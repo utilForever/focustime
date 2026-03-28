@@ -33,6 +33,10 @@ impl TerminalGuard {
         match Terminal::new(backend) {
             Ok(terminal) => Ok(Self { terminal }),
             Err(e) => {
+                // Alternate screen and mouse capture are already active; undo them
+                // before returning since Drop won't run on an unconstructed value.
+                let mut stdout = io::stdout();
+                let _ = execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
                 let _ = disable_raw_mode();
                 Err(e)
             }
