@@ -11,7 +11,7 @@ use std::{
 
 use crossterm::{
     event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind,
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind,
         KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute,
@@ -19,7 +19,7 @@ use crossterm::{
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 
-use app::App;
+use app::{App, InputMode};
 
 /// RAII guard that restores the terminal on drop, ensuring cleanup on any exit path.
 struct TerminalGuard {
@@ -109,11 +109,30 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
             .checked_sub(last_tick.elapsed())
             .unwrap_or(Duration::ZERO);
 
-        if event::poll(timeout)?
-            && let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-        {
-            app.handle_key(key);
+        // Block up to `timeout` waiting for the first event, then drain every
+        // event that is already queued.  In Normal mode we deduplicate by key
+        // code: press + release (or any other duplicate delivery) fires exactly
+        // one action per physical keypress regardless of what the terminal
+        // sends.  In AddingSite mode every event is forwarded so fast typing is
+        // not impaired.
+        if event::poll(timeout)? {
+            let mut seen: std::collections::HashSet<KeyCode> = std::collections::HashSet::new();
+            loop {
+                if let Event::Key(key) = event::read()?
+                    && key.kind != KeyEventKind::Release
+                {
+                    let should_process = match app.input_mode {
+                        InputMode::Normal => seen.insert(key.code),
+                        InputMode::AddingSite => true,
+                    };
+                    if should_process {
+                        app.handle_key(key);
+                    }
+                }
+                if !event::poll(Duration::ZERO)? {
+                    break;
+                }
+            }
         }
 
         if last_tick.elapsed() >= tick_rate {
