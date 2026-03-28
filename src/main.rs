@@ -102,6 +102,18 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
     let mut last_tick = Instant::now();
     let mut tick_accumulator: u64 = 0; // milliseconds accumulated towards next second
 
+    // On Windows (ConPTY / Windows Terminal) both key-down and key-up are
+    // forwarded as indistinguishable events and can arrive in *different*
+    // frames, so per-frame deduplication is not enough.  We keep the last
+    // processed time for each key code and ignore re-deliveries that arrive
+    // within KEY_DEBOUNCE of the original.  200 ms comfortably covers the
+    // typical key-hold duration (50–150 ms) while staying well below the
+    // system auto-repeat delay (~250 ms), so auto-repeat still works.
+    // AddingSite mode bypasses the debounce so fast URL typing is unaffected.
+    const KEY_DEBOUNCE: Duration = Duration::from_millis(200);
+    let mut last_key_time: std::collections::HashMap<KeyCode, Instant> =
+        std::collections::HashMap::new();
+
     loop {
         terminal.draw(|frame| ui::render(frame, &app))?;
 
@@ -109,21 +121,25 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
             .checked_sub(last_tick.elapsed())
             .unwrap_or(Duration::ZERO);
 
-        // Block up to `timeout` waiting for the first event, then drain every
-        // event that is already queued.  In Normal mode we deduplicate by key
-        // code: press + release (or any other duplicate delivery) fires exactly
-        // one action per physical keypress regardless of what the terminal
-        // sends.  In AddingSite mode every event is forwarded so fast typing is
-        // not impaired.
+        // Drain all pending events in one pass so queued duplicates are
+        // consumed even when they arrive in the same burst.
         if event::poll(timeout)? {
-            let mut seen: std::collections::HashSet<KeyCode> = std::collections::HashSet::new();
             loop {
                 if let Event::Key(key) = event::read()?
                     && key.kind != KeyEventKind::Release
                 {
                     let should_process = match app.input_mode {
-                        InputMode::Normal => seen.insert(key.code),
                         InputMode::AddingSite => true,
+                        InputMode::Normal => {
+                            let now = Instant::now();
+                            let recent = last_key_time
+                                .get(&key.code)
+                                .is_some_and(|&t| now.duration_since(t) < KEY_DEBOUNCE);
+                            if !recent {
+                                last_key_time.insert(key.code, now);
+                            }
+                            !recent
+                        }
                     };
                     if should_process {
                         app.handle_key(key);
