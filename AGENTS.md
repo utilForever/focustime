@@ -72,6 +72,12 @@ cargo clippy --all-targets -- -D warnings
 cargo audit
 ```
 
+## Commit Style
+
+- Conventional Commits: `feat:`, `fix:`, `refactor:`, `perf:`, `test:`, `docs:`, `chore:`
+- Release commits: `feat: vX.Y.Z — short summary`
+- Hotfix: `fix: description` (no version in message)
+
 ## CI Pipeline
 
 The GitHub Actions workflow (`.github/workflows/rust.yml`) runs on every push/PR to `main`:
