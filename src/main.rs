@@ -1,4 +1,6 @@
 mod app;
+mod blocker;
+mod config;
 mod timer;
 mod ui;
 
@@ -96,6 +98,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
         }
 
         if app.should_quit {
+            app.cleanup();
             break;
         }
     }
