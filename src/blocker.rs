@@ -68,8 +68,10 @@ impl SiteBlocker {
         content.push('\n');
         for site in &self.sites {
             content.push_str(&format!("127.0.0.1 {site}\n"));
+            content.push_str(&format!("::1 {site}\n"));
             if !site.starts_with("www.") {
                 content.push_str(&format!("127.0.0.1 www.{site}\n"));
+                content.push_str(&format!("::1 www.{site}\n"));
             }
         }
         content.push_str(BLOCK_MARKER_END);

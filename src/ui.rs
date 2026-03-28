@@ -131,6 +131,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         .margin(2)
         .constraints([
             Constraint::Length(1), // status line
+            Constraint::Length(1), // DoH warning
             Constraint::Length(1), // spacer
             Constraint::Min(3),    // site list
             Constraint::Length(1), // spacer
@@ -158,6 +159,13 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         inner[0],
     );
 
+    // DoH warning
+    let doh_warning =
+        Paragraph::new("⚠ Disable DNS-over-HTTPS in your browser for blocking to work")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Yellow));
+    frame.render_widget(doh_warning, inner[1]);
+
     // Site list
     let list_title = format!(" Blocked Sites ({}) ", app.blocker.sites.len());
     let list_block = Block::default()
@@ -169,7 +177,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         let empty = Paragraph::new("  No sites blocked yet. Press [a] to add one.")
             .style(Style::default().fg(Color::DarkGray))
             .block(list_block);
-        frame.render_widget(empty, inner[2]);
+        frame.render_widget(empty, inner[3]);
     } else {
         let items: Vec<ListItem> = app
             .blocker
@@ -190,7 +198,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
 
         let mut list_state = ListState::default();
         list_state.select(Some(app.selected_site));
-        frame.render_stateful_widget(list, inner[2], &mut list_state);
+        frame.render_stateful_widget(list, inner[3], &mut list_state);
     }
 
     // Input area
@@ -216,7 +224,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             } else {
                 Style::default().fg(Color::DarkGray)
             });
-    frame.render_widget(input_widget, inner[4]);
+    frame.render_widget(input_widget, inner[5]);
 
     // Error line
     if let Some(ref err) = app.block_error {
@@ -224,7 +232,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         let err_widget = Paragraph::new(err_text)
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Red));
-        frame.render_widget(err_widget, inner[5]);
+        frame.render_widget(err_widget, inner[6]);
     }
 
     // Key hints
@@ -236,7 +244,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
     let hints_widget = Paragraph::new(hints)
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints_widget, inner[7]);
+    frame.render_widget(hints_widget, inner[8]);
 }
 
 fn phase_color(phase: TimerPhase) -> Color {
