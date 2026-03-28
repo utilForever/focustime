@@ -10,7 +10,10 @@ use std::{
 };
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind,
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -21,23 +24,50 @@ use app::App;
 /// RAII guard that restores the terminal on drop, ensuring cleanup on any exit path.
 struct TerminalGuard {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
+    keyboard_enhancement: bool,
 }
 
 impl TerminalGuard {
     fn new() -> io::Result<Self> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
-        if let Err(e) = execute!(stdout, EnterAlternateScreen, EnableMouseCapture) {
+
+        // Push keyboard enhancement flags when the terminal supports it (e.g. Windows
+        // Terminal, Kitty, WezTerm). This forces the kitty keyboard protocol which
+        // correctly distinguishes Press / Repeat / Release events and prevents
+        // duplicate key actions caused by ConPTY forwarding both keydown and keyup
+        // as Press events.
+        let keyboard_enhancement =
+            crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
+        if keyboard_enhancement
+            && let Err(e) = execute!(
+                stdout,
+                PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES)
+            )
+        {
             let _ = disable_raw_mode();
             return Err(e);
         }
+
+        if let Err(e) = execute!(stdout, EnterAlternateScreen, EnableMouseCapture) {
+            if keyboard_enhancement {
+                let _ = execute!(stdout, PopKeyboardEnhancementFlags);
+            }
+            let _ = disable_raw_mode();
+            return Err(e);
+        }
+
         let backend = CrosstermBackend::new(stdout);
         match Terminal::new(backend) {
-            Ok(terminal) => Ok(Self { terminal }),
+            Ok(terminal) => Ok(Self {
+                terminal,
+                keyboard_enhancement,
+            }),
             Err(e) => {
-                // Alternate screen and mouse capture are already active; undo them
-                // before returning since Drop won't run on an unconstructed value.
                 let mut stdout = io::stdout();
+                if keyboard_enhancement {
+                    let _ = execute!(stdout, PopKeyboardEnhancementFlags);
+                }
                 let _ = execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
                 let _ = disable_raw_mode();
                 Err(e)
@@ -49,6 +79,9 @@ impl TerminalGuard {
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
+        if self.keyboard_enhancement {
+            let _ = execute!(self.terminal.backend_mut(), PopKeyboardEnhancementFlags);
+        }
         let _ = execute!(
             self.terminal.backend_mut(),
             LeaveAlternateScreen,
