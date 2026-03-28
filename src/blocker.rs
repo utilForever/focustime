@@ -1,5 +1,6 @@
 use std::fs;
 use std::io;
+use std::process::Command;
 
 const HOSTS_FILE: &str = "/etc/hosts";
 const BLOCK_MARKER_START: &str = "# focustime-block-start";
@@ -74,13 +75,17 @@ impl SiteBlocker {
         content.push_str(BLOCK_MARKER_END);
         content.push('\n');
 
-        fs::write(HOSTS_FILE, content)
+        fs::write(HOSTS_FILE, content)?;
+        flush_dns_cache();
+        Ok(())
     }
 
     fn remove_hosts_block(&self) -> io::Result<()> {
         let content = fs::read_to_string(HOSTS_FILE)?;
         let cleaned = Self::strip_block_section(&content);
-        fs::write(HOSTS_FILE, cleaned)
+        fs::write(HOSTS_FILE, cleaned)?;
+        flush_dns_cache();
+        Ok(())
     }
 
     pub(crate) fn strip_block_section(content: &str) -> String {
@@ -109,6 +114,32 @@ impl SiteBlocker {
 impl Default for SiteBlocker {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Flush the OS DNS cache so /etc/hosts changes take effect immediately.
+/// Best-effort: failures are silently ignored.
+fn flush_dns_cache() {
+    #[cfg(target_os = "macos")]
+    {
+        // Flush mDNSResponder cache (macOS 10.10.4+)
+        let _ = Command::new("dscacheutil").arg("-flushcache").status();
+        let _ = Command::new("killall")
+            .args(["-HUP", "mDNSResponder"])
+            .status();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // systemd-resolved
+        let _ = Command::new("systemd-resolve")
+            .arg("--flush-caches")
+            .status();
+        // nscd (older systems)
+        let _ = Command::new("nscd").args(["-i", "hosts"]).status();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("ipconfig").arg("/flushdns").status();
     }
 }
 
