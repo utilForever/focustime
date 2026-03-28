@@ -102,15 +102,15 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
     let mut last_tick = Instant::now();
     let mut tick_accumulator: u64 = 0; // milliseconds accumulated towards next second
 
-    // On Windows (ConPTY / Windows Terminal) both key-down and key-up are
-    // forwarded as indistinguishable events and can arrive in *different*
-    // frames, so per-frame deduplication is not enough.  We keep the last
-    // processed time for each key code and ignore re-deliveries that arrive
-    // within KEY_DEBOUNCE of the original.  200 ms comfortably covers the
-    // typical key-hold duration (50–150 ms) while staying well below the
-    // system auto-repeat delay (~250 ms), so auto-repeat still works.
-    // AddingSite mode bypasses the debounce so fast URL typing is unaffected.
-    const KEY_DEBOUNCE: Duration = Duration::from_millis(200);
+    // Key-event deduplication strategy for Normal mode:
+    //   • Release  – filtered at the outer `!= Release` check below.
+    //   • Repeat   – suppressed entirely; action keys (Space, n, s, q …)
+    //                must not fire again when the key is held down.
+    //   • Press    – debounced with a 500 ms window to absorb any duplicate
+    //                Press deliveries (ConPTY, terminal emulator quirks, etc.)
+    //                that arrive in a different event-loop frame.
+    // AddingSite mode bypasses all of this so fast URL typing is unaffected.
+    const KEY_DEBOUNCE: Duration = Duration::from_millis(500);
     let mut last_key_time: std::collections::HashMap<KeyCode, Instant> =
         std::collections::HashMap::new();
 
@@ -131,14 +131,21 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
                     let should_process = match app.input_mode {
                         InputMode::AddingSite => true,
                         InputMode::Normal => {
-                            let now = Instant::now();
-                            let recent = last_key_time
-                                .get(&key.code)
-                                .is_some_and(|&t| now.duration_since(t) < KEY_DEBOUNCE);
-                            if !recent {
-                                last_key_time.insert(key.code, now);
+                            // Suppress autorepeat entirely for action keys.
+                            if key.kind == KeyEventKind::Repeat {
+                                false
+                            } else {
+                                // Debounce to absorb duplicate Press deliveries
+                                // (ConPTY, etc.) that arrive in different frames.
+                                let now = Instant::now();
+                                let recent = last_key_time
+                                    .get(&key.code)
+                                    .is_some_and(|&t| now.duration_since(t) < KEY_DEBOUNCE);
+                                if !recent {
+                                    last_key_time.insert(key.code, now);
+                                }
+                                !recent
                             }
-                            !recent
                         }
                     };
                     if should_process {
