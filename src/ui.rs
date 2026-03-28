@@ -2,13 +2,21 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Gauge, Paragraph},
+    text::{Line, Span},
+    widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph},
 };
 
-use crate::app::App;
+use crate::app::{App, AppMode};
 use crate::timer::{TimerPhase, TimerStatus};
 
 pub fn render(frame: &mut Frame, app: &App) {
+    match app.mode {
+        AppMode::Timer => render_timer(frame, app),
+        AppMode::SiteManager => render_site_manager(frame, app),
+    }
+}
+
+fn render_timer(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
     // Outer centered block
@@ -88,11 +96,147 @@ pub fn render(frame: &mut Frame, app: &App) {
     frame.render_widget(status_widget, inner[3]);
 
     // Key hints
-    let hints = "[Space] Start/Pause  [s] Stop  [n] Next  [q] Quit";
+    let hints = "[Space] Start/Pause  [s] Stop  [n] Next  [b] Block Sites  [q] Quit";
     let hints_widget = Paragraph::new(hints)
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints_widget, inner[5]);
+}
+
+fn render_site_manager(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+    let outer = centered_rect(60, 80, area);
+
+    let block_color = if app.blocker.is_blocking {
+        Color::Red
+    } else {
+        Color::Green
+    };
+
+    let title = if app.blocker.is_blocking {
+        " 🚫 Site Blocking – ACTIVE "
+    } else {
+        " 🌐 Site Blocking – Inactive "
+    };
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .style(Style::default().fg(block_color));
+    frame.render_widget(block, outer);
+
+    let inner = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(2)
+        .constraints([
+            Constraint::Length(1), // status line
+            Constraint::Length(1), // spacer
+            Constraint::Min(3),    // site list
+            Constraint::Length(1), // spacer
+            Constraint::Length(3), // input area
+            Constraint::Length(1), // error line
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // key hints
+        ])
+        .split(outer);
+
+    // Blocking status
+    let status_text = if app.blocker.is_blocking {
+        Span::styled(
+            "Blocking is ACTIVE during this focus session",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )
+    } else {
+        Span::styled(
+            "Blocking will activate when a focus session starts",
+            Style::default().fg(Color::Gray),
+        )
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(status_text)).alignment(Alignment::Center),
+        inner[0],
+    );
+
+    // Site list
+    let list_title = format!(" Blocked Sites ({}) ", app.blocker.sites.len());
+    let list_block = Block::default()
+        .borders(Borders::ALL)
+        .title(list_title)
+        .style(Style::default().fg(Color::Gray));
+
+    if app.blocker.sites.is_empty() {
+        let empty = Paragraph::new("  No sites blocked yet. Press [a] to add one.")
+            .style(Style::default().fg(Color::DarkGray))
+            .block(list_block);
+        frame.render_widget(empty, inner[2]);
+    } else {
+        let items: Vec<ListItem> = app
+            .blocker
+            .sites
+            .iter()
+            .map(|s| ListItem::new(format!("  {s}")))
+            .collect();
+
+        let list = List::new(items)
+            .block(list_block)
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("▶ ");
+
+        let mut list_state = ListState::default();
+        list_state.select(Some(app.selected_site));
+        frame.render_stateful_widget(list, inner[2], &mut list_state);
+    }
+
+    // Input area
+    let input_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Add Site ")
+        .style(if app.site_input_active {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        });
+
+    let input_text = if app.site_input_active {
+        format!("{}_", app.site_input)
+    } else {
+        "Press [a] to add a site (e.g. youtube.com)".to_string()
+    };
+    let input_widget =
+        Paragraph::new(input_text)
+            .block(input_block)
+            .style(if app.site_input_active {
+                Style::default().fg(Color::Yellow)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            });
+    frame.render_widget(input_widget, inner[4]);
+
+    // Error line
+    if let Some(ref err) = app.block_error {
+        let err_text = format!("⚠  {err}  (try running with sudo)");
+        let err_widget = Paragraph::new(err_text)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Red));
+        frame.render_widget(err_widget, inner[5]);
+    }
+
+    // Key hints
+    let hints = if app.site_input_active {
+        "[Enter] Confirm  [Esc] Cancel"
+    } else {
+        "[a] Add  [d] Delete  [↑/↓] Navigate  [b/Esc] Back  [q] Quit"
+    };
+    let hints_widget = Paragraph::new(hints)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(hints_widget, inner[7]);
 }
 
 fn phase_color(phase: TimerPhase) -> Color {
