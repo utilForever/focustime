@@ -86,11 +86,10 @@ impl TimerState {
         self.status = TimerStatus::Idle;
     }
 
-    /// Skip to the next phase immediately.
+    /// Skip to the next phase immediately (does not count as a completed session).
     pub fn next_phase(&mut self) {
         if self.phase == TimerPhase::Focus {
-            self.pomodoros_completed += 1;
-            if self.pomodoros_completed.is_multiple_of(4) {
+            if (self.pomodoros_completed + 1).is_multiple_of(4) {
                 self.phase = TimerPhase::LongBreak;
             } else {
                 self.phase = TimerPhase::ShortBreak;
@@ -117,11 +116,11 @@ impl TimerState {
 
     /// Progress as a value in [0.0, 1.0] where 1.0 means full time remaining.
     pub fn progress(&self) -> f64 {
-        let total = self.phase.duration_secs() as f64;
-        if total == 0.0 {
+        let total_secs = self.phase.duration_secs();
+        if total_secs == 0 {
             return 0.0;
         }
-        self.remaining_secs as f64 / total
+        self.remaining_secs as f64 / total_secs as f64
     }
 }
 
@@ -162,14 +161,29 @@ mod tests {
     #[test]
     fn phase_transitions_after_four_focus_sessions() {
         let mut t = TimerState::new();
+        // Simulate 3 completed focus sessions via auto-advance (tick to 0).
         for _ in 0..3 {
-            t.next_phase(); // focus -> short break
+            t.status = TimerStatus::Running;
+            t.remaining_secs = 1;
+            t.tick(); // completes focus → short break
             assert_eq!(t.phase, TimerPhase::ShortBreak);
-            t.next_phase(); // short break -> focus
+            t.status = TimerStatus::Running;
+            t.remaining_secs = 1;
+            t.tick(); // completes short break → focus
             assert_eq!(t.phase, TimerPhase::Focus);
         }
-        t.next_phase(); // 4th focus -> long break
+        // 4th focus: manual skip should go to long break (pomodoros_completed == 3).
+        t.next_phase();
         assert_eq!(t.phase, TimerPhase::LongBreak);
+        assert_eq!(t.pomodoros_completed, 3); // skip doesn't increment counter
+    }
+
+    #[test]
+    fn next_phase_skip_does_not_increment_counter() {
+        let mut t = TimerState::new();
+        t.next_phase(); // skip focus without completing it
+        assert_eq!(t.pomodoros_completed, 0);
+        assert_eq!(t.phase, TimerPhase::ShortBreak);
     }
 
     #[test]
