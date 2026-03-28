@@ -105,21 +105,27 @@ fn phase_color(phase: TimerPhase) -> Color {
 
 /// Returns a centered rectangle of given percentage of the parent rect.
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let v_outer_top = (100 - percent_y) / 2;
+    let v_outer_bottom = 100 - percent_y - v_outer_top;
+
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(v_outer_top),
             Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(v_outer_bottom),
         ])
         .split(r);
+
+    let h_outer_left = (100 - percent_x) / 2;
+    let h_outer_right = 100 - percent_x - h_outer_left;
 
     Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(h_outer_left),
             Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(h_outer_right),
         ])
         .split(popup_layout[1])[1]
 }
