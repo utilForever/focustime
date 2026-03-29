@@ -23,10 +23,50 @@ impl SiteBlocker {
     }
 
     pub fn add_site(&mut self, site: String) {
-        let site = site.trim().to_lowercase();
-        if !site.is_empty() && !self.sites.contains(&site) {
-            self.sites.push(site);
+        if let Some(hostname) = Self::sanitize_hostname(&site)
+            && !self.sites.contains(&hostname)
+        {
+            self.sites.push(hostname);
         }
+    }
+
+    /// Validate and normalise a user-supplied hostname.
+    /// Returns `None` if the input cannot be reduced to a valid single hostname.
+    fn sanitize_hostname(input: &str) -> Option<String> {
+        let mut hostname = input.trim().to_lowercase();
+
+        if hostname.is_empty() {
+            return None;
+        }
+
+        // Strip URI scheme (e.g. "https://example.com" → "example.com").
+        if let Some(sep) = hostname.find("://") {
+            hostname = hostname[sep + 3..].to_string();
+        }
+
+        // Remove path, query, or fragment after the hostname.
+        if let Some(pos) = hostname.find(['/', '?', '#']) {
+            hostname.truncate(pos);
+        }
+
+        if hostname.is_empty() {
+            return None;
+        }
+
+        // Reject anything with internal whitespace (would produce multi-hostname lines).
+        if hostname.chars().any(char::is_whitespace) {
+            return None;
+        }
+
+        // Allow only ASCII letters, digits, dots, and hyphens.
+        if !hostname
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
+        {
+            return None;
+        }
+
+        Some(hostname)
     }
 
     pub fn remove_site(&mut self, index: usize) {
@@ -35,11 +75,13 @@ impl SiteBlocker {
         }
     }
 
-    /// Activate blocking by writing entries into /etc/hosts.
+    /// Activate blocking by writing entries into the hosts file.
     /// Returns an error if the file is not writable (e.g. needs sudo).
     pub fn block(&mut self) -> io::Result<()> {
         if self.sites.is_empty() {
             self.is_blocking = false;
+            // Best-effort: strip any stale block section left by a prior run.
+            let _ = self.remove_hosts_block();
             return Ok(());
         }
         self.apply_hosts_block()?;
@@ -69,11 +111,19 @@ impl SiteBlocker {
         content.push_str(BLOCK_MARKER_START);
         content.push('\n');
         for site in &self.sites {
-            content.push_str(&format!("127.0.0.1 {site}\n"));
-            content.push_str(&format!("::1 {site}\n"));
+            content.push_str("127.0.0.1 ");
+            content.push_str(site);
+            content.push('\n');
+            content.push_str("::1 ");
+            content.push_str(site);
+            content.push('\n');
             if !site.starts_with("www.") {
-                content.push_str(&format!("127.0.0.1 www.{site}\n"));
-                content.push_str(&format!("::1 www.{site}\n"));
+                content.push_str("127.0.0.1 www.");
+                content.push_str(site);
+                content.push('\n');
+                content.push_str("::1 www.");
+                content.push_str(site);
+                content.push('\n');
             }
         }
         content.push_str(BLOCK_MARKER_END);
@@ -96,10 +146,14 @@ impl SiteBlocker {
     }
 
     pub(crate) fn strip_block_section(content: &str) -> String {
-        // If either marker is absent the block section is incomplete/absent;
-        // return the content unchanged to avoid silently dropping valid lines.
-        if !content.contains(BLOCK_MARKER_START) || !content.contains(BLOCK_MARKER_END) {
-            return content.to_string();
+        // Locate both markers and ensure they appear in the correct order.
+        // An absent marker, or an end marker before the start marker, means the
+        // section is incomplete/corrupt — return content unchanged to avoid data loss.
+        let start_pos = content.find(BLOCK_MARKER_START);
+        let end_pos = content.find(BLOCK_MARKER_END);
+        match (start_pos, end_pos) {
+            (Some(s), Some(e)) if s < e => {}
+            _ => return content.to_string(),
         }
 
         let mut result = String::with_capacity(content.len());
@@ -212,6 +266,34 @@ mod tests {
         let mut b = SiteBlocker::new();
         b.add_site("   ".to_string());
         assert!(b.sites.is_empty());
+    }
+
+    #[test]
+    fn add_site_strips_scheme_and_path() {
+        let mut b = SiteBlocker::new();
+        b.add_site("https://example.com/some/path?q=1".to_string());
+        assert_eq!(b.sites, vec!["example.com"]);
+    }
+
+    #[test]
+    fn add_site_rejects_multiple_hostnames() {
+        let mut b = SiteBlocker::new();
+        b.add_site("example.com other.com".to_string());
+        assert!(b.sites.is_empty());
+    }
+
+    #[test]
+    fn add_site_rejects_invalid_characters() {
+        let mut b = SiteBlocker::new();
+        b.add_site("exam_ple.com".to_string());
+        assert!(b.sites.is_empty());
+    }
+
+    #[test]
+    fn strip_out_of_order_markers_leaves_content_unchanged() {
+        // End marker before start marker: treat as corrupt, return unchanged.
+        let input = "127.0.0.1 localhost\n# focustime-block-end\n# focustime-block-start\nafter\n";
+        assert_eq!(SiteBlocker::strip_block_section(input), input);
     }
 
     #[test]
