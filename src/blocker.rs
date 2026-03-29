@@ -115,7 +115,11 @@ impl SiteBlocker {
         };
         let mut content = Self::strip_block_section(&original);
 
-        content.push_str(nl);
+        // Only insert a separator newline when the content doesn't already end
+        // with one, so repeated focus/break cycles don't accumulate blank lines.
+        if !content.ends_with(nl) && !content.is_empty() {
+            content.push_str(nl);
+        }
         content.push_str(BLOCK_MARKER_START);
         content.push_str(nl);
         for site in &self.sites {
@@ -154,14 +158,24 @@ impl SiteBlocker {
     }
 
     pub(crate) fn strip_block_section(content: &str) -> String {
-        // Locate the start marker, then search for the end marker only *after*
-        // it, so a stray end marker earlier in the file cannot hide a real block.
-        // If either marker is absent, or markers are out of order, return unchanged.
-        let start_pos = content.find(BLOCK_MARKER_START);
-        let end_pos = start_pos.and_then(|s| content[s..].find(BLOCK_MARKER_END).map(|e| s + e));
-        match (start_pos, end_pos) {
-            (Some(s), Some(e)) if s < e => {}
-            _ => return content.to_string(),
+        // Verify that both markers exist as *complete* lines in the correct order
+        // before attempting to strip. This prevents a marker that appears only as
+        // a substring of a longer line (e.g. "# focustime-block-end  extra") from
+        // being found by a substring search but then silently missed by the line
+        // loop, which would drop the remainder of the file.
+        let has_block = {
+            let mut found_start = false;
+            content.lines().any(|line| {
+                if !found_start {
+                    found_start = line.trim() == BLOCK_MARKER_START;
+                    false
+                } else {
+                    line.trim() == BLOCK_MARKER_END
+                }
+            })
+        };
+        if !has_block {
+            return content.to_string();
         }
 
         // Preserve the original line ending style (LF vs CRLF).
@@ -334,6 +348,14 @@ mod tests {
     fn strip_out_of_order_markers_leaves_content_unchanged() {
         // End marker before start marker: treat as corrupt, return unchanged.
         let input = "127.0.0.1 localhost\n# focustime-block-end\n# focustime-block-start\nafter\n";
+        assert_eq!(SiteBlocker::strip_block_section(input), input);
+    }
+
+    #[test]
+    fn strip_marker_with_trailing_content_leaves_unchanged() {
+        // Markers that appear as substrings of longer lines must not be treated
+        // as valid markers; the whole file should be returned untouched.
+        let input = "127.0.0.1 localhost\n# focustime-block-start\n127.0.0.1 example.com\n# focustime-block-end extra\n::1 localhost\n";
         assert_eq!(SiteBlocker::strip_block_section(input), input);
     }
 
