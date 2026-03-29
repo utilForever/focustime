@@ -2,6 +2,7 @@ mod app;
 mod blocker;
 mod timer;
 mod ui;
+mod wakatime;
 
 use std::{
     io,

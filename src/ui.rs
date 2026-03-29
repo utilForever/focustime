@@ -29,7 +29,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(phase_color(app.timer.phase)));
     frame.render_widget(block, outer);
 
-    // Inner layout: title | time | progress | status | hints
+    // Inner layout: title | time | progress | status | wakatime | spacer | hints
     let inner = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
@@ -38,6 +38,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
             Constraint::Length(3), // MM:SS
             Constraint::Length(3), // progress bar
             Constraint::Length(2), // status
+            Constraint::Length(1), // wakatime status
             Constraint::Min(0),    // spacer
             Constraint::Length(1), // key hints
         ])
@@ -95,12 +96,25 @@ fn render_timer(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(Color::Gray));
     frame.render_widget(status_widget, inner[3]);
 
+    // WakaTime status
+    let (waka_text, waka_color) = if app.wakatime.is_tracking() {
+        ("⏱ WakaTime: tracking", Color::Green)
+    } else if app.wakatime.is_configured() {
+        ("⏱ WakaTime: idle", Color::DarkGray)
+    } else {
+        ("⏱ WakaTime: not configured", Color::DarkGray)
+    };
+    let waka_widget = Paragraph::new(waka_text)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(waka_color));
+    frame.render_widget(waka_widget, inner[4]);
+
     // Key hints
     let hints = "[Space] Start/Pause  [s] Stop  [n] Next  [b] Block Sites  [q] Quit";
     let hints_widget = Paragraph::new(hints)
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints_widget, inner[5]);
+    frame.render_widget(hints_widget, inner[6]);
 }
 
 fn render_site_manager(frame: &mut Frame, app: &App) {

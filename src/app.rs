@@ -2,6 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blocker::SiteBlocker;
 use crate::timer::{TimerPhase, TimerState, TimerStatus};
+use crate::wakatime::WakatimeTracker;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
@@ -22,6 +23,7 @@ pub struct App {
     pub selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
     pub block_error: Option<String>,
+    pub wakatime: WakatimeTracker,
 }
 
 impl App {
@@ -35,6 +37,7 @@ impl App {
             site_input_active: false,
             selected_site: 0,
             block_error: None,
+            wakatime: WakatimeTracker::new(),
         }
     }
 
@@ -42,6 +45,9 @@ impl App {
         let phase_changed = self.timer.tick();
         if phase_changed {
             self.apply_blocking_for_phase();
+        }
+        if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running {
+            self.wakatime.tick();
         }
     }
 
@@ -187,6 +193,15 @@ impl App {
             self.block_error = Some(e.to_string());
         } else {
             self.block_error = None;
+        }
+
+        // Keep WakaTime tracking in sync with the focus session state.
+        let focus_running =
+            self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running;
+        if focus_running && !self.wakatime.is_tracking() {
+            self.wakatime.on_focus_start();
+        } else if !focus_running && self.wakatime.is_tracking() {
+            self.wakatime.on_focus_stop();
         }
     }
 
