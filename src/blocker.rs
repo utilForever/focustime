@@ -2,6 +2,9 @@ use std::fs;
 use std::io;
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+const HOSTS_FILE: &str = r"C:\Windows\System32\drivers\etc\hosts";
+#[cfg(not(target_os = "windows"))]
 const HOSTS_FILE: &str = "/etc/hosts";
 const BLOCK_MARKER_START: &str = "# focustime-block-start";
 const BLOCK_MARKER_END: &str = "# focustime-block-end";
@@ -44,11 +47,10 @@ impl SiteBlocker {
         Ok(())
     }
 
-    /// Remove the focustime block section from /etc/hosts.
+    /// Remove the focustime block section from the hosts file.
+    /// Always attempts to strip any existing block section, even after a crash
+    /// left entries behind with is_blocking == false.
     pub fn unblock(&mut self) -> io::Result<()> {
-        if !self.is_blocking {
-            return Ok(());
-        }
         self.remove_hosts_block()?;
         self.is_blocking = false;
         Ok(())
@@ -85,12 +87,21 @@ impl SiteBlocker {
     fn remove_hosts_block(&self) -> io::Result<()> {
         let content = fs::read_to_string(HOSTS_FILE)?;
         let cleaned = Self::strip_block_section(&content);
-        fs::write(HOSTS_FILE, cleaned)?;
-        flush_dns_cache();
+        // Only write back if something was actually removed.
+        if cleaned != content {
+            fs::write(HOSTS_FILE, cleaned)?;
+            flush_dns_cache();
+        }
         Ok(())
     }
 
     pub(crate) fn strip_block_section(content: &str) -> String {
+        // If either marker is absent the block section is incomplete/absent;
+        // return the content unchanged to avoid silently dropping valid lines.
+        if !content.contains(BLOCK_MARKER_START) || !content.contains(BLOCK_MARKER_END) {
+            return content.to_string();
+        }
+
         let mut result = String::with_capacity(content.len());
         let mut in_block = false;
 
@@ -148,6 +159,13 @@ fn flush_dns_cache() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strip_unterminated_start_marker_leaves_content_unchanged() {
+        // A lone start marker without an end marker must not drop any content.
+        let input = "127.0.0.1 localhost\n# focustime-block-start\n127.0.0.1 example.com\n";
+        assert_eq!(SiteBlocker::strip_block_section(input), input);
+    }
 
     #[test]
     fn strip_empty_string() {

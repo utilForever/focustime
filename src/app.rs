@@ -66,7 +66,10 @@ impl App {
                 self.apply_blocking_for_phase();
             }
             // Stop / reset current phase
-            KeyCode::Char('s') => self.timer.reset(),
+            KeyCode::Char('s') => {
+                self.timer.reset();
+                self.apply_blocking_for_phase();
+            }
             // Skip to next phase
             KeyCode::Char('n') => {
                 self.timer.next_phase();
@@ -168,22 +171,22 @@ impl App {
     }
 
     /// Apply or remove blocks based on the current timer phase and status.
+    /// Blocks whenever the focus phase is active (Running or Paused) so that
+    /// pausing the timer cannot be used to bypass the block.
+    /// Unblocks when the phase is a break or the timer has not yet started (Idle).
     fn apply_blocking_for_phase(&mut self) {
-        match self.timer.phase {
-            TimerPhase::Focus if self.timer.status == TimerStatus::Running => {
-                if let Err(e) = self.blocker.block() {
-                    self.block_error = Some(e.to_string());
-                } else {
-                    self.block_error = None;
-                }
+        let should_block = self.timer.phase == TimerPhase::Focus
+            && self.timer.status != TimerStatus::Idle;
+        if should_block {
+            if let Err(e) = self.blocker.block() {
+                self.block_error = Some(e.to_string());
+            } else {
+                self.block_error = None;
             }
-            _ => {
-                if let Err(e) = self.blocker.unblock() {
-                    self.block_error = Some(e.to_string());
-                } else {
-                    self.block_error = None;
-                }
-            }
+        } else if let Err(e) = self.blocker.unblock() {
+            self.block_error = Some(e.to_string());
+        } else {
+            self.block_error = None;
         }
     }
 
