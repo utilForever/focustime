@@ -144,8 +144,8 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
 
     // Blocking status — derive the message from both the blocker flag and the
     // current timer phase/status so the copy is accurate in all states.
-    let focus_session_active = app.timer.phase == TimerPhase::Focus
-        && app.timer.status != TimerStatus::Idle;
+    let focus_session_active =
+        app.timer.phase == TimerPhase::Focus && app.timer.status != TimerStatus::Idle;
     let status_text = if app.blocker.is_blocking {
         Span::styled(
             "Blocking is ACTIVE during this focus session",
