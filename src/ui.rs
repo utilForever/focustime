@@ -142,11 +142,21 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         ])
         .split(outer);
 
-    // Blocking status
+    // Blocking status — derive the message from both the blocker flag and the
+    // current timer phase/status so the copy is accurate in all states.
+    let focus_session_active = app.timer.phase == TimerPhase::Focus
+        && app.timer.status != TimerStatus::Idle;
     let status_text = if app.blocker.is_blocking {
         Span::styled(
             "Blocking is ACTIVE during this focus session",
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )
+    } else if focus_session_active {
+        // Focus session is running/paused but blocking is not active
+        // (empty site list or a permission error prevented it).
+        Span::styled(
+            "Focus session active — blocking inactive (no sites or permission error)",
+            Style::default().fg(Color::Yellow),
         )
     } else {
         Span::styled(
