@@ -105,30 +105,37 @@ impl SiteBlocker {
     }
 
     fn apply_hosts_block(&self) -> io::Result<()> {
-        let mut content = fs::read_to_string(HOSTS_FILE)?;
-        content = Self::strip_block_section(&content);
+        let original = fs::read_to_string(HOSTS_FILE)?;
+        // Detect the original line ending style so we don't convert CRLF → LF
+        // on Windows hosts files.
+        let nl: &str = if original.contains("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        };
+        let mut content = Self::strip_block_section(&original);
 
-        content.push('\n');
+        content.push_str(nl);
         content.push_str(BLOCK_MARKER_START);
-        content.push('\n');
+        content.push_str(nl);
         for site in &self.sites {
             content.push_str("127.0.0.1 ");
             content.push_str(site);
-            content.push('\n');
+            content.push_str(nl);
             content.push_str("::1 ");
             content.push_str(site);
-            content.push('\n');
+            content.push_str(nl);
             if !site.starts_with("www.") {
                 content.push_str("127.0.0.1 www.");
                 content.push_str(site);
-                content.push('\n');
+                content.push_str(nl);
                 content.push_str("::1 www.");
                 content.push_str(site);
-                content.push('\n');
+                content.push_str(nl);
             }
         }
         content.push_str(BLOCK_MARKER_END);
-        content.push('\n');
+        content.push_str(nl);
 
         atomic_write_hosts(&content)?;
         flush_dns_cache();
@@ -157,6 +164,12 @@ impl SiteBlocker {
             _ => return content.to_string(),
         }
 
+        // Preserve the original line ending style (LF vs CRLF).
+        let nl: &str = if content.contains("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        };
         let mut result = String::with_capacity(content.len());
         let mut in_block = false;
 
@@ -171,7 +184,7 @@ impl SiteBlocker {
             }
             if !in_block {
                 result.push_str(line);
-                result.push('\n');
+                result.push_str(nl);
             }
         }
 
@@ -187,12 +200,29 @@ impl Default for SiteBlocker {
 
 /// Write `content` to the hosts file atomically via a temp file + rename so
 /// an interrupted write cannot corrupt the file or leave it truncated.
+/// On non-Windows the original file's permissions are copied to the replacement.
+/// On Windows we fall back to a direct write because atomic rename over an
+/// existing file requires Win32 APIs not exposed by std::fs::rename.
 fn atomic_write_hosts(content: &str) -> io::Result<()> {
     let hosts_path = Path::new(HOSTS_FILE);
-    let dir = hosts_path.parent().unwrap_or(Path::new("."));
-    let tmp_path = dir.join(".focustime_hosts.tmp");
-    fs::write(&tmp_path, content)?;
-    fs::rename(&tmp_path, hosts_path)
+
+    #[cfg(target_os = "windows")]
+    {
+        fs::write(hosts_path, content)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let dir = hosts_path.parent().unwrap_or(Path::new("."));
+        let tmp_path = dir.join(".focustime_hosts.tmp");
+        fs::write(&tmp_path, content)?;
+        // Copy the original file's permissions onto the temp file so the rename
+        // does not silently change the access mode of /etc/hosts.
+        if let Ok(meta) = fs::metadata(hosts_path) {
+            let _ = fs::set_permissions(&tmp_path, meta.permissions());
+        }
+        fs::rename(&tmp_path, hosts_path)
+    }
 }
 
 /// Flush the OS DNS cache so /etc/hosts changes take effect immediately.
@@ -305,6 +335,13 @@ mod tests {
         // End marker before start marker: treat as corrupt, return unchanged.
         let input = "127.0.0.1 localhost\n# focustime-block-end\n# focustime-block-start\nafter\n";
         assert_eq!(SiteBlocker::strip_block_section(input), input);
+    }
+
+    #[test]
+    fn strip_preserves_crlf_line_endings() {
+        let input = "127.0.0.1 localhost\r\n# focustime-block-start\r\n127.0.0.1 example.com\r\n# focustime-block-end\r\n::1 localhost\r\n";
+        let expected = "127.0.0.1 localhost\r\n::1 localhost\r\n";
+        assert_eq!(SiteBlocker::strip_block_section(input), expected);
     }
 
     #[test]
