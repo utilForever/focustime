@@ -175,8 +175,8 @@ impl App {
     /// pausing the timer cannot be used to bypass the block.
     /// Unblocks when the phase is a break or the timer has not yet started (Idle).
     fn apply_blocking_for_phase(&mut self) {
-        let should_block = self.timer.phase == TimerPhase::Focus
-            && self.timer.status != TimerStatus::Idle;
+        let should_block =
+            self.timer.phase == TimerPhase::Focus && self.timer.status != TimerStatus::Idle;
         if should_block {
             if let Err(e) = self.blocker.block() {
                 self.block_error = Some(e.to_string());
