@@ -228,7 +228,12 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
 
     // Error line
     if let Some(ref err) = app.block_error {
-        let err_text = format!("⚠  {err}  (try running with sudo)");
+        let privilege_hint = if cfg!(target_os = "windows") {
+            " (try running in an elevated command prompt)"
+        } else {
+            " (try running with elevated privileges)"
+        };
+        let err_text = format!("⚠  {err}{privilege_hint}");
         let err_widget = Paragraph::new(err_text)
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Red));

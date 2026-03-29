@@ -199,6 +199,14 @@ impl App {
     }
 }
 
+impl Drop for App {
+    fn drop(&mut self) {
+        // Ensure hosts-file block entries are removed on every exit path,
+        // including early returns caused by I/O errors in run_app.
+        self.blocker.cleanup();
+    }
+}
+
 impl Default for App {
     fn default() -> Self {
         Self::new()

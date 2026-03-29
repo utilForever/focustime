@@ -101,6 +101,5 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
         }
     }
 
-    app.blocker.cleanup();
     Ok(())
 }

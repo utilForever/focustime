@@ -1,5 +1,6 @@
 use std::fs;
 use std::io;
+use std::path::Path;
 use std::process::Command;
 
 #[cfg(target_os = "windows")]
@@ -129,7 +130,7 @@ impl SiteBlocker {
         content.push_str(BLOCK_MARKER_END);
         content.push('\n');
 
-        fs::write(HOSTS_FILE, content)?;
+        atomic_write_hosts(&content)?;
         flush_dns_cache();
         Ok(())
     }
@@ -139,18 +140,18 @@ impl SiteBlocker {
         let cleaned = Self::strip_block_section(&content);
         // Only write back if something was actually removed.
         if cleaned != content {
-            fs::write(HOSTS_FILE, cleaned)?;
+            atomic_write_hosts(&cleaned)?;
             flush_dns_cache();
         }
         Ok(())
     }
 
     pub(crate) fn strip_block_section(content: &str) -> String {
-        // Locate both markers and ensure they appear in the correct order.
-        // An absent marker, or an end marker before the start marker, means the
-        // section is incomplete/corrupt — return content unchanged to avoid data loss.
+        // Locate the start marker, then search for the end marker only *after*
+        // it, so a stray end marker earlier in the file cannot hide a real block.
+        // If either marker is absent, or markers are out of order, return unchanged.
         let start_pos = content.find(BLOCK_MARKER_START);
-        let end_pos = content.find(BLOCK_MARKER_END);
+        let end_pos = start_pos.and_then(|s| content[s..].find(BLOCK_MARKER_END).map(|e| s + e));
         match (start_pos, end_pos) {
             (Some(s), Some(e)) if s < e => {}
             _ => return content.to_string(),
@@ -182,6 +183,16 @@ impl Default for SiteBlocker {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Write `content` to the hosts file atomically via a temp file + rename so
+/// an interrupted write cannot corrupt the file or leave it truncated.
+fn atomic_write_hosts(content: &str) -> io::Result<()> {
+    let hosts_path = Path::new(HOSTS_FILE);
+    let dir = hosts_path.parent().unwrap_or(Path::new("."));
+    let tmp_path = dir.join(".focustime_hosts.tmp");
+    fs::write(&tmp_path, content)?;
+    fs::rename(&tmp_path, hosts_path)
 }
 
 /// Flush the OS DNS cache so /etc/hosts changes take effect immediately.
