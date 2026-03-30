@@ -151,13 +151,18 @@ impl WakatimeTracker {
         self.send_heartbeat_async();
     }
 
-    /// Called each second while the focus session is running.
-    /// Sends a heartbeat every `HEARTBEAT_INTERVAL_SECS` seconds.
-    pub fn tick(&mut self) {
-        if !self.tracking {
+    /// Advances the heartbeat counter by `secs` simulated seconds.
+    ///
+    /// Sends at most one heartbeat per call regardless of how large `secs` is,
+    /// so that a burst of catch-up ticks after a suspend/resume does not
+    /// trigger multiple rapid HTTP requests.
+    pub fn tick_elapsed(&mut self, secs: u64) {
+        if !self.tracking || secs == 0 {
             return;
         }
-        self.secs_since_last_heartbeat += 1;
+        // Clamp so that a large elapsed value only triggers one heartbeat.
+        self.secs_since_last_heartbeat =
+            (self.secs_since_last_heartbeat + secs).min(HEARTBEAT_INTERVAL_SECS);
         if self.secs_since_last_heartbeat >= HEARTBEAT_INTERVAL_SECS {
             self.secs_since_last_heartbeat = 0;
             self.send_heartbeat_async();
@@ -322,7 +327,7 @@ mod tests {
             secs_since_last_heartbeat: HEARTBEAT_INTERVAL_SECS - 1,
             tracking: true,
         };
-        tracker.tick();
+        tracker.tick_elapsed(1);
         // Counter should have reset after reaching the interval threshold
         assert_eq!(tracker.secs_since_last_heartbeat, 0);
     }
@@ -335,7 +340,20 @@ mod tests {
             secs_since_last_heartbeat: 0,
             tracking: false,
         };
-        tracker.tick();
+        tracker.tick_elapsed(1);
+        assert_eq!(tracker.secs_since_last_heartbeat, 0);
+    }
+
+    #[test]
+    fn tick_elapsed_clamps_to_single_heartbeat_on_burst() {
+        let mut tracker = WakatimeTracker {
+            api_key: None, // no HTTP call made
+            api_url: DEFAULT_API_URL.to_string(),
+            secs_since_last_heartbeat: 0,
+            tracking: true,
+        };
+        // Simulate 10 minutes of catch-up at once; should only fire one heartbeat
+        tracker.tick_elapsed(600);
         assert_eq!(tracker.secs_since_last_heartbeat, 0);
     }
 }

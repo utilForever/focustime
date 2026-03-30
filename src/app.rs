@@ -46,8 +46,16 @@ impl App {
         if phase_changed {
             self.apply_blocking_for_phase();
         }
+    }
+
+    /// Advance WakaTime tracking by `elapsed_secs` simulated seconds.
+    ///
+    /// Must be called **once per main-loop UI frame** (not once per catch-up
+    /// tick) so that a burst of back-filled timer ticks after a
+    /// suspend/resume cannot trigger multiple rapid heartbeats.
+    pub fn on_wakatime_elapsed(&mut self, elapsed_secs: u64) {
         if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running {
-            self.wakatime.tick();
+            self.wakatime.tick_elapsed(elapsed_secs);
         }
     }
 
@@ -176,7 +184,9 @@ impl App {
         self.timer.status == TimerStatus::Running
     }
 
-    /// Apply or remove blocks based on the current timer phase and status.
+    /// Apply or remove blocks based on the current timer phase and status, and
+    /// synchronise WakaTime tracking state.
+    ///
     /// Blocks whenever the focus phase is active (Running or Paused) so that
     /// pausing the timer cannot be used to bypass the block.
     /// Unblocks when the phase is a break or the timer has not yet started (Idle).
