@@ -157,6 +157,12 @@ impl WakatimeTracker {
         let auth = format!("Basic {}", BASE64.encode(api_key.as_bytes()));
         let url = format!("{}/api/v1/users/current/heartbeats", self.api_url);
 
+        let plugin_version = env!("CARGO_PKG_VERSION");
+        let os = std::env::consts::OS;
+        let user_agent = format!(
+            "wakatime/unset ({os}) focustime/{plugin_version} focustime-wakatime/{plugin_version}"
+        );
+
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs_f64())
@@ -174,6 +180,7 @@ impl WakatimeTracker {
             let _ = ureq::post(&url)
                 .set("Authorization", &auth)
                 .set("Content-Type", "application/json")
+                .set("User-Agent", &user_agent)
                 .send_json(heartbeat);
         });
     }
