@@ -2,6 +2,7 @@ mod app;
 mod blocker;
 mod timer;
 mod ui;
+mod wakatime;
 
 use std::{
     io,
@@ -87,9 +88,16 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
 
             if app.is_running() {
                 tick_accumulator += elapsed_ms;
+                let mut elapsed_secs: u64 = 0;
                 while tick_accumulator >= 1000 {
                     tick_accumulator -= 1000;
+                    elapsed_secs += 1;
                     app.on_tick();
+                }
+                // Advance WakaTime once per UI frame to avoid burst heartbeats
+                // after a suspend/resume catch-up.
+                if elapsed_secs > 0 {
+                    app.on_wakatime_elapsed(elapsed_secs);
                 }
             } else {
                 tick_accumulator = 0;

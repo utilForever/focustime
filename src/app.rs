@@ -2,6 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blocker::SiteBlocker;
 use crate::timer::{TimerPhase, TimerState, TimerStatus};
+use crate::wakatime::WakatimeTracker;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
@@ -22,6 +23,7 @@ pub struct App {
     pub selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
     pub block_error: Option<String>,
+    pub wakatime: WakatimeTracker,
 }
 
 impl App {
@@ -35,6 +37,7 @@ impl App {
             site_input_active: false,
             selected_site: 0,
             block_error: None,
+            wakatime: WakatimeTracker::new(),
         }
     }
 
@@ -42,6 +45,17 @@ impl App {
         let phase_changed = self.timer.tick();
         if phase_changed {
             self.apply_blocking_for_phase();
+        }
+    }
+
+    /// Advance WakaTime tracking by `elapsed_secs` simulated seconds.
+    ///
+    /// Must be called **once per main-loop UI frame** (not once per catch-up
+    /// tick) so that a burst of back-filled timer ticks after a
+    /// suspend/resume cannot trigger multiple rapid heartbeats.
+    pub fn on_wakatime_elapsed(&mut self, elapsed_secs: u64) {
+        if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running {
+            self.wakatime.tick_elapsed(elapsed_secs);
         }
     }
 
@@ -170,7 +184,9 @@ impl App {
         self.timer.status == TimerStatus::Running
     }
 
-    /// Apply or remove blocks based on the current timer phase and status.
+    /// Apply or remove blocks based on the current timer phase and status, and
+    /// synchronise WakaTime tracking state.
+    ///
     /// Blocks whenever the focus phase is active (Running or Paused) so that
     /// pausing the timer cannot be used to bypass the block.
     /// Unblocks when the phase is a break or the timer has not yet started (Idle).
@@ -187,6 +203,15 @@ impl App {
             self.block_error = Some(e.to_string());
         } else {
             self.block_error = None;
+        }
+
+        // Keep WakaTime tracking in sync with the focus session state.
+        let focus_running =
+            self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running;
+        if focus_running && !self.wakatime.is_tracking() {
+            self.wakatime.on_focus_start();
+        } else if !focus_running && self.wakatime.is_tracking() {
+            self.wakatime.on_focus_stop();
         }
     }
 
