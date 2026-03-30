@@ -54,7 +54,11 @@ impl WakatimeConfig {
         let home = dirs_home()?;
         let cfg_path = home.join(".wakatime.cfg");
         let content = fs::read_to_string(cfg_path).ok()?;
+        Some(Self::parse_config_str(&content))
+    }
 
+    /// Parse an INI config string and return `(api_key, api_url)` from `[settings]`.
+    fn parse_config_str(content: &str) -> (Option<String>, Option<String>) {
         let mut api_key: Option<String> = None;
         let mut api_url: Option<String> = None;
         let mut in_settings = false;
@@ -83,7 +87,7 @@ impl WakatimeConfig {
             }
         }
 
-        Some((api_key, api_url))
+        (api_key, api_url)
     }
 }
 
@@ -137,7 +141,11 @@ impl WakatimeTracker {
 
     /// Called when a focus session starts (timer transitions to Running in Focus phase).
     /// Sends an immediate heartbeat and resets the interval counter.
+    /// Does nothing if no API key is configured.
     pub fn on_focus_start(&mut self) {
+        if self.api_key.is_none() {
+            return;
+        }
         self.tracking = true;
         self.secs_since_last_heartbeat = 0;
         self.send_heartbeat_async();
@@ -170,7 +178,8 @@ impl WakatimeTracker {
         };
 
         let auth = format!("Basic {}", BASE64.encode(api_key.as_bytes()));
-        let url = format!("{}/api/v1/users/current/heartbeats", self.api_url);
+        let api_url = self.api_url.trim_end_matches('/');
+        let url = format!("{}/api/v1/users/current/heartbeats", api_url);
 
         let plugin_version = env!("CARGO_PKG_VERSION");
         let os = std::env::consts::OS;
@@ -194,7 +203,11 @@ impl WakatimeTracker {
         };
 
         std::thread::spawn(move || {
-            let _ = ureq::post(&url)
+            let agent = ureq::AgentBuilder::new()
+                .timeout(std::time::Duration::from_secs(10))
+                .build();
+            let _ = agent
+                .post(&url)
                 .set("Authorization", &auth)
                 .set("Content-Type", "application/json")
                 .set("User-Agent", &user_agent)
@@ -216,96 +229,26 @@ mod tests {
 
     #[test]
     fn parse_config_extracts_api_key() {
-        let content = "[settings]\napi_key = test-key-123\n";
-        let mut api_key = None;
-        let mut api_url = None;
-        let mut in_settings = false;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed == "[settings]" {
-                in_settings = true;
-                continue;
-            }
-            if trimmed.starts_with('[') {
-                in_settings = false;
-                continue;
-            }
-            if !in_settings {
-                continue;
-            }
-            if let Some((k, v)) = trimmed.split_once('=') {
-                match k.trim() {
-                    "api_key" => api_key = Some(v.trim().to_string()),
-                    "api_url" => api_url = Some(v.trim().to_string()),
-                    _ => {}
-                }
-            }
-        }
-
+        let (api_key, api_url) =
+            WakatimeConfig::parse_config_str("[settings]\napi_key = test-key-123\n");
         assert_eq!(api_key, Some("test-key-123".to_string()));
         assert_eq!(api_url, None);
     }
 
     #[test]
     fn parse_config_extracts_api_url() {
-        let content = "[settings]\napi_key = mykey\napi_url = https://wakatime.example.com\n";
-        let mut api_key = None;
-        let mut api_url = None;
-        let mut in_settings = false;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed == "[settings]" {
-                in_settings = true;
-                continue;
-            }
-            if trimmed.starts_with('[') {
-                in_settings = false;
-                continue;
-            }
-            if !in_settings {
-                continue;
-            }
-            if let Some((k, v)) = trimmed.split_once('=') {
-                match k.trim() {
-                    "api_key" => api_key = Some(v.trim().to_string()),
-                    "api_url" => api_url = Some(v.trim().to_string()),
-                    _ => {}
-                }
-            }
-        }
-
+        let (api_key, api_url) = WakatimeConfig::parse_config_str(
+            "[settings]\napi_key = mykey\napi_url = https://wakatime.example.com\n",
+        );
         assert_eq!(api_key, Some("mykey".to_string()));
         assert_eq!(api_url, Some("https://wakatime.example.com".to_string()));
     }
 
     #[test]
     fn parse_config_ignores_other_sections() {
-        let content = "[other]\napi_key = wrong\n[settings]\napi_key = correct\n";
-        let mut api_key = None;
-        let mut in_settings = false;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed == "[settings]" {
-                in_settings = true;
-                continue;
-            }
-            if trimmed.starts_with('[') {
-                in_settings = false;
-                continue;
-            }
-            if !in_settings {
-                continue;
-            }
-            if let Some((k, v)) = trimmed.split_once('=')
-                && k.trim() == "api_key"
-            {
-                api_key = Some(v.trim().to_string());
-            }
-        }
-
+        let (api_key, _) = WakatimeConfig::parse_config_str(
+            "[other]\napi_key = wrong\n[settings]\napi_key = correct\n",
+        );
         assert_eq!(api_key, Some("correct".to_string()));
     }
 
@@ -333,9 +276,22 @@ mod tests {
     }
 
     #[test]
-    fn on_focus_start_sets_tracking() {
+    fn on_focus_start_does_not_track_without_api_key() {
         let mut tracker = WakatimeTracker {
-            api_key: None, // no key: heartbeat send is skipped but tracking flag still sets
+            api_key: None,
+            api_url: DEFAULT_API_URL.to_string(),
+            secs_since_last_heartbeat: 50,
+            tracking: false,
+        };
+        tracker.on_focus_start();
+        assert!(!tracker.is_tracking());
+        assert_eq!(tracker.secs_since_last_heartbeat, 50);
+    }
+
+    #[test]
+    fn on_focus_start_sets_tracking_when_configured() {
+        let mut tracker = WakatimeTracker {
+            api_key: Some("test-key".to_string()),
             api_url: DEFAULT_API_URL.to_string(),
             secs_since_last_heartbeat: 50,
             tracking: false,
