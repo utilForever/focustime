@@ -15,7 +15,24 @@ struct Heartbeat {
     entity_type: String,
     time: f64,
     project: String,
+    language: String,
     is_write: bool,
+}
+
+/// Returns the machine hostname for the `X-Machine-Name` header.
+fn get_hostname() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("COMPUTERNAME").unwrap_or_else(|_| "unknown".to_string())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::env::var("HOSTNAME")
+            .or_else(|_| {
+                std::fs::read_to_string("/etc/hostname").map(|s| s.trim().to_string())
+            })
+            .unwrap_or_else(|_| "unknown".to_string())
+    }
 }
 
 /// Reads WakaTime configuration from `~/.wakatime.cfg`.
@@ -162,6 +179,7 @@ impl WakatimeTracker {
         let user_agent = format!(
             "wakatime/unset ({os}) focustime/{plugin_version} focustime-wakatime/{plugin_version}"
         );
+        let hostname = get_hostname();
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -173,6 +191,7 @@ impl WakatimeTracker {
             entity_type: "app".to_string(),
             time: now,
             project: "focustime".to_string(),
+            language: "Pomodoro".to_string(),
             is_write: false,
         };
 
@@ -181,6 +200,7 @@ impl WakatimeTracker {
                 .set("Authorization", &auth)
                 .set("Content-Type", "application/json")
                 .set("User-Agent", &user_agent)
+                .set("X-Machine-Name", &hostname)
                 .send_json(heartbeat);
         });
     }
