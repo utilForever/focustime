@@ -208,15 +208,16 @@ impl WakatimeTracker {
         };
 
         std::thread::spawn(move || {
-            let agent = ureq::AgentBuilder::new()
-                .timeout(std::time::Duration::from_secs(10))
-                .build();
+            let agent: ureq::Agent = ureq::Agent::config_builder()
+                .timeout_global(Some(std::time::Duration::from_secs(10)))
+                .build()
+                .into();
             let _ = agent
                 .post(&url)
-                .set("Authorization", &auth)
-                .set("Content-Type", "application/json")
-                .set("User-Agent", &user_agent)
-                .set("X-Machine-Name", &hostname)
+                .header("Authorization", &auth)
+                .header("Content-Type", "application/json")
+                .header("User-Agent", &user_agent)
+                .header("X-Machine-Name", &hostname)
                 .send_json(heartbeat);
         });
     }
