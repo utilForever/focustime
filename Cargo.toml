@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ratatui = "0.29"
+ratatui = "0.30"
 crossterm = "0.29"
 ureq = { version = "2", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
