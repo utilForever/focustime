@@ -19,4 +19,4 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v6
       - name: Check for typos
-        uses: crate-ci/typos@v1.44.0
+        uses: crate-ci/typos@v1.45.0
