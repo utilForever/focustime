@@ -32,14 +32,8 @@ cargo audit
 
 `focustime` is a Rust TUI application that combines a Pomodoro timer, site blocking, and WakaTime tracking.
 
-Current module layout in `src/`:
-
-- `main.rs`: app entry point, terminal setup/cleanup, event loop and ticks.
-- `app.rs`: application state and key handling across Timer and Site Manager modes.
-- `timer.rs`: timer domain logic (focus/short break/long break, status transitions).
-- `blocker.rs`: hosts-file based website blocking logic.
-- `ui.rs`: Ratatui rendering for both screens.
-- `wakatime.rs`: WakaTime configuration parsing and heartbeat tracking.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the module map, component interactions,
+visibility rules, and file conventions.
 
 ## Code Style
 
