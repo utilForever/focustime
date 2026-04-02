@@ -22,7 +22,7 @@ flowchart LR
     A --> T
     A --> B
     A --> W
-    U -->|"reads app+timer state"| A
+    A -->|"state read by ui"| U
     B --> OS
     W --> API
 ```
