@@ -59,12 +59,15 @@ sequenceDiagram
         alt phase changed
             App->>Blocker: block()/unblock()
         end
-        App->>Waka: tick_elapsed(elapsed_secs)
+        Main->>App: on_wakatime_elapsed(elapsed_secs) (when >=1s)
+        alt Focus + Running
+            App->>Waka: tick_elapsed(elapsed_secs)
+        end
     end
 ```
 
 1. `main` creates `App`, initializes terminal state, and enters a loop.
-2. Each loop iteration draws UI from current state (`ui::render(&app)`).
+2. Each loop iteration draws UI from current state (`ui::render(frame, &app)`).
 3. Key events are routed to `App::handle_key`, which updates timer state, mode,
    site list, and quit intent.
 4. A 100ms tick cadence accumulates elapsed time; every elapsed second triggers
