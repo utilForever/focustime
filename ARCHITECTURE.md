@@ -18,7 +18,7 @@ flowchart LR
     API["WakaTime API"]
 
     M -->|"handle key + tick"| A
-    M -->|"render(frame, app)"| U
+    M -->|"render(frame, &app)"| U
     A --> T
     A --> B
     A --> W
@@ -52,7 +52,7 @@ sequenceDiagram
     participant UI as ui::render
 
     loop every frame
-        Main->>UI: render(frame, app)
+        Main->>UI: render(frame, &app)
         Main->>App: handle_key(key) (if input)
         Main->>App: on_tick() (when 1s elapsed)
         App->>Timer: tick()
