@@ -71,6 +71,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 - coding and commit conventions
 - pull request workflow
 
+## Release automation
+
+Pushing a tag that matches `v*` (for example, `v0.2.0`) triggers the release
+workflow. It runs CI quality gates, builds binaries for Linux/macOS/Windows, and
+publishes them to the GitHub Release attached to that tag.
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
