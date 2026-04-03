@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality_gates:
+    name: ✅ Quality Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run cargo check
+        run: cargo check --all --locked
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check
+      - name: Run cargo clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Run cargo test
+        run: cargo test --all --locked
+      - name: Run cargo audit
+        uses: actions-rust-lang/audit@v1
+      - name: Run typos check
+        uses: crate-ci/typos@v1.45.0
+
+  build_binaries:
+    name: 📦 Build (${{ matrix.asset_suffix }})
+    needs: quality_gates
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset_suffix: linux-x86_64
+            archive_ext: tar.gz
+            binary_name: focustime
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset_suffix: macos-aarch64
+            archive_ext: tar.gz
+            binary_name: focustime
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset_suffix: windows-x86_64
+            archive_ext: zip
+            binary_name: focustime.exe
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package release archive (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" .
+          archive_name="focustime-${{ github.ref_name }}-${{ matrix.asset_suffix }}.${{ matrix.archive_ext }}"
+          tar -czf "dist/${archive_name}" "${{ matrix.binary_name }}"
+      - name: Package release archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item "target\${{ matrix.target }}\release\${{ matrix.binary_name }}" -Destination ".\${{ matrix.binary_name }}"
+          $archiveName = "focustime-${{ github.ref_name }}-${{ matrix.asset_suffix }}.${{ matrix.archive_ext }}"
+          Compress-Archive -Path ".\${{ matrix.binary_name }}" -DestinationPath ".\dist\$archiveName" -Force
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.asset_suffix }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish_release:
+    name: 🚀 Publish GitHub Release
+    needs: build_binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: release-*
+          merge-multiple: true
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
