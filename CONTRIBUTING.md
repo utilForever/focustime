@@ -71,7 +71,8 @@ Before preparing a release commit, make sure all CI jobs pass for the release ch
 To publish a release artifact set, create and push a `v*` tag (for example, `v0.2.0`).
 The release workflow will:
 
-- run `cargo check`, `cargo fmt --check`, `cargo clippy -D warnings`, and `cargo test`
+- run `cargo check`, `cargo fmt --check`, `cargo clippy --locked -D warnings`, and `cargo test`
+- run dependency audit and typos checks
 - build release binaries for Linux, macOS, and Windows
 - upload those binaries to the GitHub Release for the tag
 

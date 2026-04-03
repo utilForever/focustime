@@ -29,6 +29,10 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Run cargo test
         run: cargo test --all --locked
+      - name: Run cargo audit
+        uses: actions-rust-lang/audit@v1
+      - name: Run typos check
+        uses: crate-ci/typos@v1.45.0
 
   build_binaries:
     name: 📦 Build (${{ matrix.asset_suffix }})
