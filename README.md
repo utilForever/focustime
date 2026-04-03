@@ -26,6 +26,10 @@ cd focustime
 cargo run
 ```
 
+> Site blocking updates your OS hosts file and may require elevated privileges
+> (`sudo`/Administrator). If permissions are insufficient, timer functionality
+> still works, but blocking operations can fail.
+
 ### Development checks
 
 ```sh
@@ -45,6 +49,9 @@ cargo test --all
 - `src/blocker.rs`: hosts-file site blocking and unblocking.
 - `src/wakatime.rs`: heartbeat tracking integration.
 - `src/ui.rs`: Ratatui rendering for timer and site manager views.
+
+WakaTime tracking is optional and activates only when an API key is configured
+(read from `~/.wakatime.cfg`).
 
 Runtime flow (high-level):
 
