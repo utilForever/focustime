@@ -5,7 +5,7 @@ TUI-based application for **Pomodoro timing**, **distraction-site blocking**, an
 ## Status badges
 
 [![Rust CI](https://github.com/utilForever/focustime/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/utilForever/focustime/actions/workflows/rust.yml)
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Screenshot
 
@@ -37,14 +37,14 @@ cargo test --all
 
 ## The way the system works
 
-`focustime` is a single-binary Rust TUI app composed of six modules:
+`focustime` is a single-binary Rust TUI app composed of six modules in `src/`:
 
-- `main.rs`: terminal lifecycle and event loop.
-- `app.rs`: application state and orchestration.
-- `timer.rs`: Pomodoro timer state machine.
-- `blocker.rs`: hosts-file site blocking and unblocking.
-- `wakatime.rs`: heartbeat tracking integration.
-- `ui.rs`: Ratatui rendering for timer and site manager views.
+- `src/main.rs`: terminal lifecycle and event loop.
+- `src/app.rs`: application state and orchestration.
+- `src/timer.rs`: Pomodoro timer state machine.
+- `src/blocker.rs`: hosts-file site blocking and unblocking.
+- `src/wakatime.rs`: heartbeat tracking integration.
+- `src/ui.rs`: Ratatui rendering for timer and site manager views.
 
 Runtime flow (high-level):
 
