@@ -84,7 +84,7 @@ jobs:
           $archiveName = "focustime-${{ github.ref_name }}-${{ matrix.asset_suffix }}.${{ matrix.archive_ext }}"
           Compress-Archive -Path ".\${{ matrix.binary_name }}" -DestinationPath ".\dist\$archiveName" -Force
       - name: Upload release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.asset_suffix }}
           path: dist/*
