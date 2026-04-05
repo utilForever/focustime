@@ -5,9 +5,27 @@
 
 TUI-based application for **Pomodoro timing**, **distraction-site blocking**, and **WakaTime tracking**.
 
-## Screenshot
-
-> Screenshot will be added later.
+<table>
+  <tr>
+    <td align="center">
+      <img src="./assets/demo_focus.png" alt="Focus mode demo" width="800">
+      <p>Pomodoro - Focus</p>
+    </td>
+    <td align="center">
+      <img src="./assets/demo_short_break.png" alt="Short break demo" width="800">
+      <p>Pomodoro - Short Break</p>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./assets/demo_site_blocking_inactive.png" alt="Site blocking inactive demo" width="800">
+      <p>Site blocking - Inactive</p>
+    </td>
+    <td align="center">
+      <img src="./assets/demo_site_blocking_active.png" alt="Site blocking active demo" width="800">
+      <p>Site blocking - Active</p>
+    </td>
+</table>
 
 ## Quick Start
 
