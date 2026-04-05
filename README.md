@@ -1,11 +1,9 @@
 # focustime
 
-TUI-based application for **Pomodoro timing**, **distraction-site blocking**, and **WakaTime tracking**.
-
-## Status badges
-
 [![Rust CI](https://github.com/utilForever/focustime/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/utilForever/focustime/actions/workflows/rust.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+TUI-based application for **Pomodoro timing**, **distraction-site blocking**, and **WakaTime tracking**.
 
 ## Screenshot
 
