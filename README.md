@@ -1,15 +1,32 @@
 # focustime
 
-TUI-based application for **Pomodoro timing**, **distraction-site blocking**, and **WakaTime tracking**.
-
-## Status badges
-
 [![Rust CI](https://github.com/utilForever/focustime/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/utilForever/focustime/actions/workflows/rust.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Screenshot
+TUI-based application for **Pomodoro timing**, **distraction-site blocking**, and **WakaTime tracking**.
 
-> Screenshot will be added later.
+<table>
+  <tr>
+    <td align="center">
+      <img src="./assets/demo_focus.png" alt="Focus mode demo" width="800">
+      <p>Pomodoro - Focus</p>
+    </td>
+    <td align="center">
+      <img src="./assets/demo_short_break.png" alt="Short break demo" width="800">
+      <p>Pomodoro - Short Break</p>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./assets/demo_site_blocking_inactive.png" alt="Site blocking inactive demo" width="800">
+      <p>Site blocking - Inactive</p>
+    </td>
+    <td align="center">
+      <img src="./assets/demo_site_blocking_active.png" alt="Site blocking active demo" width="800">
+      <p>Site blocking - Active</p>
+    </td>
+  </tr>
+</table>
 
 ## Quick Start
 
@@ -80,4 +97,14 @@ them to the GitHub Release attached to that tag.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+<img align="right" src="https://149753425.v2.pressablecdn.com/wp-content/uploads/2009/06/OSIApproved_100X125.png">
+
+The class is licensed under the [MIT License](https://opensource.org/licenses/MIT):
+
+Copyright &copy; 2026 [Chris Ohk](https://www.github.com/utilForever).
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
