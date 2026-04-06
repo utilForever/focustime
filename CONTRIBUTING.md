@@ -65,6 +65,7 @@ The project uses Conventional Commit-style release commits:
 
 - Release commit format: `feat: vX.Y.Z — short summary`
 - Hotfix format: `fix: description` (no version in the message)
+- Update [CHANGELOG.md](CHANGELOG.md) with release notes before creating a release commit/tag.
 
 Before preparing a release commit, make sure all CI jobs pass for the release changes.
 

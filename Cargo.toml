@@ -2,6 +2,13 @@
 name = "focustime"
 version = "0.1.0"
 edition = "2024"
+description = "TUI Pomodoro timer with site blocking and WakaTime tracking"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/utilForever/focustime"
+homepage = "https://github.com/utilForever/focustime"
+keywords = ["pomodoro", "tui", "productivity", "focus", "wakatime"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 ratatui = "0.30"
