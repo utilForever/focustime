@@ -95,6 +95,8 @@ workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
+For a human-readable summary of notable changes, see [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 <img align="right" src="https://149753425.v2.pressablecdn.com/wp-content/uploads/2009/06/OSIApproved_100X125.png">
