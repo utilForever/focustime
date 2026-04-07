@@ -251,13 +251,19 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
     frame.render_widget(input_widget, inner[5]);
 
     // Error line
-    if let Some(ref err) = app.block_error {
+    if let Some(err) = app.block_error.as_ref() {
         let privilege_hint = if cfg!(target_os = "windows") {
             " (try running in an elevated command prompt)"
         } else {
             " (try running with elevated privileges)"
         };
         let err_text = format!("⚠  {err}{privilege_hint}");
+        let err_widget = Paragraph::new(err_text)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Red));
+        frame.render_widget(err_widget, inner[6]);
+    } else if let Some(err) = app.config_error.as_ref() {
+        let err_text = format!("⚠  {err}");
         let err_widget = Paragraph::new(err_text)
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Red));

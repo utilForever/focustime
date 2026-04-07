@@ -24,6 +24,8 @@ pub struct App {
     pub selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
     pub block_error: Option<String>,
+    /// Last error from persisting timer/site configuration.
+    pub config_error: Option<String>,
     pub wakatime: WakatimeTracker,
 }
 
@@ -48,6 +50,7 @@ impl App {
             site_input_active: false,
             selected_site: 0,
             block_error: None,
+            config_error: None,
             wakatime: WakatimeTracker::new(),
         }
     }
@@ -71,7 +74,7 @@ impl App {
     }
 
     /// Persist the current blocked-sites list and timer preferences to disk.
-    /// Failures are best-effort; the error is surfaced through `block_error`.
+    /// Failures are best-effort; the error is surfaced through `config_error`.
     fn save_config(&mut self) {
         let config = AppConfig {
             focus_secs: self.timer.focus_secs,
@@ -80,7 +83,9 @@ impl App {
             blocked_sites: self.blocker.sites.clone(),
         };
         if let Err(e) = config.save() {
-            self.block_error = Some(format!("config save failed: {e}"));
+            self.config_error = Some(format!("config save failed: {e}"));
+        } else {
+            self.config_error = None;
         }
     }
 

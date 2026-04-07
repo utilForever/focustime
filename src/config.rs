@@ -74,7 +74,9 @@ impl AppConfig {
         let content = toml::to_string_pretty(self)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-        // Atomic write: write to a temp file first, then rename.
+        // Best-effort atomic write: temp file + rename.
+        // On Windows, rename cannot replace an existing file; we fall back to
+        // remove+rename when the destination already exists.
         let tmp = path.with_extension("toml.tmp");
         fs::write(&tmp, &content)?;
         #[cfg(target_os = "windows")]
@@ -123,6 +125,49 @@ fn config_dir() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[cfg(target_os = "windows")]
+    const CONFIG_DIR_ENV: &str = "APPDATA";
+    #[cfg(not(target_os = "windows"))]
+    const CONFIG_DIR_ENV: &str = "XDG_CONFIG_HOME";
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EnvVarGuard {
+        key: &'static str,
+        original: Option<OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let original = std::env::var_os(key);
+            // SAFETY: test-only mutation of process environment under a module-
+            // local lock to avoid concurrent updates from these tests.
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, original }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            // SAFETY: restores the original value captured before mutation.
+            unsafe {
+                if let Some(value) = self.original.as_ref() {
+                    std::env::set_var(self.key, value);
+                } else {
+                    std::env::remove_var(self.key);
+                }
+            }
+        }
+    }
 
     #[test]
     fn default_values_are_canonical_pomodoro() {
@@ -161,13 +206,29 @@ mod tests {
     }
 
     #[test]
-    fn corrupt_toml_parse_failure_can_fall_back_to_default() {
-        let content = "this is not valid toml !!!";
-        let result: Result<AppConfig, _> = toml::from_str(content);
-        assert!(result.is_err(), "invalid TOML should fail to parse");
-        // Applying a default fallback after parse failure yields defaults.
-        let cfg = result.ok().unwrap_or_default();
+    fn load_returns_default_when_config_file_is_corrupt() {
+        let _lock = env_lock().lock().unwrap();
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_base = std::env::temp_dir().join(format!(
+            "focustime-config-test-{}-{now}",
+            std::process::id()
+        ));
+        let app_dir = temp_base.join("focustime");
+        fs::create_dir_all(&app_dir).unwrap();
+        fs::write(app_dir.join("config.toml"), "this is not valid toml !!!").unwrap();
+
+        let _env_guard = EnvVarGuard::set(CONFIG_DIR_ENV, &temp_base);
+        let cfg = AppConfig::load();
+        let _ = fs::remove_dir_all(&temp_base);
+
         assert_eq!(cfg.focus_secs, crate::timer::DEFAULT_FOCUS_SECS);
+        assert_eq!(cfg.short_break_secs, crate::timer::DEFAULT_SHORT_BREAK_SECS);
+        assert_eq!(cfg.long_break_secs, crate::timer::DEFAULT_LONG_BREAK_SECS);
+        assert!(cfg.blocked_sites.is_empty());
     }
 
     #[test]
