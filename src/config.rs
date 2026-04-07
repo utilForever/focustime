@@ -123,8 +123,13 @@ fn config_dir() -> Option<PathBuf> {
 }
 
 fn env_path_var(key: &str) -> Option<PathBuf> {
-    let value = std::env::var(key).ok()?;
-    if value.trim().is_empty() {
+    let value = std::env::var_os(key)?;
+    if value.is_empty() {
+        return None;
+    }
+    if let Some(value_utf8) = value.to_str()
+        && value_utf8.trim().is_empty()
+    {
         return None;
     }
     Some(PathBuf::from(value))
@@ -265,6 +270,21 @@ mod tests {
         let _lock = env_lock().lock().unwrap();
         let _appdata_guard = EnvVarGuard::set("APPDATA", "   ");
         assert!(config_dir().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn env_path_var_accepts_non_utf8_value() {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        let _lock = env_lock().lock().unwrap();
+        let non_utf8 = OsString::from_vec(vec![b'/', b't', b'm', b'p', b'/', 0x80, b'x']);
+        let _home_guard = EnvVarGuard::set("HOME", &non_utf8);
+        let parsed = env_path_var("HOME").expect("non-UTF-8 env var should be accepted");
+        assert_eq!(
+            parsed.as_os_str().as_bytes(),
+            non_utf8.as_os_str().as_bytes()
+        );
     }
 
     #[test]
