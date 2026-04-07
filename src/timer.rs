@@ -62,6 +62,9 @@ impl TimerState {
 
     /// Create a timer with custom phase durations (all in seconds).
     pub fn with_durations(focus_secs: u64, short_break_secs: u64, long_break_secs: u64) -> Self {
+        let focus_secs = nonzero_or_default(focus_secs, DEFAULT_FOCUS_SECS);
+        let short_break_secs = nonzero_or_default(short_break_secs, DEFAULT_SHORT_BREAK_SECS);
+        let long_break_secs = nonzero_or_default(long_break_secs, DEFAULT_LONG_BREAK_SECS);
         let phase = TimerPhase::Focus;
         Self {
             phase,
@@ -153,6 +156,10 @@ impl TimerState {
         }
         self.remaining_secs as f64 / total_secs as f64
     }
+}
+
+fn nonzero_or_default(value: u64, default: u64) -> u64 {
+    if value == 0 { default } else { value }
 }
 
 impl Default for TimerState {
@@ -265,5 +272,14 @@ mod tests {
         t.tick(); // completes focus → short break
         assert_eq!(t.phase, TimerPhase::ShortBreak);
         assert_eq!(t.remaining_secs, 2 * 60);
+    }
+
+    #[test]
+    fn with_durations_zero_values_fall_back_to_defaults() {
+        let t = TimerState::with_durations(0, 0, 0);
+        assert_eq!(t.focus_secs, DEFAULT_FOCUS_SECS);
+        assert_eq!(t.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
+        assert_eq!(t.long_break_secs, DEFAULT_LONG_BREAK_SECS);
+        assert_eq!(t.remaining_secs, DEFAULT_FOCUS_SECS);
     }
 }

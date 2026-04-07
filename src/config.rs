@@ -59,6 +59,11 @@ impl AppConfig {
         Self::try_load_with_env(|key| std::env::var_os(key))
     }
 
+    #[cfg(test)]
+    fn load_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Self {
+        Self::try_load_with_env(get_var).unwrap_or_default()
+    }
+
     fn try_load_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Option<Self> {
         let path = Self::config_path_with_env(get_var)?;
         let content = fs::read_to_string(path).ok()?;
@@ -206,14 +211,13 @@ mod tests {
         fs::create_dir_all(&app_dir).unwrap();
         fs::write(app_dir.join("config.toml"), "this is not valid toml !!!").unwrap();
 
-        let cfg = AppConfig::try_load_with_env(|key| {
+        let cfg = AppConfig::load_with_env(|key| {
             if key == CONFIG_DIR_ENV {
                 Some(temp_base.clone().into_os_string())
             } else {
                 None
             }
-        })
-        .unwrap_or_default();
+        });
         let _ = fs::remove_dir_all(&temp_base);
 
         assert_eq!(cfg.focus_secs, crate::timer::DEFAULT_FOCUS_SECS);
