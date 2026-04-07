@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -55,7 +56,11 @@ impl AppConfig {
     }
 
     fn try_load() -> Option<Self> {
-        let path = Self::config_path()?;
+        Self::try_load_with_env(|key| std::env::var_os(key))
+    }
+
+    fn try_load_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Option<Self> {
+        let path = Self::config_path_with_env(get_var)?;
         let content = fs::read_to_string(path).ok()?;
         toml::from_str(&content).ok()
     }
@@ -101,27 +106,35 @@ impl AppConfig {
         let config_dir = config_dir()?;
         Some(config_dir.join("focustime").join("config.toml"))
     }
+
+    fn config_path_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Option<PathBuf> {
+        let config_dir = config_dir_from_env(get_var)?;
+        Some(config_dir.join("focustime").join("config.toml"))
+    }
 }
 
 /// Returns the platform-appropriate configuration base directory.
 fn config_dir() -> Option<PathBuf> {
+    config_dir_from_env(|key| std::env::var_os(key))
+}
+
+fn config_dir_from_env(mut get_var: impl FnMut(&str) -> Option<OsString>) -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
-        env_path_var("APPDATA")
+        env_path_from_value(get_var("APPDATA")?)
     }
     #[cfg(not(target_os = "windows"))]
     {
         // Honour XDG_CONFIG_HOME if set, otherwise fall back to ~/.config.
-        if let Some(xdg) = env_path_var("XDG_CONFIG_HOME") {
+        if let Some(xdg) = get_var("XDG_CONFIG_HOME").and_then(env_path_from_value) {
             return Some(xdg);
         }
-        let home = env_path_var("HOME")?;
+        let home = get_var("HOME").and_then(env_path_from_value)?;
         Some(home.join(".config"))
     }
 }
 
-fn env_path_var(key: &str) -> Option<PathBuf> {
-    let value = std::env::var_os(key)?;
+fn env_path_from_value(value: OsString) -> Option<PathBuf> {
     if value.is_empty() {
         return None;
     }
@@ -136,60 +149,12 @@ fn env_path_var(key: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::OsString;
-    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[cfg(target_os = "windows")]
     const CONFIG_DIR_ENV: &str = "APPDATA";
     #[cfg(not(target_os = "windows"))]
     const CONFIG_DIR_ENV: &str = "XDG_CONFIG_HOME";
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
-    struct EnvVarGuard {
-        key: &'static str,
-        original: Option<OsString>,
-    }
-
-    impl EnvVarGuard {
-        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
-            let original = std::env::var_os(key);
-            // SAFETY: test-only mutation of process environment under a module-
-            // local lock to avoid concurrent updates from these tests.
-            unsafe {
-                std::env::set_var(key, value);
-            }
-            Self { key, original }
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        fn unset(key: &'static str) -> Self {
-            let original = std::env::var_os(key);
-            // SAFETY: test-only mutation of process environment under a module-
-            // local lock to avoid concurrent updates from these tests.
-            unsafe {
-                std::env::remove_var(key);
-            }
-            Self { key, original }
-        }
-    }
-
-    impl Drop for EnvVarGuard {
-        fn drop(&mut self) {
-            // SAFETY: restores the original value captured before mutation.
-            unsafe {
-                if let Some(value) = self.original.as_ref() {
-                    std::env::set_var(self.key, value);
-                } else {
-                    std::env::remove_var(self.key);
-                }
-            }
-        }
-    }
 
     #[test]
     fn default_values_are_canonical_pomodoro() {
@@ -229,8 +194,6 @@ mod tests {
 
     #[test]
     fn load_returns_default_when_config_file_is_corrupt() {
-        let _lock = env_lock().lock().unwrap();
-
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -243,8 +206,14 @@ mod tests {
         fs::create_dir_all(&app_dir).unwrap();
         fs::write(app_dir.join("config.toml"), "this is not valid toml !!!").unwrap();
 
-        let _env_guard = EnvVarGuard::set(CONFIG_DIR_ENV, &temp_base);
-        let cfg = AppConfig::load();
+        let cfg = AppConfig::try_load_with_env(|key| {
+            if key == CONFIG_DIR_ENV {
+                Some(temp_base.clone().into_os_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
         let _ = fs::remove_dir_all(&temp_base);
 
         assert_eq!(cfg.focus_secs, crate::timer::DEFAULT_FOCUS_SECS);
@@ -256,29 +225,32 @@ mod tests {
     #[cfg(not(target_os = "windows"))]
     #[test]
     fn config_dir_returns_none_when_home_is_blank_and_xdg_is_unset() {
-        let _lock = env_lock().lock().unwrap();
-        let _xdg_guard = EnvVarGuard::unset("XDG_CONFIG_HOME");
-        let _home_guard = EnvVarGuard::set("HOME", "   ");
-        assert!(config_dir().is_none());
+        let dir = config_dir_from_env(|key| match key {
+            "XDG_CONFIG_HOME" => None,
+            "HOME" => Some(OsString::from("   ")),
+            _ => None,
+        });
+        assert!(dir.is_none());
     }
 
     #[cfg(target_os = "windows")]
     #[test]
     fn config_dir_returns_none_when_appdata_is_blank() {
-        let _lock = env_lock().lock().unwrap();
-        let _appdata_guard = EnvVarGuard::set("APPDATA", "   ");
-        assert!(config_dir().is_none());
+        let dir = config_dir_from_env(|key| match key {
+            "APPDATA" => Some(OsString::from("   ")),
+            _ => None,
+        });
+        assert!(dir.is_none());
     }
 
     #[cfg(unix)]
     #[test]
-    fn env_path_var_accepts_non_utf8_value() {
+    fn env_path_from_value_accepts_non_utf8_value() {
         use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
-        let _lock = env_lock().lock().unwrap();
         let non_utf8 = OsString::from_vec(vec![b'/', b't', b'm', b'p', b'/', 0x80, b'x']);
-        let _home_guard = EnvVarGuard::set("HOME", &non_utf8);
-        let parsed = env_path_var("HOME").expect("non-UTF-8 env var should be accepted");
+        let parsed =
+            env_path_from_value(non_utf8.clone()).expect("non-UTF-8 env var should be accepted");
         assert_eq!(
             parsed.as_os_str().as_bytes(),
             non_utf8.as_os_str().as_bytes()
@@ -290,10 +262,12 @@ mod tests {
     fn config_dir_uses_non_utf8_xdg_config_home() {
         use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
-        let _lock = env_lock().lock().unwrap();
         let non_utf8 = OsString::from_vec(vec![b'/', b't', b'm', b'p', b'/', 0x81, b'y']);
-        let _xdg_guard = EnvVarGuard::set("XDG_CONFIG_HOME", &non_utf8);
-        let dir = config_dir().expect("non-UTF-8 XDG_CONFIG_HOME should be accepted");
+        let dir = config_dir_from_env(|key| match key {
+            "XDG_CONFIG_HOME" => Some(non_utf8.clone()),
+            _ => None,
+        })
+        .expect("non-UTF-8 XDG_CONFIG_HOME should be accepted");
         assert_eq!(dir.as_os_str().as_bytes(), non_utf8.as_os_str().as_bytes());
     }
 
