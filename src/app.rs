@@ -84,7 +84,8 @@ impl App {
         }
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) {        match self.mode {
+    pub fn handle_key(&mut self, key: KeyEvent) {
+        match self.mode {
             AppMode::Timer => self.handle_key_timer(key),
             AppMode::SiteManager => self.handle_key_site_manager(key),
         }
