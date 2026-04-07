@@ -110,10 +110,10 @@ fn config_dir() -> Option<PathBuf> {
     #[cfg(not(target_os = "windows"))]
     {
         // Honour XDG_CONFIG_HOME if set, otherwise fall back to ~/.config.
-        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-            if !xdg.trim().is_empty() {
-                return Some(PathBuf::from(xdg));
-            }
+        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME")
+            && !xdg.trim().is_empty()
+        {
+            return Some(PathBuf::from(xdg));
         }
         let home = std::env::var("HOME").ok()?;
         Some(PathBuf::from(home).join(".config"))
