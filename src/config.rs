@@ -112,10 +112,8 @@ fn config_dir() -> Option<PathBuf> {
     #[cfg(not(target_os = "windows"))]
     {
         // Honour XDG_CONFIG_HOME if set, otherwise fall back to ~/.config.
-        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME")
-            && !xdg.trim().is_empty()
-        {
-            return Some(PathBuf::from(xdg));
+        if let Some(xdg) = env_path_var("XDG_CONFIG_HOME") {
+            return Some(xdg);
         }
         let home = env_path_var("HOME")?;
         Some(home.join(".config"))
@@ -285,6 +283,18 @@ mod tests {
             parsed.as_os_str().as_bytes(),
             non_utf8.as_os_str().as_bytes()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_dir_uses_non_utf8_xdg_config_home() {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        let _lock = env_lock().lock().unwrap();
+        let non_utf8 = OsString::from_vec(vec![b'/', b't', b'm', b'p', b'/', 0x81, b'y']);
+        let _xdg_guard = EnvVarGuard::set("XDG_CONFIG_HOME", &non_utf8);
+        let dir = config_dir().expect("non-UTF-8 XDG_CONFIG_HOME should be accepted");
+        assert_eq!(dir.as_os_str().as_bytes(), non_utf8.as_os_str().as_bytes());
     }
 
     #[test]
