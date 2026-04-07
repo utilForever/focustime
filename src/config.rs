@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 /// Persistent application configuration stored as TOML.
 ///
 /// File locations:
-/// - Unix / macOS: `~/.config/focustime/config.toml`
+/// - Unix / macOS: `$XDG_CONFIG_HOME/focustime/config.toml` if set,
+///   otherwise `~/.config/focustime/config.toml`
 /// - Windows:      `%APPDATA%\focustime\config.toml`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -26,13 +27,13 @@ pub struct AppConfig {
 }
 
 fn default_focus_secs() -> u64 {
-    25 * 60
+    crate::timer::DEFAULT_FOCUS_SECS
 }
 fn default_short_break_secs() -> u64 {
-    5 * 60
+    crate::timer::DEFAULT_SHORT_BREAK_SECS
 }
 fn default_long_break_secs() -> u64 {
-    15 * 60
+    crate::timer::DEFAULT_LONG_BREAK_SECS
 }
 
 impl Default for AppConfig {
@@ -76,7 +77,22 @@ impl AppConfig {
         // Atomic write: write to a temp file first, then rename.
         let tmp = path.with_extension("toml.tmp");
         fs::write(&tmp, &content)?;
-        fs::rename(&tmp, &path)
+        #[cfg(target_os = "windows")]
+        {
+            match fs::rename(&tmp, &path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                    fs::remove_file(&path)?;
+                    fs::rename(&tmp, &path)
+                }
+                Err(e) => Err(e),
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            fs::rename(&tmp, &path)
+        }
     }
 
     fn config_path() -> Option<PathBuf> {
@@ -95,7 +111,9 @@ fn config_dir() -> Option<PathBuf> {
     {
         // Honour XDG_CONFIG_HOME if set, otherwise fall back to ~/.config.
         if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-            return Some(PathBuf::from(xdg));
+            if !xdg.trim().is_empty() {
+                return Some(PathBuf::from(xdg));
+            }
         }
         let home = std::env::var("HOME").ok()?;
         Some(PathBuf::from(home).join(".config"))
@@ -143,14 +161,13 @@ mod tests {
     }
 
     #[test]
-    fn corrupt_data_returns_default_via_load() {
-        // try_load should return None for invalid TOML, so load() returns Default.
+    fn corrupt_toml_parse_failure_can_fall_back_to_default() {
         let content = "this is not valid toml !!!";
         let result: Result<AppConfig, _> = toml::from_str(content);
         assert!(result.is_err(), "invalid TOML should fail to parse");
-        // Simulate what AppConfig::load() does on parse failure:
+        // Applying a default fallback after parse failure yields defaults.
         let cfg = result.ok().unwrap_or_default();
-        assert_eq!(cfg.focus_secs, 25 * 60);
+        assert_eq!(cfg.focus_secs, crate::timer::DEFAULT_FOCUS_SECS);
     }
 
     #[test]

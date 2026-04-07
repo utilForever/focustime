@@ -5,6 +5,10 @@ pub enum TimerPhase {
     LongBreak,
 }
 
+pub const DEFAULT_FOCUS_SECS: u64 = 25 * 60;
+pub const DEFAULT_SHORT_BREAK_SECS: u64 = 5 * 60;
+pub const DEFAULT_LONG_BREAK_SECS: u64 = 15 * 60;
+
 impl TimerPhase {
     pub fn label(self) -> &'static str {
         match self {
@@ -17,9 +21,9 @@ impl TimerPhase {
     /// Duration of the phase in seconds.
     pub fn duration_secs(self) -> u64 {
         match self {
-            TimerPhase::Focus => 25 * 60,
-            TimerPhase::ShortBreak => 5 * 60,
-            TimerPhase::LongBreak => 15 * 60,
+            TimerPhase::Focus => DEFAULT_FOCUS_SECS,
+            TimerPhase::ShortBreak => DEFAULT_SHORT_BREAK_SECS,
+            TimerPhase::LongBreak => DEFAULT_LONG_BREAK_SECS,
         }
     }
 }
