@@ -1,6 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blocker::SiteBlocker;
+use crate::config::AppConfig;
 use crate::timer::{TimerPhase, TimerState, TimerStatus};
 use crate::wakatime::WakatimeTracker;
 
@@ -28,11 +29,21 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
+        let config = AppConfig::load();
+        let timer = TimerState::with_durations(
+            config.focus_secs,
+            config.short_break_secs,
+            config.long_break_secs,
+        );
+        let mut blocker = SiteBlocker::new();
+        for site in &config.blocked_sites {
+            blocker.add_site(site.clone());
+        }
         Self {
-            timer: TimerState::new(),
+            timer,
             should_quit: false,
             mode: AppMode::Timer,
-            blocker: SiteBlocker::new(),
+            blocker,
             site_input: String::new(),
             site_input_active: false,
             selected_site: 0,
@@ -59,8 +70,21 @@ impl App {
         }
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) {
-        match self.mode {
+    /// Persist the current blocked-sites list and timer preferences to disk.
+    /// Failures are best-effort; the error is surfaced through `block_error`.
+    fn save_config(&mut self) {
+        let config = AppConfig {
+            focus_secs: self.timer.focus_secs,
+            short_break_secs: self.timer.short_break_secs,
+            long_break_secs: self.timer.long_break_secs,
+            blocked_sites: self.blocker.sites.clone(),
+        };
+        if let Err(e) = config.save() {
+            self.block_error = Some(format!("config save failed: {e}"));
+        }
+    }
+
+    pub fn handle_key(&mut self, key: KeyEvent) {        match self.mode {
             AppMode::Timer => self.handle_key_timer(key),
             AppMode::SiteManager => self.handle_key_site_manager(key),
         }
@@ -106,6 +130,7 @@ impl App {
                     self.blocker.add_site(site);
                     self.site_input_active = false;
                     self.clamp_selection();
+                    self.save_config();
                     // Re-apply block if currently blocking
                     if self.blocker.is_blocking {
                         if let Err(e) = self.blocker.block() {
@@ -160,6 +185,7 @@ impl App {
                 if !self.blocker.sites.is_empty() {
                     self.blocker.remove_site(self.selected_site);
                     self.clamp_selection();
+                    self.save_config();
                     // Re-apply or clear block based on new list
                     if self.blocker.is_blocking {
                         if self.blocker.sites.is_empty() {
