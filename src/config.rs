@@ -13,18 +13,91 @@ use serde::{Deserialize, Serialize};
 /// - Windows:      `%APPDATA%\focustime\config.toml`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    /// Duration of a focus session in seconds.
+    /// Duration of a focus session in seconds (legacy compatibility field).
     #[serde(default = "default_focus_secs")]
     pub focus_secs: u64,
-    /// Duration of a short-break session in seconds.
+    /// Duration of a short-break session in seconds (legacy compatibility field).
     #[serde(default = "default_short_break_secs")]
     pub short_break_secs: u64,
-    /// Duration of a long-break session in seconds.
+    /// Duration of a long-break session in seconds (legacy compatibility field).
     #[serde(default = "default_long_break_secs")]
     pub long_break_secs: u64,
+    /// Number of completed focus sessions before a long break.
+    #[serde(default = "default_long_break_interval")]
+    pub long_break_interval: u32,
     /// Sites that should be blocked during focus sessions.
     #[serde(default)]
     pub blocked_sites: Vec<String>,
+    /// Selected profile identifier.
+    #[serde(default)]
+    pub selected_profile: ProfileId,
+    /// Editable custom profile persisted by the app.
+    ///
+    /// When this is absent, the app derives it from the legacy duration fields.
+    #[serde(default)]
+    pub custom_profile: Option<CustomProfileConfig>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProfileId {
+    Classic,
+    DeepWork,
+    #[default]
+    Custom,
+}
+
+impl ProfileId {
+    pub fn label(self) -> &'static str {
+        match self {
+            ProfileId::Classic => "Classic",
+            ProfileId::DeepWork => "Deep Work",
+            ProfileId::Custom => "Custom",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CustomProfileConfig {
+    #[serde(default = "default_focus_secs")]
+    pub focus_secs: u64,
+    #[serde(default = "default_short_break_secs")]
+    pub short_break_secs: u64,
+    #[serde(default = "default_long_break_secs")]
+    pub long_break_secs: u64,
+    #[serde(default = "default_long_break_interval")]
+    pub long_break_interval: u32,
+}
+
+impl CustomProfileConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            focus_secs: nonzero_or_default_u64(self.focus_secs, default_focus_secs()),
+            short_break_secs: nonzero_or_default_u64(
+                self.short_break_secs,
+                default_short_break_secs(),
+            ),
+            long_break_secs: nonzero_or_default_u64(
+                self.long_break_secs,
+                default_long_break_secs(),
+            ),
+            long_break_interval: nonzero_or_default_u32(
+                self.long_break_interval,
+                default_long_break_interval(),
+            ),
+        }
+    }
+}
+
+impl Default for CustomProfileConfig {
+    fn default() -> Self {
+        Self {
+            focus_secs: default_focus_secs(),
+            short_break_secs: default_short_break_secs(),
+            long_break_secs: default_long_break_secs(),
+            long_break_interval: default_long_break_interval(),
+        }
+    }
 }
 
 fn default_focus_secs() -> u64 {
@@ -36,6 +109,9 @@ fn default_short_break_secs() -> u64 {
 fn default_long_break_secs() -> u64 {
     crate::timer::DEFAULT_LONG_BREAK_SECS
 }
+fn default_long_break_interval() -> u32 {
+    crate::timer::DEFAULT_LONG_BREAK_INTERVAL
+}
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -43,7 +119,10 @@ impl Default for AppConfig {
             focus_secs: default_focus_secs(),
             short_break_secs: default_short_break_secs(),
             long_break_secs: default_long_break_secs(),
+            long_break_interval: default_long_break_interval(),
             blocked_sites: Vec::new(),
+            selected_profile: ProfileId::default(),
+            custom_profile: None,
         }
     }
 }
@@ -53,6 +132,22 @@ impl AppConfig {
     /// error (missing file, parse error, corrupt data, etc.).
     pub fn load() -> Self {
         Self::try_load().unwrap_or_default()
+    }
+
+    /// Returns the effective custom profile configuration.
+    ///
+    /// If `custom_profile` is not present in the config file, this derives
+    /// values from legacy duration fields to preserve user settings.
+    pub fn effective_custom_profile(&self) -> CustomProfileConfig {
+        self.custom_profile
+            .clone()
+            .unwrap_or(CustomProfileConfig {
+                focus_secs: self.focus_secs,
+                short_break_secs: self.short_break_secs,
+                long_break_secs: self.long_break_secs,
+                long_break_interval: self.long_break_interval,
+            })
+            .normalized()
     }
 
     fn try_load() -> Option<Self> {
@@ -67,7 +162,7 @@ impl AppConfig {
     fn try_load_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Option<Self> {
         let path = Self::config_path_with_env(get_var)?;
         let content = fs::read_to_string(path).ok()?;
-        toml::from_str(&content).ok()
+        toml::from_str(&content).ok().map(Self::normalize)
     }
 
     /// Persist the current config to disk.
@@ -105,6 +200,18 @@ impl AppConfig {
         {
             fs::rename(&tmp, &path)
         }
+    }
+
+    fn normalize(mut self) -> Self {
+        self.focus_secs = nonzero_or_default_u64(self.focus_secs, default_focus_secs());
+        self.short_break_secs =
+            nonzero_or_default_u64(self.short_break_secs, default_short_break_secs());
+        self.long_break_secs =
+            nonzero_or_default_u64(self.long_break_secs, default_long_break_secs());
+        self.long_break_interval =
+            nonzero_or_default_u32(self.long_break_interval, default_long_break_interval());
+        self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
+        self
     }
 
     fn config_path() -> Option<PathBuf> {
@@ -151,6 +258,14 @@ fn env_path_from_value(value: OsString) -> Option<PathBuf> {
     Some(PathBuf::from(value))
 }
 
+fn nonzero_or_default_u64(value: u64, default: u64) -> u64 {
+    if value == 0 { default } else { value }
+}
+
+fn nonzero_or_default_u32(value: u32, default: u32) -> u32 {
+    if value == 0 { default } else { value }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,6 +282,9 @@ mod tests {
         assert_eq!(cfg.focus_secs, 25 * 60);
         assert_eq!(cfg.short_break_secs, 5 * 60);
         assert_eq!(cfg.long_break_secs, 15 * 60);
+        assert_eq!(cfg.long_break_interval, 4);
+        assert_eq!(cfg.selected_profile, ProfileId::Custom);
+        assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
     }
 
@@ -176,25 +294,77 @@ mod tests {
             focus_secs: 50 * 60,
             short_break_secs: 10 * 60,
             long_break_secs: 20 * 60,
+            long_break_interval: 3,
             blocked_sites: vec!["example.com".to_string(), "reddit.com".to_string()],
+            selected_profile: ProfileId::DeepWork,
+            custom_profile: Some(CustomProfileConfig {
+                focus_secs: 30 * 60,
+                short_break_secs: 7 * 60,
+                long_break_secs: 12 * 60,
+                long_break_interval: 5,
+            }),
         };
         let toml_str = toml::to_string_pretty(&original).unwrap();
         let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
         assert_eq!(parsed.focus_secs, original.focus_secs);
         assert_eq!(parsed.short_break_secs, original.short_break_secs);
         assert_eq!(parsed.long_break_secs, original.long_break_secs);
+        assert_eq!(parsed.long_break_interval, original.long_break_interval);
         assert_eq!(parsed.blocked_sites, original.blocked_sites);
+        assert_eq!(parsed.selected_profile, original.selected_profile);
+        assert_eq!(parsed.custom_profile, original.custom_profile);
     }
 
     #[test]
     fn missing_fields_fall_back_to_defaults() {
-        // A config file that only specifies one field; the rest should default.
         let partial = "focus_secs = 1500\n";
         let cfg: AppConfig = toml::from_str(partial).unwrap();
         assert_eq!(cfg.focus_secs, 1500);
         assert_eq!(cfg.short_break_secs, 5 * 60);
         assert_eq!(cfg.long_break_secs, 15 * 60);
+        assert_eq!(cfg.long_break_interval, 4);
+        assert_eq!(cfg.selected_profile, ProfileId::Custom);
+        assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
+    }
+
+    #[test]
+    fn legacy_duration_fields_seed_custom_profile() {
+        let legacy = r#"
+focus_secs = 1800
+short_break_secs = 360
+long_break_secs = 900
+long_break_interval = 3
+"#;
+        let cfg: AppConfig = toml::from_str(legacy).unwrap();
+        let custom = cfg.effective_custom_profile();
+        assert_eq!(custom.focus_secs, 1800);
+        assert_eq!(custom.short_break_secs, 360);
+        assert_eq!(custom.long_break_secs, 900);
+        assert_eq!(custom.long_break_interval, 3);
+    }
+
+    #[test]
+    fn effective_custom_profile_uses_explicit_profile_when_present() {
+        let cfg = AppConfig {
+            focus_secs: 25 * 60,
+            short_break_secs: 5 * 60,
+            long_break_secs: 15 * 60,
+            long_break_interval: 4,
+            blocked_sites: Vec::new(),
+            selected_profile: ProfileId::Custom,
+            custom_profile: Some(CustomProfileConfig {
+                focus_secs: 40 * 60,
+                short_break_secs: 8 * 60,
+                long_break_secs: 16 * 60,
+                long_break_interval: 2,
+            }),
+        };
+        let custom = cfg.effective_custom_profile();
+        assert_eq!(custom.focus_secs, 40 * 60);
+        assert_eq!(custom.short_break_secs, 8 * 60);
+        assert_eq!(custom.long_break_secs, 16 * 60);
+        assert_eq!(custom.long_break_interval, 2);
     }
 
     #[test]
@@ -223,6 +393,12 @@ mod tests {
         assert_eq!(cfg.focus_secs, crate::timer::DEFAULT_FOCUS_SECS);
         assert_eq!(cfg.short_break_secs, crate::timer::DEFAULT_SHORT_BREAK_SECS);
         assert_eq!(cfg.long_break_secs, crate::timer::DEFAULT_LONG_BREAK_SECS);
+        assert_eq!(
+            cfg.long_break_interval,
+            crate::timer::DEFAULT_LONG_BREAK_INTERVAL
+        );
+        assert_eq!(cfg.selected_profile, ProfileId::Custom);
+        assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
     }
 

@@ -8,6 +8,7 @@ pub enum TimerPhase {
 pub const DEFAULT_FOCUS_SECS: u64 = 25 * 60;
 pub const DEFAULT_SHORT_BREAK_SECS: u64 = 5 * 60;
 pub const DEFAULT_LONG_BREAK_SECS: u64 = 15 * 60;
+pub const DEFAULT_LONG_BREAK_INTERVAL: u32 = 4;
 
 impl TimerPhase {
     pub fn label(self) -> &'static str {
@@ -49,22 +50,43 @@ pub struct TimerState {
     pub short_break_secs: u64,
     /// Configured duration for the long-break phase.
     pub long_break_secs: u64,
+    /// Number of completed focus sessions before a long break.
+    pub long_break_interval: u32,
 }
 
 impl TimerState {
     pub fn new() -> Self {
-        Self::with_durations(
+        Self::with_profile(
             TimerPhase::Focus.duration_secs(),
             TimerPhase::ShortBreak.duration_secs(),
             TimerPhase::LongBreak.duration_secs(),
+            DEFAULT_LONG_BREAK_INTERVAL,
         )
     }
 
     /// Create a timer with custom phase durations (all in seconds).
+    #[cfg(test)]
     pub fn with_durations(focus_secs: u64, short_break_secs: u64, long_break_secs: u64) -> Self {
+        Self::with_profile(
+            focus_secs,
+            short_break_secs,
+            long_break_secs,
+            DEFAULT_LONG_BREAK_INTERVAL,
+        )
+    }
+
+    /// Create a timer with custom phase durations and long-break cadence.
+    pub fn with_profile(
+        focus_secs: u64,
+        short_break_secs: u64,
+        long_break_secs: u64,
+        long_break_interval: u32,
+    ) -> Self {
         let focus_secs = nonzero_or_default(focus_secs, DEFAULT_FOCUS_SECS);
         let short_break_secs = nonzero_or_default(short_break_secs, DEFAULT_SHORT_BREAK_SECS);
         let long_break_secs = nonzero_or_default(long_break_secs, DEFAULT_LONG_BREAK_SECS);
+        let long_break_interval =
+            nonzero_or_default_u32(long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
         let phase = TimerPhase::Focus;
         Self {
             phase,
@@ -74,6 +96,7 @@ impl TimerState {
             focus_secs,
             short_break_secs,
             long_break_secs,
+            long_break_interval,
         }
     }
 
@@ -106,7 +129,10 @@ impl TimerState {
         match self.phase {
             TimerPhase::Focus => {
                 self.pomodoros_completed += 1;
-                if self.pomodoros_completed.is_multiple_of(4) {
+                if self
+                    .pomodoros_completed
+                    .is_multiple_of(self.long_break_interval)
+                {
                     self.phase = TimerPhase::LongBreak;
                 } else {
                     self.phase = TimerPhase::ShortBreak;
@@ -123,7 +149,7 @@ impl TimerState {
     /// Skip to the next phase immediately (does not count as a completed session).
     pub fn next_phase(&mut self) {
         if self.phase == TimerPhase::Focus {
-            if (self.pomodoros_completed + 1).is_multiple_of(4) {
+            if (self.pomodoros_completed + 1).is_multiple_of(self.long_break_interval) {
                 self.phase = TimerPhase::LongBreak;
             } else {
                 self.phase = TimerPhase::ShortBreak;
@@ -159,6 +185,10 @@ impl TimerState {
 }
 
 fn nonzero_or_default(value: u64, default: u64) -> u64 {
+    if value == 0 { default } else { value }
+}
+
+fn nonzero_or_default_u32(value: u32, default: u32) -> u32 {
     if value == 0 { default } else { value }
 }
 
@@ -249,6 +279,7 @@ mod tests {
         assert_eq!(t.focus_secs, 10 * 60);
         assert_eq!(t.short_break_secs, 2 * 60);
         assert_eq!(t.long_break_secs, 8 * 60);
+        assert_eq!(t.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
         assert_eq!(t.phase, TimerPhase::Focus);
         assert_eq!(t.status, TimerStatus::Idle);
     }
@@ -280,6 +311,30 @@ mod tests {
         assert_eq!(t.focus_secs, DEFAULT_FOCUS_SECS);
         assert_eq!(t.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
         assert_eq!(t.long_break_secs, DEFAULT_LONG_BREAK_SECS);
+        assert_eq!(t.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
         assert_eq!(t.remaining_secs, DEFAULT_FOCUS_SECS);
+    }
+
+    #[test]
+    fn with_profile_supports_custom_long_break_cadence() {
+        let mut t = TimerState::with_profile(25 * 60, 5 * 60, 15 * 60, 2);
+        t.status = TimerStatus::Running;
+        t.remaining_secs = 1;
+        t.tick(); // focus #1 -> short break
+        assert_eq!(t.phase, TimerPhase::ShortBreak);
+        t.status = TimerStatus::Running;
+        t.remaining_secs = 1;
+        t.tick(); // short break -> focus
+        assert_eq!(t.phase, TimerPhase::Focus);
+        t.status = TimerStatus::Running;
+        t.remaining_secs = 1;
+        t.tick(); // focus #2 -> long break (cadence 2)
+        assert_eq!(t.phase, TimerPhase::LongBreak);
+    }
+
+    #[test]
+    fn with_profile_zero_long_break_interval_falls_back_to_default() {
+        let t = TimerState::with_profile(25 * 60, 5 * 60, 15 * 60, 0);
+        assert_eq!(t.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
     }
 }
