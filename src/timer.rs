@@ -5,6 +5,10 @@ pub enum TimerPhase {
     LongBreak,
 }
 
+pub const DEFAULT_FOCUS_SECS: u64 = 25 * 60;
+pub const DEFAULT_SHORT_BREAK_SECS: u64 = 5 * 60;
+pub const DEFAULT_LONG_BREAK_SECS: u64 = 15 * 60;
+
 impl TimerPhase {
     pub fn label(self) -> &'static str {
         match self {
@@ -17,9 +21,9 @@ impl TimerPhase {
     /// Duration of the phase in seconds.
     pub fn duration_secs(self) -> u64 {
         match self {
-            TimerPhase::Focus => 25 * 60,
-            TimerPhase::ShortBreak => 5 * 60,
-            TimerPhase::LongBreak => 15 * 60,
+            TimerPhase::Focus => DEFAULT_FOCUS_SECS,
+            TimerPhase::ShortBreak => DEFAULT_SHORT_BREAK_SECS,
+            TimerPhase::LongBreak => DEFAULT_LONG_BREAK_SECS,
         }
     }
 }
@@ -39,16 +43,46 @@ pub struct TimerState {
     pub remaining_secs: u64,
     /// Number of completed focus sessions.
     pub pomodoros_completed: u32,
+    /// Configured duration for the focus phase.
+    pub focus_secs: u64,
+    /// Configured duration for the short-break phase.
+    pub short_break_secs: u64,
+    /// Configured duration for the long-break phase.
+    pub long_break_secs: u64,
 }
 
 impl TimerState {
     pub fn new() -> Self {
+        Self::with_durations(
+            TimerPhase::Focus.duration_secs(),
+            TimerPhase::ShortBreak.duration_secs(),
+            TimerPhase::LongBreak.duration_secs(),
+        )
+    }
+
+    /// Create a timer with custom phase durations (all in seconds).
+    pub fn with_durations(focus_secs: u64, short_break_secs: u64, long_break_secs: u64) -> Self {
+        let focus_secs = nonzero_or_default(focus_secs, DEFAULT_FOCUS_SECS);
+        let short_break_secs = nonzero_or_default(short_break_secs, DEFAULT_SHORT_BREAK_SECS);
+        let long_break_secs = nonzero_or_default(long_break_secs, DEFAULT_LONG_BREAK_SECS);
         let phase = TimerPhase::Focus;
         Self {
             phase,
             status: TimerStatus::Idle,
-            remaining_secs: phase.duration_secs(),
+            remaining_secs: focus_secs,
             pomodoros_completed: 0,
+            focus_secs,
+            short_break_secs,
+            long_break_secs,
+        }
+    }
+
+    /// Returns the configured duration for `phase`.
+    fn phase_duration(&self, phase: TimerPhase) -> u64 {
+        match phase {
+            TimerPhase::Focus => self.focus_secs,
+            TimerPhase::ShortBreak => self.short_break_secs,
+            TimerPhase::LongBreak => self.long_break_secs,
         }
     }
 
@@ -82,7 +116,7 @@ impl TimerState {
                 self.phase = TimerPhase::Focus;
             }
         }
-        self.remaining_secs = self.phase.duration_secs();
+        self.remaining_secs = self.phase_duration(self.phase);
         self.status = TimerStatus::Idle;
     }
 
@@ -97,13 +131,13 @@ impl TimerState {
         } else {
             self.phase = TimerPhase::Focus;
         }
-        self.remaining_secs = self.phase.duration_secs();
+        self.remaining_secs = self.phase_duration(self.phase);
         self.status = TimerStatus::Idle;
     }
 
     /// Reset the current phase back to its full duration and stop.
     pub fn reset(&mut self) {
-        self.remaining_secs = self.phase.duration_secs();
+        self.remaining_secs = self.phase_duration(self.phase);
         self.status = TimerStatus::Idle;
     }
 
@@ -116,12 +150,16 @@ impl TimerState {
 
     /// Progress as a value in [0.0, 1.0] where 1.0 means full time remaining.
     pub fn progress(&self) -> f64 {
-        let total_secs = self.phase.duration_secs();
+        let total_secs = self.phase_duration(self.phase);
         if total_secs == 0 {
             return 0.0;
         }
         self.remaining_secs as f64 / total_secs as f64
     }
+}
+
+fn nonzero_or_default(value: u64, default: u64) -> u64 {
+    if value == 0 { default } else { value }
 }
 
 impl Default for TimerState {
@@ -202,5 +240,46 @@ mod tests {
     fn progress_starts_at_one() {
         let t = TimerState::new();
         assert!((t.progress() - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn with_durations_uses_custom_values() {
+        let t = TimerState::with_durations(10 * 60, 2 * 60, 8 * 60);
+        assert_eq!(t.remaining_secs, 10 * 60);
+        assert_eq!(t.focus_secs, 10 * 60);
+        assert_eq!(t.short_break_secs, 2 * 60);
+        assert_eq!(t.long_break_secs, 8 * 60);
+        assert_eq!(t.phase, TimerPhase::Focus);
+        assert_eq!(t.status, TimerStatus::Idle);
+    }
+
+    #[test]
+    fn with_durations_respects_custom_reset() {
+        let mut t = TimerState::with_durations(10 * 60, 2 * 60, 8 * 60);
+        t.toggle_pause();
+        for _ in 0..30 {
+            t.tick();
+        }
+        t.reset();
+        assert_eq!(t.remaining_secs, 10 * 60);
+    }
+
+    #[test]
+    fn with_durations_used_on_phase_advance() {
+        let mut t = TimerState::with_durations(10 * 60, 2 * 60, 8 * 60);
+        t.status = TimerStatus::Running;
+        t.remaining_secs = 1;
+        t.tick(); // completes focus → short break
+        assert_eq!(t.phase, TimerPhase::ShortBreak);
+        assert_eq!(t.remaining_secs, 2 * 60);
+    }
+
+    #[test]
+    fn with_durations_zero_values_fall_back_to_defaults() {
+        let t = TimerState::with_durations(0, 0, 0);
+        assert_eq!(t.focus_secs, DEFAULT_FOCUS_SECS);
+        assert_eq!(t.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
+        assert_eq!(t.long_break_secs, DEFAULT_LONG_BREAK_SECS);
+        assert_eq!(t.remaining_secs, DEFAULT_FOCUS_SECS);
     }
 }

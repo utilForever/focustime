@@ -1,6 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blocker::SiteBlocker;
+use crate::config::AppConfig;
 use crate::timer::{TimerPhase, TimerState, TimerStatus};
 use crate::wakatime::WakatimeTracker;
 
@@ -23,20 +24,33 @@ pub struct App {
     pub selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
     pub block_error: Option<String>,
+    /// Last error from persisting timer/site configuration.
+    pub config_error: Option<String>,
     pub wakatime: WakatimeTracker,
 }
 
 impl App {
     pub fn new() -> Self {
+        let config = AppConfig::load();
+        let timer = TimerState::with_durations(
+            config.focus_secs,
+            config.short_break_secs,
+            config.long_break_secs,
+        );
+        let mut blocker = SiteBlocker::new();
+        for site in &config.blocked_sites {
+            blocker.add_site(site.clone());
+        }
         Self {
-            timer: TimerState::new(),
+            timer,
             should_quit: false,
             mode: AppMode::Timer,
-            blocker: SiteBlocker::new(),
+            blocker,
             site_input: String::new(),
             site_input_active: false,
             selected_site: 0,
             block_error: None,
+            config_error: None,
             wakatime: WakatimeTracker::new(),
         }
     }
@@ -56,6 +70,22 @@ impl App {
     pub fn on_wakatime_elapsed(&mut self, elapsed_secs: u64) {
         if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running {
             self.wakatime.tick_elapsed(elapsed_secs);
+        }
+    }
+
+    /// Persist the current blocked-sites list and timer preferences to disk.
+    /// Failures are best-effort; the error is surfaced through `config_error`.
+    fn save_config(&mut self) {
+        let config = AppConfig {
+            focus_secs: self.timer.focus_secs,
+            short_break_secs: self.timer.short_break_secs,
+            long_break_secs: self.timer.long_break_secs,
+            blocked_sites: self.blocker.sites.clone(),
+        };
+        if let Err(e) = config.save() {
+            self.config_error = Some(format!("config save failed: {e}"));
+        } else {
+            self.config_error = None;
         }
     }
 
@@ -106,6 +136,7 @@ impl App {
                     self.blocker.add_site(site);
                     self.site_input_active = false;
                     self.clamp_selection();
+                    self.save_config();
                     // Re-apply block if currently blocking
                     if self.blocker.is_blocking {
                         if let Err(e) = self.blocker.block() {
@@ -160,6 +191,7 @@ impl App {
                 if !self.blocker.sites.is_empty() {
                     self.blocker.remove_site(self.selected_site);
                     self.clamp_selection();
+                    self.save_config();
                     // Re-apply or clear block based on new list
                     if self.blocker.is_blocking {
                         if self.blocker.sites.is_empty() {
