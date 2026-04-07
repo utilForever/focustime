@@ -107,7 +107,7 @@ impl AppConfig {
 fn config_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
-        std::env::var("APPDATA").ok().map(PathBuf::from)
+        env_path_var("APPDATA")
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -117,9 +117,17 @@ fn config_dir() -> Option<PathBuf> {
         {
             return Some(PathBuf::from(xdg));
         }
-        let home = std::env::var("HOME").ok()?;
-        Some(PathBuf::from(home).join(".config"))
+        let home = env_path_var("HOME")?;
+        Some(home.join(".config"))
     }
+}
+
+fn env_path_var(key: &str) -> Option<PathBuf> {
+    let value = std::env::var(key).ok()?;
+    if value.trim().is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(value))
 }
 
 #[cfg(test)]
@@ -145,12 +153,23 @@ mod tests {
     }
 
     impl EnvVarGuard {
-        fn set(key: &'static str, value: &std::path::Path) -> Self {
+        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
             let original = std::env::var_os(key);
             // SAFETY: test-only mutation of process environment under a module-
             // local lock to avoid concurrent updates from these tests.
             unsafe {
                 std::env::set_var(key, value);
+            }
+            Self { key, original }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        fn unset(key: &'static str) -> Self {
+            let original = std::env::var_os(key);
+            // SAFETY: test-only mutation of process environment under a module-
+            // local lock to avoid concurrent updates from these tests.
+            unsafe {
+                std::env::remove_var(key);
             }
             Self { key, original }
         }
@@ -229,6 +248,23 @@ mod tests {
         assert_eq!(cfg.short_break_secs, crate::timer::DEFAULT_SHORT_BREAK_SECS);
         assert_eq!(cfg.long_break_secs, crate::timer::DEFAULT_LONG_BREAK_SECS);
         assert!(cfg.blocked_sites.is_empty());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn config_dir_returns_none_when_home_is_blank_and_xdg_is_unset() {
+        let _lock = env_lock().lock().unwrap();
+        let _xdg_guard = EnvVarGuard::unset("XDG_CONFIG_HOME");
+        let _home_guard = EnvVarGuard::set("HOME", "   ");
+        assert!(config_dir().is_none());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn config_dir_returns_none_when_appdata_is_blank() {
+        let _lock = env_lock().lock().unwrap();
+        let _appdata_guard = EnvVarGuard::set("APPDATA", "   ");
+        assert!(config_dir().is_none());
     }
 
     #[test]
