@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Persistent application configuration stored as TOML.
 ///
@@ -38,7 +38,7 @@ pub struct AppConfig {
     pub custom_profile: Option<CustomProfileConfig>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProfileId {
     Classic,
@@ -48,12 +48,31 @@ pub enum ProfileId {
 }
 
 impl ProfileId {
+    fn from_config_value(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "classic" => Self::Classic,
+            "deep-work" | "deep_work" | "deepwork" => Self::DeepWork,
+            "custom" => Self::Custom,
+            _ => Self::Custom,
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             ProfileId::Classic => "Classic",
             ProfileId::DeepWork => "Deep Work",
             ProfileId::Custom => "Custom",
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for ProfileId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_config_value(&value))
     }
 }
 
@@ -329,6 +348,25 @@ mod tests {
         assert_eq!(cfg.selected_profile, ProfileId::Custom);
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
+    }
+
+    #[test]
+    fn unknown_selected_profile_falls_back_to_custom_without_dropping_config() {
+        let config = r#"
+focus_secs = 1500
+short_break_secs = 360
+long_break_secs = 900
+long_break_interval = 3
+selected_profile = "clasisc"
+blocked_sites = ["reddit.com", "youtube.com"]
+"#;
+        let parsed: AppConfig = toml::from_str(config).unwrap();
+        assert_eq!(parsed.selected_profile, ProfileId::Custom);
+        assert_eq!(parsed.focus_secs, 1500);
+        assert_eq!(parsed.short_break_secs, 360);
+        assert_eq!(parsed.long_break_secs, 900);
+        assert_eq!(parsed.long_break_interval, 3);
+        assert_eq!(parsed.blocked_sites, vec!["reddit.com", "youtube.com"]);
     }
 
     #[test]
