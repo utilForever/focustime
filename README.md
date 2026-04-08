@@ -56,6 +56,35 @@ cargo clippy --all-targets -- -D warnings
 cargo test --all
 ```
 
+## Pomodoro profiles
+
+`focustime` now supports selectable Pomodoro profiles:
+
+- **Classic** (25/5/15, long break every 4 focus sessions)
+- **Deep Work** (50/10/30, long break every 3 focus sessions)
+- **Custom** (editable in-app)
+
+Open profile manager from timer view with **`p`**.
+
+- `↑/↓`: move between profiles
+- `Enter`: apply selected profile
+- `e`: edit the Custom profile (when Custom is highlighted)
+- In custom editor: `↑/↓` selects field, `←/→` adjusts value, `Enter` saves
+
+Profile selection and custom values are persisted in `config.toml`.
+
+### Example config
+
+```toml
+selected_profile = "custom"
+
+[custom_profile]
+focus_secs = 1800
+short_break_secs = 360
+long_break_secs = 900
+long_break_interval = 3
+```
+
 ## The way the system works
 
 `focustime` is a single-binary Rust TUI app composed of six modules in `src/`:
