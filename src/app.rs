@@ -198,17 +198,26 @@ impl App {
 
     /// Persist the current blocked-sites list and timer preferences to disk.
     /// Failures are best-effort; the error is surfaced through `config_error`.
-    #[cfg(not(test))]
-    fn save_config(&mut self) {
-        let config = AppConfig {
-            focus_secs: self.timer.focus_secs,
-            short_break_secs: self.timer.short_break_secs,
-            long_break_secs: self.timer.long_break_secs,
-            long_break_interval: self.timer.long_break_interval,
+    fn persisted_config(&self) -> AppConfig {
+        let custom_profile = self.custom_profile.normalized();
+        AppConfig {
+            // Keep legacy fields aligned with the editable custom profile so
+            // older releases retain user-configured values.
+            focus_secs: custom_profile.focus_secs,
+            short_break_secs: custom_profile.short_break_secs,
+            long_break_secs: custom_profile.long_break_secs,
+            long_break_interval: custom_profile.long_break_interval,
             blocked_sites: self.blocker.sites.clone(),
             selected_profile: self.selected_profile,
-            custom_profile: Some(self.custom_profile.clone()),
-        };
+            custom_profile: Some(custom_profile),
+        }
+    }
+
+    /// Persist the current blocked-sites list and timer preferences to disk.
+    /// Failures are best-effort; the error is surfaced through `config_error`.
+    #[cfg(not(test))]
+    fn save_config(&mut self) {
+        let config = self.persisted_config();
         if let Err(e) = config.save() {
             self.config_error = Some(format!("config save failed: {e}"));
         } else {
@@ -218,6 +227,7 @@ impl App {
 
     #[cfg(test)]
     fn save_config(&mut self) {
+        let _ = self.persisted_config();
         self.config_error = None;
     }
 
@@ -694,5 +704,29 @@ mod tests {
         assert!(!app.profile_edit_active);
         assert_eq!(app.custom_profile, original);
         assert_eq!(app.timer.focus_secs, original.focus_secs);
+    }
+
+    #[test]
+    fn persisted_config_keeps_legacy_fields_from_custom_profile() {
+        let custom = CustomProfileConfig {
+            focus_secs: 35 * 60,
+            short_break_secs: 7 * 60,
+            long_break_secs: 14 * 60,
+            long_break_interval: 5,
+        };
+        let config = AppConfig {
+            selected_profile: ProfileId::DeepWork,
+            custom_profile: Some(custom.clone()),
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+
+        let persisted = app.persisted_config();
+        assert_eq!(persisted.selected_profile, ProfileId::DeepWork);
+        assert_eq!(persisted.focus_secs, custom.focus_secs);
+        assert_eq!(persisted.short_break_secs, custom.short_break_secs);
+        assert_eq!(persisted.long_break_secs, custom.long_break_secs);
+        assert_eq!(persisted.long_break_interval, custom.long_break_interval);
+        assert_eq!(persisted.custom_profile, Some(custom));
     }
 }
