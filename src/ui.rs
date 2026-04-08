@@ -126,7 +126,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
     // Key hints
     let hints_widget = Paragraph::new(vec![
         Line::from("[Space] Start/Pause  [s] Stop  [n] Next"),
-        Line::from("[p] Profiles  [b] Block Sites  [q] Quit"),
+        Line::from("[p] Profiles  [b] Block Sites  [q/Esc] Quit"),
     ])
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));
@@ -401,7 +401,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     let hints = if app.profile_edit_active {
         vec![
             Line::from("[↑/↓] Field  [←/→] Adjust"),
-            Line::from("[Enter] Save  [Esc] Cancel"),
+            Line::from("[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit"),
         ]
     } else if profile_for_index(app.profile_selection_index) == ProfileId::Custom {
         vec![

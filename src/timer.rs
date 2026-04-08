@@ -128,7 +128,7 @@ impl TimerState {
     fn advance_phase(&mut self) {
         match self.phase {
             TimerPhase::Focus => {
-                self.pomodoros_completed += 1;
+                self.pomodoros_completed = self.pomodoros_completed.saturating_add(1);
                 if self
                     .pomodoros_completed
                     .is_multiple_of(self.long_break_interval)
@@ -149,7 +149,8 @@ impl TimerState {
     /// Skip to the next phase immediately (does not count as a completed session).
     pub fn next_phase(&mut self) {
         if self.phase == TimerPhase::Focus {
-            if (self.pomodoros_completed + 1).is_multiple_of(self.long_break_interval) {
+            let next_focus_count = self.pomodoros_completed.saturating_add(1);
+            if next_focus_count.is_multiple_of(self.long_break_interval) {
                 self.phase = TimerPhase::LongBreak;
             } else {
                 self.phase = TimerPhase::ShortBreak;
@@ -336,5 +337,31 @@ mod tests {
     fn with_profile_zero_long_break_interval_falls_back_to_default() {
         let t = TimerState::with_profile(25 * 60, 5 * 60, 15 * 60, 0);
         assert_eq!(t.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
+    }
+
+    #[test]
+    fn tick_from_max_pomodoro_count_does_not_overflow() {
+        let mut t = TimerState::new();
+        t.phase = TimerPhase::Focus;
+        t.pomodoros_completed = u32::MAX;
+        t.status = TimerStatus::Running;
+        t.remaining_secs = 1;
+
+        t.tick();
+
+        assert_eq!(t.pomodoros_completed, u32::MAX);
+        assert_eq!(t.phase, TimerPhase::ShortBreak);
+    }
+
+    #[test]
+    fn next_phase_from_max_pomodoro_count_does_not_overflow() {
+        let mut t = TimerState::new();
+        t.phase = TimerPhase::Focus;
+        t.pomodoros_completed = u32::MAX;
+
+        t.next_phase();
+
+        assert_eq!(t.pomodoros_completed, u32::MAX);
+        assert_eq!(t.phase, TimerPhase::ShortBreak);
     }
 }
