@@ -175,19 +175,19 @@ impl App {
     pub fn profile_summary(&self, profile: ProfileId) -> String {
         let (focus, short_break, long_break, cadence) = self.profile_values(profile);
         format!(
-            "{:>2}/{:>2}/{:>2}m · every {} focus",
-            focus / 60,
-            short_break / 60,
-            long_break / 60,
+            "{}/{}/{} · every {} focus",
+            format_duration_label(focus),
+            format_duration_label(short_break),
+            format_duration_label(long_break),
             cadence
         )
     }
 
     pub fn custom_profile_field_value(&self, field_index: usize) -> String {
         match field_index {
-            0 => format!("{} min", self.custom_profile.focus_secs / 60),
-            1 => format!("{} min", self.custom_profile.short_break_secs / 60),
-            2 => format!("{} min", self.custom_profile.long_break_secs / 60),
+            0 => format_duration_label(self.custom_profile.focus_secs),
+            1 => format_duration_label(self.custom_profile.short_break_secs),
+            2 => format_duration_label(self.custom_profile.long_break_secs),
             3 => format!(
                 "every {} focus sessions",
                 self.custom_profile.long_break_interval
@@ -550,6 +550,16 @@ fn adjust_duration_minutes(value: &mut u64, increase: bool) {
     }
 }
 
+fn format_duration_label(seconds: u64) -> String {
+    let minutes = seconds / 60;
+    let remaining_seconds = seconds % 60;
+    if remaining_seconds == 0 {
+        format!("{minutes}m")
+    } else {
+        format!("{minutes}:{remaining_seconds:02}")
+    }
+}
+
 impl Drop for App {
     fn drop(&mut self) {
         // Ensure hosts-file block entries are removed on every exit path,
@@ -728,5 +738,42 @@ mod tests {
         assert_eq!(persisted.long_break_secs, custom.long_break_secs);
         assert_eq!(persisted.long_break_interval, custom.long_break_interval);
         assert_eq!(persisted.custom_profile, Some(custom));
+    }
+
+    #[test]
+    fn profile_summary_displays_seconds_when_not_minute_aligned() {
+        let config = AppConfig {
+            selected_profile: ProfileId::Custom,
+            custom_profile: Some(CustomProfileConfig {
+                focus_secs: 25 * 60 + 1,
+                short_break_secs: 5 * 60 + 2,
+                long_break_secs: 15 * 60 + 3,
+                long_break_interval: 4,
+            }),
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+        assert_eq!(
+            app.profile_summary(ProfileId::Custom),
+            "25:01/5:02/15:03 · every 4 focus"
+        );
+    }
+
+    #[test]
+    fn custom_profile_field_value_displays_second_precision() {
+        let config = AppConfig {
+            selected_profile: ProfileId::Custom,
+            custom_profile: Some(CustomProfileConfig {
+                focus_secs: 10 * 60 + 7,
+                short_break_secs: 2 * 60,
+                long_break_secs: 8 * 60 + 9,
+                long_break_interval: 3,
+            }),
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+        assert_eq!(app.custom_profile_field_value(0), "10:07");
+        assert_eq!(app.custom_profile_field_value(1), "2m");
+        assert_eq!(app.custom_profile_field_value(2), "8:09");
     }
 }
