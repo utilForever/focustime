@@ -22,7 +22,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
     // Outer centered block
-    let outer = centered_rect(60, 70, area);
+    let outer = centered_rect(72, 72, area);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -43,7 +43,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
             Constraint::Length(2), // status
             Constraint::Length(1), // wakatime status
             Constraint::Min(0),    // spacer
-            Constraint::Length(1), // key hints
+            Constraint::Length(2), // key hints
         ])
         .split(outer);
 
@@ -124,10 +124,12 @@ fn render_timer(frame: &mut Frame, app: &App) {
     frame.render_widget(waka_widget, inner[5]);
 
     // Key hints
-    let hints = "[Space] Start/Pause  [s] Stop  [n] Next  [p] Profiles  [b] Block Sites  [q] Quit";
-    let hints_widget = Paragraph::new(hints)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
+    let hints_widget = Paragraph::new(vec![
+        Line::from("[Space] Start/Pause  [s] Stop  [n] Next"),
+        Line::from("[p] Profiles  [b] Block Sites  [q] Quit"),
+    ])
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints_widget, inner[7]);
 }
 
@@ -166,7 +168,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             Constraint::Length(3), // input area
             Constraint::Length(1), // error line
             Constraint::Length(1), // spacer
-            Constraint::Length(1), // key hints
+            Constraint::Length(2), // key hints
         ])
         .split(outer);
 
@@ -397,11 +399,20 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     }
 
     let hints = if app.profile_edit_active {
-        "[↑/↓] Field  [←/→] Adjust  [Enter] Save  [Esc] Cancel"
+        vec![
+            Line::from("[↑/↓] Field  [←/→] Adjust"),
+            Line::from("[Enter] Save  [Esc] Cancel"),
+        ]
     } else if profile_for_index(app.profile_selection_index) == ProfileId::Custom {
-        "[↑/↓] Select  [Enter] Apply  [e] Edit Custom  [p/Esc] Back  [q] Quit"
+        vec![
+            Line::from("[↑/↓] Select  [Enter] Apply  [e] Edit Custom"),
+            Line::from("[p/Esc] Back  [q] Quit"),
+        ]
     } else {
-        "[↑/↓] Select  [Enter] Apply  [p/Esc] Back  [q] Quit"
+        vec![
+            Line::from("[↑/↓] Select  [Enter] Apply"),
+            Line::from("[p/Esc] Back  [q] Quit"),
+        ]
     };
     let hints_widget = Paragraph::new(hints)
         .alignment(Alignment::Center)

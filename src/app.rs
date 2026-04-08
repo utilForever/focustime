@@ -196,6 +196,7 @@ impl App {
 
     /// Persist the current blocked-sites list and timer preferences to disk.
     /// Failures are best-effort; the error is surfaced through `config_error`.
+    #[cfg(not(test))]
     fn save_config(&mut self) {
         let config = AppConfig {
             focus_secs: self.timer.focus_secs,
@@ -211,6 +212,11 @@ impl App {
         } else {
             self.config_error = None;
         }
+    }
+
+    #[cfg(test)]
+    fn save_config(&mut self) {
+        self.config_error = None;
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -555,6 +561,34 @@ mod tests {
         assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
         assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
         assert_eq!(app.timer.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
+    }
+
+    #[test]
+    fn deep_work_profile_reaches_long_break_on_third_focus() {
+        let config = AppConfig {
+            selected_profile: ProfileId::DeepWork,
+            custom_profile: Some(CustomProfileConfig::default()),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        assert_eq!(app.timer.long_break_interval, 3);
+
+        for _ in 0..2 {
+            app.timer.status = TimerStatus::Running;
+            app.timer.remaining_secs = 1;
+            app.on_tick(); // focus -> short break
+            assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+
+            app.timer.status = TimerStatus::Running;
+            app.timer.remaining_secs = 1;
+            app.on_tick(); // short break -> focus
+            assert_eq!(app.timer.phase, TimerPhase::Focus);
+        }
+
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = 1;
+        app.on_tick(); // third focus completion -> long break
+        assert_eq!(app.timer.phase, TimerPhase::LongBreak);
     }
 
     #[test]

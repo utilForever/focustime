@@ -167,6 +167,7 @@ impl AppConfig {
 
     /// Persist the current config to disk.
     /// Creates parent directories as needed.
+    #[cfg_attr(test, allow(dead_code))]
     pub fn save(&self) -> io::Result<()> {
         let path = Self::config_path().ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, "cannot determine config directory")
@@ -214,6 +215,7 @@ impl AppConfig {
         self
     }
 
+    #[cfg_attr(test, allow(dead_code))]
     fn config_path() -> Option<PathBuf> {
         let config_dir = config_dir()?;
         Some(config_dir.join("focustime").join("config.toml"))
@@ -226,6 +228,7 @@ impl AppConfig {
 }
 
 /// Returns the platform-appropriate configuration base directory.
+#[cfg_attr(test, allow(dead_code))]
 fn config_dir() -> Option<PathBuf> {
     config_dir_from_env(|key| std::env::var_os(key))
 }
