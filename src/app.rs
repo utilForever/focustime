@@ -98,6 +98,7 @@ pub struct App {
     pub profile_selection_index: usize,
     pub profile_edit_active: bool,
     pub profile_edit_field: usize,
+    pub profile_edit_snapshot: Option<CustomProfileConfig>,
 }
 
 impl App {
@@ -135,6 +136,7 @@ impl App {
             profile_selection_index: profile_index(selected_profile),
             profile_edit_active: false,
             profile_edit_field: 0,
+            profile_edit_snapshot: None,
         }
     }
 
@@ -260,6 +262,7 @@ impl App {
                 self.mode = AppMode::ProfileManager;
                 self.profile_edit_active = false;
                 self.profile_edit_field = 0;
+                self.profile_edit_snapshot = None;
                 self.profile_selection_index = profile_index(self.selected_profile);
                 self.clamp_profile_selection();
             }
@@ -275,7 +278,7 @@ impl App {
                     self.should_quit = true;
                 }
                 KeyCode::Esc => {
-                    self.profile_edit_active = false;
+                    self.cancel_profile_edit();
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
                     self.profile_edit_field = self.profile_edit_field.saturating_sub(1);
@@ -291,13 +294,7 @@ impl App {
                     self.adjust_custom_profile_field(true);
                 }
                 KeyCode::Enter => {
-                    self.profile_edit_active = false;
-                    self.custom_profile = self.custom_profile.normalized();
-                    if self.selected_profile == ProfileId::Custom {
-                        self.apply_profile(ProfileId::Custom);
-                    } else {
-                        self.save_config();
-                    }
+                    self.commit_profile_edit();
                 }
                 _ => {}
             }
@@ -307,6 +304,7 @@ impl App {
         match key.code {
             KeyCode::Esc | KeyCode::Char('p') => {
                 self.mode = AppMode::Timer;
+                self.profile_edit_snapshot = None;
             }
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -326,11 +324,36 @@ impl App {
             }
             KeyCode::Char('e') => {
                 if profile_for_index(self.profile_selection_index) == ProfileId::Custom {
-                    self.profile_edit_active = true;
-                    self.profile_edit_field = 0;
+                    self.begin_profile_edit();
                 }
             }
             _ => {}
+        }
+    }
+
+    fn begin_profile_edit(&mut self) {
+        self.profile_edit_snapshot = Some(self.custom_profile.clone());
+        self.profile_edit_active = true;
+        self.profile_edit_field = 0;
+    }
+
+    fn cancel_profile_edit(&mut self) {
+        if let Some(snapshot) = self.profile_edit_snapshot.take() {
+            self.custom_profile = snapshot;
+        }
+        self.profile_edit_active = false;
+        self.profile_edit_field = 0;
+    }
+
+    fn commit_profile_edit(&mut self) {
+        self.profile_edit_active = false;
+        self.profile_edit_field = 0;
+        self.profile_edit_snapshot = None;
+        self.custom_profile = self.custom_profile.normalized();
+        if self.selected_profile == ProfileId::Custom {
+            self.apply_profile(ProfileId::Custom);
+        } else {
+            self.save_config();
         }
     }
 
@@ -643,5 +666,33 @@ mod tests {
             app.custom_profile.focus_secs,
             original_focus + CUSTOM_DURATION_STEP_SECS
         );
+    }
+
+    #[test]
+    fn cancelling_custom_profile_edit_restores_original_values() {
+        let custom = CustomProfileConfig {
+            focus_secs: 30 * 60,
+            short_break_secs: 6 * 60,
+            long_break_secs: 12 * 60,
+            long_break_interval: 3,
+        };
+        let config = AppConfig {
+            selected_profile: ProfileId::Custom,
+            custom_profile: Some(custom),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let original = app.custom_profile.clone();
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.handle_key(key(KeyCode::Right));
+        assert_ne!(app.custom_profile.focus_secs, original.focus_secs);
+
+        app.handle_key(key(KeyCode::Esc));
+
+        assert!(!app.profile_edit_active);
+        assert_eq!(app.custom_profile, original);
+        assert_eq!(app.timer.focus_secs, original.focus_secs);
     }
 }

@@ -320,7 +320,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
             Constraint::Length(7), // custom editor
             Constraint::Min(0),    // spacer
             Constraint::Length(1), // error line
-            Constraint::Length(1), // key hints
+            Constraint::Length(2), // key hints
         ])
         .split(outer);
 
