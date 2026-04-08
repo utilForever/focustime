@@ -168,7 +168,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             Constraint::Length(3), // input area
             Constraint::Length(1), // error line
             Constraint::Length(1), // spacer
-            Constraint::Length(2), // key hints
+            Constraint::Length(1), // key hints
         ])
         .split(outer);
 
