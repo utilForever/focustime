@@ -357,7 +357,7 @@ focus_secs = 1500
 short_break_secs = 360
 long_break_secs = 900
 long_break_interval = 3
-selected_profile = "clasisc"
+selected_profile = "unknown"
 blocked_sites = ["reddit.com", "youtube.com"]
 "#;
         let parsed: AppConfig = toml::from_str(config).unwrap();
