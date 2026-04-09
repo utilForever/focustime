@@ -1,7 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blocker::SiteBlocker;
-use crate::config::{AppConfig, CustomProfileConfig, ProfileId};
+use crate::config::{AppConfig, CustomProfileConfig, NotificationConfig, ProfileId};
+use crate::notifications::PhaseNotifier;
 use crate::stats::{DailyStats, FocusStats, SessionStats, current_day_key};
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -11,8 +12,14 @@ use crate::wakatime::WakatimeTracker;
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const CUSTOM_PROFILE_FIELD_LABELS: [&str; 4] =
-    ["Focus", "Short Break", "Long Break", "Long-break cadence"];
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 6] = [
+    "Focus",
+    "Short Break",
+    "Long Break",
+    "Long-break cadence",
+    "Phase notifications",
+    "Sound alert",
+];
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +86,12 @@ fn profile_for_index(index: usize) -> ProfileId {
         .unwrap_or(PROFILE_IDS[PROFILE_IDS.len() - 1])
 }
 
+#[derive(Debug, Clone)]
+struct ProfileEditSnapshot {
+    custom_profile: CustomProfileConfig,
+    notification_settings: NotificationConfig,
+}
+
 pub struct App {
     pub timer: TimerState,
     pub should_quit: bool,
@@ -96,13 +109,16 @@ pub struct App {
     pub config_error: Option<String>,
     /// Last error from persisting focus stats.
     pub stats_error: Option<String>,
+    pub phase_notification: Option<String>,
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
     pub custom_profile: CustomProfileConfig,
     pub profile_selection_index: usize,
     pub profile_edit_active: bool,
     pub profile_edit_field: usize,
-    pub profile_edit_snapshot: Option<CustomProfileConfig>,
+    profile_edit_snapshot: Option<ProfileEditSnapshot>,
+    notification_settings: NotificationConfig,
+    notifier: PhaseNotifier,
     stats: FocusStats,
     stats_dirty: bool,
     stats_has_unsaved_elapsed: bool,
@@ -116,6 +132,7 @@ impl App {
     fn from_config(config: AppConfig) -> Self {
         let selected_profile = config.selected_profile;
         let custom_profile = config.effective_custom_profile();
+        let notification_settings = config.notifications;
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (stats, stats_error) = match FocusStats::load() {
             Ok(stats) => (stats, None),
@@ -142,6 +159,7 @@ impl App {
             block_error: None,
             config_error: None,
             stats_error,
+            phase_notification: None,
             wakatime: WakatimeTracker::new(),
             selected_profile,
             custom_profile,
@@ -149,6 +167,8 @@ impl App {
             profile_edit_active: false,
             profile_edit_field: 0,
             profile_edit_snapshot: None,
+            notification_settings,
+            notifier: PhaseNotifier::new(notification_settings),
             stats,
             stats_dirty: false,
             stats_has_unsaved_elapsed: false,
@@ -158,6 +178,7 @@ impl App {
     pub fn on_tick(&mut self, is_catchup: bool) {
         let was_focus_running = self.focus_running_for_current_state();
         let was_focus_phase = self.timer.phase == TimerPhase::Focus;
+        let completed_phase = self.timer.phase;
         if was_focus_running && !is_catchup {
             self.record_focus_elapsed(1);
         }
@@ -168,6 +189,11 @@ impl App {
             self.record_completed_focus_session();
         }
         if phase_changed {
+            if !is_catchup {
+                self.phase_notification = self
+                    .notifier
+                    .notify_phase_completion(completed_phase, self.timer.phase);
+            }
             self.apply_blocking_for_phase();
         }
         self.flush_stats_if_dirty(false);
@@ -221,7 +247,7 @@ impl App {
         self.stats.recent_daily(limit)
     }
 
-    pub fn custom_profile_field_value(&self, field_index: usize) -> String {
+    pub fn profile_edit_field_value(&self, field_index: usize) -> String {
         match field_index {
             0 => format_duration_label(self.custom_profile.focus_secs),
             1 => format_duration_label(self.custom_profile.short_break_secs),
@@ -230,6 +256,8 @@ impl App {
                 "every {} focus sessions",
                 self.custom_profile.long_break_interval
             ),
+            4 => bool_label(self.notification_settings.enabled).to_string(),
+            5 => bool_label(self.notification_settings.sound).to_string(),
             _ => String::new(),
         }
     }
@@ -248,6 +276,7 @@ impl App {
             blocked_sites: self.blocker.sites.clone(),
             selected_profile: self.selected_profile,
             custom_profile: Some(custom_profile),
+            notifications: self.notification_settings,
         }
     }
 
@@ -366,13 +395,13 @@ impl App {
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     self.profile_edit_field = (self.profile_edit_field + 1)
-                        .min(CUSTOM_PROFILE_FIELD_LABELS.len().saturating_sub(1));
+                        .min(PROFILE_EDIT_FIELD_LABELS.len().saturating_sub(1));
                 }
                 KeyCode::Left | KeyCode::Char('h') => {
-                    self.adjust_custom_profile_field(false);
+                    self.adjust_profile_edit_field(false);
                 }
                 KeyCode::Right | KeyCode::Char('l') => {
-                    self.adjust_custom_profile_field(true);
+                    self.adjust_profile_edit_field(true);
                 }
                 KeyCode::Enter => {
                     self.commit_profile_edit();
@@ -403,23 +432,26 @@ impl App {
                 self.exit_profile_manager();
             }
             KeyCode::Char('e') => {
-                if profile_for_index(self.profile_selection_index) == ProfileId::Custom {
-                    self.begin_profile_edit();
-                }
+                self.begin_profile_edit();
             }
             _ => {}
         }
     }
 
     fn begin_profile_edit(&mut self) {
-        self.profile_edit_snapshot = Some(self.custom_profile.clone());
+        self.profile_edit_snapshot = Some(ProfileEditSnapshot {
+            custom_profile: self.custom_profile.clone(),
+            notification_settings: self.notification_settings,
+        });
         self.profile_edit_active = true;
         self.profile_edit_field = 0;
     }
 
     fn cancel_profile_edit(&mut self) {
         if let Some(snapshot) = self.profile_edit_snapshot.take() {
-            self.custom_profile = snapshot;
+            self.custom_profile = snapshot.custom_profile;
+            self.notification_settings = snapshot.notification_settings;
+            self.rebuild_notifier();
         }
         self.profile_edit_active = false;
         self.profile_edit_field = 0;
@@ -430,6 +462,7 @@ impl App {
         self.profile_edit_field = 0;
         self.profile_edit_snapshot = None;
         self.custom_profile = self.custom_profile.normalized();
+        self.rebuild_notifier();
         if self.selected_profile == ProfileId::Custom {
             self.apply_profile(ProfileId::Custom);
         } else {
@@ -437,7 +470,7 @@ impl App {
         }
     }
 
-    fn adjust_custom_profile_field(&mut self, increase: bool) {
+    fn adjust_profile_edit_field(&mut self, increase: bool) {
         match self.profile_edit_field {
             0 => adjust_duration_minutes(&mut self.custom_profile.focus_secs, increase),
             1 => adjust_duration_minutes(&mut self.custom_profile.short_break_secs, increase),
@@ -453,6 +486,12 @@ impl App {
                         .saturating_sub(1)
                         .max(1);
                 }
+            }
+            4 => {
+                self.notification_settings.enabled = increase;
+            }
+            5 => {
+                self.notification_settings.sound = increase;
             }
             _ => {}
         }
@@ -682,6 +721,10 @@ impl App {
             Err(e) => self.block_error = Some(e.to_string()),
         }
     }
+
+    fn rebuild_notifier(&mut self) {
+        self.notifier = PhaseNotifier::new(self.notification_settings);
+    }
 }
 
 fn adjust_duration_minutes(value: &mut u64, increase: bool) {
@@ -702,6 +745,10 @@ fn format_duration_label(seconds: u64) -> String {
     } else {
         format!("{minutes}:{remaining_seconds:02}")
     }
+}
+
+fn bool_label(value: bool) -> &'static str {
+    if value { "On" } else { "Off" }
 }
 
 impl Drop for App {
@@ -746,6 +793,7 @@ mod tests {
                 long_break_secs: 16 * 60,
                 long_break_interval: 2,
             }),
+            notifications: NotificationConfig::default(),
         };
         let app = App::from_config(config);
         assert_eq!(app.selected_profile, ProfileId::Classic);
@@ -887,6 +935,7 @@ mod tests {
         assert_eq!(persisted.long_break_secs, custom.long_break_secs);
         assert_eq!(persisted.long_break_interval, custom.long_break_interval);
         assert_eq!(persisted.custom_profile, Some(custom));
+        assert_eq!(persisted.notifications, NotificationConfig::default());
     }
 
     #[test]
@@ -909,7 +958,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_profile_field_value_displays_second_precision() {
+    fn profile_edit_field_value_displays_second_precision() {
         let config = AppConfig {
             selected_profile: ProfileId::Custom,
             custom_profile: Some(CustomProfileConfig {
@@ -921,9 +970,83 @@ mod tests {
             ..AppConfig::default()
         };
         let app = App::from_config(config);
-        assert_eq!(app.custom_profile_field_value(0), "10:07");
-        assert_eq!(app.custom_profile_field_value(1), "2m");
-        assert_eq!(app.custom_profile_field_value(2), "8:09");
+        assert_eq!(app.profile_edit_field_value(0), "10:07");
+        assert_eq!(app.profile_edit_field_value(1), "2m");
+        assert_eq!(app.profile_edit_field_value(2), "8:09");
+        assert_eq!(app.profile_edit_field_value(4), "On");
+        assert_eq!(app.profile_edit_field_value(5), "Off");
+    }
+
+    #[test]
+    fn profile_manager_edit_mode_available_for_non_custom_profile() {
+        let config = AppConfig {
+            selected_profile: ProfileId::Classic,
+            notifications: NotificationConfig {
+                enabled: false,
+                sound: false,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+
+        assert!(app.profile_edit_active);
+    }
+
+    #[test]
+    fn editing_notification_fields_updates_and_persists_settings() {
+        let config = AppConfig {
+            selected_profile: ProfileId::DeepWork,
+            notifications: NotificationConfig {
+                enabled: false,
+                sound: false,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..4 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Right)); // notifications -> On
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Right)); // sound -> On
+        app.handle_key(key(KeyCode::Enter));
+
+        let persisted = app.persisted_config();
+        assert!(persisted.notifications.enabled);
+        assert!(persisted.notifications.sound);
+    }
+
+    #[test]
+    fn cancelling_profile_edit_restores_notification_settings() {
+        let config = AppConfig {
+            selected_profile: ProfileId::Classic,
+            notifications: NotificationConfig {
+                enabled: true,
+                sound: true,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..4 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Left)); // notifications -> Off
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Left)); // sound -> Off
+        app.handle_key(key(KeyCode::Esc)); // cancel
+
+        assert!(!app.profile_edit_active);
+        assert!(app.notification_settings.enabled);
+        assert!(app.notification_settings.sound);
     }
 
     #[test]
@@ -985,6 +1108,10 @@ mod tests {
 
         assert_eq!(app.session_stats().pomodoros_completed, 1);
         assert_eq!(app.today_stats().pomodoros_completed, 1);
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("Focus complete. Next up: Short Break.")
+        );
     }
 
     #[test]
@@ -995,6 +1122,7 @@ mod tests {
         app.handle_key(key(KeyCode::Char('n')));
 
         assert_eq!(app.session_stats().pomodoros_completed, 0);
+        assert!(app.phase_notification.is_none());
     }
 
     #[test]
@@ -1035,6 +1163,7 @@ mod tests {
         assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
         assert_eq!(app.session_stats().pomodoros_completed, 0);
         assert_eq!(app.session_stats().focused_seconds, 0);
+        assert!(app.phase_notification.is_none());
     }
 
     #[test]

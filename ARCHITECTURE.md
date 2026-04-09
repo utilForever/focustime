@@ -1,8 +1,8 @@
 # Architecture
 
-`focustime` is a single-binary Rust TUI application with six modules in `src/`:
-timer logic, app state/orchestration, site blocking, WakaTime tracking, UI rendering,
-and the main event loop.
+`focustime` is a single-binary Rust TUI application with seven modules in `src/`:
+timer logic, app state/orchestration, site blocking, WakaTime tracking, phase
+notifications, UI rendering, and the main event loop.
 
 ## Visual overview
 
@@ -13,6 +13,7 @@ flowchart LR
     T["timer.rs<br/>Pomodoro state machine"]
     B["blocker.rs<br/>hosts file blocking"]
     W["wakatime.rs<br/>heartbeat tracking"]
+    N["notifications.rs<br/>phase notifications"]
     U["ui.rs<br/>Ratatui rendering"]
     OS["OS / hosts file / DNS cache"]
     API["WakaTime API"]
@@ -22,9 +23,11 @@ flowchart LR
     A --> T
     A --> B
     A --> W
+    A --> N
     A -->|"state read by ui"| U
     B --> OS
     W --> API
+    N --> OS
 ```
 
 ## Module map
@@ -32,10 +35,11 @@ flowchart LR
 | Module | Responsibility | Main collaborators |
 | --- | --- | --- |
 | `main.rs` | Entry point, terminal setup/teardown, event loop cadence, key event polling | `app`, `ui`, `crossterm`, `ratatui` |
-| `app.rs` | Application state, mode switching, key handling, coordination between timer/blocker/WakaTime | `timer`, `blocker`, `wakatime` |
+| `app.rs` | Application state, mode switching, key handling, coordination between timer/blocker/WakaTime/notifications | `timer`, `blocker`, `wakatime`, `notifications` |
 | `timer.rs` | Pomodoro domain model and transitions (`Focus`, `ShortBreak`, `LongBreak`) | `app` |
 | `blocker.rs` | Hosts-file based site blocking/unblocking and DNS cache flush integration | `app`, OS commands/filesystem |
 | `wakatime.rs` | WakaTime config parsing and heartbeat scheduling/sending | `app`, HTTP (`ureq`) |
+| `notifications.rs` | Phase completion notifications and optional sound alerts | `app`, OS notification commands |
 | `ui.rs` | Ratatui rendering for Timer and Site Manager screens | `app`, `timer` |
 
 ## Related explanation
@@ -49,6 +53,7 @@ sequenceDiagram
     participant Timer as TimerState
     participant Blocker as SiteBlocker
     participant Waka as WakatimeTracker
+    participant Notify as PhaseNotifier
     participant UI as ui::render
 
     loop every frame
@@ -58,6 +63,7 @@ sequenceDiagram
         App->>Timer: tick()
         alt phase changed
             App->>Blocker: block()/unblock()
+            App->>Notify: notify_phase_completion()
         end
         Main->>App: on_wakatime_elapsed(elapsed_secs) (when >=1s)
         alt Focus + Running
@@ -77,7 +83,9 @@ sequenceDiagram
    tracking, and accumulated elapsed focus seconds (when at least 1s has passed)
    are fed to `WakatimeTracker::tick_elapsed(elapsed_secs)` to avoid heartbeat
    bursts after suspend/resume.
-6. Blocking policy is phase-aware: blocking is active only during focus sessions
+6. Phase notifications are dispatched asynchronously on natural phase completions
+   (not manual skips), with optional sound and platform-specific desktop delivery.
+7. Blocking policy is phase-aware: blocking is active only during focus sessions
    (running or paused), and removed for break/idle phases.
 
 ## Visibility rules
@@ -95,7 +103,8 @@ sequenceDiagram
 ## File conventions
 
 - One top-level module per file in `src/` (`app.rs`, `timer.rs`, `blocker.rs`,
-  `ui.rs`, `wakatime.rs`), with `main.rs` as the composition root.
+  `ui.rs`, `wakatime.rs`, `notifications.rs`), with `main.rs` as the composition
+  root.
 - Keep domain logic (`timer`, `blocker`, `wakatime`) separate from presentation
   (`ui`) and orchestration (`app`).
 - Place module tests in the same file using `#[cfg(test)] mod tests`.

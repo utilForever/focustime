@@ -68,8 +68,8 @@ Open profile manager from timer view with **`p`**.
 
 - `↑/↓`: move between profiles
 - `Enter`: apply selected profile
-- `e`: edit the Custom profile (when Custom is highlighted)
-- In custom editor: `↑/↓` selects field, `←/→` adjusts value, `Enter` saves
+- `e`: open profile/settings editor
+- In editor: `↑/↓` selects field, `←/→` adjusts value, `Enter` saves
 
 Profile selection and custom values are persisted in `config.toml`.
 
@@ -83,7 +83,33 @@ focus_secs = 1800
 short_break_secs = 360
 long_break_secs = 900
 long_break_interval = 3
+
+[notifications]
+enabled = true
+sound = false
 ```
+
+## Phase notifications
+
+`focustime` emits a phase notification when a phase naturally completes at `00:00`:
+
+- **Focus complete** → next break starts
+- **Break complete** → focus starts
+
+Manual skip (`n`) changes phase immediately but does not emit a completion notification.
+
+Notifications are delivered best-effort:
+
+- terminal notice in the timer view
+- desktop notification via platform-specific delivery (WinRT toast on Windows with a `msg` fallback, `osascript` on macOS, `notify-send` on Linux)
+- optional sound alert using platform audio capabilities when `notifications.sound = true`
+
+You can also configure `notifications.enabled` and `notifications.sound` directly from the TUI:
+
+- open profile manager with `p`
+- press `e` to open the editor
+- use `↑/↓` to select **Phase notifications** or **Sound alert**
+- use `←/→` to set `Off`/`On`, then `Enter` to save
 
 ## Session stats and daily history
 
@@ -100,13 +126,14 @@ From timer view:
 
 ## The way the system works
 
-`focustime` is a single-binary Rust TUI app composed of six modules in `src/`:
+`focustime` is a single-binary Rust TUI app composed of seven modules in `src/`:
 
 - `src/main.rs`: terminal lifecycle and event loop.
 - `src/app.rs`: application state and orchestration.
 - `src/timer.rs`: Pomodoro timer state machine.
 - `src/blocker.rs`: hosts-file site blocking and unblocking.
 - `src/wakatime.rs`: heartbeat tracking integration.
+- `src/notifications.rs`: phase transition notifications and optional sound.
 - `src/ui.rs`: Ratatui rendering for timer and site manager views.
 
 WakaTime tracking is optional and activates only when an API key is configured
@@ -117,8 +144,9 @@ Runtime flow (high-level):
 1. The main loop renders UI and reads keyboard input.
 2. `App` handles key events (`start/pause`, `stop`, `next`, site manager actions).
 3. Timer ticks advance every elapsed second while running.
-4. Blocking is applied during focus phases and removed outside focus.
-5. WakaTime tracking stays in sync with focus-running state.
+4. Phase-completion notifications are dispatched asynchronously.
+5. Blocking is applied during focus phases and removed outside focus.
+6. WakaTime tracking stays in sync with focus-running state.
 
 For full module map and design details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
