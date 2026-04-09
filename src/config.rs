@@ -36,6 +36,30 @@ pub struct AppConfig {
     /// When this is absent, the app derives it from the legacy duration fields.
     #[serde(default)]
     pub custom_profile: Option<CustomProfileConfig>,
+    /// Notification preferences for phase transitions.
+    #[serde(default)]
+    pub notifications: NotificationConfig,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NotificationConfig {
+    #[serde(default = "default_notification_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub sound: bool,
+}
+
+impl Default for NotificationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_notification_enabled(),
+            sound: false,
+        }
+    }
+}
+
+fn default_notification_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
@@ -142,6 +166,7 @@ impl Default for AppConfig {
             blocked_sites: Vec::new(),
             selected_profile: ProfileId::default(),
             custom_profile: None,
+            notifications: NotificationConfig::default(),
         }
     }
 }
@@ -316,6 +341,7 @@ mod tests {
         assert_eq!(cfg.selected_profile, ProfileId::Custom);
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
+        assert_eq!(cfg.notifications, NotificationConfig::default());
     }
 
     #[test]
@@ -333,6 +359,10 @@ mod tests {
                 long_break_secs: 12 * 60,
                 long_break_interval: 5,
             }),
+            notifications: NotificationConfig {
+                enabled: true,
+                sound: true,
+            },
         };
         let toml_str = toml::to_string_pretty(&original).unwrap();
         let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
@@ -343,6 +373,7 @@ mod tests {
         assert_eq!(parsed.blocked_sites, original.blocked_sites);
         assert_eq!(parsed.selected_profile, original.selected_profile);
         assert_eq!(parsed.custom_profile, original.custom_profile);
+        assert_eq!(parsed.notifications, original.notifications);
     }
 
     #[test]
@@ -356,6 +387,7 @@ mod tests {
         assert_eq!(cfg.selected_profile, ProfileId::Custom);
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
+        assert_eq!(cfg.notifications, NotificationConfig::default());
     }
 
     #[test]
@@ -408,6 +440,7 @@ long_break_interval = 3
                 long_break_secs: 16 * 60,
                 long_break_interval: 2,
             }),
+            notifications: NotificationConfig::default(),
         };
         let custom = cfg.effective_custom_profile();
         assert_eq!(custom.focus_secs, 40 * 60);

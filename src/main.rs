@@ -1,6 +1,7 @@
 mod app;
 mod blocker;
 mod config;
+mod notifications;
 mod stats;
 mod timer;
 mod ui;

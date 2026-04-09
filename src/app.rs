@@ -1,7 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blocker::SiteBlocker;
-use crate::config::{AppConfig, CustomProfileConfig, ProfileId};
+use crate::config::{AppConfig, CustomProfileConfig, NotificationConfig, ProfileId};
+use crate::notifications::PhaseNotifier;
 use crate::stats::{DailyStats, FocusStats, SessionStats, current_day_key};
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -96,6 +97,7 @@ pub struct App {
     pub config_error: Option<String>,
     /// Last error from persisting focus stats.
     pub stats_error: Option<String>,
+    pub phase_notification: Option<String>,
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
     pub custom_profile: CustomProfileConfig,
@@ -103,6 +105,8 @@ pub struct App {
     pub profile_edit_active: bool,
     pub profile_edit_field: usize,
     pub profile_edit_snapshot: Option<CustomProfileConfig>,
+    notification_settings: NotificationConfig,
+    notifier: PhaseNotifier,
     stats: FocusStats,
     stats_dirty: bool,
     stats_has_unsaved_elapsed: bool,
@@ -116,6 +120,7 @@ impl App {
     fn from_config(config: AppConfig) -> Self {
         let selected_profile = config.selected_profile;
         let custom_profile = config.effective_custom_profile();
+        let notification_settings = config.notifications;
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (stats, stats_error) = match FocusStats::load() {
             Ok(stats) => (stats, None),
@@ -142,6 +147,7 @@ impl App {
             block_error: None,
             config_error: None,
             stats_error,
+            phase_notification: None,
             wakatime: WakatimeTracker::new(),
             selected_profile,
             custom_profile,
@@ -149,6 +155,8 @@ impl App {
             profile_edit_active: false,
             profile_edit_field: 0,
             profile_edit_snapshot: None,
+            notification_settings,
+            notifier: PhaseNotifier::new(notification_settings),
             stats,
             stats_dirty: false,
             stats_has_unsaved_elapsed: false,
@@ -158,6 +166,7 @@ impl App {
     pub fn on_tick(&mut self, is_catchup: bool) {
         let was_focus_running = self.focus_running_for_current_state();
         let was_focus_phase = self.timer.phase == TimerPhase::Focus;
+        let completed_phase = self.timer.phase;
         if was_focus_running && !is_catchup {
             self.record_focus_elapsed(1);
         }
@@ -168,6 +177,11 @@ impl App {
             self.record_completed_focus_session();
         }
         if phase_changed {
+            if !is_catchup {
+                self.phase_notification = self
+                    .notifier
+                    .notify_phase_completion(completed_phase, self.timer.phase);
+            }
             self.apply_blocking_for_phase();
         }
         self.flush_stats_if_dirty(false);
@@ -248,6 +262,7 @@ impl App {
             blocked_sites: self.blocker.sites.clone(),
             selected_profile: self.selected_profile,
             custom_profile: Some(custom_profile),
+            notifications: self.notification_settings,
         }
     }
 
@@ -746,6 +761,7 @@ mod tests {
                 long_break_secs: 16 * 60,
                 long_break_interval: 2,
             }),
+            notifications: NotificationConfig::default(),
         };
         let app = App::from_config(config);
         assert_eq!(app.selected_profile, ProfileId::Classic);
@@ -887,6 +903,7 @@ mod tests {
         assert_eq!(persisted.long_break_secs, custom.long_break_secs);
         assert_eq!(persisted.long_break_interval, custom.long_break_interval);
         assert_eq!(persisted.custom_profile, Some(custom));
+        assert_eq!(persisted.notifications, NotificationConfig::default());
     }
 
     #[test]
@@ -985,6 +1002,10 @@ mod tests {
 
         assert_eq!(app.session_stats().pomodoros_completed, 1);
         assert_eq!(app.today_stats().pomodoros_completed, 1);
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("Focus complete. Next up: Short Break.")
+        );
     }
 
     #[test]
@@ -995,6 +1016,7 @@ mod tests {
         app.handle_key(key(KeyCode::Char('n')));
 
         assert_eq!(app.session_stats().pomodoros_completed, 0);
+        assert!(app.phase_notification.is_none());
     }
 
     #[test]
@@ -1035,6 +1057,7 @@ mod tests {
         assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
         assert_eq!(app.session_stats().pomodoros_completed, 0);
         assert_eq!(app.session_stats().focused_seconds, 0);
+        assert!(app.phase_notification.is_none());
     }
 
     #[test]

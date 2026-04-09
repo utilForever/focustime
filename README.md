@@ -83,7 +83,26 @@ focus_secs = 1800
 short_break_secs = 360
 long_break_secs = 900
 long_break_interval = 3
+
+[notifications]
+enabled = true
+sound = false
 ```
+
+## Phase notifications
+
+`focustime` emits a phase notification when a phase naturally completes at `00:00`:
+
+- **Focus complete** → next break starts
+- **Break complete** → focus starts
+
+Manual skip (`n`) changes phase immediately but does not emit a completion notification.
+
+Notifications are delivered best-effort:
+
+- terminal notice in the timer view
+- desktop notification via platform-specific command (`msg` on Windows, `osascript` on macOS, `notify-send` on Linux)
+- optional sound alert when `notifications.sound = true`
 
 ## Session stats and daily history
 
@@ -100,13 +119,14 @@ From timer view:
 
 ## The way the system works
 
-`focustime` is a single-binary Rust TUI app composed of six modules in `src/`:
+`focustime` is a single-binary Rust TUI app composed of seven modules in `src/`:
 
 - `src/main.rs`: terminal lifecycle and event loop.
 - `src/app.rs`: application state and orchestration.
 - `src/timer.rs`: Pomodoro timer state machine.
 - `src/blocker.rs`: hosts-file site blocking and unblocking.
 - `src/wakatime.rs`: heartbeat tracking integration.
+- `src/notifications.rs`: phase transition notifications and optional sound.
 - `src/ui.rs`: Ratatui rendering for timer and site manager views.
 
 WakaTime tracking is optional and activates only when an API key is configured
@@ -117,8 +137,9 @@ Runtime flow (high-level):
 1. The main loop renders UI and reads keyboard input.
 2. `App` handles key events (`start/pause`, `stop`, `next`, site manager actions).
 3. Timer ticks advance every elapsed second while running.
-4. Blocking is applied during focus phases and removed outside focus.
-5. WakaTime tracking stays in sync with focus-running state.
+4. Phase-completion notifications are dispatched asynchronously.
+5. Blocking is applied during focus phases and removed outside focus.
+6. WakaTime tracking stays in sync with focus-running state.
 
 For full module map and design details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
