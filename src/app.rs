@@ -105,6 +105,7 @@ pub struct App {
     pub profile_edit_snapshot: Option<CustomProfileConfig>,
     stats: FocusStats,
     stats_dirty: bool,
+    stats_has_unsaved_elapsed: bool,
 }
 
 impl App {
@@ -150,6 +151,7 @@ impl App {
             profile_edit_snapshot: None,
             stats,
             stats_dirty: false,
+            stats_has_unsaved_elapsed: false,
         }
     }
 
@@ -168,7 +170,7 @@ impl App {
         if phase_changed {
             self.apply_blocking_for_phase();
         }
-        self.flush_stats_if_dirty();
+        self.flush_stats_if_dirty(false);
     }
 
     /// Advance WakaTime tracking by `elapsed_secs` simulated seconds.
@@ -281,14 +283,15 @@ impl App {
         self.stats_error = None;
     }
 
-    fn flush_stats_if_dirty(&mut self) {
-        if !self.stats_dirty {
+    fn flush_stats_if_dirty(&mut self, force_partial: bool) {
+        if !(self.stats_dirty || (force_partial && self.stats_has_unsaved_elapsed)) {
             return;
         }
 
         self.save_stats();
         if self.stats_error.is_none() {
             self.stats_dirty = false;
+            self.stats_has_unsaved_elapsed = false;
         }
     }
 
@@ -647,6 +650,7 @@ impl App {
         let today_minutes_before = self.stats.daily_for(&day_key).focused_minutes();
 
         self.stats.record_focus_elapsed(&day_key, elapsed_secs);
+        self.stats_has_unsaved_elapsed = true;
 
         let session_minutes_after = self.stats.session().focused_minutes();
         let today_minutes_after = self.stats.daily_for(&day_key).focused_minutes();
@@ -702,7 +706,7 @@ fn format_duration_label(seconds: u64) -> String {
 
 impl Drop for App {
     fn drop(&mut self) {
-        self.flush_stats_if_dirty();
+        self.flush_stats_if_dirty(true);
         // Ensure hosts-file block entries are removed on every exit path,
         // including early returns caused by I/O errors in run_app.
         self.blocker.cleanup();
@@ -1031,6 +1035,19 @@ mod tests {
         assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
         assert_eq!(app.session_stats().pomodoros_completed, 0);
         assert_eq!(app.session_stats().focused_seconds, 0);
+    }
+
+    #[test]
+    fn partial_focus_elapsed_marks_unsaved_flag_for_drop_flush() {
+        let mut app = App::default();
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = app.timer.focus_secs;
+
+        app.on_tick(false);
+
+        assert!(app.stats_has_unsaved_elapsed);
+        assert_eq!(app.session_stats().focused_seconds, 1);
     }
 
     #[test]
