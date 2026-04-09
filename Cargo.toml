@@ -15,5 +15,5 @@ ratatui = "0.30"
 crossterm = "0.29"
 ureq = { version = "3", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+toml = "1.1"
 base64 = "0.22"
