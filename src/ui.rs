@@ -15,6 +15,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         AppMode::Timer => render_timer(frame, app),
         AppMode::SiteManager => render_site_manager(frame, app),
         AppMode::ProfileManager => render_profile_manager(frame, app),
+        AppMode::StatsHistory => render_stats_history(frame, app),
     }
 }
 
@@ -31,7 +32,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(phase_color(app.timer.phase)));
     frame.render_widget(block, outer);
 
-    // Inner layout: title | time | profile | progress | status | wakatime | spacer | hints
+    // Inner layout: title | time | profile | progress | status | stats | wakatime | spacer | hints
     let inner = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
@@ -41,6 +42,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
             Constraint::Length(1), // active profile
             Constraint::Length(3), // progress bar
             Constraint::Length(2), // status
+            Constraint::Length(1), // stats summary
             Constraint::Length(1), // wakatime status
             Constraint::Min(0),    // spacer
             Constraint::Length(2), // key hints
@@ -110,6 +112,31 @@ fn render_timer(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(Color::Gray));
     frame.render_widget(status_widget, inner[4]);
 
+    // Session + today stats summary
+    let stats_line = if let Some(err) = app.stats_error.as_ref() {
+        (
+            format!("⚠ Stats persistence warning: {err}"),
+            Style::default().fg(Color::Yellow),
+        )
+    } else {
+        let session_stats = app.session_stats();
+        let today_stats = app.today_stats();
+        (
+            format!(
+                "Session: 🍅{} · {}m   Today: 🍅{} · {}m",
+                session_stats.pomodoros_completed,
+                session_stats.focused_minutes(),
+                today_stats.pomodoros_completed,
+                today_stats.focused_minutes()
+            ),
+            Style::default().fg(Color::DarkGray),
+        )
+    };
+    let stats_widget = Paragraph::new(stats_line.0)
+        .alignment(Alignment::Center)
+        .style(stats_line.1);
+    frame.render_widget(stats_widget, inner[5]);
+
     // WakaTime status
     let (waka_text, waka_color) = if app.wakatime.is_tracking() {
         ("⏱ WakaTime: tracking", Color::Green)
@@ -121,16 +148,16 @@ fn render_timer(frame: &mut Frame, app: &App) {
     let waka_widget = Paragraph::new(waka_text)
         .alignment(Alignment::Center)
         .style(Style::default().fg(waka_color));
-    frame.render_widget(waka_widget, inner[5]);
+    frame.render_widget(waka_widget, inner[6]);
 
     // Key hints
     let hints_widget = Paragraph::new(vec![
         Line::from("[Space] Start/Pause  [s] Stop  [n] Next"),
-        Line::from("[p] Profiles  [b] Block Sites  [q/Esc] Quit"),
+        Line::from("[h] History  [p] Profiles  [b] Block Sites  [q/Esc] Quit"),
     ])
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints_widget, inner[7]);
+    frame.render_widget(hints_widget, inner[8]);
 }
 
 fn render_site_manager(frame: &mut Frame, app: &App) {
@@ -407,6 +434,94 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints_widget, inner[7]);
+}
+
+fn render_stats_history(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+    let outer = centered_rect(65, 80, area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Daily Focus History ")
+        .title_alignment(Alignment::Center)
+        .style(Style::default().fg(Color::Cyan));
+    frame.render_widget(block, outer);
+
+    let inner = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(2)
+        .constraints([
+            Constraint::Length(1), // session summary
+            Constraint::Length(1), // today summary
+            Constraint::Length(1), // spacer
+            Constraint::Min(3),    // history list
+            Constraint::Length(1), // error line
+            Constraint::Length(1), // hints
+        ])
+        .split(outer);
+
+    let session_stats = app.session_stats();
+    let today_stats = app.today_stats();
+    let session_summary = Paragraph::new(format!(
+        "This session: 🍅{} · {}m",
+        session_stats.pomodoros_completed,
+        session_stats.focused_minutes()
+    ))
+    .style(
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    );
+    frame.render_widget(session_summary, inner[0]);
+
+    let today_summary = Paragraph::new(format!(
+        "Today: 🍅{} · {}m",
+        today_stats.pomodoros_completed,
+        today_stats.focused_minutes()
+    ))
+    .style(Style::default().fg(Color::Gray));
+    frame.render_widget(today_summary, inner[1]);
+
+    let history_items: Vec<ListItem> = app
+        .recent_daily_stats(14)
+        .into_iter()
+        .map(|(day, stats)| {
+            ListItem::new(format!(
+                "  {day}   🍅{}   {}m",
+                stats.pomodoros_completed,
+                stats.focused_minutes()
+            ))
+        })
+        .collect();
+
+    if history_items.is_empty() {
+        let empty = Paragraph::new("  No completed focus history yet.")
+            .style(Style::default().fg(Color::DarkGray))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Recent Days "),
+            );
+        frame.render_widget(empty, inner[3]);
+    } else {
+        let list = List::new(history_items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Recent Days "),
+            )
+            .style(Style::default().fg(Color::Gray));
+        frame.render_widget(list, inner[3]);
+    }
+
+    if let Some(err) = app.stats_error.as_ref() {
+        render_centered_error(frame, inner[4], format!("⚠  {err}"));
+    }
+
+    let hints = Paragraph::new("[h/Esc] Back  [q/Ctrl-C] Quit")
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(hints, inner[5]);
 }
 
 fn profile_for_index(index: usize) -> ProfileId {
