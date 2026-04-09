@@ -114,7 +114,7 @@ impl TimerState {
     }
 
     fn break_phase_for_focus_count(&self, focus_count: u32) -> TimerPhase {
-        if focus_count.is_multiple_of(self.effective_long_break_interval()) {
+        if focus_count % self.effective_long_break_interval() == 0 {
             TimerPhase::LongBreak
         } else {
             TimerPhase::ShortBreak
