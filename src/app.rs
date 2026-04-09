@@ -104,6 +104,7 @@ pub struct App {
     pub profile_edit_field: usize,
     pub profile_edit_snapshot: Option<CustomProfileConfig>,
     stats: FocusStats,
+    stats_dirty: bool,
 }
 
 impl App {
@@ -148,6 +149,7 @@ impl App {
             profile_edit_field: 0,
             profile_edit_snapshot: None,
             stats,
+            stats_dirty: false,
         }
     }
 
@@ -166,6 +168,7 @@ impl App {
         if phase_changed {
             self.apply_blocking_for_phase();
         }
+        self.flush_stats_if_dirty();
     }
 
     /// Advance WakaTime tracking by `elapsed_secs` simulated seconds.
@@ -276,6 +279,17 @@ impl App {
     #[cfg(test)]
     fn save_stats(&mut self) {
         self.stats_error = None;
+    }
+
+    fn flush_stats_if_dirty(&mut self) {
+        if !self.stats_dirty {
+            return;
+        }
+
+        self.save_stats();
+        if self.stats_error.is_none() {
+            self.stats_dirty = false;
+        }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -639,14 +653,14 @@ impl App {
         if session_minutes_before != session_minutes_after
             || today_minutes_before != today_minutes_after
         {
-            self.save_stats();
+            self.stats_dirty = true;
         }
     }
 
     fn record_completed_focus_session(&mut self) {
         let day_key = current_day_key();
         self.stats.record_completed_pomodoro(&day_key);
-        self.save_stats();
+        self.stats_dirty = true;
     }
 
     fn sync_wakatime_tracking_for_state(&mut self) {
@@ -655,7 +669,6 @@ impl App {
             self.wakatime.on_focus_start();
         } else if !focus_running && self.wakatime.is_tracking() {
             self.wakatime.on_focus_stop();
-            self.save_stats();
         }
     }
 
@@ -689,7 +702,7 @@ fn format_duration_label(seconds: u64) -> String {
 
 impl Drop for App {
     fn drop(&mut self) {
-        self.save_stats();
+        self.flush_stats_if_dirty();
         // Ensure hosts-file block entries are removed on every exit path,
         // including early returns caused by I/O errors in run_app.
         self.blocker.cleanup();
