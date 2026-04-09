@@ -1,6 +1,7 @@
 mod app;
 mod blocker;
 mod config;
+mod stats;
 mod timer;
 mod ui;
 mod wakatime;
@@ -93,7 +94,10 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
                 while tick_accumulator >= 1000 {
                     tick_accumulator -= 1000;
                     elapsed_secs += 1;
-                    app.on_tick();
+                }
+                let is_catchup = elapsed_secs > 1;
+                for _ in 0..elapsed_secs {
+                    app.on_tick(is_catchup);
                 }
                 // Advance WakaTime once per UI frame to avoid burst heartbeats
                 // after a suspend/resume catch-up.

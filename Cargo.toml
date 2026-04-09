@@ -18,3 +18,4 @@ ureq = { version = "3", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 toml = "1.1"
 base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }

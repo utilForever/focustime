@@ -85,6 +85,19 @@ long_break_secs = 900
 long_break_interval = 3
 ```
 
+## Session stats and daily history
+
+`focustime` tracks:
+
+- completed pomodoros for the current app session
+- focused minutes for the current app session
+- daily aggregates persisted in `stats.toml` (in the same config directory as `config.toml`)
+
+From timer view:
+
+- press **`h`** to open the daily history panel
+- press **`h`** or **`Esc`** to return to timer view
+
 ## The way the system works
 
 `focustime` is a single-binary Rust TUI app composed of six modules in `src/`:

@@ -236,20 +236,28 @@ impl AppConfig {
 
     #[cfg_attr(test, allow(dead_code))]
     fn config_path() -> Option<PathBuf> {
-        let config_dir = config_dir()?;
-        Some(config_dir.join("focustime").join("config.toml"))
+        app_data_path("config.toml")
     }
 
     fn config_path_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Option<PathBuf> {
-        let config_dir = config_dir_from_env(get_var)?;
-        Some(config_dir.join("focustime").join("config.toml"))
+        let app_dir = app_dir_with_env(get_var)?;
+        Some(app_dir.join("config.toml"))
     }
 }
 
-/// Returns the platform-appropriate configuration base directory.
 #[cfg_attr(test, allow(dead_code))]
-fn config_dir() -> Option<PathBuf> {
-    config_dir_from_env(|key| std::env::var_os(key))
+pub(crate) fn app_data_path(file_name: &str) -> Option<PathBuf> {
+    let app_dir = app_dir()?;
+    Some(app_dir.join(file_name))
+}
+
+fn app_dir() -> Option<PathBuf> {
+    app_dir_with_env(|key| std::env::var_os(key))
+}
+
+fn app_dir_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Option<PathBuf> {
+    let config_dir = config_dir_from_env(get_var)?;
+    Some(config_dir.join("focustime"))
 }
 
 fn config_dir_from_env(mut get_var: impl FnMut(&str) -> Option<OsString>) -> Option<PathBuf> {

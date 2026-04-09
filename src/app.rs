@@ -2,6 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blocker::SiteBlocker;
 use crate::config::{AppConfig, CustomProfileConfig, ProfileId};
+use crate::stats::{DailyStats, FocusStats, SessionStats, current_day_key};
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
@@ -19,6 +20,7 @@ pub enum AppMode {
     Timer,
     SiteManager,
     ProfileManager,
+    StatsHistory,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -92,6 +94,8 @@ pub struct App {
     pub block_error: Option<String>,
     /// Last error from persisting timer/site configuration.
     pub config_error: Option<String>,
+    /// Last error from persisting focus stats.
+    pub stats_error: Option<String>,
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
     pub custom_profile: CustomProfileConfig,
@@ -99,6 +103,9 @@ pub struct App {
     pub profile_edit_active: bool,
     pub profile_edit_field: usize,
     pub profile_edit_snapshot: Option<CustomProfileConfig>,
+    stats: FocusStats,
+    stats_dirty: bool,
+    stats_has_unsaved_elapsed: bool,
 }
 
 impl App {
@@ -110,6 +117,10 @@ impl App {
         let selected_profile = config.selected_profile;
         let custom_profile = config.effective_custom_profile();
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
+        let (stats, stats_error) = match FocusStats::load() {
+            Ok(stats) => (stats, None),
+            Err(e) => (FocusStats::default(), Some(e)),
+        };
         let timer = TimerState::with_profile(
             profile_spec.focus_secs,
             profile_spec.short_break_secs,
@@ -130,6 +141,7 @@ impl App {
             selected_site: 0,
             block_error: None,
             config_error: None,
+            stats_error,
             wakatime: WakatimeTracker::new(),
             selected_profile,
             custom_profile,
@@ -137,14 +149,28 @@ impl App {
             profile_edit_active: false,
             profile_edit_field: 0,
             profile_edit_snapshot: None,
+            stats,
+            stats_dirty: false,
+            stats_has_unsaved_elapsed: false,
         }
     }
 
-    pub fn on_tick(&mut self) {
+    pub fn on_tick(&mut self, is_catchup: bool) {
+        let was_focus_running = self.focus_running_for_current_state();
+        let was_focus_phase = self.timer.phase == TimerPhase::Focus;
+        if was_focus_running && !is_catchup {
+            self.record_focus_elapsed(1);
+        }
+
         let phase_changed = self.timer.tick();
+        if !is_catchup && phase_changed && was_focus_phase && self.timer.phase != TimerPhase::Focus
+        {
+            self.record_completed_focus_session();
+        }
         if phase_changed {
             self.apply_blocking_for_phase();
         }
+        self.flush_stats_if_dirty(false);
     }
 
     /// Advance WakaTime tracking by `elapsed_secs` simulated seconds.
@@ -181,6 +207,18 @@ impl App {
             format_duration_label(long_break),
             cadence
         )
+    }
+
+    pub fn session_stats(&self) -> SessionStats {
+        self.stats.session()
+    }
+
+    pub fn today_stats(&self) -> DailyStats {
+        self.stats.daily_for(&current_day_key())
+    }
+
+    pub fn recent_daily_stats(&self, limit: usize) -> Vec<(String, DailyStats)> {
+        self.stats.recent_daily(limit)
     }
 
     pub fn custom_profile_field_value(&self, field_index: usize) -> String {
@@ -231,11 +269,38 @@ impl App {
         self.config_error = None;
     }
 
+    #[cfg(not(test))]
+    fn save_stats(&mut self) {
+        if let Err(e) = self.stats.save() {
+            self.stats_error = Some(format!("stats save failed: {e}"));
+        } else {
+            self.stats_error = None;
+        }
+    }
+
+    #[cfg(test)]
+    fn save_stats(&mut self) {
+        self.stats_error = None;
+    }
+
+    fn flush_stats_if_dirty(&mut self, force_partial: bool) {
+        if !(self.stats_dirty || (force_partial && self.stats_has_unsaved_elapsed)) {
+            return;
+        }
+
+        self.save_stats();
+        if self.stats_error.is_none() {
+            self.stats_dirty = false;
+            self.stats_has_unsaved_elapsed = false;
+        }
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) {
         match self.mode {
             AppMode::Timer => self.handle_key_timer(key),
             AppMode::SiteManager => self.handle_key_site_manager(key),
             AppMode::ProfileManager => self.handle_key_profile_manager(key),
+            AppMode::StatsHistory => self.handle_key_stats_history(key),
         }
     }
 
@@ -264,6 +329,23 @@ impl App {
             // Open profile manager
             KeyCode::Char('p') => {
                 self.open_profile_manager();
+            }
+            // Open stats history
+            KeyCode::Char('h') => {
+                self.open_stats_history();
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_key_stats_history(&mut self, key: KeyEvent) {
+        if self.handle_quit_key(&key, false) {
+            return;
+        }
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('h') => {
+                self.mode = AppMode::Timer;
             }
             _ => {}
         }
@@ -523,6 +605,10 @@ impl App {
         self.clamp_profile_selection();
     }
 
+    fn open_stats_history(&mut self) {
+        self.mode = AppMode::StatsHistory;
+    }
+
     fn exit_profile_manager(&mut self) {
         self.mode = AppMode::Timer;
         self.profile_edit_snapshot = None;
@@ -552,6 +638,33 @@ impl App {
 
     fn focus_running_for_current_state(&self) -> bool {
         self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running
+    }
+
+    fn record_focus_elapsed(&mut self, elapsed_secs: u64) {
+        if elapsed_secs == 0 {
+            return;
+        }
+
+        let day_key = current_day_key();
+        let session_minutes_before = self.stats.session().focused_minutes();
+        let today_minutes_before = self.stats.daily_for(&day_key).focused_minutes();
+
+        self.stats.record_focus_elapsed(&day_key, elapsed_secs);
+        self.stats_has_unsaved_elapsed = true;
+
+        let session_minutes_after = self.stats.session().focused_minutes();
+        let today_minutes_after = self.stats.daily_for(&day_key).focused_minutes();
+        if session_minutes_before != session_minutes_after
+            || today_minutes_before != today_minutes_after
+        {
+            self.stats_dirty = true;
+        }
+    }
+
+    fn record_completed_focus_session(&mut self) {
+        let day_key = current_day_key();
+        self.stats.record_completed_pomodoro(&day_key);
+        self.stats_dirty = true;
     }
 
     fn sync_wakatime_tracking_for_state(&mut self) {
@@ -593,6 +706,7 @@ fn format_duration_label(seconds: u64) -> String {
 
 impl Drop for App {
     fn drop(&mut self) {
+        self.flush_stats_if_dirty(true);
         // Ensure hosts-file block entries are removed on every exit path,
         // including early returns caused by I/O errors in run_app.
         self.blocker.cleanup();
@@ -654,18 +768,18 @@ mod tests {
         for _ in 0..2 {
             app.timer.status = TimerStatus::Running;
             app.timer.remaining_secs = 1;
-            app.on_tick(); // focus -> short break
+            app.on_tick(false); // focus -> short break
             assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
 
             app.timer.status = TimerStatus::Running;
             app.timer.remaining_secs = 1;
-            app.on_tick(); // short break -> focus
+            app.on_tick(false); // short break -> focus
             assert_eq!(app.timer.phase, TimerPhase::Focus);
         }
 
         app.timer.status = TimerStatus::Running;
         app.timer.remaining_secs = 1;
-        app.on_tick(); // third focus completion -> long break
+        app.on_tick(false); // third focus completion -> long break
         assert_eq!(app.timer.phase, TimerPhase::LongBreak);
     }
 
@@ -858,6 +972,82 @@ mod tests {
         );
         assert_eq!(app.selected_site, 1);
         assert!(app.config_error.is_none());
+    }
+
+    #[test]
+    fn completed_focus_tick_increments_session_pomodoros() {
+        let mut app = App::default();
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = 1;
+
+        app.on_tick(false);
+
+        assert_eq!(app.session_stats().pomodoros_completed, 1);
+        assert_eq!(app.today_stats().pomodoros_completed, 1);
+    }
+
+    #[test]
+    fn skipping_focus_does_not_increment_session_pomodoros() {
+        let mut app = App::default();
+        assert_eq!(app.session_stats().pomodoros_completed, 0);
+
+        app.handle_key(key(KeyCode::Char('n')));
+
+        assert_eq!(app.session_stats().pomodoros_completed, 0);
+    }
+
+    #[test]
+    fn focus_elapsed_accumulates_session_and_today_minutes() {
+        let mut app = App::default();
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = app.timer.focus_secs;
+
+        for _ in 0..120 {
+            app.on_tick(false);
+        }
+
+        assert_eq!(app.session_stats().focused_minutes(), 2);
+        assert_eq!(app.today_stats().focused_minutes(), 2);
+    }
+
+    #[test]
+    fn history_view_toggles_from_timer_mode() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('h')));
+        assert_eq!(app.mode, AppMode::StatsHistory);
+
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.mode, AppMode::Timer);
+    }
+
+    #[test]
+    fn catchup_tick_does_not_increment_focus_stats() {
+        let mut app = App::default();
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = 1;
+
+        app.on_tick(true);
+
+        assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+        assert_eq!(app.session_stats().pomodoros_completed, 0);
+        assert_eq!(app.session_stats().focused_seconds, 0);
+    }
+
+    #[test]
+    fn partial_focus_elapsed_marks_unsaved_flag_for_drop_flush() {
+        let mut app = App::default();
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = app.timer.focus_secs;
+
+        app.on_tick(false);
+
+        assert!(app.stats_has_unsaved_elapsed);
+        assert_eq!(app.session_stats().focused_seconds, 1);
     }
 
     #[test]
