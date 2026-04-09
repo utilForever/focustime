@@ -46,26 +46,31 @@ pub struct FocusStats {
 }
 
 impl FocusStats {
-    #[cfg(not(test))]
-    pub fn load() -> Self {
-        Self::try_load().unwrap_or_default()
-    }
-
     #[cfg(test)]
-    pub fn load() -> Self {
-        Self::default()
+    pub fn load() -> Result<Self, String> {
+        Ok(Self::default())
     }
 
     #[cfg(not(test))]
-    fn try_load() -> Option<Self> {
-        let path = crate::config::app_data_path(STATS_FILE_NAME)?;
-        let content = fs::read_to_string(path).ok()?;
-        Self::try_from_toml(&content)
+    pub fn load() -> Result<Self, String> {
+        Self::try_load()
     }
 
-    fn try_from_toml(content: &str) -> Option<Self> {
-        let persisted: PersistedStats = toml::from_str(content).ok()?;
-        Some(Self::from_persisted(persisted))
+    #[cfg(not(test))]
+    fn try_load() -> Result<Self, String> {
+        let path = crate::config::app_data_path(STATS_FILE_NAME)
+            .ok_or_else(|| "cannot determine stats directory".to_string())?;
+        match fs::read_to_string(path) {
+            Ok(content) => Self::try_from_toml(&content),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(e) => Err(format!("stats read failed: {e}")),
+        }
+    }
+
+    fn try_from_toml(content: &str) -> Result<Self, String> {
+        let persisted: PersistedStats =
+            toml::from_str(content).map_err(|e| format!("stats parse failed: {e}"))?;
+        Ok(Self::from_persisted(persisted))
     }
 
     fn from_persisted(persisted: PersistedStats) -> Self {
@@ -209,8 +214,8 @@ mod tests {
     }
 
     #[test]
-    fn invalid_toml_falls_back_to_none_for_loader() {
-        assert!(FocusStats::try_from_toml("this is not valid toml").is_none());
+    fn invalid_toml_returns_parse_error() {
+        assert!(FocusStats::try_from_toml("this is not valid toml").is_err());
     }
 
     #[test]

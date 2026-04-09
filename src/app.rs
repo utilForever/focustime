@@ -115,6 +115,10 @@ impl App {
         let selected_profile = config.selected_profile;
         let custom_profile = config.effective_custom_profile();
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
+        let (stats, stats_error) = match FocusStats::load() {
+            Ok(stats) => (stats, None),
+            Err(e) => (FocusStats::default(), Some(e)),
+        };
         let timer = TimerState::with_profile(
             profile_spec.focus_secs,
             profile_spec.short_break_secs,
@@ -135,7 +139,7 @@ impl App {
             selected_site: 0,
             block_error: None,
             config_error: None,
-            stats_error: None,
+            stats_error,
             wakatime: WakatimeTracker::new(),
             selected_profile,
             custom_profile,
@@ -143,19 +147,20 @@ impl App {
             profile_edit_active: false,
             profile_edit_field: 0,
             profile_edit_snapshot: None,
-            stats: FocusStats::load(),
+            stats,
         }
     }
 
-    pub fn on_tick(&mut self) {
+    pub fn on_tick(&mut self, is_catchup: bool) {
         let was_focus_running = self.focus_running_for_current_state();
         let was_focus_phase = self.timer.phase == TimerPhase::Focus;
-        if was_focus_running {
+        if was_focus_running && !is_catchup {
             self.record_focus_elapsed(1);
         }
 
         let phase_changed = self.timer.tick();
-        if phase_changed && was_focus_phase && self.timer.phase != TimerPhase::Focus {
+        if !is_catchup && phase_changed && was_focus_phase && self.timer.phase != TimerPhase::Focus
+        {
             self.record_completed_focus_session();
         }
         if phase_changed {
@@ -746,18 +751,18 @@ mod tests {
         for _ in 0..2 {
             app.timer.status = TimerStatus::Running;
             app.timer.remaining_secs = 1;
-            app.on_tick(); // focus -> short break
+            app.on_tick(false); // focus -> short break
             assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
 
             app.timer.status = TimerStatus::Running;
             app.timer.remaining_secs = 1;
-            app.on_tick(); // short break -> focus
+            app.on_tick(false); // short break -> focus
             assert_eq!(app.timer.phase, TimerPhase::Focus);
         }
 
         app.timer.status = TimerStatus::Running;
         app.timer.remaining_secs = 1;
-        app.on_tick(); // third focus completion -> long break
+        app.on_tick(false); // third focus completion -> long break
         assert_eq!(app.timer.phase, TimerPhase::LongBreak);
     }
 
@@ -959,7 +964,7 @@ mod tests {
         app.timer.status = TimerStatus::Running;
         app.timer.remaining_secs = 1;
 
-        app.on_tick();
+        app.on_tick(false);
 
         assert_eq!(app.session_stats().pomodoros_completed, 1);
         assert_eq!(app.today_stats().pomodoros_completed, 1);
@@ -983,7 +988,7 @@ mod tests {
         app.timer.remaining_secs = app.timer.focus_secs;
 
         for _ in 0..120 {
-            app.on_tick();
+            app.on_tick(false);
         }
 
         assert_eq!(app.session_stats().focused_minutes(), 2);
@@ -999,6 +1004,20 @@ mod tests {
 
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.mode, AppMode::Timer);
+    }
+
+    #[test]
+    fn catchup_tick_does_not_increment_focus_stats() {
+        let mut app = App::default();
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = 1;
+
+        app.on_tick(true);
+
+        assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+        assert_eq!(app.session_stats().pomodoros_completed, 0);
+        assert_eq!(app.session_stats().focused_seconds, 0);
     }
 
     #[test]
