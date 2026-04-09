@@ -2,6 +2,7 @@
 name = "focustime"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "TUI Pomodoro timer with site blocking and WakaTime tracking"
 license = "MIT"
 readme = "README.md"
