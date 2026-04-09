@@ -6,8 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph},
 };
 
-use crate::app::{App, AppMode, CUSTOM_PROFILE_FIELD_LABELS, PROFILE_IDS};
-use crate::config::ProfileId;
+use crate::app::{App, AppMode, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS};
 use crate::timer::{TimerPhase, TimerStatus};
 
 pub fn render(frame: &mut Frame, app: &App) {
@@ -352,7 +351,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
             Constraint::Length(1), // spacer
             Constraint::Length(7), // profile list
             Constraint::Length(1), // spacer
-            Constraint::Length(7), // custom editor
+            Constraint::Length(9), // custom + notification editor
             Constraint::Min(0),    // spacer
             Constraint::Length(1), // error line
             Constraint::Length(2), // key hints
@@ -394,9 +393,9 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     frame.render_stateful_widget(list, inner[2], &mut list_state);
 
     let editor_title = if app.profile_edit_active {
-        " Custom profile editor "
+        " Custom + notification settings editor "
     } else {
-        " Custom profile (select Custom + [e] to edit) "
+        " Custom + notification settings ([e] to edit) "
     };
     let editor_block = Block::default()
         .borders(Borders::ALL)
@@ -407,9 +406,9 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
             Style::default().fg(Color::DarkGray)
         });
 
-    let mut lines = Vec::with_capacity(CUSTOM_PROFILE_FIELD_LABELS.len());
-    for (index, label) in CUSTOM_PROFILE_FIELD_LABELS.iter().enumerate() {
-        let value = app.custom_profile_field_value(index);
+    let mut lines = Vec::with_capacity(PROFILE_EDIT_FIELD_LABELS.len());
+    for (index, label) in PROFILE_EDIT_FIELD_LABELS.iter().enumerate() {
+        let value = app.profile_edit_field_value(index);
         let mut line = Line::from(format!("{label:<18} {value}"));
         if app.profile_edit_active && index == app.profile_edit_field {
             line = Line::from(vec![
@@ -435,14 +434,9 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
             Line::from("[↑/↓] Field  [←/→] Adjust"),
             Line::from("[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit"),
         ]
-    } else if profile_for_index(app.profile_selection_index) == ProfileId::Custom {
-        vec![
-            Line::from("[↑/↓] Select  [Enter] Apply  [e] Edit Custom"),
-            Line::from("[p/Esc] Back  [q] Quit"),
-        ]
     } else {
         vec![
-            Line::from("[↑/↓] Select  [Enter] Apply"),
+            Line::from("[↑/↓] Select  [Enter] Apply  [e] Edit Settings"),
             Line::from("[p/Esc] Back  [q] Quit"),
         ]
     };
@@ -538,10 +532,6 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints, inner[5]);
-}
-
-fn profile_for_index(index: usize) -> ProfileId {
-    PROFILE_IDS.get(index).copied().unwrap_or(ProfileId::Custom)
 }
 
 fn phase_color(phase: TimerPhase) -> Color {

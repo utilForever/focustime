@@ -68,8 +68,8 @@ Open profile manager from timer view with **`p`**.
 
 - `↑/↓`: move between profiles
 - `Enter`: apply selected profile
-- `e`: edit the Custom profile (when Custom is highlighted)
-- In custom editor: `↑/↓` selects field, `←/→` adjusts value, `Enter` saves
+- `e`: open profile/settings editor
+- In editor: `↑/↓` selects field, `←/→` adjusts value, `Enter` saves
 
 Profile selection and custom values are persisted in `config.toml`.
 
@@ -103,6 +103,13 @@ Notifications are delivered best-effort:
 - terminal notice in the timer view
 - desktop notification via platform-specific command (`msg` on Windows, `osascript` on macOS, `notify-send` on Linux)
 - optional sound alert when `notifications.sound = true`
+
+You can also configure `notifications.enabled` and `notifications.sound` directly from the TUI:
+
+- open profile manager with `p`
+- press `e` to open the editor
+- use `↑/↓` to select **Phase notifications** or **Sound alert**
+- use `←/→` to set `Off`/`On`, then `Enter` to save
 
 ## Session stats and daily history
 
