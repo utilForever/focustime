@@ -2,6 +2,8 @@
 use std::io::Write;
 #[cfg(not(test))]
 use std::process::Command;
+#[cfg(not(test))]
+use std::process::ExitStatus;
 use std::thread;
 
 use crate::config::NotificationConfig;
@@ -52,9 +54,19 @@ fn transition_message(completed_phase: TimerPhase, next_phase: TimerPhase) -> St
 fn send_desktop_notification(title: &str, body: &str) {
     #[cfg(target_os = "windows")]
     {
-        let _ = Command::new("msg")
-            .args(["*", &format!("{title}: {body}")])
-            .status();
+        use winrt_notification::{Duration, Toast};
+
+        let toast_result = Toast::new(Toast::POWERSHELL_APP_ID)
+            .title(title)
+            .text1(body)
+            .duration(Duration::Short)
+            .sound(None)
+            .show();
+        if toast_result.is_err() {
+            let _ = Command::new("msg")
+                .args(["*", &format!("{title}: {body}")])
+                .status();
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -84,6 +96,52 @@ fn escape_applescript_literal(value: &str) -> String {
 
 #[cfg(not(test))]
 fn play_sound_alert() {
+    #[cfg(target_os = "windows")]
+    {
+        if command_succeeded(
+            Command::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "[console]::Beep(880,180)",
+                ])
+                .status(),
+        ) {
+            return;
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if command_succeeded(
+            Command::new("afplay")
+                .arg("/System/Library/Sounds/Glass.aiff")
+                .status(),
+        ) {
+            return;
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if command_succeeded(
+            Command::new("paplay")
+                .arg("/usr/share/sounds/freedesktop/stereo/complete.oga")
+                .status(),
+        ) {
+            return;
+        }
+        if command_succeeded(
+            Command::new("aplay")
+                .args(["-q", "/usr/share/sounds/alsa/Front_Center.wav"])
+                .status(),
+        ) {
+            return;
+        }
+    }
+
+    // Last-resort fallback: many terminals ignore BEL, so this may be silent.
     let mut stderr = std::io::stderr();
     let _ = stderr.write_all(b"\x07");
     let _ = stderr.flush();
@@ -91,6 +149,11 @@ fn play_sound_alert() {
 
 #[cfg(test)]
 fn play_sound_alert() {}
+
+#[cfg(not(test))]
+fn command_succeeded(result: std::io::Result<ExitStatus>) -> bool {
+    matches!(result, Ok(status) if status.success())
+}
 
 #[cfg(test)]
 mod tests {
