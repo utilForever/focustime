@@ -108,11 +108,7 @@ impl SiteBlocker {
         let original = fs::read_to_string(HOSTS_FILE)?;
         // Detect the original line ending style so we don't convert CRLF → LF
         // on Windows hosts files.
-        let nl: &str = if original.contains("\r\n") {
-            "\r\n"
-        } else {
-            "\n"
-        };
+        let nl = line_ending_for(&original);
         let mut content = Self::strip_block_section(&original);
 
         // Only insert a separator newline when the content doesn't already end
@@ -123,20 +119,7 @@ impl SiteBlocker {
         content.push_str(BLOCK_MARKER_START);
         content.push_str(nl);
         for site in &self.sites {
-            content.push_str("127.0.0.1 ");
-            content.push_str(site);
-            content.push_str(nl);
-            content.push_str("::1 ");
-            content.push_str(site);
-            content.push_str(nl);
-            if !site.starts_with("www.") {
-                content.push_str("127.0.0.1 www.");
-                content.push_str(site);
-                content.push_str(nl);
-                content.push_str("::1 www.");
-                content.push_str(site);
-                content.push_str(nl);
-            }
+            append_site_entries(&mut content, site, nl);
         }
         content.push_str(BLOCK_MARKER_END);
         content.push_str(nl);
@@ -179,11 +162,7 @@ impl SiteBlocker {
         }
 
         // Preserve the original line ending style (LF vs CRLF).
-        let nl: &str = if content.contains("\r\n") {
-            "\r\n"
-        } else {
-            "\n"
-        };
+        let nl = line_ending_for(content);
         let mut result = String::with_capacity(content.len());
         let mut in_block = false;
 
@@ -210,6 +189,31 @@ impl Default for SiteBlocker {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn line_ending_for(content: &str) -> &'static str {
+    if content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    }
+}
+
+fn append_site_entries(content: &mut String, site: &str, nl: &str) {
+    append_hosts_mapping(content, "127.0.0.1", site, nl);
+    append_hosts_mapping(content, "::1", site, nl);
+    if !site.starts_with("www.") {
+        let www_site = format!("www.{site}");
+        append_hosts_mapping(content, "127.0.0.1", &www_site, nl);
+        append_hosts_mapping(content, "::1", &www_site, nl);
+    }
+}
+
+fn append_hosts_mapping(content: &mut String, host: &str, site: &str, nl: &str) {
+    content.push_str(host);
+    content.push(' ');
+    content.push_str(site);
+    content.push_str(nl);
 }
 
 /// Write `content` to the hosts file atomically via a temp file + rename so

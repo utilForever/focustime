@@ -240,41 +240,30 @@ impl App {
     }
 
     fn handle_key_timer(&mut self, key: KeyEvent) {
+        if self.handle_quit_key(&key, true) {
+            return;
+        }
+
         match key.code {
-            // Quit
-            KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
-            // Ctrl-C fallback quit
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.should_quit = true;
-            }
             // Start / pause
             KeyCode::Char(' ') => {
-                self.timer.toggle_pause();
-                self.apply_blocking_for_phase();
+                self.update_timer_and_sync(TimerState::toggle_pause);
             }
             // Stop / reset current phase
             KeyCode::Char('s') => {
-                self.timer.reset();
-                self.apply_blocking_for_phase();
+                self.update_timer_and_sync(TimerState::reset);
             }
             // Skip to next phase
             KeyCode::Char('n') => {
-                self.timer.next_phase();
-                self.apply_blocking_for_phase();
+                self.update_timer_and_sync(TimerState::next_phase);
             }
             // Open site manager
             KeyCode::Char('b') => {
-                self.mode = AppMode::SiteManager;
-                self.clamp_selection();
+                self.open_site_manager();
             }
             // Open profile manager
             KeyCode::Char('p') => {
-                self.mode = AppMode::ProfileManager;
-                self.profile_edit_active = false;
-                self.profile_edit_field = 0;
-                self.profile_edit_snapshot = None;
-                self.profile_selection_index = profile_index(self.selected_profile);
-                self.clamp_profile_selection();
+                self.open_profile_manager();
             }
             _ => {}
         }
@@ -282,11 +271,11 @@ impl App {
 
     fn handle_key_profile_manager(&mut self, key: KeyEvent) {
         if self.profile_edit_active {
+            if self.handle_quit_key(&key, false) {
+                return;
+            }
+
             match key.code {
-                KeyCode::Char('q') => self.should_quit = true,
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.should_quit = true;
-                }
                 KeyCode::Esc => {
                     self.cancel_profile_edit();
                 }
@@ -311,14 +300,13 @@ impl App {
             return;
         }
 
+        if self.handle_quit_key(&key, false) {
+            return;
+        }
+
         match key.code {
             KeyCode::Esc | KeyCode::Char('p') => {
-                self.mode = AppMode::Timer;
-                self.profile_edit_snapshot = None;
-            }
-            KeyCode::Char('q') => self.should_quit = true,
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.should_quit = true;
+                self.exit_profile_manager();
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 self.profile_selection_index = self.profile_selection_index.saturating_sub(1);
@@ -330,7 +318,7 @@ impl App {
             KeyCode::Enter => {
                 let selected = profile_for_index(self.profile_selection_index);
                 self.apply_profile(selected);
-                self.mode = AppMode::Timer;
+                self.exit_profile_manager();
             }
             KeyCode::Char('e') => {
                 if profile_for_index(self.profile_selection_index) == ProfileId::Custom {
@@ -409,16 +397,7 @@ impl App {
                     let site = std::mem::take(&mut self.site_input);
                     self.blocker.add_site(site);
                     self.site_input_active = false;
-                    self.clamp_selection();
-                    self.save_config();
-                    // Re-apply block if currently blocking
-                    if self.blocker.is_blocking {
-                        if let Err(e) = self.blocker.block() {
-                            self.block_error = Some(e.to_string());
-                        } else {
-                            self.block_error = None;
-                        }
-                    }
+                    self.finalize_site_mutation();
                 }
                 KeyCode::Esc => {
                     self.site_input.clear();
@@ -435,17 +414,15 @@ impl App {
             return;
         }
 
+        if self.handle_quit_key(&key, false) {
+            return;
+        }
+
         match key.code {
             // Back to timer view
             KeyCode::Esc | KeyCode::Char('b') => {
                 self.mode = AppMode::Timer;
             }
-            // Ctrl-C fallback quit
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.should_quit = true;
-            }
-            // Quit
-            KeyCode::Char('q') => self.should_quit = true,
             // Navigate down
             KeyCode::Down | KeyCode::Char('j') => {
                 if !self.blocker.sites.is_empty() {
@@ -464,22 +441,7 @@ impl App {
             KeyCode::Char('d') | KeyCode::Delete => {
                 if !self.blocker.sites.is_empty() {
                     self.blocker.remove_site(self.selected_site);
-                    self.clamp_selection();
-                    self.save_config();
-                    // Re-apply or clear block based on new list
-                    if self.blocker.is_blocking {
-                        if self.blocker.sites.is_empty() {
-                            if let Err(e) = self.blocker.unblock() {
-                                self.block_error = Some(e.to_string());
-                            } else {
-                                self.block_error = None;
-                            }
-                        } else if let Err(e) = self.blocker.block() {
-                            self.block_error = Some(e.to_string());
-                        } else {
-                            self.block_error = None;
-                        }
-                    }
+                    self.finalize_site_mutation();
                 }
             }
             _ => {}
@@ -497,28 +459,13 @@ impl App {
     /// pausing the timer cannot be used to bypass the block.
     /// Unblocks when the phase is a break or the timer has not yet started (Idle).
     fn apply_blocking_for_phase(&mut self) {
-        let should_block =
-            self.timer.phase == TimerPhase::Focus && self.timer.status != TimerStatus::Idle;
-        if should_block {
-            if let Err(e) = self.blocker.block() {
-                self.block_error = Some(e.to_string());
-            } else {
-                self.block_error = None;
-            }
-        } else if let Err(e) = self.blocker.unblock() {
-            self.block_error = Some(e.to_string());
+        let block_result = if self.should_block_for_current_state() {
+            self.blocker.block()
         } else {
-            self.block_error = None;
-        }
-
-        // Keep WakaTime tracking in sync with the focus session state.
-        let focus_running =
-            self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running;
-        if focus_running && !self.wakatime.is_tracking() {
-            self.wakatime.on_focus_start();
-        } else if !focus_running && self.wakatime.is_tracking() {
-            self.wakatime.on_focus_stop();
-        }
+            self.blocker.unblock()
+        };
+        self.set_block_error_from_result(block_result);
+        self.sync_wakatime_tracking_for_state();
     }
 
     fn clamp_selection(&mut self) {
@@ -536,6 +483,90 @@ impl App {
             self.profile_selection_index = self
                 .profile_selection_index
                 .min(PROFILE_IDS.len().saturating_sub(1));
+        }
+    }
+
+    fn handle_quit_key(&mut self, key: &KeyEvent, esc_quits: bool) -> bool {
+        match key.code {
+            KeyCode::Char('q') => {
+                self.should_quit = true;
+                true
+            }
+            KeyCode::Esc if esc_quits => {
+                self.should_quit = true;
+                true
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.should_quit = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn update_timer_and_sync(&mut self, action: fn(&mut TimerState)) {
+        action(&mut self.timer);
+        self.apply_blocking_for_phase();
+    }
+
+    fn open_site_manager(&mut self) {
+        self.mode = AppMode::SiteManager;
+        self.clamp_selection();
+    }
+
+    fn open_profile_manager(&mut self) {
+        self.mode = AppMode::ProfileManager;
+        self.profile_edit_active = false;
+        self.profile_edit_field = 0;
+        self.profile_edit_snapshot = None;
+        self.profile_selection_index = profile_index(self.selected_profile);
+        self.clamp_profile_selection();
+    }
+
+    fn exit_profile_manager(&mut self) {
+        self.mode = AppMode::Timer;
+        self.profile_edit_snapshot = None;
+    }
+
+    fn finalize_site_mutation(&mut self) {
+        self.clamp_selection();
+        self.save_config();
+        self.sync_blocking_after_site_mutation();
+    }
+
+    fn sync_blocking_after_site_mutation(&mut self) {
+        if !self.blocker.is_blocking {
+            return;
+        }
+        let block_result = if self.blocker.sites.is_empty() {
+            self.blocker.unblock()
+        } else {
+            self.blocker.block()
+        };
+        self.set_block_error_from_result(block_result);
+    }
+
+    fn should_block_for_current_state(&self) -> bool {
+        self.timer.phase == TimerPhase::Focus && self.timer.status != TimerStatus::Idle
+    }
+
+    fn focus_running_for_current_state(&self) -> bool {
+        self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running
+    }
+
+    fn sync_wakatime_tracking_for_state(&mut self) {
+        let focus_running = self.focus_running_for_current_state();
+        if focus_running && !self.wakatime.is_tracking() {
+            self.wakatime.on_focus_start();
+        } else if !focus_running && self.wakatime.is_tracking() {
+            self.wakatime.on_focus_stop();
+        }
+    }
+
+    fn set_block_error_from_result(&mut self, result: std::io::Result<()>) {
+        match result {
+            Ok(()) => self.block_error = None,
+            Err(e) => self.block_error = Some(e.to_string()),
         }
     }
 }
@@ -580,6 +611,10 @@ mod tests {
 
     fn key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn ctrl_key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::CONTROL)
     }
 
     #[test]
@@ -775,5 +810,62 @@ mod tests {
         assert_eq!(app.custom_profile_field_value(0), "10:07");
         assert_eq!(app.custom_profile_field_value(1), "2m");
         assert_eq!(app.custom_profile_field_value(2), "8:09");
+    }
+
+    #[test]
+    fn timer_escape_quits_application() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Esc));
+        assert!(app.should_quit);
+    }
+
+    #[test]
+    fn site_manager_add_site_runs_unified_mutation_flow() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('a')));
+        for c in "Example.com".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.mode, AppMode::SiteManager);
+        assert!(!app.site_input_active);
+        assert_eq!(app.blocker.sites, vec!["example.com"]);
+        assert_eq!(app.selected_site, 0);
+        assert!(app.config_error.is_none());
+    }
+
+    #[test]
+    fn site_manager_delete_site_clamps_selection() {
+        let config = AppConfig {
+            blocked_sites: vec![
+                "a.com".to_string(),
+                "b.com".to_string(),
+                "c.com".to_string(),
+            ],
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.mode = AppMode::SiteManager;
+        app.selected_site = 2;
+
+        app.handle_key(key(KeyCode::Char('d')));
+
+        assert_eq!(
+            app.blocker.sites,
+            vec!["a.com".to_string(), "b.com".to_string()]
+        );
+        assert_eq!(app.selected_site, 1);
+        assert!(app.config_error.is_none());
+    }
+
+    #[test]
+    fn ctrl_c_quits_during_profile_edit() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.handle_key(ctrl_key(KeyCode::Char('c')));
+        assert!(app.should_quit);
     }
 }

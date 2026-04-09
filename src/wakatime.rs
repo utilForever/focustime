@@ -76,14 +76,12 @@ impl WakatimeConfig {
             if !in_settings {
                 continue;
             }
-            if let Some((key, value)) = trimmed.split_once('=') {
-                let k = key.trim();
-                let v = value.trim().to_string();
-                match k {
-                    "api_key" if !v.is_empty() => api_key = Some(v),
-                    "api_url" if !v.is_empty() => api_url = Some(v),
+            if let Some((key, value)) = parse_setting_line(trimmed) {
+                match key {
+                    "api_key" => api_key = Some(value.to_string()),
+                    "api_url" => api_url = Some(value.to_string()),
                     _ => {}
-                }
+                };
             }
         }
 
@@ -146,8 +144,7 @@ impl WakatimeTracker {
         if self.api_key.is_none() {
             return;
         }
-        self.tracking = true;
-        self.secs_since_last_heartbeat = 0;
+        self.set_tracking_state(true);
         self.send_heartbeat_async();
     }
 
@@ -171,7 +168,11 @@ impl WakatimeTracker {
 
     /// Called when the focus session pauses, stops, or moves to a break phase.
     pub fn on_focus_stop(&mut self) {
-        self.tracking = false;
+        self.set_tracking_state(false);
+    }
+
+    fn set_tracking_state(&mut self, tracking: bool) {
+        self.tracking = tracking;
         self.secs_since_last_heartbeat = 0;
     }
 
@@ -227,6 +228,15 @@ impl Default for WakatimeTracker {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn parse_setting_line(line: &str) -> Option<(&str, &str)> {
+    let (key, value) = line.split_once('=')?;
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+    Some((key.trim(), value))
 }
 
 #[cfg(test)]

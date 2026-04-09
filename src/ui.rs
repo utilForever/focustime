@@ -273,17 +273,9 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         } else {
             " (try running with elevated privileges)"
         };
-        let err_text = format!("⚠  {err}{privilege_hint}");
-        let err_widget = Paragraph::new(err_text)
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Red));
-        frame.render_widget(err_widget, inner[6]);
+        render_centered_error(frame, inner[6], format!("⚠  {err}{privilege_hint}"));
     } else if let Some(err) = app.config_error.as_ref() {
-        let err_text = format!("⚠  {err}");
-        let err_widget = Paragraph::new(err_text)
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Red));
-        frame.render_widget(err_widget, inner[6]);
+        render_centered_error(frame, inner[6], format!("⚠  {err}"));
     }
 
     // Key hints
@@ -392,10 +384,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     frame.render_widget(Paragraph::new(lines).block(editor_block), inner[4]);
 
     if let Some(err) = app.config_error.as_ref() {
-        let err_widget = Paragraph::new(format!("⚠  {err}"))
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Red));
-        frame.render_widget(err_widget, inner[6]);
+        render_centered_error(frame, inner[6], format!("⚠  {err}"));
     }
 
     let hints = if app.profile_edit_active {
@@ -430,6 +419,13 @@ fn phase_color(phase: TimerPhase) -> Color {
         TimerPhase::ShortBreak => Color::Green,
         TimerPhase::LongBreak => Color::Cyan,
     }
+}
+
+fn render_centered_error(frame: &mut Frame, area: Rect, message: String) {
+    let err_widget = Paragraph::new(message)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::Red));
+    frame.render_widget(err_widget, area);
 }
 
 /// Returns a centered rectangle of given percentage of the parent rect.

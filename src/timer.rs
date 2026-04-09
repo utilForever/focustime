@@ -113,6 +113,20 @@ impl TimerState {
         nonzero_or_default_u32(self.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL)
     }
 
+    fn break_phase_for_focus_count(&self, focus_count: u32) -> TimerPhase {
+        if focus_count.is_multiple_of(self.effective_long_break_interval()) {
+            TimerPhase::LongBreak
+        } else {
+            TimerPhase::ShortBreak
+        }
+    }
+
+    fn set_phase_idle(&mut self, phase: TimerPhase) {
+        self.phase = phase;
+        self.remaining_secs = self.phase_duration(self.phase);
+        self.status = TimerStatus::Idle;
+    }
+
     /// Advance the timer by one second. Returns true if the phase just ended.
     pub fn tick(&mut self) -> bool {
         if self.status != TimerStatus::Running {
@@ -130,45 +144,30 @@ impl TimerState {
 
     /// Move to the next phase automatically (called when timer reaches zero).
     fn advance_phase(&mut self) {
-        match self.phase {
+        let next_phase = match self.phase {
             TimerPhase::Focus => {
                 self.pomodoros_completed = self.pomodoros_completed.saturating_add(1);
-                let cadence = self.effective_long_break_interval();
-                if self.pomodoros_completed.is_multiple_of(cadence) {
-                    self.phase = TimerPhase::LongBreak;
-                } else {
-                    self.phase = TimerPhase::ShortBreak;
-                }
+                self.break_phase_for_focus_count(self.pomodoros_completed)
             }
-            TimerPhase::ShortBreak | TimerPhase::LongBreak => {
-                self.phase = TimerPhase::Focus;
-            }
-        }
-        self.remaining_secs = self.phase_duration(self.phase);
-        self.status = TimerStatus::Idle;
+            TimerPhase::ShortBreak | TimerPhase::LongBreak => TimerPhase::Focus,
+        };
+        self.set_phase_idle(next_phase);
     }
 
     /// Skip to the next phase immediately (does not count as a completed session).
     pub fn next_phase(&mut self) {
-        if self.phase == TimerPhase::Focus {
+        let next_phase = if self.phase == TimerPhase::Focus {
             let next_focus_count = self.pomodoros_completed.saturating_add(1);
-            let cadence = self.effective_long_break_interval();
-            if next_focus_count.is_multiple_of(cadence) {
-                self.phase = TimerPhase::LongBreak;
-            } else {
-                self.phase = TimerPhase::ShortBreak;
-            }
+            self.break_phase_for_focus_count(next_focus_count)
         } else {
-            self.phase = TimerPhase::Focus;
-        }
-        self.remaining_secs = self.phase_duration(self.phase);
-        self.status = TimerStatus::Idle;
+            TimerPhase::Focus
+        };
+        self.set_phase_idle(next_phase);
     }
 
     /// Reset the current phase back to its full duration and stop.
     pub fn reset(&mut self) {
-        self.remaining_secs = self.phase_duration(self.phase);
-        self.status = TimerStatus::Idle;
+        self.set_phase_idle(self.phase);
     }
 
     pub fn toggle_pause(&mut self) {
