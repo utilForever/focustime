@@ -101,8 +101,8 @@ Manual skip (`n`) changes phase immediately but does not emit a completion notif
 Notifications are delivered best-effort:
 
 - terminal notice in the timer view
-- desktop notification via platform-specific delivery (WinRT toast on Windows with `msg` fallback, `osascript` on macOS, `notify-send` on Linux)
-- optional sound alert when `notifications.sound = true` (`[console]::Beep()` on Windows, `afplay` on macOS, `paplay`/`aplay` on Linux, BEL fallback when unavailable)
+- desktop notification via platform-specific delivery (WinRT toast on Windows with a `msg` fallback, `osascript` on macOS, `notify-send` on Linux)
+- optional sound alert using platform audio capabilities when `notifications.sound = true`
 
 You can also configure `notifications.enabled` and `notifications.sound` directly from the TUI:
 
