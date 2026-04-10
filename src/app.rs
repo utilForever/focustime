@@ -126,7 +126,14 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        Self::from_config(AppConfig::load())
+        #[cfg(test)]
+        {
+            Self::from_config(AppConfig::default())
+        }
+        #[cfg(not(test))]
+        {
+            Self::from_config(AppConfig::load())
+        }
     }
 
     fn from_config(config: AppConfig) -> Self {
@@ -776,6 +783,17 @@ mod tests {
 
     fn ctrl_key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::CONTROL)
+    }
+
+    #[test]
+    fn app_default_uses_canonical_config_in_tests() {
+        let app = App::default();
+
+        assert!(app.blocker.sites.is_empty());
+        assert_eq!(app.timer.focus_secs, DEFAULT_FOCUS_SECS);
+        assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
+        assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
+        assert_eq!(app.timer.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
     }
 
     #[test]
