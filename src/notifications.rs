@@ -54,14 +54,17 @@ fn transition_message(completed_phase: TimerPhase, next_phase: TimerPhase) -> St
 fn send_desktop_notification(title: &str, body: &str) {
     #[cfg(target_os = "windows")]
     {
-        use winrt_notification::{Duration, Toast};
+        use winrt_toast_reborn::content::audio::{Audio, Sound};
+        use winrt_toast_reborn::{Toast, ToastDuration, ToastManager};
 
-        let toast_result = Toast::new(Toast::POWERSHELL_APP_ID)
-            .title(title)
-            .text1(body)
-            .duration(Duration::Short)
-            .sound(None)
-            .show();
+        let manager = ToastManager::new(ToastManager::POWERSHELL_AUM_ID);
+        let mut toast = Toast::new();
+        toast
+            .text1(title)
+            .text2(body)
+            .duration(ToastDuration::Short)
+            .audio(Audio::new(Sound::None));
+        let toast_result = manager.show(&toast);
         if toast_result.is_err() {
             let _ = Command::new("msg")
                 .args(["*", &format!("{title}: {body}")])
@@ -89,7 +92,7 @@ fn send_desktop_notification(title: &str, body: &str) {
 #[cfg(test)]
 fn send_desktop_notification(_title: &str, _body: &str) {}
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(test)))]
 fn escape_applescript_literal(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
