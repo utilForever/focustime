@@ -174,6 +174,7 @@ impl Default for AppConfig {
 impl AppConfig {
     /// Load the config from disk, falling back to [`AppConfig::default`] on any
     /// error (missing file, parse error, corrupt data, etc.).
+    #[cfg_attr(test, allow(dead_code))]
     pub fn load() -> Self {
         Self::try_load().unwrap_or_default()
     }
@@ -194,6 +195,7 @@ impl AppConfig {
             .normalized()
     }
 
+    #[cfg_attr(test, allow(dead_code))]
     fn try_load() -> Option<Self> {
         Self::try_load_with_env(|key| std::env::var_os(key))
     }
