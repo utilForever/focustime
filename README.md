@@ -26,6 +26,16 @@ TUI-based application for **Pomodoro timing**, **distraction-site blocking**, an
       <p>Site blocking - Active</p>
     </td>
   </tr>
+  <tr>
+    <td align="center">
+      <img src="./assets/demo_history.png" alt="History demo" width="800">
+      <p>Daily Focus History</p>
+    </td>
+    <td align="center">
+      <img src="./assets/demo_profiles.png" alt="Profiles demo" width="800">
+      <p>Pomodoro Profiles</p>
+    </td>
+  </tr>
 </table>
 
 ## Quick Start
