@@ -21,4 +21,4 @@ base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winrt-notification = "0.5.1"
+winrt-toast-reborn = "0.3.8"
