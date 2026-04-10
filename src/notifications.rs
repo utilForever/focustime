@@ -50,6 +50,18 @@ fn transition_message(completed_phase: TimerPhase, next_phase: TimerPhase) -> St
     )
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn notify_windows_with_fallback(
+    title: &str,
+    body: &str,
+    mut show_toast: impl FnMut(&str, &str) -> bool,
+    mut send_fallback: impl FnMut(&str, &str),
+) {
+    if !show_toast(title, body) {
+        send_fallback(title, body);
+    }
+}
+
 #[cfg(not(test))]
 fn send_desktop_notification(title: &str, body: &str) {
     #[cfg(target_os = "windows")]
@@ -57,19 +69,25 @@ fn send_desktop_notification(title: &str, body: &str) {
         use winrt_toast_reborn::content::audio::{Audio, Sound};
         use winrt_toast_reborn::{Toast, ToastDuration, ToastManager};
 
-        let manager = ToastManager::new(ToastManager::POWERSHELL_AUM_ID);
-        let mut toast = Toast::new();
-        toast
-            .text1(title)
-            .text2(body)
-            .duration(ToastDuration::Short)
-            .audio(Audio::new(Sound::None));
-        let toast_result = manager.show(&toast);
-        if toast_result.is_err() {
-            let _ = Command::new("msg")
-                .args(["*", &format!("{title}: {body}")])
-                .status();
-        }
+        notify_windows_with_fallback(
+            title,
+            body,
+            |toast_title, toast_body| {
+                let manager = ToastManager::new(ToastManager::POWERSHELL_AUM_ID);
+                let mut toast = Toast::new();
+                toast
+                    .text1(toast_title)
+                    .text2(toast_body)
+                    .duration(ToastDuration::Short)
+                    .audio(Audio::new(Sound::None));
+                manager.show(&toast).is_ok()
+            },
+            |fallback_title, fallback_body| {
+                let _ = Command::new("msg")
+                    .args(["*", &format!("{fallback_title}: {fallback_body}")])
+                    .status();
+            },
+        );
     }
 
     #[cfg(target_os = "macos")]
@@ -161,6 +179,67 @@ fn command_succeeded(result: std::io::Result<ExitStatus>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_notification_fallback_runs_when_toast_fails() {
+        let mut toast_inputs = Vec::new();
+        let mut fallback_inputs = Vec::new();
+
+        notify_windows_with_fallback(
+            "focustime",
+            "Focus complete. Next up: Short Break.",
+            |title, body| {
+                toast_inputs.push((title.to_string(), body.to_string()));
+                false
+            },
+            |title, body| {
+                fallback_inputs.push((title.to_string(), body.to_string()));
+            },
+        );
+
+        assert_eq!(
+            toast_inputs,
+            vec![(
+                "focustime".to_string(),
+                "Focus complete. Next up: Short Break.".to_string(),
+            )]
+        );
+        assert_eq!(
+            fallback_inputs,
+            vec![(
+                "focustime".to_string(),
+                "Focus complete. Next up: Short Break.".to_string(),
+            )]
+        );
+    }
+
+    #[test]
+    fn windows_notification_does_not_fallback_when_toast_succeeds() {
+        let cases = [
+            ("focustime", "Focus complete. Next up: Short Break."),
+            ("alert", "Long Break complete. Next up: Focus."),
+        ];
+
+        for (title, body) in cases {
+            let mut toast_inputs = Vec::new();
+            let mut fallback_calls = 0;
+
+            notify_windows_with_fallback(
+                title,
+                body,
+                |toast_title, toast_body| {
+                    toast_inputs.push((toast_title.to_string(), toast_body.to_string()));
+                    true
+                },
+                |_fallback_title, _fallback_body| {
+                    fallback_calls += 1;
+                },
+            );
+
+            assert_eq!(toast_inputs, vec![(title.to_string(), body.to_string())]);
+            assert_eq!(fallback_calls, 0);
+        }
+    }
 
     #[test]
     fn notifier_returns_none_when_disabled() {
