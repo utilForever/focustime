@@ -13,7 +13,10 @@ use std::{
 };
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
+    event::{
+        self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+        Event,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -30,7 +33,12 @@ impl TerminalGuard {
     fn new() -> io::Result<Self> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
-        if let Err(e) = execute!(stdout, EnterAlternateScreen, EnableMouseCapture) {
+        if let Err(e) = execute!(
+            stdout,
+            EnterAlternateScreen,
+            EnableMouseCapture,
+            EnableBracketedPaste
+        ) {
             let _ = disable_raw_mode();
             return Err(e);
         }
@@ -41,7 +49,12 @@ impl TerminalGuard {
                 // Alternate screen and mouse capture are already active; undo them
                 // before returning since Drop won't run on an unconstructed value.
                 let mut stdout = io::stdout();
-                let _ = execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
+                let _ = execute!(
+                    stdout,
+                    LeaveAlternateScreen,
+                    DisableMouseCapture,
+                    DisableBracketedPaste
+                );
                 let _ = disable_raw_mode();
                 Err(e)
             }
@@ -55,7 +68,8 @@ impl Drop for TerminalGuard {
         let _ = execute!(
             self.terminal.backend_mut(),
             LeaveAlternateScreen,
-            DisableMouseCapture
+            DisableMouseCapture,
+            DisableBracketedPaste
         );
         let _ = self.terminal.show_cursor();
     }
@@ -80,10 +94,12 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
             .checked_sub(last_tick.elapsed())
             .unwrap_or(Duration::ZERO);
 
-        if event::poll(timeout)?
-            && let Event::Key(key) = event::read()?
-        {
-            app.handle_key(key);
+        if event::poll(timeout)? {
+            match event::read()? {
+                Event::Key(key) => app.handle_key(key),
+                Event::Paste(text) => app.handle_paste(text),
+                _ => {}
+            }
         }
 
         if last_tick.elapsed() >= tick_rate {

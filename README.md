@@ -99,6 +99,24 @@ enabled = true
 sound = false
 ```
 
+## Site manager workflow
+
+Open the site manager from timer view with **`b`**.
+
+- `a`: add/import hostnames
+- `e`: edit the selected hostname
+- `d` or `Delete`: remove the selected hostname
+- `↑/↓`: move selection
+- `b` or `Esc`: return to timer view
+
+Add/import input supports:
+
+- single hostnames (`youtube.com`)
+- comma-separated lists (`youtube.com, reddit.com`)
+- newline-separated lists (paste multi-line blocklists, then press `Enter`)
+
+Invalid and duplicate entries are reported inline so you can fix them without leaving the view.
+
 ## Phase notifications
 
 `focustime` emits a phase notification when a phase naturally completes at `00:00`:
