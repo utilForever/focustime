@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::blocker::SiteBlocker;
+use crate::blocker::{BulkAddResult, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{AppConfig, CustomProfileConfig, NotificationConfig, ProfileId};
 use crate::notifications::PhaseNotifier;
 use crate::stats::{DailyStats, FocusStats, SessionStats, current_day_key};
@@ -92,15 +92,35 @@ struct ProfileEditSnapshot {
     notification_settings: NotificationConfig,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SiteInputMode {
+    Add,
+    Edit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SiteFeedbackLevel {
+    Success,
+    Warning,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SiteFeedback {
+    pub level: SiteFeedbackLevel,
+    pub message: String,
+}
+
 pub struct App {
     pub timer: TimerState,
     pub should_quit: bool,
     pub mode: AppMode,
     pub blocker: SiteBlocker,
-    /// Text being typed when adding a new site.
+    /// Text being typed for add/import or edit site input.
     pub site_input: String,
     /// Whether the user is currently typing a new site.
     pub site_input_active: bool,
+    site_edit_index: Option<usize>,
+    pub site_feedback: Option<SiteFeedback>,
     /// Index of the highlighted site in the SiteManager list.
     pub selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
@@ -162,6 +182,8 @@ impl App {
             blocker,
             site_input: String::new(),
             site_input_active: false,
+            site_edit_index: None,
+            site_feedback: None,
             selected_site: 0,
             block_error: None,
             config_error: None,
@@ -275,6 +297,14 @@ impl App {
         }
     }
 
+    pub fn site_input_mode(&self) -> SiteInputMode {
+        if self.site_edit_index.is_some() {
+            SiteInputMode::Edit
+        } else {
+            SiteInputMode::Add
+        }
+    }
+
     /// Persist the current blocked-sites list and timer preferences to disk.
     /// Failures are best-effort; the error is surfaced through `config_error`.
     fn persisted_config(&self) -> AppConfig {
@@ -344,6 +374,17 @@ impl App {
             AppMode::ProfileManager => self.handle_key_profile_manager(key),
             AppMode::StatsHistory => self.handle_key_stats_history(key),
         }
+    }
+
+    pub fn handle_paste(&mut self, text: String) {
+        if self.mode != AppMode::SiteManager {
+            return;
+        }
+
+        if !self.site_input_active {
+            self.start_site_input(SiteInputMode::Add);
+        }
+        self.site_input.push_str(&text);
     }
 
     fn handle_key_timer(&mut self, key: KeyEvent) {
@@ -528,14 +569,10 @@ impl App {
         if self.site_input_active {
             match key.code {
                 KeyCode::Enter => {
-                    let site = std::mem::take(&mut self.site_input);
-                    self.blocker.add_site(site);
-                    self.site_input_active = false;
-                    self.finalize_site_mutation();
+                    self.commit_site_input();
                 }
                 KeyCode::Esc => {
-                    self.site_input.clear();
-                    self.site_input_active = false;
+                    self.cancel_site_input();
                 }
                 KeyCode::Backspace => {
                     self.site_input.pop();
@@ -569,16 +606,165 @@ impl App {
             }
             // Start adding a site
             KeyCode::Char('a') => {
-                self.site_input_active = true;
+                self.start_site_input(SiteInputMode::Add);
+            }
+            // Edit selected site
+            KeyCode::Char('e') => {
+                self.start_site_input(SiteInputMode::Edit);
             }
             // Delete selected site
             KeyCode::Char('d') | KeyCode::Delete => {
-                if !self.blocker.sites.is_empty() {
-                    self.blocker.remove_site(self.selected_site);
-                    self.finalize_site_mutation();
-                }
+                self.remove_selected_site();
             }
             _ => {}
+        }
+    }
+
+    fn start_site_input(&mut self, mode: SiteInputMode) {
+        self.site_input_active = true;
+        self.site_feedback = None;
+        match mode {
+            SiteInputMode::Add => {
+                self.site_edit_index = None;
+                self.site_input.clear();
+            }
+            SiteInputMode::Edit => {
+                if self.blocker.sites.is_empty() {
+                    self.site_input_active = false;
+                    self.set_site_feedback(SiteFeedbackLevel::Warning, "No site selected to edit");
+                    return;
+                }
+                self.clamp_selection();
+                self.site_edit_index = Some(self.selected_site);
+                self.site_input = self.blocker.sites[self.selected_site].clone();
+            }
+        }
+    }
+
+    fn cancel_site_input(&mut self) {
+        self.site_input.clear();
+        self.site_input_active = false;
+        self.site_edit_index = None;
+    }
+
+    fn commit_site_input(&mut self) {
+        let input = self.site_input.clone();
+
+        let committed = if let Some(index) = self.site_edit_index {
+            let edit_result = self.blocker.edit_site_from_input(index, &input);
+            self.apply_edit_site_result(edit_result)
+        } else {
+            let add_result = self.blocker.add_sites_from_input(&input);
+            self.apply_bulk_add_result(add_result)
+        };
+
+        if committed {
+            self.cancel_site_input();
+        }
+    }
+
+    fn apply_bulk_add_result(&mut self, result: BulkAddResult) -> bool {
+        let committed = !result.added.is_empty();
+        if committed {
+            self.selected_site = self.blocker.sites.len().saturating_sub(1);
+            self.finalize_site_mutation();
+        }
+
+        let mut parts = Vec::new();
+        if !result.added.is_empty() {
+            parts.push(format!(
+                "Added {}",
+                format_count(result.added.len(), "site", "sites")
+            ));
+        }
+        if !result.duplicates.is_empty() {
+            parts.push(format!(
+                "Skipped {}",
+                format_count(result.duplicates.len(), "duplicate", "duplicates")
+            ));
+        }
+        if !result.invalid.is_empty() {
+            parts.push(format!(
+                "Rejected {} ({})",
+                format_count(
+                    result.invalid.len(),
+                    "invalid hostname",
+                    "invalid hostnames"
+                ),
+                summarize_invalid_inputs(&result.invalid)
+            ));
+        }
+
+        let level = if result.invalid.is_empty() && result.duplicates.is_empty() {
+            SiteFeedbackLevel::Success
+        } else {
+            SiteFeedbackLevel::Warning
+        };
+        let message = if parts.is_empty() {
+            "No hostnames submitted".to_string()
+        } else {
+            parts.join(" • ")
+        };
+        self.set_site_feedback(level, message);
+        committed
+    }
+
+    fn apply_edit_site_result(&mut self, result: EditSiteResult) -> bool {
+        match result {
+            EditSiteResult::Updated { old, new } => {
+                self.finalize_site_mutation();
+                self.set_site_feedback(
+                    SiteFeedbackLevel::Success,
+                    format!("Updated `{old}` -> `{new}`"),
+                );
+                true
+            }
+            EditSiteResult::Unchanged { hostname } => {
+                self.set_site_feedback(
+                    SiteFeedbackLevel::Warning,
+                    format!("No change for `{hostname}`"),
+                );
+                false
+            }
+            EditSiteResult::Duplicate { hostname } => {
+                self.set_site_feedback(
+                    SiteFeedbackLevel::Warning,
+                    format!("`{hostname}` is already in the blocklist"),
+                );
+                false
+            }
+            EditSiteResult::Invalid(invalid) => {
+                self.set_site_feedback(
+                    SiteFeedbackLevel::Warning,
+                    format!(
+                        "Invalid hostname `{}` ({})",
+                        display_input_value(&invalid.input),
+                        invalid.reason.message()
+                    ),
+                );
+                false
+            }
+            EditSiteResult::MissingSelection => {
+                self.set_site_feedback(SiteFeedbackLevel::Warning, "No site selected to edit");
+                false
+            }
+        }
+    }
+
+    fn remove_selected_site(&mut self) {
+        if self.blocker.sites.is_empty() {
+            self.set_site_feedback(SiteFeedbackLevel::Warning, "No site selected to delete");
+            return;
+        }
+
+        if let Some(removed) = self.blocker.remove_site(self.selected_site) {
+            self.finalize_site_mutation();
+            self.set_site_feedback(
+                SiteFeedbackLevel::Success,
+                format!("Removed `{removed}` from blocklist"),
+            );
+        } else {
+            self.set_site_feedback(SiteFeedbackLevel::Warning, "No site selected to delete");
         }
     }
 
@@ -645,6 +831,7 @@ impl App {
 
     fn open_site_manager(&mut self) {
         self.mode = AppMode::SiteManager;
+        self.cancel_site_input();
         self.clamp_selection();
     }
 
@@ -673,15 +860,25 @@ impl App {
     }
 
     fn sync_blocking_after_site_mutation(&mut self) {
-        if !self.blocker.is_blocking {
+        if !self.should_resync_blocking_after_site_mutation() {
             return;
         }
-        let block_result = if self.blocker.sites.is_empty() {
-            self.blocker.unblock()
+
+        let should_block = self.should_block_for_current_state();
+        let block_result = if should_block {
+            if self.blocker.sites.is_empty() {
+                self.blocker.unblock()
+            } else {
+                self.blocker.block()
+            }
         } else {
-            self.blocker.block()
+            self.blocker.unblock()
         };
         self.set_block_error_from_result(block_result);
+    }
+
+    fn should_resync_blocking_after_site_mutation(&self) -> bool {
+        self.should_block_for_current_state() || self.blocker.is_blocking
     }
 
     fn should_block_for_current_state(&self) -> bool {
@@ -735,6 +932,13 @@ impl App {
         }
     }
 
+    fn set_site_feedback(&mut self, level: SiteFeedbackLevel, message: impl Into<String>) {
+        self.site_feedback = Some(SiteFeedback {
+            level,
+            message: message.into(),
+        });
+    }
+
     fn rebuild_notifier(&mut self) {
         self.notifier = PhaseNotifier::new(self.notification_settings);
     }
@@ -762,6 +966,44 @@ fn format_duration_label(seconds: u64) -> String {
 
 fn bool_label(value: bool) -> &'static str {
     if value { "On" } else { "Off" }
+}
+
+fn format_count(count: usize, singular: &str, plural: &str) -> String {
+    if count == 1 {
+        format!("1 {singular}")
+    } else {
+        format!("{count} {plural}")
+    }
+}
+
+fn summarize_invalid_inputs(invalid: &[InvalidSiteInput]) -> String {
+    const PREVIEW_LIMIT: usize = 3;
+    let preview_count = invalid.len().min(PREVIEW_LIMIT);
+    let mut details = invalid
+        .iter()
+        .take(preview_count)
+        .map(|entry| {
+            format!(
+                "`{}`: {}",
+                display_input_value(&entry.input),
+                entry.reason.message()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    if invalid.len() > PREVIEW_LIMIT {
+        details.push_str(&format!(", +{} more", invalid.len() - PREVIEW_LIMIT));
+    }
+    details
+}
+
+fn display_input_value(input: &str) -> String {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        "<empty>".to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 impl Drop for App {
@@ -1094,6 +1336,13 @@ mod tests {
         assert!(!app.site_input_active);
         assert_eq!(app.blocker.sites, vec!["example.com"]);
         assert_eq!(app.selected_site, 0);
+        assert_eq!(
+            app.site_feedback,
+            Some(SiteFeedback {
+                level: SiteFeedbackLevel::Success,
+                message: "Added 1 site".to_string(),
+            })
+        );
         assert!(app.config_error.is_none());
     }
 
@@ -1118,7 +1367,120 @@ mod tests {
             vec!["a.com".to_string(), "b.com".to_string()]
         );
         assert_eq!(app.selected_site, 1);
+        assert_eq!(
+            app.site_feedback,
+            Some(SiteFeedback {
+                level: SiteFeedbackLevel::Success,
+                message: "Removed `c.com` from blocklist".to_string(),
+            })
+        );
         assert!(app.config_error.is_none());
+    }
+
+    #[test]
+    fn site_manager_bulk_add_via_paste_supports_comma_and_newline() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('b')));
+
+        app.handle_paste("Example.com,\ngithub.com\nexam_ple.com".to_string());
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(
+            app.blocker.sites,
+            vec!["example.com".to_string(), "github.com".to_string()]
+        );
+        let feedback = app
+            .site_feedback
+            .as_ref()
+            .expect("bulk add should provide feedback");
+        assert_eq!(feedback.level, SiteFeedbackLevel::Warning);
+        assert!(feedback.message.contains("Added 2 sites"));
+        assert!(feedback.message.contains("invalid hostname"));
+    }
+
+    #[test]
+    fn site_manager_invalid_add_keeps_draft_open() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('a')));
+        for c in "exam_ple.com".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.site_input_active);
+        assert!(app.site_edit_index.is_none());
+        assert_eq!(app.site_input, "exam_ple.com");
+        assert!(app.blocker.sites.is_empty());
+    }
+
+    #[test]
+    fn site_manager_edit_selected_site() {
+        let config = AppConfig {
+            blocked_sites: vec!["a.com".to_string(), "b.com".to_string()],
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0.."a.com".len() {
+            app.handle_key(key(KeyCode::Backspace));
+        }
+        for c in "news.ycombinator.com".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(
+            app.blocker.sites,
+            vec!["news.ycombinator.com".to_string(), "b.com".to_string()]
+        );
+        assert_eq!(
+            app.site_feedback,
+            Some(SiteFeedback {
+                level: SiteFeedbackLevel::Success,
+                message: "Updated `a.com` -> `news.ycombinator.com`".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn site_manager_invalid_edit_keeps_draft_open() {
+        let config = AppConfig {
+            blocked_sites: vec!["a.com".to_string(), "b.com".to_string()],
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0.."a.com".len() {
+            app.handle_key(key(KeyCode::Backspace));
+        }
+        for c in "b.com".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.site_input_active);
+        assert_eq!(app.site_edit_index, Some(0));
+        assert_eq!(app.site_input, "b.com");
+        assert_eq!(
+            app.blocker.sites,
+            vec!["a.com".to_string(), "b.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn site_manager_reapply_decision_uses_focus_state() {
+        let mut app = App::default();
+        assert!(!app.should_resync_blocking_after_site_mutation());
+
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        assert!(app.should_resync_blocking_after_site_mutation());
     }
 
     #[test]

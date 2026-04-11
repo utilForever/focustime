@@ -6,7 +6,9 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph},
 };
 
-use crate::app::{App, AppMode, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS};
+use crate::app::{
+    App, AppMode, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, SiteFeedbackLevel, SiteInputMode,
+};
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
 
@@ -264,6 +266,8 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             .style(Style::default().fg(Color::Yellow));
     frame.render_widget(doh_warning, inner[1]);
 
+    let input_mode = app.site_input_mode();
+
     // Site list
     let list_title = format!(" Blocked Sites ({}) ", app.blocker.sites.len());
     let list_block = Block::default()
@@ -300,9 +304,13 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
     }
 
     // Input area
+    let input_title = match input_mode {
+        SiteInputMode::Add => " Add / Import Sites ",
+        SiteInputMode::Edit => " Edit Site ",
+    };
     let input_block = Block::default()
         .borders(Borders::ALL)
-        .title(" Add Site ")
+        .title(input_title)
         .style(if app.site_input_active {
             Style::default().fg(Color::Yellow)
         } else {
@@ -312,7 +320,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
     let input_text = if app.site_input_active {
         format!("{}_", app.site_input)
     } else {
-        "Press [a] to add a site (e.g. youtube.com)".to_string()
+        "Press [a] to add/import (comma/newline) or [e] to edit selected".to_string()
     };
     let input_widget =
         Paragraph::new(input_text)
@@ -334,13 +342,25 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         render_centered_error(frame, inner[6], format!("⚠  {err}{privilege_hint}"));
     } else if let Some(err) = app.config_error.as_ref() {
         render_centered_error(frame, inner[6], format!("⚠  {err}"));
+    } else if let Some(feedback) = app.site_feedback.as_ref() {
+        let (prefix, color) = match feedback.level {
+            SiteFeedbackLevel::Success => ("✓", Color::Green),
+            SiteFeedbackLevel::Warning => ("⚠", Color::Yellow),
+        };
+        let feedback_widget = Paragraph::new(format!("{prefix}  {}", feedback.message))
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(color));
+        frame.render_widget(feedback_widget, inner[6]);
     }
 
     // Key hints
     let hints = if app.site_input_active {
-        "[Enter] Confirm  [Esc] Cancel"
+        match input_mode {
+            SiteInputMode::Add => "[Enter] Add/Import  [Esc] Cancel",
+            SiteInputMode::Edit => "[Enter] Save  [Esc] Cancel",
+        }
     } else {
-        "[a] Add  [d] Delete  [↑/↓] Navigate  [b/Esc] Back  [q] Quit"
+        "[a] Add/Import  [e] Edit  [d] Delete  [↑/↓] Navigate  [b/Esc] Back  [q] Quit"
     };
     let hints_widget = Paragraph::new(hints)
         .alignment(Alignment::Center)

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -15,6 +16,51 @@ pub struct SiteBlocker {
     pub is_blocking: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SiteValidationError {
+    EmptyHostname,
+    MissingHostname,
+    ContainsWhitespace,
+    InvalidCharacter,
+    InvalidLabel,
+    MultipleHostnames,
+}
+
+impl SiteValidationError {
+    pub fn message(self) -> &'static str {
+        match self {
+            SiteValidationError::EmptyHostname => "empty hostname",
+            SiteValidationError::MissingHostname => "missing hostname",
+            SiteValidationError::ContainsWhitespace => "contains whitespace",
+            SiteValidationError::InvalidCharacter => "contains invalid characters",
+            SiteValidationError::InvalidLabel => "invalid hostname format",
+            SiteValidationError::MultipleHostnames => "multiple hostnames not allowed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidSiteInput {
+    pub input: String,
+    pub reason: SiteValidationError,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BulkAddResult {
+    pub added: Vec<String>,
+    pub duplicates: Vec<String>,
+    pub invalid: Vec<InvalidSiteInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EditSiteResult {
+    Updated { old: String, new: String },
+    Unchanged { hostname: String },
+    Duplicate { hostname: String },
+    Invalid(InvalidSiteInput),
+    MissingSelection,
+}
+
 impl SiteBlocker {
     pub fn new() -> Self {
         Self {
@@ -24,20 +70,103 @@ impl SiteBlocker {
     }
 
     pub fn add_site(&mut self, site: String) {
-        if let Some(hostname) = Self::sanitize_hostname(&site)
-            && !self.sites.contains(&hostname)
+        let _ = self.add_sites_from_input(&site);
+    }
+
+    pub fn add_sites_from_input(&mut self, input: &str) -> BulkAddResult {
+        let candidates = split_hostname_candidates(input);
+        let mut result = BulkAddResult::default();
+        let mut known_sites: HashSet<String> = self.sites.iter().cloned().collect();
+
+        if candidates.is_empty() {
+            result.invalid.push(InvalidSiteInput {
+                input: input.trim().to_string(),
+                reason: SiteValidationError::EmptyHostname,
+            });
+            return result;
+        }
+
+        for candidate in candidates {
+            match Self::sanitize_hostname_with_reason(&candidate) {
+                Ok(hostname) => {
+                    if !known_sites.insert(hostname.clone()) {
+                        result.duplicates.push(hostname);
+                    } else {
+                        self.sites.push(hostname.clone());
+                        result.added.push(hostname);
+                    }
+                }
+                Err(reason) => result.invalid.push(InvalidSiteInput {
+                    input: candidate,
+                    reason,
+                }),
+            }
+        }
+
+        result
+    }
+
+    pub fn edit_site_from_input(&mut self, index: usize, input: &str) -> EditSiteResult {
+        if index >= self.sites.len() {
+            return EditSiteResult::MissingSelection;
+        }
+
+        let candidates = split_hostname_candidates(input);
+        if candidates.is_empty() {
+            return EditSiteResult::Invalid(InvalidSiteInput {
+                input: input.trim().to_string(),
+                reason: SiteValidationError::EmptyHostname,
+            });
+        }
+        if candidates.len() > 1 {
+            return EditSiteResult::Invalid(InvalidSiteInput {
+                input: input.trim().to_string(),
+                reason: SiteValidationError::MultipleHostnames,
+            });
+        }
+
+        let candidate = candidates[0].clone();
+        let normalized = match Self::sanitize_hostname_with_reason(&candidate) {
+            Ok(hostname) => hostname,
+            Err(reason) => {
+                return EditSiteResult::Invalid(InvalidSiteInput {
+                    input: candidate,
+                    reason,
+                });
+            }
+        };
+
+        let current = self.sites[index].clone();
+        if normalized == current {
+            return EditSiteResult::Unchanged {
+                hostname: normalized,
+            };
+        }
+
+        if self
+            .sites
+            .iter()
+            .enumerate()
+            .any(|(i, site)| i != index && site == &normalized)
         {
-            self.sites.push(hostname);
+            return EditSiteResult::Duplicate {
+                hostname: normalized,
+            };
+        }
+
+        self.sites[index] = normalized.clone();
+        EditSiteResult::Updated {
+            old: current,
+            new: normalized,
         }
     }
 
     /// Validate and normalise a user-supplied hostname.
-    /// Returns `None` if the input cannot be reduced to a valid single hostname.
-    fn sanitize_hostname(input: &str) -> Option<String> {
+    fn sanitize_hostname_with_reason(input: &str) -> Result<String, SiteValidationError> {
         let mut hostname = input.trim().to_lowercase();
 
         if hostname.is_empty() {
-            return None;
+            return Err(SiteValidationError::EmptyHostname);
         }
 
         // Strip URI scheme (e.g. "https://example.com" → "example.com").
@@ -50,13 +179,26 @@ impl SiteBlocker {
             hostname.truncate(pos);
         }
 
+        if let Some(at_pos) = hostname.rfind('@') {
+            hostname = hostname[at_pos + 1..].to_string();
+        }
+
+        // Strip a port suffix from host:port forms when the suffix is numeric.
+        if let Some(colon_pos) = hostname.rfind(':') {
+            let port = &hostname[colon_pos + 1..];
+            if hostname[..colon_pos].contains(':') || !port.chars().all(|c| c.is_ascii_digit()) {
+                return Err(SiteValidationError::InvalidLabel);
+            }
+            hostname.truncate(colon_pos);
+        }
+
         if hostname.is_empty() {
-            return None;
+            return Err(SiteValidationError::MissingHostname);
         }
 
         // Reject anything with internal whitespace (would produce multi-hostname lines).
         if hostname.chars().any(char::is_whitespace) {
-            return None;
+            return Err(SiteValidationError::ContainsWhitespace);
         }
 
         // Allow only ASCII letters, digits, dots, and hyphens.
@@ -64,16 +206,35 @@ impl SiteBlocker {
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
         {
-            return None;
+            return Err(SiteValidationError::InvalidCharacter);
         }
 
-        Some(hostname)
+        if hostname.starts_with('.')
+            || hostname.ends_with('.')
+            || hostname.contains("..")
+            || hostname.len() > 253
+        {
+            return Err(SiteValidationError::InvalidLabel);
+        }
+
+        for label in hostname.split('.') {
+            if label.is_empty()
+                || label.len() > 63
+                || label.starts_with('-')
+                || label.ends_with('-')
+            {
+                return Err(SiteValidationError::InvalidLabel);
+            }
+        }
+
+        Ok(hostname)
     }
 
-    pub fn remove_site(&mut self, index: usize) {
+    pub fn remove_site(&mut self, index: usize) -> Option<String> {
         if index < self.sites.len() {
-            self.sites.remove(index);
+            return Some(self.sites.remove(index));
         }
+        None
     }
 
     /// Activate blocking by writing entries into the hosts file.
@@ -216,6 +377,15 @@ fn append_hosts_mapping(content: &mut String, host: &str, site: &str, nl: &str) 
     content.push_str(nl);
 }
 
+fn split_hostname_candidates(input: &str) -> Vec<String> {
+    input
+        .split([',', '\n', '\r'])
+        .map(str::trim)
+        .filter(|candidate| !candidate.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
+
 /// Write `content` to the hosts file atomically via a temp file + rename so
 /// an interrupted write cannot corrupt the file or leave it truncated.
 /// On non-Windows the original file's permissions are copied to the replacement.
@@ -335,6 +505,13 @@ mod tests {
     }
 
     #[test]
+    fn add_site_strips_numeric_port() {
+        let mut b = SiteBlocker::new();
+        b.add_site("https://example.com:443/some/path".to_string());
+        assert_eq!(b.sites, vec!["example.com"]);
+    }
+
+    #[test]
     fn add_site_rejects_multiple_hostnames() {
         let mut b = SiteBlocker::new();
         b.add_site("example.com other.com".to_string());
@@ -346,6 +523,84 @@ mod tests {
         let mut b = SiteBlocker::new();
         b.add_site("exam_ple.com".to_string());
         assert!(b.sites.is_empty());
+    }
+
+    #[test]
+    fn bulk_add_accepts_comma_and_newline_separators() {
+        let mut b = SiteBlocker::new();
+        let result = b.add_sites_from_input("example.com, github.com\nhttps://rust-lang.org/docs");
+        assert_eq!(
+            result.added,
+            vec!["example.com", "github.com", "rust-lang.org"]
+        );
+        assert!(result.duplicates.is_empty());
+        assert!(result.invalid.is_empty());
+        assert_eq!(b.sites, vec!["example.com", "github.com", "rust-lang.org"]);
+    }
+
+    #[test]
+    fn bulk_add_reports_duplicates_and_invalid_entries() {
+        let mut b = SiteBlocker::new();
+        let result = b.add_sites_from_input("github.com, bad host, exam_ple.com, github.com");
+        assert_eq!(result.added, vec!["github.com"]);
+        assert_eq!(result.duplicates, vec!["github.com"]);
+        assert_eq!(
+            result.invalid,
+            vec![
+                InvalidSiteInput {
+                    input: "bad host".to_string(),
+                    reason: SiteValidationError::ContainsWhitespace,
+                },
+                InvalidSiteInput {
+                    input: "exam_ple.com".to_string(),
+                    reason: SiteValidationError::InvalidCharacter,
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn edit_site_updates_selected_entry() {
+        let mut b = SiteBlocker::new();
+        b.add_site("a.com".to_string());
+        let result = b.edit_site_from_input(0, "https://news.ycombinator.com:443/newest");
+        assert_eq!(
+            result,
+            EditSiteResult::Updated {
+                old: "a.com".to_string(),
+                new: "news.ycombinator.com".to_string()
+            }
+        );
+        assert_eq!(b.sites, vec!["news.ycombinator.com"]);
+    }
+
+    #[test]
+    fn edit_site_rejects_duplicate_hostname() {
+        let mut b = SiteBlocker::new();
+        b.add_site("a.com".to_string());
+        b.add_site("b.com".to_string());
+        let result = b.edit_site_from_input(0, "b.com");
+        assert_eq!(
+            result,
+            EditSiteResult::Duplicate {
+                hostname: "b.com".to_string()
+            }
+        );
+        assert_eq!(b.sites, vec!["a.com", "b.com"]);
+    }
+
+    #[test]
+    fn edit_site_rejects_multiple_hostnames() {
+        let mut b = SiteBlocker::new();
+        b.add_site("a.com".to_string());
+        let result = b.edit_site_from_input(0, "a.com, b.com");
+        assert_eq!(
+            result,
+            EditSiteResult::Invalid(InvalidSiteInput {
+                input: "a.com, b.com".to_string(),
+                reason: SiteValidationError::MultipleHostnames,
+            })
+        );
     }
 
     #[test]
@@ -375,7 +630,8 @@ mod tests {
         let mut b = SiteBlocker::new();
         b.add_site("a.com".to_string());
         b.add_site("b.com".to_string());
-        b.remove_site(0);
+        let removed = b.remove_site(0);
+        assert_eq!(removed.as_deref(), Some("a.com"));
         assert_eq!(b.sites, vec!["b.com"]);
     }
 
@@ -383,7 +639,7 @@ mod tests {
     fn remove_site_out_of_bounds_is_safe() {
         let mut b = SiteBlocker::new();
         b.add_site("a.com".to_string());
-        b.remove_site(5); // should not panic
+        assert!(b.remove_site(5).is_none()); // should not panic
         assert_eq!(b.sites.len(), 1);
     }
 }
