@@ -57,6 +57,8 @@ sequenceDiagram
     participant UI as ui::render
 
     loop every frame
+        Main->>App: poll_wakatime_status()
+        App->>Waka: poll_events()
         Main->>UI: render(frame, &app)
         Main->>App: handle_key(key) (if input)
         Main->>App: on_tick() (when 1s elapsed)
@@ -69,6 +71,7 @@ sequenceDiagram
         alt Focus + Running
             App->>Waka: tick_elapsed(elapsed_secs)
         end
+        App-->>UI: expose sending/retrying/error state
     end
 ```
 
