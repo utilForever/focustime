@@ -73,16 +73,20 @@ sequenceDiagram
 ```
 
 1. `main` creates `App`, initializes terminal state, and enters a loop.
-2. Each loop iteration draws UI from current state (`ui::render(frame, &app)`).
+2. Each loop iteration first polls async WakaTime heartbeat outcomes, then draws
+   UI from current state (`ui::render(frame, &app)`).
 3. Key events are routed to `App::handle_key`, which updates timer state, mode,
    site list, and quit intent.
 4. A 100ms tick cadence accumulates elapsed time; every elapsed second while the
    timer is running triggers `App::on_tick()`, which advances timer state and
    reapplies block/unblock policy when phase transitions occur.
 5. WakaTime tracking is synchronized by `App`: focus-running state starts/stops
-   tracking, and accumulated elapsed focus seconds (when at least 1s has passed)
-   are fed to `WakatimeTracker::tick_elapsed(elapsed_secs)` to avoid heartbeat
-   bursts after suspend/resume.
+   tracking, accumulated elapsed focus seconds (when at least 1s has passed) are
+   fed to `WakatimeTracker::tick_elapsed(elapsed_secs)`, and async heartbeat
+   outcomes are polled once per frame to surface `sending`/`retrying`/`error`
+   status in UI without blocking timer flow. `WakatimeTracker` retries transient
+   failures with bounded backoff to improve reliability while preserving
+   best-effort semantics.
 6. Phase notifications are dispatched asynchronously on natural phase completions
    (not manual skips), with optional sound and platform-specific desktop delivery.
 7. Blocking policy is phase-aware: blocking is active only during focus sessions

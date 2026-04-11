@@ -217,6 +217,12 @@ impl App {
         }
     }
 
+    /// Applies any completed async WakaTime heartbeat results to tracker state.
+    /// Intended to be called once per UI frame.
+    pub fn poll_wakatime_status(&mut self) {
+        self.wakatime.poll_events();
+    }
+
     pub fn selected_profile_name(&self) -> &'static str {
         self.selected_profile.label()
     }
@@ -1204,5 +1210,19 @@ mod tests {
         app.handle_key(key(KeyCode::Char('e')));
         app.handle_key(ctrl_key(KeyCode::Char('c')));
         assert!(app.should_quit);
+    }
+
+    #[test]
+    fn poll_wakatime_status_applies_async_failure_event() {
+        let mut app = App::default();
+        app.wakatime = WakatimeTracker::new_configured_for_tests();
+        app.wakatime.push_failed_event_for_tests("HTTP 503");
+
+        app.poll_wakatime_status();
+
+        assert_eq!(
+            app.wakatime.runtime_state(),
+            crate::wakatime::WakatimeRuntimeState::Error("HTTP 503".to_string())
+        );
     }
 }

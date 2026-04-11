@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::app::{App, AppMode, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS};
 use crate::timer::{TimerPhase, TimerStatus};
+use crate::wakatime::WakatimeRuntimeState;
 
 pub fn render(frame: &mut Frame, app: &App) {
     match app.mode {
@@ -153,12 +154,27 @@ fn render_timer(frame: &mut Frame, app: &App) {
     frame.render_widget(stats_widget, inner[6]);
 
     // WakaTime status
-    let (waka_text, waka_color) = if app.wakatime.is_tracking() {
-        ("⏱ WakaTime: tracking", Color::Green)
-    } else if app.wakatime.is_configured() {
-        ("⏱ WakaTime: idle", Color::DarkGray)
-    } else {
-        ("⏱ WakaTime: not configured", Color::DarkGray)
+    let (waka_text, waka_color) = match app.wakatime.runtime_state() {
+        WakatimeRuntimeState::NotConfigured => {
+            ("⏱ WakaTime: not configured".to_string(), Color::DarkGray)
+        }
+        WakatimeRuntimeState::Idle => ("⏱ WakaTime: idle".to_string(), Color::DarkGray),
+        WakatimeRuntimeState::Tracking => ("⏱ WakaTime: tracking".to_string(), Color::Green),
+        WakatimeRuntimeState::Sending => {
+            ("⏱ WakaTime: sending heartbeat...".to_string(), Color::Cyan)
+        }
+        WakatimeRuntimeState::Retrying {
+            attempt,
+            max_attempts,
+            next_backoff_secs,
+            error,
+        } => (
+            format!(
+                "⏱ WakaTime: retrying ({attempt}/{max_attempts}) in {next_backoff_secs}s ({error})"
+            ),
+            Color::Yellow,
+        ),
+        WakatimeRuntimeState::Error(error) => (format!("⏱ WakaTime: error ({error})"), Color::Red),
     };
     let waka_widget = Paragraph::new(waka_text)
         .alignment(Alignment::Center)

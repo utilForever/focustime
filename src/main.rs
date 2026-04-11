@@ -73,6 +73,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
     let mut tick_accumulator: u64 = 0; // milliseconds accumulated towards next second
 
     loop {
+        app.poll_wakatime_status();
         terminal.draw(|frame| ui::render(frame, &app))?;
 
         let timeout = tick_rate

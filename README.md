@@ -156,7 +156,19 @@ Runtime flow (high-level):
 3. Timer ticks advance every elapsed second while running.
 4. Phase-completion notifications are dispatched asynchronously.
 5. Blocking is applied during focus phases and removed outside focus.
-6. WakaTime tracking stays in sync with focus-running state.
+6. WakaTime tracking stays in sync with focus-running state and applies async
+   heartbeat outcomes without blocking timer flow.
+
+### WakaTime reliability behavior
+
+When WakaTime is configured, heartbeats are still best-effort and non-blocking.
+The timer never waits on network calls.
+
+- transient heartbeat failures (`429`, `5xx`, and connectivity/timeout errors)
+  retry with bounded backoff (`1s`, then `2s`)
+- non-retryable failures are surfaced in the timer view status line
+- status line now reflects runtime states (`tracking`, `sending`, `retrying`,
+  `error`, `idle`, `not configured`)
 
 For full module map and design details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
