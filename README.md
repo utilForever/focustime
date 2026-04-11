@@ -107,13 +107,15 @@ Open the site manager from timer view with **`b`**.
 - `e`: edit the selected hostname
 - `d` or `Delete`: remove the selected hostname
 - `↑/↓`: move selection
-- `b` or `Esc`: return to timer view
+- `b`: return to timer view
+- `Esc`: return to timer view only when add/edit mode is not active
 
 Add/import input supports:
 
 - single hostnames (`youtube.com`)
 - comma-separated lists (`youtube.com, reddit.com`)
 - newline-separated lists (paste multi-line blocklists, then press `Enter`)
+- while add/import or edit mode is active, `Enter` commits and `Esc` cancels the current draft
 
 Invalid and duplicate entries are reported inline so you can fix them without leaving the view.
 

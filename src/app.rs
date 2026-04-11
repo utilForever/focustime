@@ -648,21 +648,24 @@ impl App {
     }
 
     fn commit_site_input(&mut self) {
-        let input = std::mem::take(&mut self.site_input);
-        self.site_input_active = false;
-        let edit_index = self.site_edit_index.take();
+        let input = self.site_input.clone();
 
-        if let Some(index) = edit_index {
+        let committed = if let Some(index) = self.site_edit_index {
             let edit_result = self.blocker.edit_site_from_input(index, &input);
-            self.apply_edit_site_result(edit_result);
+            self.apply_edit_site_result(edit_result)
         } else {
             let add_result = self.blocker.add_sites_from_input(&input);
-            self.apply_bulk_add_result(add_result);
+            self.apply_bulk_add_result(add_result)
+        };
+
+        if committed {
+            self.cancel_site_input();
         }
     }
 
-    fn apply_bulk_add_result(&mut self, result: BulkAddResult) {
-        if !result.added.is_empty() {
+    fn apply_bulk_add_result(&mut self, result: BulkAddResult) -> bool {
+        let committed = !result.added.is_empty();
+        if committed {
             self.selected_site = self.blocker.sites.len().saturating_sub(1);
             self.finalize_site_mutation();
         }
@@ -703,9 +706,10 @@ impl App {
             parts.join(" • ")
         };
         self.set_site_feedback(level, message);
+        committed
     }
 
-    fn apply_edit_site_result(&mut self, result: EditSiteResult) {
+    fn apply_edit_site_result(&mut self, result: EditSiteResult) -> bool {
         match result {
             EditSiteResult::Updated { old, new } => {
                 self.finalize_site_mutation();
@@ -713,18 +717,21 @@ impl App {
                     SiteFeedbackLevel::Success,
                     format!("Updated `{old}` -> `{new}`"),
                 );
+                true
             }
             EditSiteResult::Unchanged { hostname } => {
                 self.set_site_feedback(
                     SiteFeedbackLevel::Warning,
                     format!("No change for `{hostname}`"),
                 );
+                false
             }
             EditSiteResult::Duplicate { hostname } => {
                 self.set_site_feedback(
                     SiteFeedbackLevel::Warning,
                     format!("`{hostname}` is already in the blocklist"),
                 );
+                false
             }
             EditSiteResult::Invalid(invalid) => {
                 self.set_site_feedback(
@@ -735,9 +742,11 @@ impl App {
                         invalid.reason.message()
                     ),
                 );
+                false
             }
             EditSiteResult::MissingSelection => {
                 self.set_site_feedback(SiteFeedbackLevel::Warning, "No site selected to edit");
+                false
             }
         }
     }
@@ -1390,6 +1399,23 @@ mod tests {
     }
 
     #[test]
+    fn site_manager_invalid_add_keeps_draft_open() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('a')));
+        for c in "exam_ple.com".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.site_input_active);
+        assert!(app.site_edit_index.is_none());
+        assert_eq!(app.site_input, "exam_ple.com");
+        assert!(app.blocker.sites.is_empty());
+    }
+
+    #[test]
     fn site_manager_edit_selected_site() {
         let config = AppConfig {
             blocked_sites: vec!["a.com".to_string(), "b.com".to_string()],
@@ -1417,6 +1443,33 @@ mod tests {
                 level: SiteFeedbackLevel::Success,
                 message: "Updated `a.com` -> `news.ycombinator.com`".to_string(),
             })
+        );
+    }
+
+    #[test]
+    fn site_manager_invalid_edit_keeps_draft_open() {
+        let config = AppConfig {
+            blocked_sites: vec!["a.com".to_string(), "b.com".to_string()],
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0.."a.com".len() {
+            app.handle_key(key(KeyCode::Backspace));
+        }
+        for c in "b.com".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.site_input_active);
+        assert_eq!(app.site_edit_index, Some(0));
+        assert_eq!(app.site_input, "b.com");
+        assert_eq!(
+            app.blocker.sites,
+            vec!["a.com".to_string(), "b.com".to_string()]
         );
     }
 

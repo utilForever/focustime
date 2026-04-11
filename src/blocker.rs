@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -75,6 +76,7 @@ impl SiteBlocker {
     pub fn add_sites_from_input(&mut self, input: &str) -> BulkAddResult {
         let candidates = split_hostname_candidates(input);
         let mut result = BulkAddResult::default();
+        let mut known_sites: HashSet<String> = self.sites.iter().cloned().collect();
 
         if candidates.is_empty() {
             result.invalid.push(InvalidSiteInput {
@@ -87,7 +89,7 @@ impl SiteBlocker {
         for candidate in candidates {
             match Self::sanitize_hostname_with_reason(&candidate) {
                 Ok(hostname) => {
-                    if self.sites.contains(&hostname) {
+                    if !known_sites.insert(hostname.clone()) {
                         result.duplicates.push(hostname);
                     } else {
                         self.sites.push(hostname.clone());
