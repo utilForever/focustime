@@ -558,7 +558,6 @@ impl App {
 
     fn commit_profile_edit(&mut self) {
         self.custom_profile = self.custom_profile.normalized();
-        self.rebuild_notifier();
         if self.selected_profile == ProfileId::Custom {
             if !self.apply_profile(ProfileId::Custom) {
                 return;
@@ -566,6 +565,7 @@ impl App {
         } else {
             self.save_config();
         }
+        self.rebuild_notifier();
         self.profile_edit_active = false;
         self.profile_edit_field = 0;
         self.profile_edit_snapshot = None;
@@ -1751,6 +1751,7 @@ mod tests {
             strict_mode: app.strict_mode,
         });
         app.custom_profile.focus_secs = app.custom_profile.focus_secs.saturating_add(60);
+        app.notification_settings.enabled = false;
 
         app.handle_key(key(KeyCode::Enter));
 
@@ -1761,6 +1762,10 @@ mod tests {
                 .as_deref()
                 .is_some_and(|err| err.contains("strict focus active"))
         );
+
+        app.timer.remaining_secs = 1;
+        app.on_tick(false);
+        assert!(app.phase_notification.is_some());
     }
 
     #[test]
