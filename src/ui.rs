@@ -380,6 +380,8 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             SiteInputMode::Add => "[Enter] Add/Import  [Esc] Cancel",
             SiteInputMode::Edit => "[Enter] Save  [Esc] Cancel",
         }
+    } else if app.strict_mode_enforced_for_focus() {
+        "[a] Add/Import  [e] Edit  [d] Delete  [↑/↓] Navigate  [b/Esc] Back  [q] Quit (Locked)"
     } else {
         "[a] Add/Import  [e] Edit  [d] Delete  [↑/↓] Navigate  [b/Esc] Back  [q] Quit"
     };
@@ -489,12 +491,20 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     let hints = if app.profile_edit_active {
         vec![
             Line::from("[↑/↓] Field  [←/→] Adjust"),
-            Line::from("[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit (Locked)"
+            } else {
+                "[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit"
+            }),
         ]
     } else {
         vec![
             Line::from("[↑/↓] Select  [Enter] Apply  [e] Edit Settings"),
-            Line::from("[p/Esc] Back  [q] Quit"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "[p/Esc] Back  [q] Quit (Locked)"
+            } else {
+                "[p/Esc] Back  [q] Quit"
+            }),
         ]
     };
     let hints_widget = Paragraph::new(hints)
@@ -585,9 +595,13 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         render_centered_error(frame, inner[4], format!("⚠  {err}"));
     }
 
-    let hints = Paragraph::new("[h/Esc] Back  [q/Ctrl-C] Quit")
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
+    let hints = Paragraph::new(if app.strict_mode_enforced_for_focus() {
+        "[h/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+    } else {
+        "[h/Esc] Back  [q/Ctrl-C] Quit"
+    })
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints, inner[5]);
 }
 
