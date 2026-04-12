@@ -524,8 +524,9 @@ impl App {
             }
             KeyCode::Enter => {
                 let selected = profile_for_index(self.profile_selection_index);
-                self.apply_profile(selected);
-                self.exit_profile_manager();
+                if self.apply_profile(selected) {
+                    self.exit_profile_manager();
+                }
             }
             KeyCode::Char('e') => {
                 self.begin_profile_edit();
@@ -556,16 +557,18 @@ impl App {
     }
 
     fn commit_profile_edit(&mut self) {
-        self.profile_edit_active = false;
-        self.profile_edit_field = 0;
-        self.profile_edit_snapshot = None;
         self.custom_profile = self.custom_profile.normalized();
         self.rebuild_notifier();
         if self.selected_profile == ProfileId::Custom {
-            self.apply_profile(ProfileId::Custom);
+            if !self.apply_profile(ProfileId::Custom) {
+                return;
+            }
         } else {
             self.save_config();
         }
+        self.profile_edit_active = false;
+        self.profile_edit_field = 0;
+        self.profile_edit_snapshot = None;
     }
 
     fn adjust_profile_edit_field(&mut self, increase: bool) {
@@ -601,9 +604,12 @@ impl App {
         }
     }
 
-    fn apply_profile(&mut self, profile: ProfileId) {
+    fn apply_profile(&mut self, profile: ProfileId) -> bool {
         if self.strict_mode_enforced_for_focus() {
-            return;
+            self.config_error = Some(
+                "strict focus active: finish focus before applying profile changes".to_string(),
+            );
+            return false;
         }
         let profile_spec = profile_spec_for(profile, &self.custom_profile);
         self.timer = TimerState::with_profile(
@@ -617,6 +623,7 @@ impl App {
         self.pending_timer_action = None;
         self.save_config();
         self.apply_blocking_for_phase();
+        true
     }
 
     fn handle_key_site_manager(&mut self, key: KeyEvent) {
@@ -861,6 +868,17 @@ impl App {
     }
 
     fn handle_quit_key(&mut self, key: &KeyEvent, esc_quits: bool) -> bool {
+        let is_quit_key = matches!(
+            key.code,
+            KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('c')
+        ) && (key.code != KeyCode::Esc || esc_quits)
+            && (key.code != KeyCode::Char('c') || key.modifiers.contains(KeyModifiers::CONTROL));
+        if is_quit_key && self.strict_mode_enforced_for_focus() {
+            self.phase_notification =
+                Some("Strict mode active. Finish or stop focus before quitting.".to_string());
+            return true;
+        }
+
         match key.code {
             KeyCode::Char('q') => {
                 self.should_quit = true;
@@ -1681,11 +1699,17 @@ mod tests {
         app.handle_key(key(KeyCode::Enter));
 
         assert_eq!(app.selected_profile, ProfileId::Custom);
+        assert_eq!(app.mode, AppMode::ProfileManager);
         assert_eq!(app.timer.phase, TimerPhase::Focus);
         assert_eq!(app.timer.status, TimerStatus::Running);
         assert_eq!(
             app.timer.remaining_secs,
             app.timer.focus_secs.saturating_sub(20)
+        );
+        assert!(
+            app.config_error
+                .as_deref()
+                .is_some_and(|err| err.contains("strict focus active"))
         );
     }
 
@@ -1705,6 +1729,78 @@ mod tests {
         app.handle_key(key(KeyCode::Left));
 
         assert!(app.strict_mode);
+    }
+
+    #[test]
+    fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
+        let config = AppConfig {
+            strict_mode: true,
+            selected_profile: ProfileId::Custom,
+            custom_profile: Some(CustomProfileConfig::default()),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.mode = AppMode::ProfileManager;
+        app.profile_edit_active = true;
+        app.profile_edit_field = 0;
+        app.profile_edit_snapshot = Some(ProfileEditSnapshot {
+            custom_profile: app.custom_profile.clone(),
+            notification_settings: app.notification_settings,
+            strict_mode: app.strict_mode,
+        });
+        app.custom_profile.focus_secs = app.custom_profile.focus_secs.saturating_add(60);
+
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.profile_edit_active);
+        assert!(app.profile_edit_snapshot.is_some());
+        assert!(
+            app.config_error
+                .as_deref()
+                .is_some_and(|err| err.contains("strict focus active"))
+        );
+    }
+
+    #[test]
+    fn strict_mode_blocks_quit_keys_during_active_focus() {
+        let config = AppConfig {
+            strict_mode: true,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        app.handle_key(key(KeyCode::Char('q')));
+        assert!(!app.should_quit);
+
+        app.handle_key(key(KeyCode::Esc));
+        assert!(!app.should_quit);
+
+        app.handle_key(ctrl_key(KeyCode::Char('c')));
+        assert!(!app.should_quit);
+        assert!(
+            app.phase_notification
+                .as_deref()
+                .is_some_and(|msg| msg.contains("Strict mode active"))
+        );
+    }
+
+    #[test]
+    fn strict_mode_allows_quit_when_focus_not_active() {
+        let config = AppConfig {
+            strict_mode: true,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Idle;
+
+        app.handle_key(key(KeyCode::Char('q')));
+
+        assert!(app.should_quit);
     }
 
     #[test]
