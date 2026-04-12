@@ -12,13 +12,14 @@ use crate::wakatime::WakatimeTracker;
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 6] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 7] = [
     "Focus",
     "Short Break",
     "Long Break",
     "Long-break cadence",
     "Phase notifications",
     "Sound alert",
+    "Strict focus mode",
 ];
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 
@@ -90,6 +91,12 @@ fn profile_for_index(index: usize) -> ProfileId {
 struct ProfileEditSnapshot {
     custom_profile: CustomProfileConfig,
     notification_settings: NotificationConfig,
+    strict_mode: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingTimerAction {
+    Reset,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +145,8 @@ pub struct App {
     pub profile_edit_field: usize,
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
     notification_settings: NotificationConfig,
+    pub strict_mode: bool,
+    pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
     stats: FocusStats,
     stats_dirty: bool,
@@ -160,6 +169,7 @@ impl App {
         let selected_profile = config.selected_profile;
         let custom_profile = config.effective_custom_profile();
         let notification_settings = config.notifications;
+        let strict_mode = config.strict_mode;
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (stats, stats_error) = match FocusStats::load() {
             Ok(stats) => (stats, None),
@@ -197,6 +207,8 @@ impl App {
             profile_edit_field: 0,
             profile_edit_snapshot: None,
             notification_settings,
+            strict_mode,
+            pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
             stats,
             stats_dirty: false,
@@ -218,6 +230,7 @@ impl App {
             self.record_completed_focus_session();
         }
         if phase_changed {
+            self.pending_timer_action = None;
             if !is_catchup {
                 self.phase_notification = self
                     .notifier
@@ -293,8 +306,17 @@ impl App {
             ),
             4 => bool_label(self.notification_settings.enabled).to_string(),
             5 => bool_label(self.notification_settings.sound).to_string(),
+            6 => bool_label(self.strict_mode).to_string(),
             _ => String::new(),
         }
+    }
+
+    pub fn strict_mode_enforced_for_focus(&self) -> bool {
+        self.strict_mode && self.should_block_for_current_state()
+    }
+
+    pub fn strict_reset_confirmation_pending(&self) -> bool {
+        self.pending_timer_action == Some(PendingTimerAction::Reset)
     }
 
     pub fn site_input_mode(&self) -> SiteInputMode {
@@ -320,6 +342,7 @@ impl App {
             selected_profile: self.selected_profile,
             custom_profile: Some(custom_profile),
             notifications: self.notification_settings,
+            strict_mode: self.strict_mode,
         }
     }
 
@@ -392,6 +415,15 @@ impl App {
             return;
         }
 
+        if self.strict_reset_confirmation_pending() {
+            if key.code == KeyCode::Char('s') {
+                self.pending_timer_action = None;
+                self.update_timer_and_sync(TimerState::reset);
+                return;
+            }
+            self.pending_timer_action = None;
+        }
+
         match key.code {
             // Start / pause
             KeyCode::Char(' ') => {
@@ -399,10 +431,17 @@ impl App {
             }
             // Stop / reset current phase
             KeyCode::Char('s') => {
+                if self.strict_mode_enforced_for_focus() {
+                    self.pending_timer_action = Some(PendingTimerAction::Reset);
+                    return;
+                }
                 self.update_timer_and_sync(TimerState::reset);
             }
             // Skip to next phase
             KeyCode::Char('n') => {
+                if self.strict_mode_enforced_for_focus() {
+                    return;
+                }
                 self.update_timer_and_sync(TimerState::next_phase);
             }
             // Open site manager
@@ -496,6 +535,7 @@ impl App {
         self.profile_edit_snapshot = Some(ProfileEditSnapshot {
             custom_profile: self.custom_profile.clone(),
             notification_settings: self.notification_settings,
+            strict_mode: self.strict_mode,
         });
         self.profile_edit_active = true;
         self.profile_edit_field = 0;
@@ -505,6 +545,7 @@ impl App {
         if let Some(snapshot) = self.profile_edit_snapshot.take() {
             self.custom_profile = snapshot.custom_profile;
             self.notification_settings = snapshot.notification_settings;
+            self.strict_mode = snapshot.strict_mode;
             self.rebuild_notifier();
         }
         self.profile_edit_active = false;
@@ -547,6 +588,9 @@ impl App {
             5 => {
                 self.notification_settings.sound = increase;
             }
+            6 => {
+                self.strict_mode = increase;
+            }
             _ => {}
         }
     }
@@ -561,6 +605,7 @@ impl App {
         );
         self.selected_profile = profile;
         self.profile_selection_index = profile_index(profile);
+        self.pending_timer_action = None;
         self.save_config();
         self.apply_blocking_for_phase();
     }
@@ -825,8 +870,12 @@ impl App {
     }
 
     fn update_timer_and_sync(&mut self, action: fn(&mut TimerState)) {
+        self.pending_timer_action = None;
         action(&mut self.timer);
         self.apply_blocking_for_phase();
+        if !self.strict_mode_enforced_for_focus() {
+            self.pending_timer_action = None;
+        }
     }
 
     fn open_site_manager(&mut self) {
@@ -1042,6 +1091,7 @@ mod tests {
         assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
         assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
         assert_eq!(app.timer.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
+        assert!(!app.strict_mode);
     }
 
     #[test]
@@ -1060,6 +1110,7 @@ mod tests {
                 long_break_interval: 2,
             }),
             notifications: NotificationConfig::default(),
+            strict_mode: false,
         };
         let app = App::from_config(config);
         assert_eq!(app.selected_profile, ProfileId::Classic);
@@ -1190,6 +1241,7 @@ mod tests {
         let config = AppConfig {
             selected_profile: ProfileId::DeepWork,
             custom_profile: Some(custom.clone()),
+            strict_mode: true,
             ..AppConfig::default()
         };
         let app = App::from_config(config);
@@ -1202,6 +1254,7 @@ mod tests {
         assert_eq!(persisted.long_break_interval, custom.long_break_interval);
         assert_eq!(persisted.custom_profile, Some(custom));
         assert_eq!(persisted.notifications, NotificationConfig::default());
+        assert!(persisted.strict_mode);
     }
 
     #[test]
@@ -1241,6 +1294,24 @@ mod tests {
         assert_eq!(app.profile_edit_field_value(2), "8:09");
         assert_eq!(app.profile_edit_field_value(4), "On");
         assert_eq!(app.profile_edit_field_value(5), "Off");
+        assert_eq!(app.profile_edit_field_value(6), "Off");
+    }
+
+    #[test]
+    fn editing_strict_mode_field_updates_and_persists_setting() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..6 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Right));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.strict_mode);
+        let persisted = app.persisted_config();
+        assert!(persisted.strict_mode);
     }
 
     #[test]
@@ -1509,6 +1580,64 @@ mod tests {
 
         assert_eq!(app.session_stats().pomodoros_completed, 0);
         assert!(app.phase_notification.is_none());
+    }
+
+    #[test]
+    fn strict_mode_blocks_skip_during_active_focus() {
+        let config = AppConfig {
+            strict_mode: true,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = app.timer.focus_secs;
+
+        app.handle_key(key(KeyCode::Char('n')));
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(app.timer.remaining_secs, app.timer.focus_secs);
+    }
+
+    #[test]
+    fn strict_mode_requires_second_stop_press_during_active_focus() {
+        let config = AppConfig {
+            strict_mode: true,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = app.timer.focus_secs.saturating_sub(10);
+
+        app.handle_key(key(KeyCode::Char('s')));
+
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(
+            app.timer.remaining_secs,
+            app.timer.focus_secs.saturating_sub(10)
+        );
+        assert!(app.strict_reset_confirmation_pending());
+
+        app.handle_key(key(KeyCode::Char('s')));
+
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+        assert_eq!(app.timer.remaining_secs, app.timer.focus_secs);
+        assert!(!app.strict_reset_confirmation_pending());
+    }
+
+    #[test]
+    fn stop_resets_immediately_when_strict_mode_is_disabled() {
+        let mut app = App::default();
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = app.timer.focus_secs.saturating_sub(5);
+
+        app.handle_key(key(KeyCode::Char('s')));
+
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+        assert_eq!(app.timer.remaining_secs, app.timer.focus_secs);
     }
 
     #[test]

@@ -39,6 +39,12 @@ pub struct AppConfig {
     /// Notification preferences for phase transitions.
     #[serde(default)]
     pub notifications: NotificationConfig,
+    /// Whether strict focus mode is enabled.
+    ///
+    /// When enabled, active focus sessions disallow skip and require
+    /// confirmation before stop/reset.
+    #[serde(default)]
+    pub strict_mode: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -167,6 +173,7 @@ impl Default for AppConfig {
             selected_profile: ProfileId::default(),
             custom_profile: None,
             notifications: NotificationConfig::default(),
+            strict_mode: false,
         }
     }
 }
@@ -344,6 +351,7 @@ mod tests {
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
         assert_eq!(cfg.notifications, NotificationConfig::default());
+        assert!(!cfg.strict_mode);
     }
 
     #[test]
@@ -365,6 +373,7 @@ mod tests {
                 enabled: true,
                 sound: true,
             },
+            strict_mode: true,
         };
         let toml_str = toml::to_string_pretty(&original).unwrap();
         let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
@@ -376,6 +385,7 @@ mod tests {
         assert_eq!(parsed.selected_profile, original.selected_profile);
         assert_eq!(parsed.custom_profile, original.custom_profile);
         assert_eq!(parsed.notifications, original.notifications);
+        assert_eq!(parsed.strict_mode, original.strict_mode);
     }
 
     #[test]
@@ -390,6 +400,7 @@ mod tests {
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
         assert_eq!(cfg.notifications, NotificationConfig::default());
+        assert!(!cfg.strict_mode);
     }
 
     #[test]
@@ -443,6 +454,7 @@ long_break_interval = 3
                 long_break_interval: 2,
             }),
             notifications: NotificationConfig::default(),
+            strict_mode: false,
         };
         let custom = cfg.effective_custom_profile();
         assert_eq!(custom.focus_secs, 40 * 60);
@@ -484,6 +496,7 @@ long_break_interval = 3
         assert_eq!(cfg.selected_profile, ProfileId::Custom);
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
+        assert!(!cfg.strict_mode);
     }
 
     #[cfg(not(target_os = "windows"))]

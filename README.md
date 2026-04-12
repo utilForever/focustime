@@ -94,6 +94,8 @@ short_break_secs = 360
 long_break_secs = 900
 long_break_interval = 3
 
+strict_mode = false
+
 [notifications]
 enabled = true
 sound = false
@@ -138,8 +140,17 @@ You can also configure `notifications.enabled` and `notifications.sound` directl
 
 - open profile manager with `p`
 - press `e` to open the editor
-- use `↑/↓` to select **Phase notifications** or **Sound alert**
+- use `↑/↓` to select **Phase notifications**, **Sound alert**, or **Strict focus mode**
 - use `←/→` to set `Off`/`On`, then `Enter` to save
+
+## Strict focus mode
+
+`focustime` provides an optional strict mode (`strict_mode = false` by default).
+
+When strict mode is enabled during an active focus session:
+
+- `n` (skip phase) is disabled
+- `s` (stop/reset) requires confirmation by pressing `s` again
 
 ## Session stats and daily history
 

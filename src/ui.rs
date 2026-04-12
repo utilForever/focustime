@@ -110,9 +110,21 @@ fn render_timer(frame: &mut Frame, app: &App) {
         TimerStatus::Paused => "⏸  Paused",
         TimerStatus::Idle => "⏹  Idle",
     };
-    let status_widget = Paragraph::new(status_text)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Gray));
+    let strict_status_text = if app.strict_reset_confirmation_pending() {
+        "🔒 Strict mode: press [s] again to confirm stop/reset"
+    } else if app.strict_mode_enforced_for_focus() {
+        "🔒 Strict mode active: skip locked, stop requires confirmation"
+    } else if app.strict_mode {
+        "🔒 Strict mode armed: enforced during active focus only"
+    } else {
+        "🔓 Strict mode off"
+    };
+    let status_widget = Paragraph::new(vec![
+        Line::from(status_text),
+        Line::from(strict_status_text),
+    ])
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(Color::Gray));
     frame.render_widget(status_widget, inner[4]);
 
     // Phase transition notification
@@ -184,8 +196,15 @@ fn render_timer(frame: &mut Frame, app: &App) {
     frame.render_widget(waka_widget, inner[7]);
 
     // Key hints
+    let primary_hint = if app.strict_reset_confirmation_pending() {
+        "[Space] Start/Pause  [s] Confirm Stop  [n] Next (Locked)"
+    } else if app.strict_mode_enforced_for_focus() {
+        "[Space] Start/Pause  [s] Stop (Confirm)  [n] Next (Locked)"
+    } else {
+        "[Space] Start/Pause  [s] Stop  [n] Next"
+    };
     let hints_widget = Paragraph::new(vec![
-        Line::from("[Space] Start/Pause  [s] Stop  [n] Next"),
+        Line::from(primary_hint),
         Line::from("[h] History  [p] Profiles  [b] Block Sites  [q/Esc] Quit"),
     ])
     .alignment(Alignment::Center)
