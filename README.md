@@ -150,6 +150,8 @@ When strict mode is enabled during an active focus session:
 
 - `n` (skip phase) is disabled
 - `s` (stop/reset) requires confirmation by pressing `s` again
+- `p` (profile manager) is disabled, so profile switching is locked
+- quit shortcuts (`q`, `Esc`, `Ctrl-C`) are disabled until focus is no longer active
 
 ## Session stats and daily history
 

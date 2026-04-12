@@ -204,7 +204,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
         "[Space] Start/Pause  [s] Stop  [n] Next"
     };
     let secondary_hint = if app.strict_mode_enforced_for_focus() {
-        "[h] History  [p] Profiles  [b] Block Sites  [q/Esc] Quit (Locked)"
+        "[h] History  [p] Profiles (Locked)  [b] Block Sites  [q/Esc] Quit (Locked)"
     } else {
         "[h] History  [p] Profiles  [b] Block Sites  [q/Esc] Quit"
     };
