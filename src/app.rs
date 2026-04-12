@@ -910,6 +910,7 @@ impl App {
     }
 
     fn open_site_manager(&mut self) {
+        self.pending_timer_action = None;
         self.mode = AppMode::SiteManager;
         self.cancel_site_input();
         self.clamp_selection();
@@ -925,6 +926,7 @@ impl App {
     }
 
     fn open_stats_history(&mut self) {
+        self.pending_timer_action = None;
         self.mode = AppMode::StatsHistory;
     }
 
@@ -1655,6 +1657,44 @@ mod tests {
 
         assert_eq!(app.timer.status, TimerStatus::Idle);
         assert_eq!(app.timer.remaining_secs, app.timer.focus_secs);
+        assert!(!app.strict_reset_confirmation_pending());
+    }
+
+    #[test]
+    fn pending_strict_reset_confirmation_clears_when_opening_site_manager() {
+        let config = AppConfig {
+            strict_mode: true,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        app.handle_key(key(KeyCode::Char('s')));
+        assert!(app.strict_reset_confirmation_pending());
+
+        app.handle_key(key(KeyCode::Char('b')));
+
+        assert_eq!(app.mode, AppMode::SiteManager);
+        assert!(!app.strict_reset_confirmation_pending());
+    }
+
+    #[test]
+    fn pending_strict_reset_confirmation_clears_when_opening_history() {
+        let config = AppConfig {
+            strict_mode: true,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        app.handle_key(key(KeyCode::Char('s')));
+        assert!(app.strict_reset_confirmation_pending());
+
+        app.handle_key(key(KeyCode::Char('h')));
+
+        assert_eq!(app.mode, AppMode::StatsHistory);
         assert!(!app.strict_reset_confirmation_pending());
     }
 

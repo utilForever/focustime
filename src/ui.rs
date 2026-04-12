@@ -499,7 +499,11 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         ]
     } else {
         vec![
-            Line::from("[↑/↓] Select  [Enter] Apply  [e] Edit Settings"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "[↑/↓] Select  [Enter] Apply (Locked)  [e] Edit Settings"
+            } else {
+                "[↑/↓] Select  [Enter] Apply  [e] Edit Settings"
+            }),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "[p/Esc] Back  [q] Quit (Locked)"
             } else {
