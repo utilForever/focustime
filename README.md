@@ -1,6 +1,7 @@
 # focustime
 
 [![Rust CI](https://github.com/utilForever/focustime/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/utilForever/focustime/actions/workflows/rust.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=utilForever_focustime&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=utilForever_focustime)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 TUI-based application for **Pomodoro timing**, **distraction-site blocking**, and **WakaTime tracking**.
@@ -65,6 +66,19 @@ cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 cargo test --all
 ```
+
+### SonarCloud setup
+
+Static analysis runs in `.github/workflows/sonarcloud.yml` for pushes and pull
+requests to `main`.
+
+1. Import `utilForever/focustime` into SonarCloud.
+2. Confirm `sonar.projectKey` and `sonar.organization` in
+   `sonar-project.properties` match your SonarCloud project.
+3. Add `SONAR_TOKEN` as a repository secret in GitHub.
+
+> For pull requests from forks, the SonarCloud job is skipped because
+> repository secrets are not available in untrusted fork contexts.
 
 ## Pomodoro profiles
 
