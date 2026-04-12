@@ -557,10 +557,17 @@ impl App {
     }
 
     fn commit_profile_edit(&mut self) {
+        let custom_profile_changed = self.profile_edit_snapshot.as_ref().is_some_and(|snapshot| {
+            snapshot.custom_profile.normalized() != self.custom_profile.normalized()
+        });
         self.custom_profile = self.custom_profile.normalized();
         if self.selected_profile == ProfileId::Custom {
-            if !self.apply_profile(ProfileId::Custom) {
-                return;
+            if custom_profile_changed {
+                if !self.apply_profile(ProfileId::Custom) {
+                    return;
+                }
+            } else {
+                self.save_config();
             }
         } else {
             self.save_config();
@@ -1763,6 +1770,43 @@ mod tests {
         app.timer.remaining_secs = 1;
         app.on_tick(false);
         assert!(app.phase_notification.is_some());
+    }
+
+    #[test]
+    fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_reset() {
+        let config = AppConfig {
+            strict_mode: false,
+            selected_profile: ProfileId::Custom,
+            custom_profile: Some(CustomProfileConfig::default()),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = app.timer.focus_secs.saturating_sub(30);
+        app.mode = AppMode::ProfileManager;
+        app.profile_edit_active = true;
+        app.profile_edit_field = 6;
+        app.profile_edit_snapshot = Some(ProfileEditSnapshot {
+            custom_profile: app.custom_profile.clone(),
+            notification_settings: app.notification_settings,
+            strict_mode: app.strict_mode,
+        });
+
+        app.handle_key(key(KeyCode::Right));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.strict_mode);
+        assert!(!app.profile_edit_active);
+        assert!(app.profile_edit_snapshot.is_none());
+        assert!(app.config_error.is_none());
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(
+            app.timer.remaining_secs,
+            app.timer.focus_secs.saturating_sub(30)
+        );
+        assert!(app.persisted_config().strict_mode);
     }
 
     #[test]
