@@ -87,6 +87,7 @@ Profile selection and custom values are persisted in `config.toml`.
 
 ```toml
 selected_profile = "custom"
+strict_mode = false
 
 [custom_profile]
 focus_secs = 1800
@@ -138,8 +139,19 @@ You can also configure `notifications.enabled` and `notifications.sound` directl
 
 - open profile manager with `p`
 - press `e` to open the editor
-- use `↑/↓` to select **Phase notifications** or **Sound alert**
+- use `↑/↓` to select **Phase notifications**, **Sound alert**, or **Strict focus mode**
 - use `←/→` to set `Off`/`On`, then `Enter` to save
+
+## Strict focus mode
+
+`focustime` provides an optional strict mode (`strict_mode = false` by default).
+
+When strict mode is enabled during an active focus session:
+
+- `n` (skip phase) is disabled
+- `s` (stop/reset) requires confirmation by pressing `s` again
+- `p` (profile manager) is disabled, so profile switching is locked
+- quit shortcuts (`q`, `Esc`, `Ctrl-C`) are disabled until focus is no longer active
 
 ## Session stats and daily history
 

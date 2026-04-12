@@ -110,9 +110,21 @@ fn render_timer(frame: &mut Frame, app: &App) {
         TimerStatus::Paused => "⏸  Paused",
         TimerStatus::Idle => "⏹  Idle",
     };
-    let status_widget = Paragraph::new(status_text)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Gray));
+    let strict_status_text = if app.strict_reset_confirmation_pending() {
+        "🔒 Strict mode: press [s] again to confirm stop/reset"
+    } else if app.strict_mode_enforced_for_focus() {
+        "🔒 Strict mode active: skip locked, stop requires confirmation"
+    } else if app.strict_mode {
+        "🔒 Strict mode armed: enforced during active focus only"
+    } else {
+        "🔓 Strict mode off"
+    };
+    let status_widget = Paragraph::new(vec![
+        Line::from(status_text),
+        Line::from(strict_status_text),
+    ])
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(Color::Gray));
     frame.render_widget(status_widget, inner[4]);
 
     // Phase transition notification
@@ -184,12 +196,21 @@ fn render_timer(frame: &mut Frame, app: &App) {
     frame.render_widget(waka_widget, inner[7]);
 
     // Key hints
-    let hints_widget = Paragraph::new(vec![
-        Line::from("[Space] Start/Pause  [s] Stop  [n] Next"),
-        Line::from("[h] History  [p] Profiles  [b] Block Sites  [q/Esc] Quit"),
-    ])
-    .alignment(Alignment::Center)
-    .style(Style::default().fg(Color::DarkGray));
+    let primary_hint = if app.strict_reset_confirmation_pending() {
+        "[Space] Start/Pause  [s] Confirm Stop  [n] Next (Locked)"
+    } else if app.strict_mode_enforced_for_focus() {
+        "[Space] Start/Pause  [s] Stop (Confirm)  [n] Next (Locked)"
+    } else {
+        "[Space] Start/Pause  [s] Stop  [n] Next"
+    };
+    let secondary_hint = if app.strict_mode_enforced_for_focus() {
+        "[h] History  [p] Profiles (Locked)  [b] Block Sites  [q/Esc] Quit (Locked)"
+    } else {
+        "[h] History  [p] Profiles  [b] Block Sites  [q/Esc] Quit"
+    };
+    let hints_widget = Paragraph::new(vec![Line::from(primary_hint), Line::from(secondary_hint)])
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints_widget, inner[9]);
 }
 
@@ -359,6 +380,8 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             SiteInputMode::Add => "[Enter] Add/Import  [Esc] Cancel",
             SiteInputMode::Edit => "[Enter] Save  [Esc] Cancel",
         }
+    } else if app.strict_mode_enforced_for_focus() {
+        "[a] Add/Import  [e] Edit  [d] Delete  [↑/↓] Navigate  [b/Esc] Back  [q] Quit (Locked)"
     } else {
         "[a] Add/Import  [e] Edit  [d] Delete  [↑/↓] Navigate  [b/Esc] Back  [q] Quit"
     };
@@ -468,12 +491,24 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     let hints = if app.profile_edit_active {
         vec![
             Line::from("[↑/↓] Field  [←/→] Adjust"),
-            Line::from("[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit (Locked)"
+            } else {
+                "[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit"
+            }),
         ]
     } else {
         vec![
-            Line::from("[↑/↓] Select  [Enter] Apply  [e] Edit Settings"),
-            Line::from("[p/Esc] Back  [q] Quit"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "[↑/↓] Select  [Enter] Apply (Locked)  [e] Edit Settings"
+            } else {
+                "[↑/↓] Select  [Enter] Apply  [e] Edit Settings"
+            }),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "[p/Esc] Back  [q] Quit (Locked)"
+            } else {
+                "[p/Esc] Back  [q] Quit"
+            }),
         ]
     };
     let hints_widget = Paragraph::new(hints)
@@ -564,9 +599,13 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         render_centered_error(frame, inner[4], format!("⚠  {err}"));
     }
 
-    let hints = Paragraph::new("[h/Esc] Back  [q/Ctrl-C] Quit")
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
+    let hints = Paragraph::new(if app.strict_mode_enforced_for_focus() {
+        "[h/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+    } else {
+        "[h/Esc] Back  [q/Ctrl-C] Quit"
+    })
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints, inner[5]);
 }
 
