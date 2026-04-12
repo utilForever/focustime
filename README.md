@@ -87,14 +87,13 @@ Profile selection and custom values are persisted in `config.toml`.
 
 ```toml
 selected_profile = "custom"
+strict_mode = false
 
 [custom_profile]
 focus_secs = 1800
 short_break_secs = 360
 long_break_secs = 900
 long_break_interval = 3
-
-strict_mode = false
 
 [notifications]
 enabled = true

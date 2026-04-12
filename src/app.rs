@@ -900,9 +900,6 @@ impl App {
         self.pending_timer_action = None;
         action(&mut self.timer);
         self.apply_blocking_for_phase();
-        if !self.strict_mode_enforced_for_focus() {
-            self.pending_timer_action = None;
-        }
     }
 
     fn open_site_manager(&mut self) {
