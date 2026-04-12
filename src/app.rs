@@ -450,6 +450,9 @@ impl App {
             }
             // Open profile manager
             KeyCode::Char('p') => {
+                if self.strict_mode_enforced_for_focus() {
+                    return;
+                }
                 self.open_profile_manager();
             }
             // Open stats history
@@ -589,6 +592,9 @@ impl App {
                 self.notification_settings.sound = increase;
             }
             6 => {
+                if !increase && self.strict_mode_enforced_for_focus() {
+                    return;
+                }
                 self.strict_mode = increase;
             }
             _ => {}
@@ -596,6 +602,9 @@ impl App {
     }
 
     fn apply_profile(&mut self, profile: ProfileId) {
+        if self.strict_mode_enforced_for_focus() {
+            return;
+        }
         let profile_spec = profile_spec_for(profile, &self.custom_profile);
         self.timer = TimerState::with_profile(
             profile_spec.focus_secs,
@@ -1638,6 +1647,64 @@ mod tests {
 
         assert_eq!(app.timer.status, TimerStatus::Idle);
         assert_eq!(app.timer.remaining_secs, app.timer.focus_secs);
+    }
+
+    #[test]
+    fn strict_mode_blocks_profile_manager_access_during_active_focus() {
+        let config = AppConfig {
+            strict_mode: true,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        app.handle_key(key(KeyCode::Char('p')));
+
+        assert_eq!(app.mode, AppMode::Timer);
+    }
+
+    #[test]
+    fn strict_mode_blocks_profile_apply_during_active_focus() {
+        let config = AppConfig {
+            strict_mode: true,
+            selected_profile: ProfileId::Custom,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = app.timer.focus_secs.saturating_sub(20);
+        app.mode = AppMode::ProfileManager;
+        app.profile_selection_index = profile_index(ProfileId::Classic);
+
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.selected_profile, ProfileId::Custom);
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(
+            app.timer.remaining_secs,
+            app.timer.focus_secs.saturating_sub(20)
+        );
+    }
+
+    #[test]
+    fn strict_mode_cannot_be_disabled_during_active_focus_profile_edit() {
+        let config = AppConfig {
+            strict_mode: true,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.mode = AppMode::ProfileManager;
+        app.profile_edit_active = true;
+        app.profile_edit_field = 6;
+
+        app.handle_key(key(KeyCode::Left));
+
+        assert!(app.strict_mode);
     }
 
     #[test]
