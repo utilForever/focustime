@@ -1,0 +1,35 @@
+name: SonarCloud
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonarcloud:
+    name: 🔎 SonarCloud
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Skip scan when SONAR_TOKEN is missing
+        if: ${{ env.SONAR_TOKEN == '' }}
+        run: echo "SONAR_TOKEN is not configured. Skipping SonarCloud scan."
+
+      - name: Run SonarCloud scan
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@v6
