@@ -1,7 +1,9 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blocker::{BulkAddResult, EditSiteResult, InvalidSiteInput, SiteBlocker};
-use crate::config::{AppConfig, CustomProfileConfig, NotificationConfig, ProfileId};
+use crate::config::{
+    AppConfig, CustomProfileConfig, DailyGoalConfig, NotificationConfig, ProfileId,
+};
 use crate::notifications::PhaseNotifier;
 use crate::stats::{DailyStats, FocusStats, SessionStats, current_day_key};
 use crate::timer::{
@@ -12,7 +14,7 @@ use crate::wakatime::WakatimeTracker;
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 7] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 9] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -20,8 +22,11 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 7] = [
     "Phase notifications",
     "Sound alert",
     "Strict focus mode",
+    "Daily goal (minutes)",
+    "Daily goal (pomodoros)",
 ];
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
+const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
@@ -92,6 +97,7 @@ struct ProfileEditSnapshot {
     custom_profile: CustomProfileConfig,
     notification_settings: NotificationConfig,
     strict_mode: bool,
+    daily_goal: DailyGoalConfig,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,6 +121,31 @@ pub enum SiteFeedbackLevel {
 pub struct SiteFeedback {
     pub level: SiteFeedbackLevel,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GoalProgress {
+    pub completed: u64,
+    pub target: u64,
+    pub ratio: f64,
+}
+
+impl GoalProgress {
+    pub fn is_configured(self) -> bool {
+        self.target > 0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DailyGoalProgress {
+    pub minutes: GoalProgress,
+    pub pomodoros: GoalProgress,
+}
+
+impl DailyGoalProgress {
+    pub fn has_any_target(self) -> bool {
+        self.minutes.is_configured() || self.pomodoros.is_configured()
+    }
 }
 
 pub struct App {
@@ -146,6 +177,7 @@ pub struct App {
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
     notification_settings: NotificationConfig,
     pub strict_mode: bool,
+    daily_goal: DailyGoalConfig,
     pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
     stats: FocusStats,
@@ -170,6 +202,7 @@ impl App {
         let custom_profile = config.effective_custom_profile();
         let notification_settings = config.notifications;
         let strict_mode = config.strict_mode;
+        let daily_goal = config.daily_goal;
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (stats, stats_error) = match FocusStats::load() {
             Ok(stats) => (stats, None),
@@ -208,6 +241,7 @@ impl App {
             profile_edit_snapshot: None,
             notification_settings,
             strict_mode,
+            daily_goal,
             pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
             stats,
@@ -291,6 +325,20 @@ impl App {
         self.stats.daily_for(&current_day_key())
     }
 
+    pub fn today_goal_progress(&self) -> DailyGoalProgress {
+        self.daily_goal_progress_for(self.today_stats())
+    }
+
+    pub fn daily_goal_progress_for(&self, stats: DailyStats) -> DailyGoalProgress {
+        DailyGoalProgress {
+            minutes: goal_progress(stats.focused_minutes(), self.daily_goal.minutes),
+            pomodoros: goal_progress(
+                u64::from(stats.pomodoros_completed),
+                u64::from(self.daily_goal.pomodoros),
+            ),
+        }
+    }
+
     pub fn recent_daily_stats(&self, limit: usize) -> Vec<(String, DailyStats)> {
         self.stats.recent_daily(limit)
     }
@@ -307,6 +355,8 @@ impl App {
             4 => bool_label(self.notification_settings.enabled).to_string(),
             5 => bool_label(self.notification_settings.sound).to_string(),
             6 => bool_label(self.strict_mode).to_string(),
+            7 => format_daily_goal_minutes_label(self.daily_goal.minutes),
+            8 => format_daily_goal_pomodoros_label(self.daily_goal.pomodoros),
             _ => String::new(),
         }
     }
@@ -343,6 +393,7 @@ impl App {
             custom_profile: Some(custom_profile),
             notifications: self.notification_settings,
             strict_mode: self.strict_mode,
+            daily_goal: self.daily_goal,
         }
     }
 
@@ -540,6 +591,7 @@ impl App {
             custom_profile: self.custom_profile.clone(),
             notification_settings: self.notification_settings,
             strict_mode: self.strict_mode,
+            daily_goal: self.daily_goal,
         });
         self.profile_edit_active = true;
         self.profile_edit_field = 0;
@@ -550,6 +602,7 @@ impl App {
             self.custom_profile = snapshot.custom_profile;
             self.notification_settings = snapshot.notification_settings;
             self.strict_mode = snapshot.strict_mode;
+            self.daily_goal = snapshot.daily_goal;
             self.rebuild_notifier();
         }
         self.profile_edit_active = false;
@@ -606,6 +659,12 @@ impl App {
                     return;
                 }
                 self.strict_mode = increase;
+            }
+            7 => {
+                adjust_daily_goal_minutes(&mut self.daily_goal.minutes, increase);
+            }
+            8 => {
+                adjust_daily_goal_pomodoros(&mut self.daily_goal.pomodoros, increase);
             }
             _ => {}
         }
@@ -1036,6 +1095,28 @@ fn adjust_duration_minutes(value: &mut u64, increase: bool) {
     }
 }
 
+fn adjust_daily_goal_minutes(value: &mut u64, increase: bool) {
+    if increase {
+        *value = if *value == 0 {
+            DAILY_GOAL_MINUTES_STEP
+        } else {
+            value.saturating_add(DAILY_GOAL_MINUTES_STEP)
+        };
+    } else if *value <= DAILY_GOAL_MINUTES_STEP {
+        *value = 0;
+    } else {
+        *value = value.saturating_sub(DAILY_GOAL_MINUTES_STEP);
+    }
+}
+
+fn adjust_daily_goal_pomodoros(value: &mut u32, increase: bool) {
+    if increase {
+        *value = value.saturating_add(1);
+    } else {
+        *value = value.saturating_sub(1);
+    }
+}
+
 fn format_duration_label(seconds: u64) -> String {
     let minutes = seconds / 60;
     let remaining_seconds = seconds % 60;
@@ -1046,8 +1127,37 @@ fn format_duration_label(seconds: u64) -> String {
     }
 }
 
+fn format_daily_goal_minutes_label(minutes: u64) -> String {
+    if minutes == 0 {
+        "Off".to_string()
+    } else {
+        format!("{minutes}m")
+    }
+}
+
+fn format_daily_goal_pomodoros_label(pomodoros: u32) -> String {
+    if pomodoros == 0 {
+        "Off".to_string()
+    } else {
+        format!("{pomodoros}")
+    }
+}
+
 fn bool_label(value: bool) -> &'static str {
     if value { "On" } else { "Off" }
+}
+
+fn goal_progress(completed: u64, target: u64) -> GoalProgress {
+    let ratio = if target == 0 {
+        0.0
+    } else {
+        (completed as f64 / target as f64).clamp(0.0, 1.0)
+    };
+    GoalProgress {
+        completed,
+        target,
+        ratio,
+    }
 }
 
 fn format_count(count: usize, singular: &str, plural: &str) -> String {
@@ -1125,6 +1235,7 @@ mod tests {
         assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
         assert_eq!(app.timer.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
         assert!(!app.strict_mode);
+        assert_eq!(app.daily_goal, DailyGoalConfig::default());
     }
 
     #[test]
@@ -1144,6 +1255,7 @@ mod tests {
             }),
             notifications: NotificationConfig::default(),
             strict_mode: false,
+            daily_goal: DailyGoalConfig::default(),
         };
         let app = App::from_config(config);
         assert_eq!(app.selected_profile, ProfileId::Classic);
@@ -1288,6 +1400,7 @@ mod tests {
         assert_eq!(persisted.custom_profile, Some(custom));
         assert_eq!(persisted.notifications, NotificationConfig::default());
         assert!(persisted.strict_mode);
+        assert_eq!(persisted.daily_goal, DailyGoalConfig::default());
     }
 
     #[test]
@@ -1328,6 +1441,8 @@ mod tests {
         assert_eq!(app.profile_edit_field_value(4), "On");
         assert_eq!(app.profile_edit_field_value(5), "Off");
         assert_eq!(app.profile_edit_field_value(6), "Off");
+        assert_eq!(app.profile_edit_field_value(7), "Off");
+        assert_eq!(app.profile_edit_field_value(8), "Off");
     }
 
     #[test]
@@ -1390,6 +1505,77 @@ mod tests {
         let persisted = app.persisted_config();
         assert!(persisted.notifications.enabled);
         assert!(persisted.notifications.sound);
+    }
+
+    #[test]
+    fn editing_daily_goal_fields_updates_and_persists_settings() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..7 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Right)); // minutes goal -> 5m
+        app.handle_key(key(KeyCode::Right)); // minutes goal -> 10m
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Right)); // pomodoros goal -> 1
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.daily_goal.minutes, 10);
+        assert_eq!(app.daily_goal.pomodoros, 1);
+
+        let persisted = app.persisted_config();
+        assert_eq!(persisted.daily_goal.minutes, 10);
+        assert_eq!(persisted.daily_goal.pomodoros, 1);
+    }
+
+    #[test]
+    fn cancelling_profile_edit_restores_daily_goal_settings() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 25,
+                pomodoros: 3,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..7 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Right)); // minutes goal -> 30m
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Right)); // pomodoros goal -> 4
+        app.handle_key(key(KeyCode::Esc)); // cancel
+
+        assert_eq!(app.daily_goal.minutes, 25);
+        assert_eq!(app.daily_goal.pomodoros, 3);
+    }
+
+    #[test]
+    fn today_goal_progress_reports_ratios_for_minutes_and_pomodoros() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 4,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let day_key = current_day_key();
+        app.stats.record_focus_elapsed(&day_key, 30 * 60);
+        app.stats.record_completed_pomodoro(&day_key);
+
+        let progress = app.today_goal_progress();
+        assert_eq!(progress.minutes.completed, 30);
+        assert_eq!(progress.minutes.target, 60);
+        assert!((progress.minutes.ratio - 0.5).abs() < f64::EPSILON);
+        assert_eq!(progress.pomodoros.completed, 1);
+        assert_eq!(progress.pomodoros.target, 4);
+        assert!((progress.pomodoros.ratio - 0.25).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -1793,6 +1979,7 @@ mod tests {
             custom_profile: app.custom_profile.clone(),
             notification_settings: app.notification_settings,
             strict_mode: app.strict_mode,
+            daily_goal: app.daily_goal,
         });
         app.custom_profile.focus_secs = app.custom_profile.focus_secs.saturating_add(60);
         app.notification_settings.enabled = false;
@@ -1831,6 +2018,7 @@ mod tests {
             custom_profile: app.custom_profile.clone(),
             notification_settings: app.notification_settings,
             strict_mode: app.strict_mode,
+            daily_goal: app.daily_goal,
         });
 
         app.handle_key(key(KeyCode::Right));

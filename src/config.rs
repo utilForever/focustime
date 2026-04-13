@@ -45,6 +45,11 @@ pub struct AppConfig {
     /// confirmation before stop/reset.
     #[serde(default)]
     pub strict_mode: bool,
+    /// Daily goal settings for focus minutes and completed pomodoros.
+    ///
+    /// A value of `0` disables the corresponding goal.
+    #[serde(default)]
+    pub daily_goal: DailyGoalConfig,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -53,6 +58,16 @@ pub struct NotificationConfig {
     pub enabled: bool,
     #[serde(default)]
     pub sound: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct DailyGoalConfig {
+    /// Target focused minutes for the current day.
+    #[serde(default)]
+    pub minutes: u64,
+    /// Target completed pomodoros for the current day.
+    #[serde(default)]
+    pub pomodoros: u32,
 }
 
 impl Default for NotificationConfig {
@@ -174,6 +189,7 @@ impl Default for AppConfig {
             custom_profile: None,
             notifications: NotificationConfig::default(),
             strict_mode: false,
+            daily_goal: DailyGoalConfig::default(),
         }
     }
 }
@@ -352,6 +368,7 @@ mod tests {
         assert!(cfg.blocked_sites.is_empty());
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert!(!cfg.strict_mode);
+        assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     }
 
     #[test]
@@ -374,6 +391,10 @@ mod tests {
                 sound: true,
             },
             strict_mode: true,
+            daily_goal: DailyGoalConfig {
+                minutes: 180,
+                pomodoros: 6,
+            },
         };
         let toml_str = toml::to_string_pretty(&original).unwrap();
         let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
@@ -386,6 +407,7 @@ mod tests {
         assert_eq!(parsed.custom_profile, original.custom_profile);
         assert_eq!(parsed.notifications, original.notifications);
         assert_eq!(parsed.strict_mode, original.strict_mode);
+        assert_eq!(parsed.daily_goal, original.daily_goal);
     }
 
     #[test]
@@ -401,6 +423,7 @@ mod tests {
         assert!(cfg.blocked_sites.is_empty());
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert!(!cfg.strict_mode);
+        assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     }
 
     #[test]
@@ -420,6 +443,7 @@ blocked_sites = ["reddit.com", "youtube.com"]
         assert_eq!(parsed.long_break_secs, 900);
         assert_eq!(parsed.long_break_interval, 3);
         assert_eq!(parsed.blocked_sites, vec!["reddit.com", "youtube.com"]);
+        assert_eq!(parsed.daily_goal, DailyGoalConfig::default());
     }
 
     #[test]
@@ -455,6 +479,7 @@ long_break_interval = 3
             }),
             notifications: NotificationConfig::default(),
             strict_mode: false,
+            daily_goal: DailyGoalConfig::default(),
         };
         let custom = cfg.effective_custom_profile();
         assert_eq!(custom.focus_secs, 40 * 60);
@@ -497,6 +522,7 @@ long_break_interval = 3
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
         assert!(!cfg.strict_mode);
+        assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     }
 
     #[cfg(not(target_os = "windows"))]

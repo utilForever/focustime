@@ -7,7 +7,8 @@ use ratatui::{
 };
 
 use crate::app::{
-    App, AppMode, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, SiteFeedbackLevel, SiteInputMode,
+    App, AppMode, DailyGoalProgress, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, SiteFeedbackLevel,
+    SiteInputMode,
 };
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
@@ -34,7 +35,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(phase_color(app.timer.phase)));
     frame.render_widget(block, outer);
 
-    // Inner layout: title | time | profile | progress | status | phase notice | stats | wakatime | spacer | hints
+    // Inner layout: title | time | profile | progress | status | phase notice | stats | goal | wakatime | spacer | hints
     let inner = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
@@ -46,6 +47,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
             Constraint::Length(2), // status
             Constraint::Length(1), // latest phase notification
             Constraint::Length(1), // stats summary
+            Constraint::Length(1), // daily goal progress
             Constraint::Length(1), // wakatime status
             Constraint::Min(0),    // spacer
             Constraint::Length(2), // key hints
@@ -167,6 +169,18 @@ fn render_timer(frame: &mut Frame, app: &App) {
         .style(stats_line.1);
     frame.render_widget(stats_widget, inner[6]);
 
+    // Daily goal progress
+    let goal_progress = app.today_goal_progress();
+    let goal_line = if goal_progress.has_any_target() {
+        format_goal_progress_line(goal_progress)
+    } else {
+        "Daily goal: Off (set minutes/pomodoros in [p] Profiles → [e] Edit Settings)".to_string()
+    };
+    let goal_widget = Paragraph::new(goal_line)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(goal_widget, inner[7]);
+
     // WakaTime status
     let (waka_text, waka_color) = match app.wakatime.runtime_state() {
         WakatimeRuntimeState::NotConfigured => {
@@ -193,7 +207,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
     let waka_widget = Paragraph::new(waka_text)
         .alignment(Alignment::Center)
         .style(Style::default().fg(waka_color));
-    frame.render_widget(waka_widget, inner[7]);
+    frame.render_widget(waka_widget, inner[8]);
 
     // Key hints
     let primary_hint = if app.strict_reset_confirmation_pending() {
@@ -211,7 +225,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
     let hints_widget = Paragraph::new(vec![Line::from(primary_hint), Line::from(secondary_hint)])
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints_widget, inner[9]);
+    frame.render_widget(hints_widget, inner[10]);
 }
 
 fn render_site_manager(frame: &mut Frame, app: &App) {
@@ -406,14 +420,14 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1), // current profile
-            Constraint::Length(1), // spacer
-            Constraint::Length(7), // profile list
-            Constraint::Length(1), // spacer
-            Constraint::Length(9), // custom + notification editor
-            Constraint::Min(0),    // spacer
-            Constraint::Length(1), // error line
-            Constraint::Length(2), // key hints
+            Constraint::Length(1),  // current profile
+            Constraint::Length(1),  // spacer
+            Constraint::Length(7),  // profile list
+            Constraint::Length(1),  // spacer
+            Constraint::Length(11), // custom + notification + daily goal editor
+            Constraint::Min(0),     // spacer
+            Constraint::Length(1),  // error line
+            Constraint::Length(2),  // key hints
         ])
         .split(outer);
 
@@ -534,6 +548,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .constraints([
             Constraint::Length(1), // session summary
             Constraint::Length(1), // today summary
+            Constraint::Length(1), // daily goal progress
             Constraint::Length(1), // spacer
             Constraint::Min(3),    // history list
             Constraint::Length(1), // error line
@@ -563,6 +578,15 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     .style(Style::default().fg(Color::Gray));
     frame.render_widget(today_summary, inner[1]);
 
+    let goal_progress = app.today_goal_progress();
+    let goal_line = if goal_progress.has_any_target() {
+        format_goal_progress_line(goal_progress)
+    } else {
+        "Daily goal: Off".to_string()
+    };
+    let goal_summary = Paragraph::new(goal_line).style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(goal_summary, inner[2]);
+
     let history_items: Vec<ListItem> = app
         .recent_daily_stats(14)
         .into_iter()
@@ -583,7 +607,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
                     .borders(Borders::ALL)
                     .title(" Recent Days "),
             );
-        frame.render_widget(empty, inner[3]);
+        frame.render_widget(empty, inner[4]);
     } else {
         let list = List::new(history_items)
             .block(
@@ -592,11 +616,11 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
                     .title(" Recent Days "),
             )
             .style(Style::default().fg(Color::Gray));
-        frame.render_widget(list, inner[3]);
+        frame.render_widget(list, inner[4]);
     }
 
     if let Some(err) = app.stats_error.as_ref() {
-        render_centered_error(frame, inner[4], format!("⚠  {err}"));
+        render_centered_error(frame, inner[5], format!("⚠  {err}"));
     }
 
     let hints = Paragraph::new(if app.strict_mode_enforced_for_focus() {
@@ -606,7 +630,40 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     })
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints, inner[5]);
+    frame.render_widget(hints, inner[6]);
+}
+
+fn format_goal_progress_line(progress: DailyGoalProgress) -> String {
+    let pomodoros = format_goal_metric_progress(
+        "🍅",
+        progress.pomodoros.completed,
+        progress.pomodoros.target,
+        progress.pomodoros.ratio,
+        "",
+    );
+    let minutes = format_goal_metric_progress(
+        "⏱",
+        progress.minutes.completed,
+        progress.minutes.target,
+        progress.minutes.ratio,
+        "m",
+    );
+    format!("Daily goal: {pomodoros}   {minutes}")
+}
+
+fn format_goal_metric_progress(
+    label: &str,
+    completed: u64,
+    target: u64,
+    ratio: f64,
+    unit_suffix: &str,
+) -> String {
+    if target == 0 {
+        format!("{label} Off")
+    } else {
+        let pct = (ratio * 100.0).round() as u64;
+        format!("{label} {completed}{unit_suffix}/{target}{unit_suffix} ({pct}%)")
+    }
 }
 
 fn phase_color(phase: TimerPhase) -> Color {
