@@ -137,7 +137,7 @@ fn timer_status_text(app: &App) -> (&'static str, &'static str) {
         TimerStatus::Idle => "⏹  Idle",
     };
     let strict_text = if app.strict_reset_confirmation_pending() {
-        "🔒 Strict mode: press [s] again to confirm stop"
+        "🔒 Strict mode: press [s] again to confirm stop/reset"
     } else if app.strict_mode_enforced_for_focus() {
         "🔒 Strict mode active: skip locked, stop requires confirmation"
     } else if app.strict_mode {
@@ -255,9 +255,9 @@ fn render_timer_hints(frame: &mut Frame, app: &App, area: Rect) {
 
 fn timer_primary_hint(app: &App) -> &'static str {
     if app.strict_reset_confirmation_pending() {
-        "Timer: [Space] Run/Pause  [s] Confirm Stop  [n] Next (Locked)"
+        "Timer: [Space] Run/Pause  [s] Confirm Stop/Reset  [n] Next (Locked)"
     } else if app.strict_mode_enforced_for_focus() {
-        "Timer: [Space] Run/Pause  [s] Stop (Confirm)  [n] Next (Locked)"
+        "Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)"
     } else {
         "Timer: [Space] Run/Pause  [s] Stop  [n] Next"
     }
@@ -438,7 +438,10 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
                 SiteInputMode::Add => "Input: [Enter] Add/Import  [Esc] Cancel",
                 SiteInputMode::Edit => "Input: [Enter] Save  [Esc] Cancel",
             }),
-            Line::from("Tip: paste comma/newline hostnames, then press [Enter]"),
+            Line::from(match input_mode {
+                SiteInputMode::Add => "Tip: paste comma/newline hostnames, then press [Enter]",
+                SiteInputMode::Edit => "Tip: enter one hostname, then press [Enter]",
+            }),
         ]
     } else if app.strict_mode_enforced_for_focus() {
         vec![
