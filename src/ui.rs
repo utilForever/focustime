@@ -202,7 +202,7 @@ fn render_timer_goal_summary(frame: &mut Frame, app: &App, area: Rect) {
     let goal_line = if goal_progress.has_any_target() {
         format_goal_progress_line(goal_progress)
     } else {
-        "Daily goal: Off (set minutes/pomodoros in [p] Profiles → [e] Edit Settings)".to_string()
+        "Goal: Off ([p] Profiles -> [e] Edit)".to_string()
     };
     let goal_widget = Paragraph::new(goal_line)
         .alignment(Alignment::Center)
@@ -690,31 +690,27 @@ fn format_goal_progress_line(progress: DailyGoalProgress) -> String {
         "🍅",
         progress.pomodoros.completed,
         progress.pomodoros.target,
-        progress.pomodoros.ratio,
         "",
     );
     let minutes = format_goal_metric_progress(
         "⏱",
         progress.minutes.completed,
         progress.minutes.target,
-        progress.minutes.ratio,
         "m",
     );
-    format!("Daily goal: {pomodoros}   {minutes}")
+    format!("Goal: {pomodoros}   {minutes}")
 }
 
 fn format_goal_metric_progress(
     label: &str,
     completed: u64,
     target: u64,
-    ratio: f64,
     unit_suffix: &str,
 ) -> String {
     if target == 0 {
         format!("{label} Off")
     } else {
-        let pct = (ratio * 100.0).round() as u64;
-        format!("{label} {completed}{unit_suffix}/{target}{unit_suffix} ({pct}%)")
+        format!("{label} {completed}/{target}{unit_suffix}")
     }
 }
 

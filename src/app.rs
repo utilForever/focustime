@@ -22,8 +22,8 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 9] = [
     "Phase notifications",
     "Sound alert",
     "Strict focus mode",
-    "Daily goal (minutes)",
-    "Daily goal (pomodoros)",
+    "Goal minutes",
+    "Goal pomodoros",
 ];
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
