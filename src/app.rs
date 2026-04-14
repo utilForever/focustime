@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::blocker::{BulkAddResult, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
@@ -1249,6 +1249,10 @@ impl Default for App {
     }
 }
 
+pub(crate) fn should_handle_key(key: &KeyEvent) -> bool {
+    key.kind == KeyEventKind::Press
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2309,6 +2313,24 @@ mod tests {
         assert_eq!(
             app.wakatime.runtime_state(),
             crate::wakatime::WakatimeRuntimeState::Error("HTTP 503".to_string())
+        );
+    }
+
+    #[test]
+    fn prevent_double_input_on_windows() {
+        let mut press_event = KeyEvent::from(KeyCode::Char('a'));
+        press_event.kind = KeyEventKind::Press;
+
+        let mut release_event = KeyEvent::from(KeyCode::Char('a'));
+        release_event.kind = KeyEventKind::Release;
+
+        assert!(
+            should_handle_key(&press_event),
+            "Press event should be handled"
+        );
+        assert!(
+            !should_handle_key(&release_event),
+            "Release event should NOT be handled"
         );
     }
 }
