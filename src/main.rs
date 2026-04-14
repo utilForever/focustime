@@ -15,7 +15,7 @@ use std::{
 use crossterm::{
     event::{
         self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
-        Event,
+        Event, KeyEventKind,
     },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
@@ -96,7 +96,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
 
         if event::poll(timeout)? {
             match event::read()? {
-                Event::Key(key) => app.handle_key(key),
+                Event::Key(key) if key.kind == KeyEventKind::Press => app.handle_key(key),
+                Event::Key(key) if key.kind == KeyEventKind::Release => {}
                 Event::Paste(text) => app.handle_paste(text),
                 _ => {}
             }
