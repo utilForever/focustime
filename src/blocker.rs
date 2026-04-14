@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::Path;
 use std::process::Command;
@@ -14,6 +14,23 @@ const BLOCK_MARKER_END: &str = "# focustime-block-end";
 pub struct SiteBlocker {
     pub sites: Vec<String>,
     pub is_blocking: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostsFileDiagnostics {
+    pub path: String,
+    pub read_error: Option<String>,
+    pub write_error: Option<String>,
+}
+
+impl HostsFileDiagnostics {
+    pub fn can_read(&self) -> bool {
+        self.read_error.is_none()
+    }
+
+    pub fn can_write(&self) -> bool {
+        self.write_error.is_none()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -237,6 +254,10 @@ impl SiteBlocker {
         None
     }
 
+    pub fn hosts_file_diagnostics(&self) -> HostsFileDiagnostics {
+        hosts_file_diagnostics_for(Path::new(HOSTS_FILE))
+    }
+
     /// Activate blocking by writing entries into the hosts file.
     /// Returns an error if the file is not writable (e.g. needs sudo).
     pub fn block(&mut self) -> io::Result<()> {
@@ -386,6 +407,20 @@ fn split_hostname_candidates(input: &str) -> Vec<String> {
         .collect()
 }
 
+fn hosts_file_diagnostics_for(path: &Path) -> HostsFileDiagnostics {
+    let read_error = fs::File::open(path).err().map(|error| error.to_string());
+    let write_error = OpenOptions::new()
+        .append(true)
+        .open(path)
+        .err()
+        .map(|error| error.to_string());
+    HostsFileDiagnostics {
+        path: path.display().to_string(),
+        read_error,
+        write_error,
+    }
+}
+
 /// Write `content` to the hosts file atomically via a temp file + rename so
 /// an interrupted write cannot corrupt the file or leave it truncated.
 /// On non-Windows the original file's permissions are copied to the replacement.
@@ -442,6 +477,7 @@ fn flush_dns_cache() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn strip_unterminated_start_marker_leaves_content_unchanged() {
@@ -641,5 +677,41 @@ mod tests {
         b.add_site("a.com".to_string());
         assert!(b.remove_site(5).is_none()); // should not panic
         assert_eq!(b.sites.len(), 1);
+    }
+
+    #[test]
+    fn hosts_file_diagnostics_reports_read_and_write_success_for_temp_file() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("focustime-hosts-diagnostics-{unique}.tmp"));
+        fs::write(&path, "127.0.0.1 localhost\n").expect("temp hosts file should be writable");
+
+        let diagnostics = hosts_file_diagnostics_for(&path);
+
+        assert!(diagnostics.can_read());
+        assert!(diagnostics.can_write());
+        assert!(diagnostics.read_error.is_none());
+        assert!(diagnostics.write_error.is_none());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn hosts_file_diagnostics_reports_missing_file_errors() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("focustime-hosts-diagnostics-missing-{unique}.tmp"));
+        let _ = fs::remove_file(&path);
+
+        let diagnostics = hosts_file_diagnostics_for(&path);
+
+        assert!(!diagnostics.can_read());
+        assert!(!diagnostics.can_write());
+        assert!(diagnostics.read_error.is_some());
+        assert!(diagnostics.write_error.is_some());
     }
 }

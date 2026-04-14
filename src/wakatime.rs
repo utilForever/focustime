@@ -1,4 +1,6 @@
 use std::fs;
+use std::io;
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -35,6 +37,22 @@ pub enum WakatimeRuntimeState {
         error: String,
     },
     Error(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WakatimeConfigStatus {
+    Configured,
+    MissingConfigFile,
+    MissingApiKey,
+    UnreadableConfig,
+    HomeDirectoryUnavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WakatimeConfigDiagnostics {
+    pub config_path: Option<String>,
+    pub status: WakatimeConfigStatus,
+    pub detail: String,
 }
 
 fn current_unix_epoch_secs() -> u64 {
@@ -95,11 +113,15 @@ impl WakatimeConfig {
         }
     }
 
+    fn config_file_path() -> Option<PathBuf> {
+        let home = dirs_home()?;
+        Some(home.join(".wakatime.cfg"))
+    }
+
     /// Parse `~/.wakatime.cfg` as a simple INI file.
     /// Returns `(api_key, api_url)` from the `[settings]` section.
     fn parse_config_file() -> Option<(Option<String>, Option<String>)> {
-        let home = dirs_home()?;
-        let cfg_path = home.join(".wakatime.cfg");
+        let cfg_path = Self::config_file_path()?;
         let content = fs::read_to_string(cfg_path).ok()?;
         Some(Self::parse_config_str(&content))
     }
@@ -227,6 +249,17 @@ impl WakatimeTracker {
         } else {
             WakatimeRuntimeState::Idle
         }
+    }
+
+    pub fn config_diagnostics() -> WakatimeConfigDiagnostics {
+        let Some(config_path) = WakatimeConfig::config_file_path() else {
+            return WakatimeConfigDiagnostics {
+                config_path: None,
+                status: WakatimeConfigStatus::HomeDirectoryUnavailable,
+                detail: "WakaTime config check unavailable: home directory not found".to_string(),
+            };
+        };
+        config_diagnostics_from_read_result(config_path.clone(), fs::read_to_string(config_path))
     }
 
     pub fn last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
@@ -506,6 +539,43 @@ fn parse_setting_line(line: &str) -> Option<(&str, &str)> {
     Some((key.trim(), value))
 }
 
+fn config_diagnostics_from_read_result(
+    config_path: PathBuf,
+    read_result: io::Result<String>,
+) -> WakatimeConfigDiagnostics {
+    let config_path_text = config_path.display().to_string();
+    match read_result {
+        Ok(content) => {
+            let (api_key, _) = WakatimeConfig::parse_config_str(&content);
+            if api_key.is_some() {
+                WakatimeConfigDiagnostics {
+                    config_path: Some(config_path_text.clone()),
+                    status: WakatimeConfigStatus::Configured,
+                    detail: format!("Configured ({config_path_text})"),
+                }
+            } else {
+                WakatimeConfigDiagnostics {
+                    config_path: Some(config_path_text.clone()),
+                    status: WakatimeConfigStatus::MissingApiKey,
+                    detail: format!(
+                        "Config found at {config_path_text}, but [settings].api_key is missing"
+                    ),
+                }
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => WakatimeConfigDiagnostics {
+            config_path: Some(config_path_text.clone()),
+            status: WakatimeConfigStatus::MissingConfigFile,
+            detail: format!("Config file not found ({config_path_text})"),
+        },
+        Err(error) => WakatimeConfigDiagnostics {
+            config_path: Some(config_path_text),
+            status: WakatimeConfigStatus::UnreadableConfig,
+            detail: format!("Unable to read WakaTime config: {error}"),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -555,6 +625,36 @@ mod tests {
             "[other]\napi_key = wrong\n[settings]\napi_key = correct\n",
         );
         assert_eq!(api_key, Some("correct".to_string()));
+    }
+
+    #[test]
+    fn config_diagnostics_reports_configured_state() {
+        let diagnostics = config_diagnostics_from_read_result(
+            PathBuf::from(".wakatime.cfg"),
+            Ok("[settings]\napi_key = test-key\n".to_string()),
+        );
+        assert_eq!(diagnostics.status, WakatimeConfigStatus::Configured);
+        assert!(diagnostics.detail.contains("Configured"));
+    }
+
+    #[test]
+    fn config_diagnostics_reports_missing_api_key() {
+        let diagnostics = config_diagnostics_from_read_result(
+            PathBuf::from(".wakatime.cfg"),
+            Ok("[settings]\napi_url = https://wakatime.example.com\n".to_string()),
+        );
+        assert_eq!(diagnostics.status, WakatimeConfigStatus::MissingApiKey);
+        assert!(diagnostics.detail.contains("api_key is missing"));
+    }
+
+    #[test]
+    fn config_diagnostics_reports_missing_file() {
+        let diagnostics = config_diagnostics_from_read_result(
+            PathBuf::from(".wakatime.cfg"),
+            Err(io::Error::new(io::ErrorKind::NotFound, "not found")),
+        );
+        assert_eq!(diagnostics.status, WakatimeConfigStatus::MissingConfigFile);
+        assert!(diagnostics.detail.contains("not found"));
     }
 
     #[test]

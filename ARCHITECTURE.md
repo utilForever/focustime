@@ -40,7 +40,7 @@ flowchart LR
 | `blocker.rs` | Hosts-file based site blocking/unblocking and DNS cache flush integration | `app`, OS commands/filesystem |
 | `wakatime.rs` | WakaTime config parsing and heartbeat scheduling/sending | `app`, HTTP (`ureq`) |
 | `notifications.rs` | Phase completion notifications and optional sound alerts | `app`, OS notification commands |
-| `ui.rs` | Ratatui rendering for Timer and Site Manager screens | `app`, `timer` |
+| `ui.rs` | Ratatui rendering for Timer, Site Manager, Profile, History, and Setup Diagnostics screens | `app`, `timer` |
 
 ## Related explanation
 

@@ -150,6 +150,19 @@ Add/import input supports:
 
 Invalid and duplicate entries are reported inline so you can fix them without leaving the view.
 
+## Setup diagnostics
+
+Open the setup diagnostics screen from timer view with **`d`**.
+
+- `r`: refresh diagnostics checks
+- `d` or `Esc`: return to timer view
+
+The diagnostics screen reports:
+
+- blocking permissions
+- hosts file write capability
+- WakaTime config status (`~/.wakatime.cfg` and `api_key` availability)
+
 ## Phase notifications
 
 `focustime` emits a phase notification when a phase naturally completes at `00:00`:
@@ -217,7 +230,7 @@ From timer view:
 - `src/blocker.rs`: hosts-file site blocking and unblocking.
 - `src/wakatime.rs`: heartbeat tracking integration.
 - `src/notifications.rs`: phase transition notifications and optional sound.
-- `src/ui.rs`: Ratatui rendering for timer and site manager views.
+- `src/ui.rs`: Ratatui rendering for timer, site manager, profile, history, and setup diagnostics views.
 
 WakaTime tracking is optional and activates only when an API key is configured
 (read from `~/.wakatime.cfg`).
