@@ -37,6 +37,13 @@ pub enum WakatimeRuntimeState {
     Error(String),
 }
 
+fn current_unix_epoch_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RetryState {
     attempt: u8,
@@ -163,6 +170,8 @@ pub struct WakatimeTracker {
     retry_state: Option<RetryState>,
     /// Last terminal heartbeat failure message.
     last_error: Option<String>,
+    /// Unix timestamp (seconds) of the most recent successful heartbeat.
+    last_successful_heartbeat_epoch_secs: Option<u64>,
     /// Latches an immediate heartbeat request while another worker is in flight.
     pending_immediate_heartbeat: bool,
     #[cfg(test)]
@@ -183,6 +192,7 @@ impl WakatimeTracker {
             heartbeat_in_flight: false,
             retry_state: None,
             last_error: None,
+            last_successful_heartbeat_epoch_secs: None,
             pending_immediate_heartbeat: false,
             #[cfg(test)]
             disable_network_io: false,
@@ -219,6 +229,10 @@ impl WakatimeTracker {
         }
     }
 
+    pub fn last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
+        self.last_successful_heartbeat_epoch_secs
+    }
+
     /// Drains heartbeat events from worker threads and updates tracker status.
     pub fn poll_events(&mut self) {
         while let Ok(event) = self.result_rx.try_recv() {
@@ -227,6 +241,7 @@ impl WakatimeTracker {
                     self.heartbeat_in_flight = false;
                     self.retry_state = None;
                     self.last_error = None;
+                    self.last_successful_heartbeat_epoch_secs = Some(current_unix_epoch_secs());
                     self.dispatch_pending_immediate_heartbeat();
                 }
                 HeartbeatEvent::Retrying {
@@ -366,9 +381,34 @@ impl WakatimeTracker {
             heartbeat_in_flight: false,
             retry_state: None,
             last_error: None,
+            last_successful_heartbeat_epoch_secs: None,
             pending_immediate_heartbeat: false,
             disable_network_io: true,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_unconfigured_for_tests() -> Self {
+        let (result_tx, result_rx) = mpsc::channel();
+        Self {
+            api_key: None,
+            api_url: DEFAULT_API_URL.to_string(),
+            secs_since_last_heartbeat: 0,
+            tracking: false,
+            result_tx,
+            result_rx,
+            heartbeat_in_flight: false,
+            retry_state: None,
+            last_error: None,
+            last_successful_heartbeat_epoch_secs: None,
+            pending_immediate_heartbeat: false,
+            disable_network_io: true,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn push_sent_event_for_tests(&self) {
+        let _ = self.result_tx.send(HeartbeatEvent::Sent);
     }
 
     #[cfg(test)]
@@ -486,6 +526,7 @@ mod tests {
             heartbeat_in_flight: false,
             retry_state: None,
             last_error: None,
+            last_successful_heartbeat_epoch_secs: None,
             pending_immediate_heartbeat: false,
             disable_network_io: true,
         }
@@ -703,6 +744,37 @@ mod tests {
         tracker.poll_events();
 
         assert_eq!(tracker.runtime_state(), WakatimeRuntimeState::Tracking);
+        assert!(tracker.last_successful_heartbeat_epoch_secs.is_some());
+    }
+
+    #[test]
+    fn success_event_records_last_success_timestamp() {
+        let mut tracker = tracker_with(Some("test-key"), true, 0);
+        assert!(tracker.last_successful_heartbeat_epoch_secs.is_none());
+
+        tracker
+            .result_tx
+            .send(HeartbeatEvent::Sent)
+            .expect("test event send must succeed");
+        tracker.poll_events();
+
+        assert!(tracker.last_successful_heartbeat_epoch_secs.is_some());
+    }
+
+    #[test]
+    fn failure_event_preserves_last_success_timestamp() {
+        let mut tracker = tracker_with(Some("test-key"), true, 0);
+        tracker.last_successful_heartbeat_epoch_secs = Some(123);
+
+        tracker
+            .result_tx
+            .send(HeartbeatEvent::Failed {
+                error: "HTTP 500".to_string(),
+            })
+            .expect("test event send must succeed");
+        tracker.poll_events();
+
+        assert_eq!(tracker.last_successful_heartbeat_epoch_secs, Some(123));
     }
 
     #[test]

@@ -240,8 +240,9 @@ The timer never waits on network calls.
 - transient heartbeat failures (`429`, `5xx`, and connectivity/timeout errors)
   retry with bounded backoff (`1s`, then `2s`)
 - non-retryable failures are surfaced in the timer view status line
-- status line now reflects runtime states (`tracking`, `sending`, `retrying`,
-  `error`, `idle`, `not configured`)
+- status line reflects runtime states (`tracking`, `sending`, `retrying`,
+  `error`, `idle`, `not configured`) and, when configured, also shows the last
+  successful heartbeat time (`HH:MM:SS`) or `not yet sent` before first success
 
 For full module map and design details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
