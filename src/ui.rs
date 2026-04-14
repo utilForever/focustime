@@ -463,6 +463,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
 fn render_profile_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let outer = centered_rect(70, 80, area);
+    let profile_editor_height = PROFILE_EDIT_FIELD_LABELS.len() as u16 + 2;
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -475,14 +476,14 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1),  // current profile
-            Constraint::Length(1),  // spacer
-            Constraint::Length(7),  // profile list
-            Constraint::Length(1),  // spacer
-            Constraint::Length(13), // custom + notification + auto-start + daily goal editor
-            Constraint::Min(0),     // spacer
-            Constraint::Length(1),  // error line
-            Constraint::Length(2),  // key hints
+            Constraint::Length(1), // current profile
+            Constraint::Length(1), // spacer
+            Constraint::Length(7), // profile list
+            Constraint::Length(1), // spacer
+            Constraint::Length(profile_editor_height),
+            Constraint::Min(0),    // spacer
+            Constraint::Length(1), // error line
+            Constraint::Length(2), // key hints
         ])
         .split(outer);
 

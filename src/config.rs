@@ -446,6 +446,18 @@ mod tests {
     }
 
     #[test]
+    fn partial_auto_start_block_uses_defaults_for_missing_fields() {
+        let partial = r#"
+[auto_start]
+focus_to_break = true
+"#;
+        let cfg: AppConfig = toml::from_str(partial).unwrap();
+
+        assert!(cfg.auto_start.focus_to_break);
+        assert!(!cfg.auto_start.break_to_focus);
+    }
+
+    #[test]
     fn unknown_selected_profile_falls_back_to_custom_without_dropping_config() {
         let config = r#"
 focus_secs = 1500
