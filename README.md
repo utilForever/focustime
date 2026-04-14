@@ -120,6 +120,10 @@ long_break_interval = 3
 [notifications]
 enabled = true
 sound = false
+
+[daily_goal]
+minutes = 120
+pomodoros = 4
 ```
 
 ## Site manager workflow
@@ -161,8 +165,8 @@ You can also configure `notifications.enabled` and `notifications.sound` directl
 
 - open profile manager with `p`
 - press `e` to open the editor
-- use `↑/↓` to select **Phase notifications**, **Sound alert**, or **Strict focus mode**
-- use `←/→` to set `Off`/`On`, then `Enter` to save
+- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Strict focus mode**, **Daily goal (minutes)**, or **Daily goal (pomodoros)**
+- use `←/→` to adjust values (or toggle `Off`/`On` for boolean fields), then `Enter` to save
 
 ## Strict focus mode
 
@@ -182,6 +186,12 @@ When strict mode is enabled during an active focus session:
 - completed pomodoros for the current app session
 - focused minutes for the current app session
 - daily aggregates persisted in `stats.toml` (in the same config directory as `config.toml`)
+
+If a daily goal is configured, timer and history views also show live progress for
+both:
+
+- target focused minutes
+- target completed pomodoros
 
 From timer view:
 
