@@ -1,6 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-use crate::blocker::{BulkAddResult, EditSiteResult, InvalidSiteInput, SiteBlocker};
+use crate::blocker::{
+    BulkAddResult, EditSiteResult, HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
+};
 use crate::config::{
     AppConfig, AutoStartConfig, CustomProfileConfig, DailyGoalConfig, NotificationConfig, ProfileId,
 };
@@ -10,7 +12,7 @@ use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
 };
-use crate::wakatime::WakatimeTracker;
+use crate::wakatime::{WakatimeConfigStatus, WakatimeTracker};
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
@@ -36,6 +38,7 @@ pub enum AppMode {
     SiteManager,
     ProfileManager,
     StatsHistory,
+    SetupDiagnostics,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -151,6 +154,67 @@ impl DailyGoalProgress {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SetupCheckLevel {
+    Ok,
+    Warning,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetupCheck {
+    pub level: SetupCheckLevel,
+    pub message: String,
+}
+
+impl SetupCheck {
+    fn ok(message: impl Into<String>) -> Self {
+        Self {
+            level: SetupCheckLevel::Ok,
+            message: message.into(),
+        }
+    }
+
+    fn warning(message: impl Into<String>) -> Self {
+        Self {
+            level: SetupCheckLevel::Warning,
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetupDiagnostics {
+    pub hosts_file_path: String,
+    pub blocking_permissions: SetupCheck,
+    pub hosts_write_capability: SetupCheck,
+    pub wakatime_config: SetupCheck,
+}
+
+impl SetupDiagnostics {
+    fn collect(blocker: &SiteBlocker) -> Self {
+        let hosts_diagnostics = blocker.hosts_file_diagnostics();
+        let blocking_permissions = blocking_permissions_check(&hosts_diagnostics);
+        let hosts_write_capability = hosts_write_capability_check(&hosts_diagnostics);
+        let hosts_file_path = hosts_diagnostics.path.clone();
+        let wakatime_diagnostics = WakatimeTracker::config_diagnostics();
+        let wakatime_config = match wakatime_diagnostics.status {
+            WakatimeConfigStatus::Configured => SetupCheck::ok(wakatime_diagnostics.detail),
+            WakatimeConfigStatus::MissingConfigFile
+            | WakatimeConfigStatus::MissingApiKey
+            | WakatimeConfigStatus::UnreadableConfig
+            | WakatimeConfigStatus::HomeDirectoryUnavailable => {
+                SetupCheck::warning(wakatime_diagnostics.detail)
+            }
+        };
+        Self {
+            hosts_file_path,
+            blocking_permissions,
+            hosts_write_capability,
+            wakatime_config,
+        }
+    }
+}
+
 pub struct App {
     pub timer: TimerState,
     pub should_quit: bool,
@@ -166,6 +230,7 @@ pub struct App {
     pub selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
     pub block_error: Option<String>,
+    pub setup_diagnostics: SetupDiagnostics,
     /// Last error from persisting timer/site configuration.
     pub config_error: Option<String>,
     /// Last error from persisting focus stats.
@@ -223,6 +288,7 @@ impl App {
         for site in &config.blocked_sites {
             blocker.add_site(site.clone());
         }
+        let setup_diagnostics = SetupDiagnostics::collect(&blocker);
         Self {
             timer,
             should_quit: false,
@@ -234,6 +300,7 @@ impl App {
             site_feedback: None,
             selected_site: 0,
             block_error: None,
+            setup_diagnostics,
             config_error: None,
             stats_error,
             phase_notification: None,
@@ -459,6 +526,7 @@ impl App {
             AppMode::SiteManager => self.handle_key_site_manager(key),
             AppMode::ProfileManager => self.handle_key_profile_manager(key),
             AppMode::StatsHistory => self.handle_key_stats_history(key),
+            AppMode::SetupDiagnostics => self.handle_key_setup_diagnostics(key),
         }
     }
 
@@ -522,6 +590,10 @@ impl App {
             KeyCode::Char('h') => {
                 self.open_stats_history();
             }
+            // Open setup diagnostics
+            KeyCode::Char('d') => {
+                self.open_setup_diagnostics();
+            }
             _ => {}
         }
     }
@@ -534,6 +606,22 @@ impl App {
         match key.code {
             KeyCode::Esc | KeyCode::Char('h') => {
                 self.mode = AppMode::Timer;
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_key_setup_diagnostics(&mut self, key: KeyEvent) {
+        if self.handle_quit_key(&key, false) {
+            return;
+        }
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('d') => {
+                self.mode = AppMode::Timer;
+            }
+            KeyCode::Char('r') => {
+                self.refresh_setup_diagnostics();
             }
             _ => {}
         }
@@ -1009,6 +1097,12 @@ impl App {
         self.mode = AppMode::StatsHistory;
     }
 
+    fn open_setup_diagnostics(&mut self) {
+        self.pending_timer_action = None;
+        self.refresh_setup_diagnostics();
+        self.mode = AppMode::SetupDiagnostics;
+    }
+
     fn exit_profile_manager(&mut self) {
         self.mode = AppMode::Timer;
         self.profile_edit_snapshot = None;
@@ -1114,6 +1208,10 @@ impl App {
             level,
             message: message.into(),
         });
+    }
+
+    fn refresh_setup_diagnostics(&mut self) {
+        self.setup_diagnostics = SetupDiagnostics::collect(&self.blocker);
     }
 
     fn rebuild_notifier(&mut self) {
@@ -1240,6 +1338,41 @@ impl Drop for App {
         // Ensure hosts-file block entries are removed on every exit path,
         // including early returns caused by I/O errors in run_app.
         self.blocker.cleanup();
+    }
+}
+
+fn blocking_permissions_check(hosts_diagnostics: &HostsFileDiagnostics) -> SetupCheck {
+    if hosts_diagnostics.can_write() {
+        SetupCheck::ok("Ready: hosts file can be opened for write access")
+    } else {
+        let reason = hosts_diagnostics
+            .write_error
+            .as_deref()
+            .unwrap_or("unknown write error");
+        SetupCheck::warning(format!("Blocked: write permission unavailable ({reason})"))
+    }
+}
+
+fn hosts_write_capability_check(hosts_diagnostics: &HostsFileDiagnostics) -> SetupCheck {
+    let can_read = hosts_diagnostics.can_read();
+    let can_write = hosts_diagnostics.can_write();
+    match (
+        can_read,
+        can_write,
+        hosts_diagnostics.read_error.as_deref(),
+        hosts_diagnostics.write_error.as_deref(),
+    ) {
+        (true, true, _, _) => SetupCheck::ok("Ready: hosts file is readable and writable"),
+        (false, true, Some(read_error), _) => {
+            SetupCheck::warning(format!("Blocked: cannot read hosts file ({read_error})"))
+        }
+        (true, false, _, Some(write_error)) => {
+            SetupCheck::warning(format!("Blocked: cannot write hosts file ({write_error})"))
+        }
+        (false, false, Some(read_error), Some(write_error)) => SetupCheck::warning(format!(
+            "Blocked: read error ({read_error}); write error ({write_error})"
+        )),
+        _ => SetupCheck::warning("Blocked: hosts access diagnostics unavailable"),
     }
 }
 
@@ -2255,6 +2388,36 @@ mod tests {
 
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.mode, AppMode::Timer);
+    }
+
+    #[test]
+    fn diagnostics_view_toggles_from_timer_mode() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('d')));
+        assert_eq!(app.mode, AppMode::SetupDiagnostics);
+
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.mode, AppMode::Timer);
+    }
+
+    #[test]
+    fn pending_strict_reset_confirmation_clears_when_opening_setup_diagnostics() {
+        let config = AppConfig {
+            strict_mode: true,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        app.handle_key(key(KeyCode::Char('s')));
+        assert!(app.strict_reset_confirmation_pending());
+
+        app.handle_key(key(KeyCode::Char('d')));
+
+        assert_eq!(app.mode, AppMode::SetupDiagnostics);
+        assert!(!app.strict_reset_confirmation_pending());
     }
 
     #[test]

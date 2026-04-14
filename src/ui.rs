@@ -4,12 +4,12 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph, Wrap},
 };
 
 use crate::app::{
-    App, AppMode, DailyGoalProgress, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, SiteFeedbackLevel,
-    SiteInputMode,
+    App, AppMode, DailyGoalProgress, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, SetupCheck,
+    SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
 };
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
@@ -20,6 +20,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         AppMode::SiteManager => render_site_manager(frame, app),
         AppMode::ProfileManager => render_profile_manager(frame, app),
         AppMode::StatsHistory => render_stats_history(frame, app),
+        AppMode::SetupDiagnostics => render_setup_diagnostics(frame, app),
     }
 }
 
@@ -294,9 +295,9 @@ fn timer_primary_hint(app: &App) -> &'static str {
 
 fn timer_secondary_hint(app: &App) -> &'static str {
     if app.strict_mode_enforced_for_focus() {
-        "Views: [h] History  [p] Profiles (Locked)  [b] Sites  [q/Esc] Quit (Locked)"
+        "Views: [h] History  [p] Profiles (Locked)  [b] Sites  [d] Setup  [q/Esc] Quit (Locked)"
     } else {
-        "Views: [h] History  [p] Profiles  [b] Sites  [q/Esc] Quit"
+        "Views: [h] History  [p] Profiles  [b] Sites  [d] Setup  [q/Esc] Quit"
     }
 }
 
@@ -718,6 +719,87 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     frame.render_widget(hints, inner[6]);
 }
 
+fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+    let outer = centered_rect(72, 68, area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Setup Diagnostics ")
+        .title_alignment(Alignment::Center)
+        .style(Style::default().fg(Color::Cyan));
+    frame.render_widget(block, outer);
+
+    let inner = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(2)
+        .constraints([
+            Constraint::Length(1), // hosts path
+            Constraint::Length(1), // spacer
+            Constraint::Length(2), // blocking permissions
+            Constraint::Length(2), // hosts write capability
+            Constraint::Length(2), // wakatime config status
+            Constraint::Min(0),    // spacer
+            Constraint::Length(2), // key hints
+        ])
+        .split(outer);
+
+    let hosts_path = Paragraph::new(format!(
+        "Hosts file: {}",
+        app.setup_diagnostics.hosts_file_path
+    ))
+    .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(hosts_path, inner[0]);
+
+    render_setup_check(
+        frame,
+        inner[2],
+        "Blocking permissions",
+        &app.setup_diagnostics.blocking_permissions,
+    );
+    render_setup_check(
+        frame,
+        inner[3],
+        "Hosts write capability",
+        &app.setup_diagnostics.hosts_write_capability,
+    );
+    render_setup_check(
+        frame,
+        inner[4],
+        "WakaTime config status",
+        &app.setup_diagnostics.wakatime_config,
+    );
+
+    let hints = Paragraph::new(vec![
+        Line::from("Diagnostics: [r] Refresh"),
+        Line::from(if app.strict_mode_enforced_for_focus() {
+            "View: [d/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+        } else {
+            "View: [d/Esc] Back  [q/Ctrl-C] Quit"
+        }),
+    ])
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(hints, inner[6]);
+}
+
+fn render_setup_check(frame: &mut Frame, area: Rect, label: &str, check: &SetupCheck) {
+    let (icon, status_color) = match check.level {
+        SetupCheckLevel::Ok => ("✓", Color::Green),
+        SetupCheckLevel::Warning => ("⚠", Color::Yellow),
+    };
+    let line = Line::from(vec![
+        Span::styled(
+            format!("{icon} {label}: "),
+            Style::default()
+                .fg(status_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(check.message.as_str(), Style::default().fg(Color::Gray)),
+    ]);
+    frame.render_widget(Paragraph::new(line).wrap(Wrap { trim: true }), area);
+}
+
 fn format_goal_progress_line(progress: DailyGoalProgress) -> String {
     let pomodoros = format_goal_metric_progress(
         "🍅",
@@ -792,7 +874,77 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::{Terminal, backend::TestBackend};
+
     use crate::wakatime::WakatimeTracker;
+
+    fn terminal_text(terminal: &Terminal<TestBackend>, width: u16, height: u16) -> String {
+        let buffer = terminal.backend().buffer();
+        let mut text = String::new();
+        for y in 0..height {
+            for x in 0..width {
+                text.push_str(buffer[(x, y)].symbol());
+            }
+            text.push('\n');
+        }
+        text
+    }
+
+    #[test]
+    fn timer_secondary_hint_includes_setup_shortcut() {
+        let app = App::default();
+        assert!(timer_secondary_hint(&app).contains("[d] Setup"));
+    }
+
+    #[test]
+    fn timer_secondary_hint_includes_setup_shortcut_in_strict_mode() {
+        let mut app = App::default();
+        app.strict_mode = true;
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        assert!(timer_secondary_hint(&app).contains("[d] Setup"));
+    }
+
+    #[test]
+    fn render_setup_check_wraps_long_warning_message() {
+        let width = 38;
+        let height = 3;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let check = SetupCheck {
+            level: SetupCheckLevel::Warning,
+            message: "wrapped output should include TAIL-END".to_string(),
+        };
+
+        terminal
+            .draw(|frame| render_setup_check(frame, frame.area(), "Check", &check))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("TAIL-END"));
+    }
+
+    #[test]
+    fn setup_diagnostics_view_wraps_long_status_messages() {
+        let width = 80;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::SetupDiagnostics;
+        app.setup_diagnostics.blocking_permissions = SetupCheck {
+            level: SetupCheckLevel::Warning,
+            message: "permission denied while probing parent directory WRAP-END".to_string(),
+        };
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("WRAP-END"));
+    }
 
     #[test]
     fn wakatime_status_line_shows_not_yet_sent_when_no_success_exists() {
