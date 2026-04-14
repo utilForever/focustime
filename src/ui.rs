@@ -1,3 +1,4 @@
+use chrono::{Local, TimeZone};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -219,7 +220,8 @@ fn render_timer_wakatime_status(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn wakatime_status_line(app: &App) -> (String, Color) {
-    match app.wakatime.runtime_state() {
+    let runtime_state = app.wakatime.runtime_state();
+    let (status_text, status_color) = match &runtime_state {
         WakatimeRuntimeState::NotConfigured => {
             ("⏱ WakaTime: not configured".to_string(), Color::DarkGray)
         }
@@ -240,7 +242,34 @@ fn wakatime_status_line(app: &App) -> (String, Color) {
             Color::Yellow,
         ),
         WakatimeRuntimeState::Error(error) => (format!("⏱ WakaTime: error ({error})"), Color::Red),
+    };
+
+    if matches!(runtime_state, WakatimeRuntimeState::NotConfigured) {
+        return (status_text, status_color);
     }
+
+    (
+        format!("{status_text} · {}", wakatime_last_success_text(app)),
+        status_color,
+    )
+}
+
+fn wakatime_last_success_text(app: &App) -> String {
+    match app.wakatime.last_successful_heartbeat_epoch_secs() {
+        Some(epoch_secs) => format!(
+            "last success {}",
+            format_wakatime_heartbeat_timestamp(epoch_secs)
+        ),
+        None => "last success not yet sent".to_string(),
+    }
+}
+
+fn format_wakatime_heartbeat_timestamp(epoch_secs: u64) -> String {
+    i64::try_from(epoch_secs)
+        .ok()
+        .and_then(|secs| Local.timestamp_opt(secs, 0).single())
+        .map(|datetime| datetime.format("%H:%M:%S").to_string())
+        .unwrap_or_else(|| epoch_secs.to_string())
 }
 
 fn render_timer_hints(frame: &mut Frame, app: &App, area: Rect) {
@@ -758,4 +787,46 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage(h_outer_right),
         ])
         .split(popup_layout[1])[1]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wakatime::WakatimeTracker;
+
+    #[test]
+    fn wakatime_status_line_shows_not_yet_sent_when_no_success_exists() {
+        let mut app = App::default();
+        app.wakatime = WakatimeTracker::new_configured_for_tests();
+
+        let (text, color) = wakatime_status_line(&app);
+
+        assert_eq!(text, "⏱ WakaTime: idle · last success not yet sent");
+        assert_eq!(color, Color::DarkGray);
+    }
+
+    #[test]
+    fn wakatime_status_line_shows_last_success_time_after_success_event() {
+        let mut app = App::default();
+        app.wakatime = WakatimeTracker::new_configured_for_tests();
+        app.wakatime.push_sent_event_for_tests();
+        app.wakatime.poll_events();
+
+        let (text, color) = wakatime_status_line(&app);
+
+        assert!(text.starts_with("⏱ WakaTime: idle · last success "));
+        assert!(!text.contains("not yet sent"));
+        assert_eq!(color, Color::DarkGray);
+    }
+
+    #[test]
+    fn wakatime_status_line_for_not_configured_omits_last_success_suffix() {
+        let mut app = App::default();
+        app.wakatime = WakatimeTracker::new_unconfigured_for_tests();
+
+        let (text, color) = wakatime_status_line(&app);
+
+        assert_eq!(text, "⏱ WakaTime: not configured");
+        assert_eq!(color, Color::DarkGray);
+    }
 }
