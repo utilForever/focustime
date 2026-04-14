@@ -165,10 +165,10 @@ Notifications are delivered best-effort:
 - desktop notification via platform-specific delivery (`winrt-toast-reborn` toast on Windows with a `msg` fallback, `osascript` on macOS, `notify-send` on Linux)
 - optional sound alert using platform audio capabilities when `notifications.sound = true`
 
-Natural phase transitions can also auto-start the next timer with safe defaults (`Off`):
+Natural, non-catchup phase transitions can also auto-start the next timer with safe defaults (`Off`):
 
-- `auto_start.focus_to_break` starts break timers automatically after focus completion
-- `auto_start.break_to_focus` starts focus timers automatically after break completion
+- `auto_start.focus_to_break` starts break timers automatically after focus completion on non-catchup ticks
+- `auto_start.break_to_focus` starts focus timers automatically after break completion on non-catchup ticks
 
 You can configure notification and auto-start settings directly from the TUI:
 
