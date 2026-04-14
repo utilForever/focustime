@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::blocker::{BulkAddResult, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
-    AppConfig, CustomProfileConfig, DailyGoalConfig, NotificationConfig, ProfileId,
+    AppConfig, AutoStartConfig, CustomProfileConfig, DailyGoalConfig, NotificationConfig, ProfileId,
 };
 use crate::notifications::PhaseNotifier;
 use crate::stats::{DailyStats, FocusStats, SessionStats, current_day_key};
@@ -14,13 +14,15 @@ use crate::wakatime::WakatimeTracker;
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 9] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 11] = [
     "Focus",
     "Short Break",
     "Long Break",
     "Long-break cadence",
     "Phase notifications",
     "Sound alert",
+    "Auto-start break",
+    "Auto-start focus",
     "Strict focus mode",
     "Goal minutes",
     "Goal pomodoros",
@@ -96,6 +98,7 @@ fn profile_for_index(index: usize) -> ProfileId {
 struct ProfileEditSnapshot {
     custom_profile: CustomProfileConfig,
     notification_settings: NotificationConfig,
+    auto_start: AutoStartConfig,
     strict_mode: bool,
     daily_goal: DailyGoalConfig,
 }
@@ -176,6 +179,7 @@ pub struct App {
     pub profile_edit_field: usize,
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
     notification_settings: NotificationConfig,
+    auto_start: AutoStartConfig,
     pub strict_mode: bool,
     daily_goal: DailyGoalConfig,
     pending_timer_action: Option<PendingTimerAction>,
@@ -201,6 +205,7 @@ impl App {
         let selected_profile = config.selected_profile;
         let custom_profile = config.effective_custom_profile();
         let notification_settings = config.notifications;
+        let auto_start = config.auto_start;
         let strict_mode = config.strict_mode;
         let daily_goal = config.daily_goal;
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
@@ -240,6 +245,7 @@ impl App {
             profile_edit_field: 0,
             profile_edit_snapshot: None,
             notification_settings,
+            auto_start,
             strict_mode,
             daily_goal,
             pending_timer_action: None,
@@ -265,6 +271,9 @@ impl App {
         }
         if phase_changed {
             self.pending_timer_action = None;
+            if !is_catchup && self.should_auto_start_transition(completed_phase, self.timer.phase) {
+                self.timer.status = TimerStatus::Running;
+            }
             if !is_catchup {
                 self.phase_notification = self
                     .notifier
@@ -354,9 +363,11 @@ impl App {
             ),
             4 => bool_label(self.notification_settings.enabled).to_string(),
             5 => bool_label(self.notification_settings.sound).to_string(),
-            6 => bool_label(self.strict_mode).to_string(),
-            7 => format_daily_goal_minutes_label(self.daily_goal.minutes),
-            8 => format_daily_goal_pomodoros_label(self.daily_goal.pomodoros),
+            6 => bool_label(self.auto_start.focus_to_break).to_string(),
+            7 => bool_label(self.auto_start.break_to_focus).to_string(),
+            8 => bool_label(self.strict_mode).to_string(),
+            9 => format_daily_goal_minutes_label(self.daily_goal.minutes),
+            10 => format_daily_goal_pomodoros_label(self.daily_goal.pomodoros),
             _ => String::new(),
         }
     }
@@ -392,6 +403,7 @@ impl App {
             selected_profile: self.selected_profile,
             custom_profile: Some(custom_profile),
             notifications: self.notification_settings,
+            auto_start: self.auto_start,
             strict_mode: self.strict_mode,
             daily_goal: self.daily_goal,
         }
@@ -590,6 +602,7 @@ impl App {
         self.profile_edit_snapshot = Some(ProfileEditSnapshot {
             custom_profile: self.custom_profile.clone(),
             notification_settings: self.notification_settings,
+            auto_start: self.auto_start,
             strict_mode: self.strict_mode,
             daily_goal: self.daily_goal,
         });
@@ -601,6 +614,7 @@ impl App {
         if let Some(snapshot) = self.profile_edit_snapshot.take() {
             self.custom_profile = snapshot.custom_profile;
             self.notification_settings = snapshot.notification_settings;
+            self.auto_start = snapshot.auto_start;
             self.strict_mode = snapshot.strict_mode;
             self.daily_goal = snapshot.daily_goal;
             self.rebuild_notifier();
@@ -655,15 +669,21 @@ impl App {
                 self.notification_settings.sound = increase;
             }
             6 => {
+                self.auto_start.focus_to_break = increase;
+            }
+            7 => {
+                self.auto_start.break_to_focus = increase;
+            }
+            8 => {
                 if !increase && self.strict_mode_enforced_for_focus() {
                     return;
                 }
                 self.strict_mode = increase;
             }
-            7 => {
+            9 => {
                 adjust_daily_goal_minutes(&mut self.daily_goal.minutes, increase);
             }
-            8 => {
+            10 => {
                 adjust_daily_goal_pomodoros(&mut self.daily_goal.pomodoros, increase);
             }
             _ => {}
@@ -1030,6 +1050,22 @@ impl App {
         self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running
     }
 
+    fn should_auto_start_transition(
+        &self,
+        completed_phase: TimerPhase,
+        next_phase: TimerPhase,
+    ) -> bool {
+        match (completed_phase, next_phase) {
+            (TimerPhase::Focus, TimerPhase::ShortBreak | TimerPhase::LongBreak) => {
+                self.auto_start.focus_to_break
+            }
+            (TimerPhase::ShortBreak | TimerPhase::LongBreak, TimerPhase::Focus) => {
+                self.auto_start.break_to_focus
+            }
+            _ => false,
+        }
+    }
+
     fn record_focus_elapsed(&mut self, elapsed_secs: u64) {
         if elapsed_secs == 0 {
             return;
@@ -1234,6 +1270,7 @@ mod tests {
         assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
         assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
         assert_eq!(app.timer.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
+        assert_eq!(app.auto_start, AutoStartConfig::default());
         assert!(!app.strict_mode);
         assert_eq!(app.daily_goal, DailyGoalConfig::default());
     }
@@ -1254,6 +1291,7 @@ mod tests {
                 long_break_interval: 2,
             }),
             notifications: NotificationConfig::default(),
+            auto_start: AutoStartConfig::default(),
             strict_mode: false,
             daily_goal: DailyGoalConfig::default(),
         };
@@ -1399,6 +1437,7 @@ mod tests {
         assert_eq!(persisted.long_break_interval, custom.long_break_interval);
         assert_eq!(persisted.custom_profile, Some(custom));
         assert_eq!(persisted.notifications, NotificationConfig::default());
+        assert_eq!(persisted.auto_start, AutoStartConfig::default());
         assert!(persisted.strict_mode);
         assert_eq!(persisted.daily_goal, DailyGoalConfig::default());
     }
@@ -1443,6 +1482,8 @@ mod tests {
         assert_eq!(app.profile_edit_field_value(6), "Off");
         assert_eq!(app.profile_edit_field_value(7), "Off");
         assert_eq!(app.profile_edit_field_value(8), "Off");
+        assert_eq!(app.profile_edit_field_value(9), "Off");
+        assert_eq!(app.profile_edit_field_value(10), "Off");
     }
 
     #[test]
@@ -1451,7 +1492,7 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('p')));
         app.handle_key(key(KeyCode::Char('e')));
-        for _ in 0..6 {
+        for _ in 0..8 {
             app.handle_key(key(KeyCode::Down));
         }
         app.handle_key(key(KeyCode::Right));
@@ -1508,12 +1549,34 @@ mod tests {
     }
 
     #[test]
+    fn editing_auto_start_fields_updates_and_persists_settings() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..6 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Right)); // auto-start break -> On
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Right)); // auto-start focus -> On
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.auto_start.focus_to_break);
+        assert!(app.auto_start.break_to_focus);
+
+        let persisted = app.persisted_config();
+        assert!(persisted.auto_start.focus_to_break);
+        assert!(persisted.auto_start.break_to_focus);
+    }
+
+    #[test]
     fn editing_daily_goal_fields_updates_and_persists_settings() {
         let mut app = App::default();
 
         app.handle_key(key(KeyCode::Char('p')));
         app.handle_key(key(KeyCode::Char('e')));
-        for _ in 0..7 {
+        for _ in 0..9 {
             app.handle_key(key(KeyCode::Down));
         }
         app.handle_key(key(KeyCode::Right)); // minutes goal -> 5m
@@ -1543,7 +1606,7 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('p')));
         app.handle_key(key(KeyCode::Char('e')));
-        for _ in 0..7 {
+        for _ in 0..9 {
             app.handle_key(key(KeyCode::Down));
         }
         app.handle_key(key(KeyCode::Right)); // minutes goal -> 30m
@@ -1553,6 +1616,32 @@ mod tests {
 
         assert_eq!(app.daily_goal.minutes, 25);
         assert_eq!(app.daily_goal.pomodoros, 3);
+    }
+
+    #[test]
+    fn cancelling_profile_edit_restores_auto_start_settings() {
+        let config = AppConfig {
+            auto_start: AutoStartConfig {
+                focus_to_break: true,
+                break_to_focus: true,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..6 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Left)); // auto-start break -> Off
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Left)); // auto-start focus -> Off
+        app.handle_key(key(KeyCode::Esc)); // cancel
+
+        assert!(!app.profile_edit_active);
+        assert!(app.auto_start.focus_to_break);
+        assert!(app.auto_start.break_to_focus);
     }
 
     #[test]
@@ -1788,6 +1877,7 @@ mod tests {
             app.phase_notification.as_deref(),
             Some("Focus complete. Next up: Short Break.")
         );
+        assert_eq!(app.timer.status, TimerStatus::Idle);
     }
 
     #[test]
@@ -1798,6 +1888,64 @@ mod tests {
         app.handle_key(key(KeyCode::Char('n')));
 
         assert_eq!(app.session_stats().pomodoros_completed, 0);
+        assert!(app.phase_notification.is_none());
+    }
+
+    #[test]
+    fn natural_focus_completion_auto_starts_break_when_enabled() {
+        let config = AppConfig {
+            auto_start: AutoStartConfig {
+                focus_to_break: true,
+                break_to_focus: false,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = 1;
+
+        app.on_tick(false);
+
+        assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+    }
+
+    #[test]
+    fn natural_break_completion_auto_starts_focus_when_enabled() {
+        let config = AppConfig {
+            auto_start: AutoStartConfig {
+                focus_to_break: false,
+                break_to_focus: true,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::ShortBreak;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = 1;
+
+        app.on_tick(false);
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+    }
+
+    #[test]
+    fn manual_skip_keeps_next_phase_idle_when_auto_start_is_enabled() {
+        let config = AppConfig {
+            auto_start: AutoStartConfig {
+                focus_to_break: true,
+                break_to_focus: true,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('n')));
+
+        assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+        assert_eq!(app.timer.status, TimerStatus::Idle);
         assert!(app.phase_notification.is_none());
     }
 
@@ -1954,7 +2102,7 @@ mod tests {
         app.timer.status = TimerStatus::Running;
         app.mode = AppMode::ProfileManager;
         app.profile_edit_active = true;
-        app.profile_edit_field = 6;
+        app.profile_edit_field = 8;
 
         app.handle_key(key(KeyCode::Left));
 
@@ -1978,6 +2126,7 @@ mod tests {
         app.profile_edit_snapshot = Some(ProfileEditSnapshot {
             custom_profile: app.custom_profile.clone(),
             notification_settings: app.notification_settings,
+            auto_start: app.auto_start,
             strict_mode: app.strict_mode,
             daily_goal: app.daily_goal,
         });
@@ -2013,10 +2162,11 @@ mod tests {
         app.timer.remaining_secs = app.timer.focus_secs.saturating_sub(30);
         app.mode = AppMode::ProfileManager;
         app.profile_edit_active = true;
-        app.profile_edit_field = 6;
+        app.profile_edit_field = 8;
         app.profile_edit_snapshot = Some(ProfileEditSnapshot {
             custom_profile: app.custom_profile.clone(),
             notification_settings: app.notification_settings,
+            auto_start: app.auto_start,
             strict_mode: app.strict_mode,
             daily_goal: app.daily_goal,
         });
@@ -2105,7 +2255,14 @@ mod tests {
 
     #[test]
     fn catchup_tick_does_not_increment_focus_stats() {
-        let mut app = App::default();
+        let config = AppConfig {
+            auto_start: AutoStartConfig {
+                focus_to_break: true,
+                break_to_focus: true,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
         app.timer.phase = TimerPhase::Focus;
         app.timer.status = TimerStatus::Running;
         app.timer.remaining_secs = 1;
@@ -2113,6 +2270,7 @@ mod tests {
         app.on_tick(true);
 
         assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+        assert_eq!(app.timer.status, TimerStatus::Idle);
         assert_eq!(app.session_stats().pomodoros_completed, 0);
         assert_eq!(app.session_stats().focused_seconds, 0);
         assert!(app.phase_notification.is_none());

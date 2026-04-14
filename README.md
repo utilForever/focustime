@@ -121,6 +121,10 @@ long_break_interval = 3
 enabled = true
 sound = false
 
+[auto_start]
+focus_to_break = false
+break_to_focus = false
+
 [daily_goal]
 minutes = 120
 pomodoros = 4
@@ -150,8 +154,8 @@ Invalid and duplicate entries are reported inline so you can fix them without le
 
 `focustime` emits a phase notification when a phase naturally completes at `00:00`:
 
-- **Focus complete** → next break starts
-- **Break complete** → focus starts
+- **Focus complete** → next break phase
+- **Break complete** → focus phase
 
 Manual skip (`n`) changes phase immediately but does not emit a completion notification.
 
@@ -161,11 +165,16 @@ Notifications are delivered best-effort:
 - desktop notification via platform-specific delivery (`winrt-toast-reborn` toast on Windows with a `msg` fallback, `osascript` on macOS, `notify-send` on Linux)
 - optional sound alert using platform audio capabilities when `notifications.sound = true`
 
-You can also configure `notifications.enabled` and `notifications.sound` directly from the TUI:
+Natural, non-catchup phase transitions can also auto-start the next timer with safe defaults (`Off`):
+
+- `auto_start.focus_to_break` starts break timers automatically after focus completion on non-catchup ticks
+- `auto_start.break_to_focus` starts focus timers automatically after break completion on non-catchup ticks
+
+You can configure notification and auto-start settings directly from the TUI:
 
 - open profile manager with `p`
 - press `e` to open the editor
-- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Strict focus mode**, **Daily goal (minutes)**, or **Daily goal (pomodoros)**
+- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily goal (minutes)**, or **Daily goal (pomodoros)**
 - use `←/→` to adjust values (or toggle `Off`/`On` for boolean fields), then `Enter` to save
 
 ## Strict focus mode

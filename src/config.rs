@@ -39,6 +39,9 @@ pub struct AppConfig {
     /// Notification preferences for phase transitions.
     #[serde(default)]
     pub notifications: NotificationConfig,
+    /// Auto-start preferences for natural phase transitions.
+    #[serde(default)]
+    pub auto_start: AutoStartConfig,
     /// Whether strict focus mode is enabled.
     ///
     /// When enabled, active focus sessions disallow skip and require
@@ -58,6 +61,14 @@ pub struct NotificationConfig {
     pub enabled: bool,
     #[serde(default)]
     pub sound: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct AutoStartConfig {
+    #[serde(default)]
+    pub focus_to_break: bool,
+    #[serde(default)]
+    pub break_to_focus: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -188,6 +199,7 @@ impl Default for AppConfig {
             selected_profile: ProfileId::default(),
             custom_profile: None,
             notifications: NotificationConfig::default(),
+            auto_start: AutoStartConfig::default(),
             strict_mode: false,
             daily_goal: DailyGoalConfig::default(),
         }
@@ -367,6 +379,7 @@ mod tests {
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
         assert_eq!(cfg.notifications, NotificationConfig::default());
+        assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     }
@@ -390,6 +403,10 @@ mod tests {
                 enabled: true,
                 sound: true,
             },
+            auto_start: AutoStartConfig {
+                focus_to_break: true,
+                break_to_focus: false,
+            },
             strict_mode: true,
             daily_goal: DailyGoalConfig {
                 minutes: 180,
@@ -406,6 +423,7 @@ mod tests {
         assert_eq!(parsed.selected_profile, original.selected_profile);
         assert_eq!(parsed.custom_profile, original.custom_profile);
         assert_eq!(parsed.notifications, original.notifications);
+        assert_eq!(parsed.auto_start, original.auto_start);
         assert_eq!(parsed.strict_mode, original.strict_mode);
         assert_eq!(parsed.daily_goal, original.daily_goal);
     }
@@ -422,8 +440,21 @@ mod tests {
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
         assert_eq!(cfg.notifications, NotificationConfig::default());
+        assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
+    }
+
+    #[test]
+    fn partial_auto_start_block_uses_defaults_for_missing_fields() {
+        let partial = r#"
+[auto_start]
+focus_to_break = true
+"#;
+        let cfg: AppConfig = toml::from_str(partial).unwrap();
+
+        assert!(cfg.auto_start.focus_to_break);
+        assert!(!cfg.auto_start.break_to_focus);
     }
 
     #[test]
@@ -443,6 +474,7 @@ blocked_sites = ["reddit.com", "youtube.com"]
         assert_eq!(parsed.long_break_secs, 900);
         assert_eq!(parsed.long_break_interval, 3);
         assert_eq!(parsed.blocked_sites, vec!["reddit.com", "youtube.com"]);
+        assert_eq!(parsed.auto_start, AutoStartConfig::default());
         assert_eq!(parsed.daily_goal, DailyGoalConfig::default());
     }
 
@@ -478,6 +510,7 @@ long_break_interval = 3
                 long_break_interval: 2,
             }),
             notifications: NotificationConfig::default(),
+            auto_start: AutoStartConfig::default(),
             strict_mode: false,
             daily_goal: DailyGoalConfig::default(),
         };
@@ -521,6 +554,7 @@ long_break_interval = 3
         assert_eq!(cfg.selected_profile, ProfileId::Custom);
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
+        assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     }
