@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph, Wrap},
 };
 
 use crate::app::{
@@ -736,9 +736,9 @@ fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         .constraints([
             Constraint::Length(1), // hosts path
             Constraint::Length(1), // spacer
-            Constraint::Length(1), // blocking permissions
-            Constraint::Length(1), // hosts write capability
-            Constraint::Length(1), // wakatime config status
+            Constraint::Length(2), // blocking permissions
+            Constraint::Length(2), // hosts write capability
+            Constraint::Length(2), // wakatime config status
             Constraint::Min(0),    // spacer
             Constraint::Length(2), // key hints
         ])
@@ -797,7 +797,7 @@ fn render_setup_check(frame: &mut Frame, area: Rect, label: &str, check: &SetupC
         ),
         Span::styled(check.message.as_str(), Style::default().fg(Color::Gray)),
     ]);
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(Paragraph::new(line).wrap(Wrap { trim: true }), area);
 }
 
 fn format_goal_progress_line(progress: DailyGoalProgress) -> String {
@@ -874,7 +874,21 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::{Terminal, backend::TestBackend};
+
     use crate::wakatime::WakatimeTracker;
+
+    fn terminal_text(terminal: &Terminal<TestBackend>, width: u16, height: u16) -> String {
+        let buffer = terminal.backend().buffer();
+        let mut text = String::new();
+        for y in 0..height {
+            for x in 0..width {
+                text.push_str(buffer[(x, y)].symbol());
+            }
+            text.push('\n');
+        }
+        text
+    }
 
     #[test]
     fn timer_secondary_hint_includes_setup_shortcut() {
@@ -890,6 +904,46 @@ mod tests {
         app.timer.status = TimerStatus::Running;
 
         assert!(timer_secondary_hint(&app).contains("[d] Setup"));
+    }
+
+    #[test]
+    fn render_setup_check_wraps_long_warning_message() {
+        let width = 38;
+        let height = 3;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let check = SetupCheck {
+            level: SetupCheckLevel::Warning,
+            message: "wrapped output should include TAIL-END".to_string(),
+        };
+
+        terminal
+            .draw(|frame| render_setup_check(frame, frame.area(), "Check", &check))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("TAIL-END"));
+    }
+
+    #[test]
+    fn setup_diagnostics_view_wraps_long_status_messages() {
+        let width = 80;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::SetupDiagnostics;
+        app.setup_diagnostics.blocking_permissions = SetupCheck {
+            level: SetupCheckLevel::Warning,
+            message: "permission denied while probing parent directory WRAP-END".to_string(),
+        };
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("WRAP-END"));
     }
 
     #[test]

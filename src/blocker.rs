@@ -409,9 +409,7 @@ fn split_hostname_candidates(input: &str) -> Vec<String> {
 
 fn hosts_file_diagnostics_for(path: &Path) -> HostsFileDiagnostics {
     let read_error = fs::File::open(path).err().map(|error| error.to_string());
-    let write_error = OpenOptions::new()
-        .append(true)
-        .open(path)
+    let write_error = probe_hosts_write_path(path)
         .err()
         .map(|error| error.to_string());
     HostsFileDiagnostics {
@@ -419,6 +417,30 @@ fn hosts_file_diagnostics_for(path: &Path) -> HostsFileDiagnostics {
         read_error,
         write_error,
     }
+}
+
+#[cfg(target_os = "windows")]
+fn probe_hosts_write_path(path: &Path) -> io::Result<()> {
+    OpenOptions::new().append(true).open(path).map(|_| ())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn probe_hosts_write_path(path: &Path) -> io::Result<()> {
+    let dir = path.parent().unwrap_or(Path::new("."));
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let probe = dir.join(format!(
+        ".focustime_hosts_probe_{}_{}",
+        std::process::id(),
+        nanos
+    ));
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)?;
+    fs::remove_file(&probe)
 }
 
 /// Write `content` to the hosts file atomically via a temp file + rename so
@@ -710,8 +732,16 @@ mod tests {
         let diagnostics = hosts_file_diagnostics_for(&path);
 
         assert!(!diagnostics.can_read());
-        assert!(!diagnostics.can_write());
         assert!(diagnostics.read_error.is_some());
-        assert!(diagnostics.write_error.is_some());
+        #[cfg(target_os = "windows")]
+        {
+            assert!(!diagnostics.can_write());
+            assert!(diagnostics.write_error.is_some());
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(diagnostics.can_write());
+            assert!(diagnostics.write_error.is_none());
+        }
     }
 }
