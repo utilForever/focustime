@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 
@@ -20,11 +20,39 @@ impl SessionStats {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct DailyGoalSnapshot {
+    #[serde(default)]
+    pub minutes: u64,
+    #[serde(default)]
+    pub pomodoros: u32,
+}
+
+impl DailyGoalSnapshot {
+    pub fn has_any_target(self) -> bool {
+        self.minutes > 0 || self.pomodoros > 0
+    }
+
+    pub fn is_met_by(self, stats: DailyStats) -> bool {
+        self.has_any_target()
+            && (self.minutes == 0 || stats.focused_minutes() >= self.minutes)
+            && (self.pomodoros == 0 || stats.pomodoros_completed >= self.pomodoros)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GoalStreak {
+    pub current: u32,
+    pub best: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct DailyStats {
     #[serde(default)]
     pub pomodoros_completed: u32,
     #[serde(default)]
     pub focused_seconds: u64,
+    #[serde(default)]
+    pub goal: Option<DailyGoalSnapshot>,
 }
 
 impl DailyStats {
@@ -122,7 +150,12 @@ impl FocusStats {
         }
     }
 
-    pub fn record_focus_elapsed(&mut self, day_key: &str, elapsed_secs: u64) {
+    pub fn record_focus_elapsed(
+        &mut self,
+        day_key: &str,
+        elapsed_secs: u64,
+        goal: DailyGoalSnapshot,
+    ) {
         if elapsed_secs == 0 {
             return;
         }
@@ -130,12 +163,27 @@ impl FocusStats {
         self.session.focused_seconds = self.session.focused_seconds.saturating_add(elapsed_secs);
         let daily = self.daily.entry(day_key.to_string()).or_default();
         daily.focused_seconds = daily.focused_seconds.saturating_add(elapsed_secs);
+        daily.goal = Some(goal);
     }
 
-    pub fn record_completed_pomodoro(&mut self, day_key: &str) {
+    pub fn record_completed_pomodoro(&mut self, day_key: &str, goal: DailyGoalSnapshot) {
         self.session.pomodoros_completed = self.session.pomodoros_completed.saturating_add(1);
         let daily = self.daily.entry(day_key.to_string()).or_default();
         daily.pomodoros_completed = daily.pomodoros_completed.saturating_add(1);
+        daily.goal = Some(goal);
+    }
+
+    pub fn sync_goal_snapshot(&mut self, day_key: &str, goal: DailyGoalSnapshot) -> bool {
+        let Some(daily) = self.daily.get_mut(day_key) else {
+            return false;
+        };
+
+        if daily.goal == Some(goal) {
+            return false;
+        }
+
+        daily.goal = Some(goal);
+        true
     }
 
     pub fn session(&self) -> SessionStats {
@@ -154,6 +202,55 @@ impl FocusStats {
             .map(|(day, stats)| (day.clone(), *stats))
             .collect()
     }
+
+    #[cfg(test)]
+    pub fn insert_daily_for_tests(&mut self, day_key: &str, stats: DailyStats) {
+        self.daily.insert(day_key.to_string(), stats);
+    }
+
+    pub fn goal_streak(
+        &self,
+        today: chrono::NaiveDate,
+        current_goal: DailyGoalSnapshot,
+        today_stats: DailyStats,
+    ) -> GoalStreak {
+        let completed_days = self.completed_goal_days(today, current_goal, today_stats);
+        GoalStreak {
+            current: current_goal_streak(&completed_days, today, current_goal, today_stats),
+            best: best_goal_streak(&completed_days),
+        }
+    }
+
+    fn completed_goal_days(
+        &self,
+        today: chrono::NaiveDate,
+        current_goal: DailyGoalSnapshot,
+        today_stats: DailyStats,
+    ) -> BTreeSet<chrono::NaiveDate> {
+        let mut completed_days = BTreeSet::new();
+
+        for (day_key, stats) in &self.daily {
+            let Ok(day) = chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d") else {
+                continue;
+            };
+            if day == today {
+                continue;
+            }
+
+            let snapshot = stats
+                .goal
+                .or(current_goal.has_any_target().then_some(current_goal));
+            if snapshot.is_some_and(|goal| goal.is_met_by(*stats)) {
+                completed_days.insert(day);
+            }
+        }
+
+        if current_goal.is_met_by(today_stats) {
+            completed_days.insert(today);
+        }
+
+        completed_days
+    }
 }
 
 pub fn current_day_key() -> String {
@@ -163,6 +260,53 @@ pub fn current_day_key() -> String {
         .to_string()
 }
 
+fn current_goal_streak(
+    completed_days: &BTreeSet<chrono::NaiveDate>,
+    today: chrono::NaiveDate,
+    current_goal: DailyGoalSnapshot,
+    today_stats: DailyStats,
+) -> u32 {
+    if !current_goal.has_any_target() {
+        return 0;
+    }
+
+    let mut streak = 0;
+    let mut cursor = if current_goal.is_met_by(today_stats) {
+        Some(today)
+    } else {
+        today.pred_opt()
+    };
+
+    while let Some(day) = cursor {
+        if !completed_days.contains(&day) {
+            break;
+        }
+        streak += 1;
+        cursor = day.pred_opt();
+    }
+
+    streak
+}
+
+fn best_goal_streak(completed_days: &BTreeSet<chrono::NaiveDate>) -> u32 {
+    let mut best = 0;
+    let mut streak = 0;
+    let mut previous_day: Option<chrono::NaiveDate> = None;
+
+    for day in completed_days {
+        if previous_day.is_some_and(|previous| previous.succ_opt() == Some(*day)) {
+            streak += 1;
+        } else {
+            streak = 1;
+        }
+
+        best = best.max(streak);
+        previous_day = Some(*day);
+    }
+
+    best
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,9 +314,13 @@ mod tests {
     #[test]
     fn recording_updates_session_and_daily_totals() {
         let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
 
-        stats.record_focus_elapsed("2026-04-09", 125);
-        stats.record_completed_pomodoro("2026-04-09");
+        stats.record_focus_elapsed("2026-04-09", 125, goal);
+        stats.record_completed_pomodoro("2026-04-09", goal);
 
         let session = stats.session();
         assert_eq!(session.pomodoros_completed, 1);
@@ -183,13 +331,18 @@ mod tests {
         assert_eq!(day.pomodoros_completed, 1);
         assert_eq!(day.focused_seconds, 125);
         assert_eq!(day.focused_minutes(), 2);
+        assert_eq!(day.goal, Some(goal));
     }
 
     #[test]
     fn recent_daily_is_sorted_newest_first() {
         let mut stats = FocusStats::default();
-        stats.record_focus_elapsed("2026-04-08", 60);
-        stats.record_focus_elapsed("2026-04-09", 120);
+        let goal = DailyGoalSnapshot {
+            minutes: 30,
+            pomodoros: 1,
+        };
+        stats.record_focus_elapsed("2026-04-08", 60, goal);
+        stats.record_focus_elapsed("2026-04-09", 120, goal);
 
         let recent = stats.recent_daily(2);
         assert_eq!(recent[0].0, "2026-04-09");
@@ -199,8 +352,12 @@ mod tests {
     #[test]
     fn persisted_stats_round_trip_preserves_daily_history() {
         let mut original = FocusStats::default();
-        original.record_focus_elapsed("2026-04-09", 300);
-        original.record_completed_pomodoro("2026-04-09");
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        original.record_focus_elapsed("2026-04-09", 300, goal);
+        original.record_completed_pomodoro("2026-04-09", goal);
 
         let persisted = original.to_persisted();
         let toml_str = toml::to_string_pretty(&persisted).unwrap();
@@ -211,6 +368,7 @@ mod tests {
         let day = restored.daily_for("2026-04-09");
         assert_eq!(day.pomodoros_completed, 1);
         assert_eq!(day.focused_seconds, 300);
+        assert_eq!(day.goal, Some(goal));
     }
 
     #[test]
@@ -224,5 +382,75 @@ mod tests {
         assert_eq!(key.len(), 10);
         assert_eq!(&key[4..5], "-");
         assert_eq!(&key[7..8], "-");
+    }
+
+    #[test]
+    fn goal_streak_counts_consecutive_completed_days() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 30,
+            pomodoros: 1,
+        };
+
+        for day in ["2026-04-07", "2026-04-08", "2026-04-09"] {
+            stats.record_focus_elapsed(day, 30 * 60, goal);
+            stats.record_completed_pomodoro(day, goal);
+        }
+
+        let streak = stats.goal_streak(
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap(),
+            goal,
+            stats.daily_for("2026-04-09"),
+        );
+
+        assert_eq!(streak.current, 3);
+        assert_eq!(streak.best, 3);
+    }
+
+    #[test]
+    fn goal_streak_keeps_running_until_today_is_missed() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 1,
+        };
+
+        for day in ["2026-04-07", "2026-04-08"] {
+            stats.record_focus_elapsed(day, 60 * 60, goal);
+            stats.record_completed_pomodoro(day, goal);
+        }
+
+        let streak = stats.goal_streak(
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap(),
+            goal,
+            DailyStats::default(),
+        );
+
+        assert_eq!(streak.current, 2);
+        assert_eq!(streak.best, 2);
+    }
+
+    #[test]
+    fn goal_streak_uses_current_goal_as_legacy_fallback() {
+        let mut stats = FocusStats::default();
+        {
+            let day = stats.daily.entry("2026-04-09".to_string()).or_default();
+            day.focused_seconds = 45 * 60;
+            day.pomodoros_completed = 2;
+        }
+
+        let goal = DailyGoalSnapshot {
+            minutes: 30,
+            pomodoros: 1,
+        };
+        let today_stats = stats.daily_for("2026-04-09");
+        let streak = stats.goal_streak(
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap(),
+            goal,
+            today_stats,
+        );
+
+        assert_eq!(streak.current, 1);
+        assert_eq!(streak.best, 1);
     }
 }

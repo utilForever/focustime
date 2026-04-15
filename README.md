@@ -220,12 +220,17 @@ When strict mode is enabled during an active focus session:
 - completed pomodoros for the current app session
 - focused minutes for the current app session
 - daily aggregates persisted in `stats.toml` (in the same config directory as `config.toml`)
+- current streak and best streak based on completed daily goals
 
 If a daily goal is configured, timer and history views also show live progress for
 both:
 
 - target focused minutes
 - target completed pomodoros
+
+Streaks are evaluated against the goal that was active on each day. Changing the
+daily goal later does not rewrite older tracked days, and streak tracking stays
+inactive when today's goal is off.
 
 From timer view:
 

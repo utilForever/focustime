@@ -7,7 +7,9 @@ use crate::config::{
     AppConfig, AutoStartConfig, CustomProfileConfig, DailyGoalConfig, NotificationConfig, ProfileId,
 };
 use crate::notifications::PhaseNotifier;
-use crate::stats::{DailyStats, FocusStats, SessionStats, current_day_key};
+use crate::stats::{
+    DailyGoalSnapshot, DailyStats, FocusStats, GoalStreak, SessionStats, current_day_key,
+};
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
@@ -405,6 +407,22 @@ impl App {
         self.daily_goal_progress_for(self.today_stats())
     }
 
+    pub fn goal_streak(&self) -> GoalStreak {
+        self.goal_streak_for_day_key(&current_day_key())
+    }
+
+    fn goal_streak_for_day_key(&self, day_key: &str) -> GoalStreak {
+        let Some(day) = parse_day_key(day_key) else {
+            return GoalStreak::default();
+        };
+
+        self.stats.goal_streak(
+            day,
+            self.current_goal_snapshot(),
+            self.stats.daily_for(day_key),
+        )
+    }
+
     pub fn daily_goal_progress_for(&self, stats: DailyStats) -> DailyGoalProgress {
         DailyGoalProgress {
             minutes: goal_progress(stats.focused_minutes(), self.daily_goal.minutes),
@@ -715,6 +733,10 @@ impl App {
         let custom_profile_changed = self.profile_edit_snapshot.as_ref().is_some_and(|snapshot| {
             snapshot.custom_profile.normalized() != self.custom_profile.normalized()
         });
+        let daily_goal_changed = self
+            .profile_edit_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.daily_goal != self.daily_goal);
         self.custom_profile = self.custom_profile.normalized();
         if self.selected_profile == ProfileId::Custom {
             if custom_profile_changed {
@@ -728,6 +750,9 @@ impl App {
             self.save_config();
         }
         self.rebuild_notifier();
+        if daily_goal_changed {
+            self.sync_today_goal_snapshot();
+        }
         self.profile_edit_active = false;
         self.profile_edit_field = 0;
         self.profile_edit_snapshot = None;
@@ -1166,10 +1191,12 @@ impl App {
         }
 
         let day_key = current_day_key();
+        let goal_snapshot = self.current_goal_snapshot();
         let session_minutes_before = self.stats.session().focused_minutes();
         let today_minutes_before = self.stats.daily_for(&day_key).focused_minutes();
 
-        self.stats.record_focus_elapsed(&day_key, elapsed_secs);
+        self.stats
+            .record_focus_elapsed(&day_key, elapsed_secs, goal_snapshot);
         self.stats_has_unsaved_elapsed = true;
 
         let session_minutes_after = self.stats.session().focused_minutes();
@@ -1183,8 +1210,27 @@ impl App {
 
     fn record_completed_focus_session(&mut self) {
         let day_key = current_day_key();
-        self.stats.record_completed_pomodoro(&day_key);
+        self.stats
+            .record_completed_pomodoro(&day_key, self.current_goal_snapshot());
         self.stats_dirty = true;
+    }
+
+    fn current_goal_snapshot(&self) -> DailyGoalSnapshot {
+        DailyGoalSnapshot {
+            minutes: self.daily_goal.minutes,
+            pomodoros: self.daily_goal.pomodoros,
+        }
+    }
+
+    fn sync_today_goal_snapshot(&mut self) {
+        let day_key = current_day_key();
+        if self
+            .stats
+            .sync_goal_snapshot(&day_key, self.current_goal_snapshot())
+        {
+            self.stats_dirty = true;
+            self.flush_stats_if_dirty(false);
+        }
     }
 
     fn sync_wakatime_tracking_for_state(&mut self) {
@@ -1279,6 +1325,10 @@ fn format_daily_goal_pomodoros_label(pomodoros: u32) -> String {
 
 fn bool_label(value: bool) -> &'static str {
     if value { "On" } else { "Off" }
+}
+
+fn parse_day_key(day_key: &str) -> Option<chrono::NaiveDate> {
+    chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d").ok()
 }
 
 fn goal_progress(completed: u64, target: u64) -> GoalProgress {
@@ -1792,8 +1842,10 @@ mod tests {
         };
         let mut app = App::from_config(config);
         let day_key = current_day_key();
-        app.stats.record_focus_elapsed(&day_key, 30 * 60);
-        app.stats.record_completed_pomodoro(&day_key);
+        app.stats
+            .record_focus_elapsed(&day_key, 30 * 60, app.current_goal_snapshot());
+        app.stats
+            .record_completed_pomodoro(&day_key, app.current_goal_snapshot());
 
         let progress = app.today_goal_progress();
         assert_eq!(progress.minutes.completed, 30);
@@ -1802,6 +1854,128 @@ mod tests {
         assert_eq!(progress.pomodoros.completed, 1);
         assert_eq!(progress.pomodoros.target, 4);
         assert!((progress.pomodoros.ratio - 0.25).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn goal_streak_counts_yesterday_until_today_is_missed() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 1,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let goal = app.current_goal_snapshot();
+        let yesterday = chrono::Local::now().date_naive().pred_opt().unwrap();
+        let day_before = yesterday.pred_opt().unwrap();
+
+        for day in [day_before, yesterday] {
+            let day_key = day.format("%Y-%m-%d").to_string();
+            app.stats.record_focus_elapsed(&day_key, 60 * 60, goal);
+            app.stats.record_completed_pomodoro(&day_key, goal);
+        }
+
+        let streak = app.goal_streak();
+        assert_eq!(streak.current, 2);
+        assert_eq!(streak.best, 2);
+    }
+
+    #[test]
+    fn committing_goal_edit_updates_today_goal_snapshot() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 1,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let day_key = current_day_key();
+
+        app.stats
+            .record_focus_elapsed(&day_key, 30 * 60, app.current_goal_snapshot());
+
+        app.begin_profile_edit();
+        app.daily_goal.minutes = 90;
+        app.commit_profile_edit();
+
+        assert_eq!(
+            app.today_stats().goal,
+            Some(DailyGoalSnapshot {
+                minutes: 90,
+                pomodoros: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn goal_streak_for_day_key_uses_the_same_day_for_date_and_stats_lookup() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 1,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let goal = app.current_goal_snapshot();
+
+        for day_key in ["2026-04-08", "2026-04-09"] {
+            app.stats.record_focus_elapsed(day_key, 60 * 60, goal);
+            app.stats.record_completed_pomodoro(day_key, goal);
+        }
+
+        let streak = app.goal_streak_for_day_key("2026-04-09");
+        assert_eq!(streak.current, 2);
+        assert_eq!(streak.best, 2);
+    }
+
+    #[test]
+    fn goal_streak_for_day_key_fails_closed_for_invalid_day_keys() {
+        let app = App::from_config(AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 1,
+            },
+            ..AppConfig::default()
+        });
+
+        let streak = app.goal_streak_for_day_key("not-a-day");
+        assert_eq!(streak, GoalStreak::default());
+    }
+
+    #[test]
+    fn goal_streak_for_day_key_handles_legacy_entries_without_goal_snapshots() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 1,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.stats.insert_daily_for_tests(
+            "2026-04-08",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 60 * 60,
+                goal: None,
+            },
+        );
+        app.stats.insert_daily_for_tests(
+            "2026-04-09",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 60 * 60,
+                goal: None,
+            },
+        );
+
+        let streak = app.goal_streak_for_day_key("2026-04-09");
+        assert_eq!(streak.current, 2);
+        assert_eq!(streak.best, 2);
     }
 
     #[test]
