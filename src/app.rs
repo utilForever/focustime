@@ -8,8 +8,7 @@ use crate::config::{
 };
 use crate::notifications::PhaseNotifier;
 use crate::stats::{
-    DailyGoalSnapshot, DailyStats, FocusStats, GoalStreak, SessionStats, current_day_date,
-    current_day_key,
+    DailyGoalSnapshot, DailyStats, FocusStats, GoalStreak, SessionStats, current_day_key,
 };
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -413,8 +412,12 @@ impl App {
     }
 
     fn goal_streak_for_day_key(&self, day_key: &str) -> GoalStreak {
+        let Some(day) = parse_day_key(day_key) else {
+            return GoalStreak::default();
+        };
+
         self.stats.goal_streak(
-            parse_day_key(day_key).unwrap_or_else(current_day_date),
+            day,
             self.current_goal_snapshot(),
             self.stats.daily_for(day_key),
         )
@@ -1864,7 +1867,7 @@ mod tests {
         };
         let mut app = App::from_config(config);
         let goal = app.current_goal_snapshot();
-        let yesterday = current_day_date().pred_opt().unwrap();
+        let yesterday = chrono::Local::now().date_naive().pred_opt().unwrap();
         let day_before = yesterday.pred_opt().unwrap();
 
         for day in [day_before, yesterday] {
@@ -1922,6 +1925,53 @@ mod tests {
             app.stats.record_focus_elapsed(day_key, 60 * 60, goal);
             app.stats.record_completed_pomodoro(day_key, goal);
         }
+
+        let streak = app.goal_streak_for_day_key("2026-04-09");
+        assert_eq!(streak.current, 2);
+        assert_eq!(streak.best, 2);
+    }
+
+    #[test]
+    fn goal_streak_for_day_key_fails_closed_for_invalid_day_keys() {
+        let app = App::from_config(AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 1,
+            },
+            ..AppConfig::default()
+        });
+
+        let streak = app.goal_streak_for_day_key("not-a-day");
+        assert_eq!(streak, GoalStreak::default());
+    }
+
+    #[test]
+    fn goal_streak_for_day_key_handles_legacy_entries_without_goal_snapshots() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 1,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.stats.insert_daily_for_tests(
+            "2026-04-08",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 60 * 60,
+                goal: None,
+            },
+        );
+        app.stats.insert_daily_for_tests(
+            "2026-04-09",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 60 * 60,
+                goal: None,
+            },
+        );
 
         let streak = app.goal_streak_for_day_key("2026-04-09");
         assert_eq!(streak.current, 2);

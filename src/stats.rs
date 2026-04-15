@@ -203,6 +203,11 @@ impl FocusStats {
             .collect()
     }
 
+    #[cfg(test)]
+    pub fn insert_daily_for_tests(&mut self, day_key: &str, stats: DailyStats) {
+        self.daily.insert(day_key.to_string(), stats);
+    }
+
     pub fn goal_streak(
         &self,
         today: chrono::NaiveDate,
@@ -253,10 +258,6 @@ pub fn current_day_key() -> String {
         .date_naive()
         .format("%Y-%m-%d")
         .to_string()
-}
-
-pub fn current_day_date() -> chrono::NaiveDate {
-    chrono::Local::now().date_naive()
 }
 
 fn current_goal_streak(
