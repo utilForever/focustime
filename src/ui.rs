@@ -46,8 +46,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
             Constraint::Length(2), // status
             Constraint::Length(1), // latest phase notification
             Constraint::Length(1), // stats summary
-            Constraint::Length(1), // daily goal progress
-            Constraint::Length(1), // streak summary
+            Constraint::Length(1), // goal + streak summary
             Constraint::Length(1), // wakatime status
             Constraint::Min(0),    // spacer
             Constraint::Length(2), // key hints
@@ -61,10 +60,9 @@ fn render_timer(frame: &mut Frame, app: &App) {
     render_timer_status(frame, app, inner[4]);
     render_timer_phase_notice(frame, app, inner[5]);
     render_timer_stats_summary(frame, app, inner[6]);
-    render_timer_goal_summary(frame, app, inner[7]);
-    render_timer_streak_summary(frame, app, inner[8]);
-    render_timer_wakatime_status(frame, app, inner[9]);
-    render_timer_hints(frame, app, inner[11]);
+    render_timer_goal_streak_summary(frame, app, inner[7]);
+    render_timer_wakatime_status(frame, app, inner[8]);
+    render_timer_hints(frame, app, inner[10]);
 }
 
 fn render_timer_phase_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -201,24 +199,11 @@ fn timer_stats_line(app: &App) -> (String, Style) {
     }
 }
 
-fn render_timer_goal_summary(frame: &mut Frame, app: &App, area: Rect) {
-    let goal_progress = app.today_goal_progress();
-    let goal_line = if goal_progress.has_any_target() {
-        format_goal_progress_line(goal_progress)
-    } else {
-        "Goal: Off ([p] Profiles -> [e] Edit)".to_string()
-    };
-    let goal_widget = Paragraph::new(goal_line)
+fn render_timer_goal_streak_summary(frame: &mut Frame, app: &App, area: Rect) {
+    let goal_widget = Paragraph::new(format_timer_goal_streak_line(app))
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(goal_widget, area);
-}
-
-fn render_timer_streak_summary(frame: &mut Frame, app: &App, area: Rect) {
-    let streak_widget = Paragraph::new(format_streak_summary_line(app))
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(streak_widget, area);
 }
 
 fn render_timer_wakatime_status(frame: &mut Frame, app: &App, area: Rect) {
@@ -641,10 +626,8 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1), // session summary
-            Constraint::Length(1), // today summary
-            Constraint::Length(1), // daily goal progress
-            Constraint::Length(1), // streak summary
+            Constraint::Length(1), // session + today summary
+            Constraint::Length(1), // goal + streak summary
             Constraint::Length(1), // spacer
             Constraint::Min(3),    // history list
             Constraint::Length(1), // error line
@@ -655,9 +638,11 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     let session_stats = app.session_stats();
     let today_stats = app.today_stats();
     let session_summary = Paragraph::new(format!(
-        "This session: 🍅{} · {}m",
+        "This session: 🍅{} · {}m   Today: 🍅{} · {}m",
         session_stats.pomodoros_completed,
-        session_stats.focused_minutes()
+        session_stats.focused_minutes(),
+        today_stats.pomodoros_completed,
+        today_stats.focused_minutes()
     ))
     .style(
         Style::default()
@@ -666,26 +651,9 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     );
     frame.render_widget(session_summary, inner[0]);
 
-    let today_summary = Paragraph::new(format!(
-        "Today: 🍅{} · {}m",
-        today_stats.pomodoros_completed,
-        today_stats.focused_minutes()
-    ))
-    .style(Style::default().fg(Color::Gray));
-    frame.render_widget(today_summary, inner[1]);
-
-    let goal_progress = app.today_goal_progress();
-    let goal_line = if goal_progress.has_any_target() {
-        format_goal_progress_line(goal_progress)
-    } else {
-        "Daily goal: Off".to_string()
-    };
-    let goal_summary = Paragraph::new(goal_line).style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(goal_summary, inner[2]);
-
-    let streak_summary =
-        Paragraph::new(format_streak_summary_line(app)).style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(streak_summary, inner[3]);
+    let goal_summary = Paragraph::new(format_history_goal_streak_line(app))
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(goal_summary, inner[1]);
 
     let history_items: Vec<ListItem> = app
         .recent_daily_stats(14)
@@ -707,7 +675,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
                     .borders(Borders::ALL)
                     .title(" Recent Days "),
             );
-        frame.render_widget(empty, inner[5]);
+        frame.render_widget(empty, inner[3]);
     } else {
         let list = List::new(history_items)
             .block(
@@ -716,11 +684,11 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
                     .title(" Recent Days "),
             )
             .style(Style::default().fg(Color::Gray));
-        frame.render_widget(list, inner[5]);
+        frame.render_widget(list, inner[3]);
     }
 
     if let Some(err) = app.stats_error.as_ref() {
-        render_centered_error(frame, inner[6], format!("⚠  {err}"));
+        render_centered_error(frame, inner[4], format!("⚠  {err}"));
     }
 
     let hints = Paragraph::new(if app.strict_mode_enforced_for_focus() {
@@ -730,7 +698,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     })
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints, inner[7]);
+    frame.render_widget(hints, inner[5]);
 }
 
 fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
@@ -843,17 +811,34 @@ fn format_goal_metric_progress(
     }
 }
 
-fn format_streak_summary_line(app: &App) -> String {
+fn format_timer_goal_streak_line(app: &App) -> String {
+    let goal_progress = app.today_goal_progress();
     let streak = app.goal_streak();
-    let suffix = if app.today_goal_progress().has_any_target() {
-        ""
+    if goal_progress.has_any_target() {
+        format!(
+            "{}   Streaks: {}d current · {}d best",
+            format_goal_progress_line(goal_progress),
+            streak.current,
+            streak.best
+        )
     } else {
-        " (goal off)"
-    };
-    format!(
-        "Streaks: current {}d · best {}d{}",
-        streak.current, streak.best, suffix
-    )
+        "Goal: Off (set via [p] -> [e])   Streaks: Off".to_string()
+    }
+}
+
+fn format_history_goal_streak_line(app: &App) -> String {
+    let goal_progress = app.today_goal_progress();
+    let streak = app.goal_streak();
+    if goal_progress.has_any_target() {
+        format!(
+            "{}   Streaks: {}d current · {}d best",
+            format_goal_progress_line(goal_progress),
+            streak.current,
+            streak.best
+        )
+    } else {
+        "Daily goal: Off   Streaks: Off".to_string()
+    }
 }
 
 fn phase_color(phase: TimerPhase) -> Color {
