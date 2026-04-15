@@ -213,13 +213,14 @@ When strict mode is enabled during an active focus session:
 - `p` (profile manager) is disabled, so profile switching is locked
 - quit shortcuts (`q`, `Esc`, `Ctrl-C`) are disabled until focus is no longer active
 
-## Session stats and daily history
+## Session stats and history
 
 `focustime` tracks:
 
 - completed pomodoros for the current app session
 - focused minutes for the current app session
 - daily aggregates persisted in `stats.toml` (in the same config directory as `config.toml`)
+- weekly totals derived from daily aggregates in the History view
 - current streak and best streak based on completed daily goals
 
 If a daily goal is configured, timer and history views also show live progress for
@@ -234,7 +235,7 @@ inactive when today's goal is off.
 
 From timer view:
 
-- press **`h`** to open the daily history panel
+- press **`h`** to open the history panel with weekly and daily summaries
 - press **`h`** or **`Esc`** to return to timer view
 
 ## The way the system works

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 
+use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 
 #[cfg_attr(test, allow(dead_code))]
@@ -43,6 +44,20 @@ impl DailyGoalSnapshot {
 pub struct GoalStreak {
     pub current: u32,
     pub best: u32,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WeeklyStats {
+    pub year: i32,
+    pub week: u32,
+    pub pomodoros_completed: u32,
+    pub focused_seconds: u64,
+}
+
+impl WeeklyStats {
+    pub fn focused_minutes(self) -> u64 {
+        self.focused_seconds / 60
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -203,6 +218,35 @@ impl FocusStats {
             .collect()
     }
 
+    pub fn recent_weekly(&self, limit: usize) -> Vec<WeeklyStats> {
+        let mut weekly = BTreeMap::new();
+
+        for (day_key, stats) in &self.daily {
+            let Ok(day) = chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d") else {
+                continue;
+            };
+            let iso_week = day.iso_week();
+            let entry = weekly
+                .entry((iso_week.year(), iso_week.week()))
+                .or_insert_with(|| WeeklyStats {
+                    year: iso_week.year(),
+                    week: iso_week.week(),
+                    ..WeeklyStats::default()
+                });
+            entry.pomodoros_completed = entry
+                .pomodoros_completed
+                .saturating_add(stats.pomodoros_completed);
+            entry.focused_seconds = entry.focused_seconds.saturating_add(stats.focused_seconds);
+        }
+
+        weekly
+            .into_iter()
+            .rev()
+            .take(limit)
+            .map(|(_, stats)| stats)
+            .collect()
+    }
+
     #[cfg(test)]
     pub fn insert_daily_for_tests(&mut self, day_key: &str, stats: DailyStats) {
         self.daily.insert(day_key.to_string(), stats);
@@ -347,6 +391,79 @@ mod tests {
         let recent = stats.recent_daily(2);
         assert_eq!(recent[0].0, "2026-04-09");
         assert_eq!(recent[1].0, "2026-04-08");
+    }
+
+    #[test]
+    fn recent_weekly_aggregates_days_in_same_iso_week() {
+        let mut stats = FocusStats::default();
+        stats.insert_daily_for_tests(
+            "2026-04-06",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 30 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-08",
+            DailyStats {
+                pomodoros_completed: 2,
+                focused_seconds: 45 * 60,
+                goal: None,
+            },
+        );
+
+        let recent = stats.recent_weekly(1);
+        let iso_week = chrono::NaiveDate::from_ymd_opt(2026, 4, 6)
+            .unwrap()
+            .iso_week();
+
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].year, iso_week.year());
+        assert_eq!(recent[0].week, iso_week.week());
+        assert_eq!(recent[0].pomodoros_completed, 3);
+        assert_eq!(recent[0].focused_minutes(), 75);
+    }
+
+    #[test]
+    fn recent_weekly_is_sorted_newest_first_across_iso_year_boundaries() {
+        let mut stats = FocusStats::default();
+        stats.insert_daily_for_tests(
+            "2020-12-31",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 30 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2021-01-01",
+            DailyStats {
+                pomodoros_completed: 2,
+                focused_seconds: 60 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2021-01-04",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 15 * 60,
+                goal: None,
+            },
+        );
+
+        let recent = stats.recent_weekly(2);
+
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].year, 2021);
+        assert_eq!(recent[0].week, 1);
+        assert_eq!(recent[0].pomodoros_completed, 1);
+        assert_eq!(recent[0].focused_minutes(), 15);
+        assert_eq!(recent[1].year, 2020);
+        assert_eq!(recent[1].week, 53);
+        assert_eq!(recent[1].pomodoros_completed, 3);
+        assert_eq!(recent[1].focused_minutes(), 90);
     }
 
     #[test]

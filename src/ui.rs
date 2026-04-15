@@ -617,7 +617,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Daily Focus History ")
+        .title(" Focus History ")
         .title_alignment(Alignment::Center)
         .style(Style::default().fg(Color::Cyan));
     frame.render_widget(block, outer);
@@ -655,8 +655,33 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(goal_summary, inner[1]);
 
+    let history_sections = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+        .split(inner[3]);
+
+    let weekly_items: Vec<ListItem> = app
+        .recent_weekly_stats(6)
+        .into_iter()
+        .map(|stats| {
+            ListItem::new(format!(
+                "  {}   🍅{}   {}m",
+                format_week_label(stats.year, stats.week),
+                stats.pomodoros_completed,
+                stats.focused_minutes()
+            ))
+        })
+        .collect();
+    render_history_panel(
+        frame,
+        history_sections[0],
+        " Weekly Totals ",
+        weekly_items,
+        "  No weekly totals yet.",
+    );
+
     let history_items: Vec<ListItem> = app
-        .recent_daily_stats(14)
+        .recent_daily_stats(10)
         .into_iter()
         .map(|(day, stats)| {
             ListItem::new(format!(
@@ -666,26 +691,13 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
             ))
         })
         .collect();
-
-    if history_items.is_empty() {
-        let empty = Paragraph::new("  No completed focus history yet.")
-            .style(Style::default().fg(Color::DarkGray))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Recent Days "),
-            );
-        frame.render_widget(empty, inner[3]);
-    } else {
-        let list = List::new(history_items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Recent Days "),
-            )
-            .style(Style::default().fg(Color::Gray));
-        frame.render_widget(list, inner[3]);
-    }
+    render_history_panel(
+        frame,
+        history_sections[1],
+        " Recent Days ",
+        history_items,
+        "  No completed focus history yet.",
+    );
 
     if let Some(err) = app.stats_error.as_ref() {
         render_centered_error(frame, inner[4], format!("⚠  {err}"));
@@ -699,6 +711,26 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints, inner[5]);
+}
+
+fn render_history_panel(
+    frame: &mut Frame,
+    area: Rect,
+    title: &'static str,
+    items: Vec<ListItem>,
+    empty_message: &'static str,
+) {
+    if items.is_empty() {
+        let empty = Paragraph::new(empty_message)
+            .style(Style::default().fg(Color::DarkGray))
+            .block(Block::default().borders(Borders::ALL).title(title));
+        frame.render_widget(empty, area);
+    } else {
+        let list = List::new(items)
+            .block(Block::default().borders(Borders::ALL).title(title))
+            .style(Style::default().fg(Color::Gray));
+        frame.render_widget(list, area);
+    }
 }
 
 fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
@@ -841,6 +873,10 @@ fn format_history_goal_streak_line(app: &App) -> String {
     }
 }
 
+fn format_week_label(year: i32, week: u32) -> String {
+    format!("{year:04}-W{week:02}")
+}
+
 fn phase_color(phase: TimerPhase) -> Color {
     match phase {
         TimerPhase::Focus => Color::Red,
@@ -956,6 +992,46 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("WRAP-END"));
+    }
+
+    #[test]
+    fn history_view_renders_weekly_summary_panel() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::StatsHistory;
+        app.insert_daily_stats_for_tests(
+            "2026-04-06",
+            crate::stats::DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 30 * 60,
+                goal: None,
+            },
+        );
+        app.insert_daily_stats_for_tests(
+            "2026-04-08",
+            crate::stats::DailyStats {
+                pomodoros_completed: 2,
+                focused_seconds: 45 * 60,
+                goal: None,
+            },
+        );
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Weekly Totals"));
+        assert!(text.contains(&format_week_label(2026, 15)));
+        assert!(text.contains("75m"));
+    }
+
+    #[test]
+    fn week_label_uses_zero_padded_iso_format() {
+        assert_eq!(format_week_label(2026, 5), "2026-W05");
     }
 
     #[test]
