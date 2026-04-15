@@ -1,12 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::io;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 
 #[cfg_attr(test, allow(dead_code))]
 const STATS_FILE_NAME: &str = "stats.toml";
+const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
+const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SessionStats {
@@ -76,6 +80,53 @@ impl DailyStats {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportedStatsFiles {
+    pub json_path: PathBuf,
+    pub csv_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct StatsExport {
+    daily: Vec<DailyExportRow>,
+    weekly: Vec<WeeklyExportRow>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct DailyExportRow {
+    date: String,
+    pomodoros_completed: u32,
+    focused_seconds: u64,
+    focused_minutes: u64,
+    goal: Option<DailyGoalSnapshot>,
+    goal_met: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct WeeklyExportRow {
+    year: i32,
+    week: u32,
+    week_label: String,
+    pomodoros_completed: u32,
+    focused_seconds: u64,
+    focused_minutes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct CsvExportRow {
+    record_type: &'static str,
+    date: Option<String>,
+    week_label: Option<String>,
+    year: Option<i32>,
+    week: Option<u32>,
+    pomodoros_completed: u32,
+    focused_seconds: u64,
+    focused_minutes: u64,
+    goal_minutes: Option<u64>,
+    goal_pomodoros: Option<u32>,
+    goal_met: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 struct PersistedStats {
     #[serde(default)]
@@ -135,34 +186,9 @@ impl FocusStats {
             io::Error::new(io::ErrorKind::NotFound, "cannot determine stats directory")
         })?;
 
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
         let content = toml::to_string_pretty(&self.to_persisted())
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-        // Best-effort atomic write: temp file + rename.
-        // On Windows, rename cannot replace an existing file; fall back to
-        // remove+rename when destination already exists.
-        let tmp = path.with_extension("toml.tmp");
-        fs::write(&tmp, &content)?;
-        #[cfg(target_os = "windows")]
-        {
-            match fs::rename(&tmp, &path) {
-                Ok(()) => Ok(()),
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                    fs::remove_file(&path)?;
-                    fs::rename(&tmp, &path)
-                }
-                Err(e) => Err(e),
-            }
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            fs::rename(&tmp, &path)
-        }
+        write_atomic_bytes(&path, content.as_bytes())
     }
 
     pub fn record_focus_elapsed(
@@ -219,6 +245,70 @@ impl FocusStats {
     }
 
     pub fn recent_weekly(&self, limit: usize) -> Vec<WeeklyStats> {
+        let mut weekly = self.weekly_stats();
+        weekly.reverse();
+        weekly.truncate(limit);
+        weekly
+    }
+
+    pub fn export_to_dir(&self, dir: &Path) -> io::Result<ExportedStatsFiles> {
+        fs::create_dir_all(dir)?;
+        let export = self.export_data();
+        let json_path = dir.join(JSON_EXPORT_FILE_NAME);
+        let csv_path = dir.join(CSV_EXPORT_FILE_NAME);
+
+        let json_content = serde_json::to_vec_pretty(&export)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let csv_content = export.to_csv_bytes()?;
+
+        write_atomic_bytes(&json_path, &json_content)?;
+        write_atomic_bytes(&csv_path, &csv_content)?;
+
+        Ok(ExportedStatsFiles {
+            json_path,
+            csv_path,
+        })
+    }
+
+    fn export_data(&self) -> StatsExport {
+        StatsExport {
+            daily: self.export_daily_rows(),
+            weekly: self.export_weekly_rows(),
+        }
+    }
+
+    fn export_daily_rows(&self) -> Vec<DailyExportRow> {
+        self.daily
+            .iter()
+            .map(|(date, stats)| {
+                let goal_met = stats.goal.is_some_and(|goal| goal.is_met_by(*stats));
+                DailyExportRow {
+                    date: date.clone(),
+                    pomodoros_completed: stats.pomodoros_completed,
+                    focused_seconds: stats.focused_seconds,
+                    focused_minutes: stats.focused_minutes(),
+                    goal: stats.goal,
+                    goal_met,
+                }
+            })
+            .collect()
+    }
+
+    fn export_weekly_rows(&self) -> Vec<WeeklyExportRow> {
+        self.weekly_stats()
+            .into_iter()
+            .map(|stats| WeeklyExportRow {
+                year: stats.year,
+                week: stats.week,
+                week_label: format_week_label(stats.year, stats.week),
+                pomodoros_completed: stats.pomodoros_completed,
+                focused_seconds: stats.focused_seconds,
+                focused_minutes: stats.focused_minutes(),
+            })
+            .collect()
+    }
+
+    fn weekly_stats(&self) -> Vec<WeeklyStats> {
         let mut weekly = BTreeMap::new();
 
         for (day_key, stats) in &self.daily {
@@ -239,12 +329,7 @@ impl FocusStats {
             entry.focused_seconds = entry.focused_seconds.saturating_add(stats.focused_seconds);
         }
 
-        weekly
-            .into_iter()
-            .rev()
-            .take(limit)
-            .map(|(_, stats)| stats)
-            .collect()
+        weekly.into_values().collect()
     }
 
     #[cfg(test)]
@@ -294,6 +379,61 @@ impl FocusStats {
         }
 
         completed_days
+    }
+}
+
+impl StatsExport {
+    fn to_csv_bytes(&self) -> io::Result<Vec<u8>> {
+        let mut writer = csv::Writer::from_writer(Vec::new());
+
+        for row in self.csv_rows() {
+            writer
+                .serialize(row)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        }
+
+        writer.flush()?;
+        writer
+            .into_inner()
+            .map_err(|e| io::Error::other(format!("csv export finalize failed: {e}")))
+    }
+
+    fn csv_rows(&self) -> Vec<CsvExportRow> {
+        let mut rows = Vec::with_capacity(self.daily.len() + self.weekly.len());
+
+        for daily in &self.daily {
+            rows.push(CsvExportRow {
+                record_type: "daily",
+                date: Some(daily.date.clone()),
+                week_label: None,
+                year: None,
+                week: None,
+                pomodoros_completed: daily.pomodoros_completed,
+                focused_seconds: daily.focused_seconds,
+                focused_minutes: daily.focused_minutes,
+                goal_minutes: daily.goal.map(|goal| goal.minutes),
+                goal_pomodoros: daily.goal.map(|goal| goal.pomodoros),
+                goal_met: daily.goal.map(|_| daily.goal_met),
+            });
+        }
+
+        for weekly in &self.weekly {
+            rows.push(CsvExportRow {
+                record_type: "weekly",
+                date: None,
+                week_label: Some(weekly.week_label.clone()),
+                year: Some(weekly.year),
+                week: Some(weekly.week),
+                pomodoros_completed: weekly.pomodoros_completed,
+                focused_seconds: weekly.focused_seconds,
+                focused_minutes: weekly.focused_minutes,
+                goal_minutes: None,
+                goal_pomodoros: None,
+                goal_met: None,
+            });
+        }
+
+        rows
     }
 }
 
@@ -351,9 +491,46 @@ fn best_goal_streak(completed_days: &BTreeSet<chrono::NaiveDate>) -> u32 {
     best
 }
 
+fn format_week_label(year: i32, week: u32) -> String {
+    format!("{year:04}-W{week:02}")
+}
+
+fn write_atomic_bytes(path: &Path, content: &[u8]) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // Best-effort atomic write: temp file + rename.
+    // On Windows, rename cannot replace an existing file; fall back to
+    // remove+rename when destination already exists.
+    let tmp = path.with_extension(
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map_or_else(|| "tmp".to_string(), |ext| format!("{ext}.tmp")),
+    );
+    fs::write(&tmp, content)?;
+    #[cfg(target_os = "windows")]
+    {
+        match fs::rename(&tmp, path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                fs::remove_file(path)?;
+                fs::rename(&tmp, path)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        fs::rename(&tmp, path)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn recording_updates_session_and_daily_totals() {
@@ -569,5 +746,70 @@ mod tests {
 
         assert_eq!(streak.current, 1);
         assert_eq!(streak.best, 1);
+    }
+
+    #[test]
+    fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        stats.record_focus_elapsed("2026-04-06", 30 * 60, goal);
+        stats.record_completed_pomodoro("2026-04-06", goal);
+        stats.record_focus_elapsed("2026-04-08", 45 * 60, goal);
+        stats.record_completed_pomodoro("2026-04-08", goal);
+
+        let export_dir = unique_temp_dir("stats-export");
+        let exported = stats.export_to_dir(&export_dir).unwrap();
+
+        assert_eq!(
+            exported.json_path.file_name().unwrap(),
+            JSON_EXPORT_FILE_NAME
+        );
+        assert_eq!(exported.csv_path.file_name().unwrap(), CSV_EXPORT_FILE_NAME);
+
+        let json = fs::read_to_string(&exported.json_path).unwrap();
+        let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let daily = json_value["daily"].as_array().unwrap();
+        let weekly = json_value["weekly"].as_array().unwrap();
+        assert_eq!(daily.len(), 2);
+        assert_eq!(weekly.len(), 1);
+        assert_eq!(daily[0]["date"], "2026-04-06");
+        assert_eq!(daily[0]["goal_met"], true);
+        assert_eq!(weekly[0]["week_label"], "2026-W15");
+        assert_eq!(weekly[0]["focused_minutes"], 75);
+
+        let csv = fs::read_to_string(&exported.csv_path).unwrap();
+        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met"));
+        assert!(csv.contains("daily,2026-04-06,,,,1,1800,30,25,1,true"));
+        assert!(csv.contains("weekly,,2026-W15,2026,15,2,4500,75,,,"));
+
+        fs::remove_dir_all(export_dir).unwrap();
+    }
+
+    #[test]
+    fn export_to_dir_returns_error_when_target_is_not_directory() {
+        let stats = FocusStats::default();
+        let export_root = unique_temp_dir("stats-export-error");
+        let not_a_directory = export_root.join("already-a-file");
+        fs::write(&not_a_directory, "occupied").unwrap();
+
+        let result = stats.export_to_dir(&not_a_directory);
+
+        assert!(result.is_err());
+
+        fs::remove_dir_all(export_root).unwrap();
+    }
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("focustime-{label}-{}-{unique}", std::process::id()));
+        fs::create_dir_all(&path).unwrap();
+        path
     }
 }
