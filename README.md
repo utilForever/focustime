@@ -17,32 +17,44 @@ TUI-based application for **Pomodoro timing**, **distraction-site blocking**, an
 <table>
   <tr>
     <td align="center">
-      <img src="./assets/demo_focus.png" alt="Focus mode demo" width="800">
+      <img src="./assets/demo_focus.png" alt="Focus mode demo" width="600">
       <p>Pomodoro - Focus</p>
     </td>
     <td align="center">
-      <img src="./assets/demo_short_break.png" alt="Short break demo" width="800">
+      <img src="./assets/demo_short_break.png" alt="Short break demo" width="600">
       <p>Pomodoro - Short Break</p>
+    </td>
+    <td align="center">
+      <img src="./assets/demo_long_break.png" alt="Long break demo" width="600">
+      <p>Pomodoro - Long Break</p>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="./assets/demo_site_blocking_inactive.png" alt="Site blocking inactive demo" width="800">
+      <img src="./assets/demo_site_blocking_init.png" alt="Site blocking init demo" width="600">
+      <p>Site blocking - Init</p>
+    </td>
+    <td align="center">
+      <img src="./assets/demo_site_blocking_inactive.png" alt="Site blocking inactive demo" width="600">
       <p>Site blocking - Inactive</p>
     </td>
     <td align="center">
-      <img src="./assets/demo_site_blocking_active.png" alt="Site blocking active demo" width="800">
+      <img src="./assets/demo_site_blocking_active.png" alt="Site blocking active demo" width="600">
       <p>Site blocking - Active</p>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="./assets/demo_history.png" alt="History demo" width="800">
+      <img src="./assets/demo_history.png" alt="History demo" width="600">
       <p>Daily Focus History</p>
     </td>
     <td align="center">
-      <img src="./assets/demo_profiles.png" alt="Profiles demo" width="800">
+      <img src="./assets/demo_profiles.png" alt="Profiles demo" width="600">
       <p>Pomodoro Profiles</p>
+    </td>
+    <td align="center">
+      <img src="./assets/demo_diagnostics.png" alt="Setup diagnostics demo" width="600">
+      <p>Setup Diagnostics</p>
     </td>
   </tr>
 </table>
