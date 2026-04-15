@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-15
+
+### Added
+- **Daily focus goals and live progress (#92):** introduced configurable daily minute/pomodoro goals with live progress shown in timer and history views.
+- **Auto-start phase options (#93):** added opt-in auto-start controls for focus-to-break and break-to-focus transitions on natural (non-catchup) completions.
+- **Setup diagnostics screen (#96):** added in-app diagnostics for blocking permissions, hosts file write access, and WakaTime configuration readiness.
+- **WakaTime success timestamp visibility (#95):** surfaced the last successful heartbeat time in the timer status line when tracking is configured.
+
+### Changed
+- **Windows keyboard input handling (#94):** fixed duplicate key processing on Windows and added regression coverage for key filtering behavior.
+- **v0.3.0 visual documentation refresh (#99):** updated README screenshots to reflect current UI and workflows.
+
 ## [0.2.1] - 2026-04-13
 
 ### Added
@@ -35,7 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/utilForever/focustime/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/utilForever/focustime/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/utilForever/focustime/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/utilForever/focustime/releases/tag/v0.1.0
