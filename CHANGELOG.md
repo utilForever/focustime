@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-15
+
+### Added
+- **Streak tracking (#101):** added current-streak and best-streak tracking based on completed daily focus goals while preserving historical accuracy when goals change later.
+- **Weekly history summaries (#102):** added weekly aggregation of focused minutes and completed Pomodoros in the History view.
+
 ## [0.3.0] - 2026-04-15
 
 ### Added
@@ -47,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/utilForever/focustime/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/utilForever/focustime/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/utilForever/focustime/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/utilForever/focustime/compare/v0.1.0...v0.2.0
