@@ -8,7 +8,8 @@ use crate::config::{
 };
 use crate::notifications::PhaseNotifier;
 use crate::stats::{
-    DailyGoalSnapshot, DailyStats, FocusStats, GoalStreak, SessionStats, current_day_key,
+    DailyGoalSnapshot, DailyStats, FocusStats, GoalStreak, SessionStats, WeeklyStats,
+    current_day_key,
 };
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -435,6 +436,15 @@ impl App {
 
     pub fn recent_daily_stats(&self, limit: usize) -> Vec<(String, DailyStats)> {
         self.stats.recent_daily(limit)
+    }
+
+    pub fn recent_weekly_stats(&self, limit: usize) -> Vec<WeeklyStats> {
+        self.stats.recent_weekly(limit)
+    }
+
+    #[cfg(test)]
+    pub fn insert_daily_stats_for_tests(&mut self, day_key: &str, stats: DailyStats) {
+        self.stats.insert_daily_for_tests(day_key, stats);
     }
 
     pub fn profile_edit_field_value(&self, field_index: usize) -> String {
