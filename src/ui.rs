@@ -47,6 +47,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
             Constraint::Length(1), // latest phase notification
             Constraint::Length(1), // stats summary
             Constraint::Length(1), // daily goal progress
+            Constraint::Length(1), // streak summary
             Constraint::Length(1), // wakatime status
             Constraint::Min(0),    // spacer
             Constraint::Length(2), // key hints
@@ -61,8 +62,9 @@ fn render_timer(frame: &mut Frame, app: &App) {
     render_timer_phase_notice(frame, app, inner[5]);
     render_timer_stats_summary(frame, app, inner[6]);
     render_timer_goal_summary(frame, app, inner[7]);
-    render_timer_wakatime_status(frame, app, inner[8]);
-    render_timer_hints(frame, app, inner[10]);
+    render_timer_streak_summary(frame, app, inner[8]);
+    render_timer_wakatime_status(frame, app, inner[9]);
+    render_timer_hints(frame, app, inner[11]);
 }
 
 fn render_timer_phase_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -210,6 +212,13 @@ fn render_timer_goal_summary(frame: &mut Frame, app: &App, area: Rect) {
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(goal_widget, area);
+}
+
+fn render_timer_streak_summary(frame: &mut Frame, app: &App, area: Rect) {
+    let streak_widget = Paragraph::new(format_streak_summary_line(app))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(streak_widget, area);
 }
 
 fn render_timer_wakatime_status(frame: &mut Frame, app: &App, area: Rect) {
@@ -635,6 +644,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
             Constraint::Length(1), // session summary
             Constraint::Length(1), // today summary
             Constraint::Length(1), // daily goal progress
+            Constraint::Length(1), // streak summary
             Constraint::Length(1), // spacer
             Constraint::Min(3),    // history list
             Constraint::Length(1), // error line
@@ -673,6 +683,10 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     let goal_summary = Paragraph::new(goal_line).style(Style::default().fg(Color::DarkGray));
     frame.render_widget(goal_summary, inner[2]);
 
+    let streak_summary =
+        Paragraph::new(format_streak_summary_line(app)).style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(streak_summary, inner[3]);
+
     let history_items: Vec<ListItem> = app
         .recent_daily_stats(14)
         .into_iter()
@@ -693,7 +707,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
                     .borders(Borders::ALL)
                     .title(" Recent Days "),
             );
-        frame.render_widget(empty, inner[4]);
+        frame.render_widget(empty, inner[5]);
     } else {
         let list = List::new(history_items)
             .block(
@@ -702,11 +716,11 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
                     .title(" Recent Days "),
             )
             .style(Style::default().fg(Color::Gray));
-        frame.render_widget(list, inner[4]);
+        frame.render_widget(list, inner[5]);
     }
 
     if let Some(err) = app.stats_error.as_ref() {
-        render_centered_error(frame, inner[5], format!("⚠  {err}"));
+        render_centered_error(frame, inner[6], format!("⚠  {err}"));
     }
 
     let hints = Paragraph::new(if app.strict_mode_enforced_for_focus() {
@@ -716,7 +730,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     })
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints, inner[6]);
+    frame.render_widget(hints, inner[7]);
 }
 
 fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
@@ -827,6 +841,19 @@ fn format_goal_metric_progress(
     } else {
         format!("{label} {completed}/{target}{unit_suffix}")
     }
+}
+
+fn format_streak_summary_line(app: &App) -> String {
+    let streak = app.goal_streak();
+    let suffix = if app.today_goal_progress().has_any_target() {
+        ""
+    } else {
+        " (goal off)"
+    };
+    format!(
+        "Streaks: current {}d · best {}d{}",
+        streak.current, streak.best, suffix
+    )
 }
 
 fn phase_color(phase: TimerPhase) -> Color {
