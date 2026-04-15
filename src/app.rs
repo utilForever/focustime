@@ -409,10 +409,14 @@ impl App {
     }
 
     pub fn goal_streak(&self) -> GoalStreak {
+        self.goal_streak_for_day_key(&current_day_key())
+    }
+
+    fn goal_streak_for_day_key(&self, day_key: &str) -> GoalStreak {
         self.stats.goal_streak(
-            current_day_date(),
+            parse_day_key(day_key).unwrap_or_else(current_day_date),
             self.current_goal_snapshot(),
-            self.today_stats(),
+            self.stats.daily_for(day_key),
         )
     }
 
@@ -1320,6 +1324,10 @@ fn bool_label(value: bool) -> &'static str {
     if value { "On" } else { "Off" }
 }
 
+fn parse_day_key(day_key: &str) -> Option<chrono::NaiveDate> {
+    chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d").ok()
+}
+
 fn goal_progress(completed: u64, target: u64) -> GoalProgress {
     let ratio = if target == 0 {
         0.0
@@ -1896,6 +1904,28 @@ mod tests {
                 pomodoros: 1,
             })
         );
+    }
+
+    #[test]
+    fn goal_streak_for_day_key_uses_the_same_day_for_date_and_stats_lookup() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 1,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let goal = app.current_goal_snapshot();
+
+        for day_key in ["2026-04-08", "2026-04-09"] {
+            app.stats.record_focus_elapsed(day_key, 60 * 60, goal);
+            app.stats.record_completed_pomodoro(day_key, goal);
+        }
+
+        let streak = app.goal_streak_for_day_key("2026-04-09");
+        assert_eq!(streak.current, 2);
+        assert_eq!(streak.best, 2);
     }
 
     #[test]

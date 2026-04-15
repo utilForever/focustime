@@ -229,7 +229,7 @@ both:
 - target completed pomodoros
 
 Streaks are evaluated against the goal that was active on each day. Changing the
-daily goal later does not rewrite newer tracked days, and streak tracking stays
+daily goal later does not rewrite older tracked days, and streak tracking stays
 inactive when today's goal is off.
 
 From timer view:
