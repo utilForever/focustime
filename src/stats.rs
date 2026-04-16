@@ -517,6 +517,10 @@ fn write_atomic_bytes(path: &Path, content: &[u8]) -> io::Result<()> {
         match fs::rename(&tmp_path, path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                // Windows std::fs::rename cannot replace an existing file.
+                // This fallback has a small data-loss window: if remove_file
+                // succeeds and rename then fails, the old destination is gone
+                // while the new content remains only at tmp_path.
                 fs::remove_file(path)?;
                 fs::rename(&tmp_path, path)
             }
