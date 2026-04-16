@@ -53,6 +53,9 @@ pub struct AppConfig {
     /// A value of `0` disables the corresponding goal.
     #[serde(default)]
     pub daily_goal: DailyGoalConfig,
+    /// WakaTime heartbeat metadata labels.
+    #[serde(default)]
+    pub wakatime: WakatimeMetadataConfig,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -81,6 +84,38 @@ pub struct DailyGoalConfig {
     pub pomodoros: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WakatimeMetadataConfig {
+    #[serde(default = "default_wakatime_project")]
+    pub project: String,
+    #[serde(default = "default_wakatime_language")]
+    pub language: String,
+}
+
+impl WakatimeMetadataConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            project: normalize_nonempty_or_default_string(
+                &self.project,
+                &default_wakatime_project(),
+            ),
+            language: normalize_nonempty_or_default_string(
+                &self.language,
+                &default_wakatime_language(),
+            ),
+        }
+    }
+}
+
+impl Default for WakatimeMetadataConfig {
+    fn default() -> Self {
+        Self {
+            project: default_wakatime_project(),
+            language: default_wakatime_language(),
+        }
+    }
+}
+
 impl Default for NotificationConfig {
     fn default() -> Self {
         Self {
@@ -92,6 +127,14 @@ impl Default for NotificationConfig {
 
 fn default_notification_enabled() -> bool {
     true
+}
+
+fn default_wakatime_project() -> String {
+    "focustime".to_string()
+}
+
+fn default_wakatime_language() -> String {
+    "Pomodoro".to_string()
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
@@ -202,6 +245,7 @@ impl Default for AppConfig {
             auto_start: AutoStartConfig::default(),
             strict_mode: false,
             daily_goal: DailyGoalConfig::default(),
+            wakatime: WakatimeMetadataConfig::default(),
         }
     }
 }
@@ -293,6 +337,7 @@ impl AppConfig {
         self.long_break_interval =
             nonzero_or_default_u32(self.long_break_interval, default_long_break_interval());
         self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
+        self.wakatime = self.wakatime.normalized();
         self
     }
 
@@ -358,6 +403,15 @@ fn nonzero_or_default_u32(value: u32, default: u32) -> u32 {
     if value == 0 { default } else { value }
 }
 
+fn normalize_nonempty_or_default_string(value: &str, default: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        default.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -382,6 +436,7 @@ mod tests {
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
+        assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }
 
     #[test]
@@ -412,6 +467,10 @@ mod tests {
                 minutes: 180,
                 pomodoros: 6,
             },
+            wakatime: WakatimeMetadataConfig {
+                project: "Team Focus".to_string(),
+                language: "Focus Session".to_string(),
+            },
         };
         let toml_str = toml::to_string_pretty(&original).unwrap();
         let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
@@ -426,6 +485,7 @@ mod tests {
         assert_eq!(parsed.auto_start, original.auto_start);
         assert_eq!(parsed.strict_mode, original.strict_mode);
         assert_eq!(parsed.daily_goal, original.daily_goal);
+        assert_eq!(parsed.wakatime, original.wakatime);
     }
 
     #[test]
@@ -443,6 +503,7 @@ mod tests {
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
+        assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }
 
     #[test]
@@ -476,6 +537,7 @@ blocked_sites = ["reddit.com", "youtube.com"]
         assert_eq!(parsed.blocked_sites, vec!["reddit.com", "youtube.com"]);
         assert_eq!(parsed.auto_start, AutoStartConfig::default());
         assert_eq!(parsed.daily_goal, DailyGoalConfig::default());
+        assert_eq!(parsed.wakatime, WakatimeMetadataConfig::default());
     }
 
     #[test]
@@ -513,6 +575,7 @@ long_break_interval = 3
             auto_start: AutoStartConfig::default(),
             strict_mode: false,
             daily_goal: DailyGoalConfig::default(),
+            wakatime: WakatimeMetadataConfig::default(),
         };
         let custom = cfg.effective_custom_profile();
         assert_eq!(custom.focus_secs, 40 * 60);
@@ -557,6 +620,21 @@ long_break_interval = 3
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
+        assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
+    }
+
+    #[test]
+    fn wakatime_metadata_normalizes_blank_fields_to_defaults() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+[wakatime]
+project = "   "
+language = ""
+"#,
+        )
+        .unwrap();
+        let normalized = cfg.normalize();
+        assert_eq!(normalized.wakatime, WakatimeMetadataConfig::default());
     }
 
     #[cfg(not(target_os = "windows"))]

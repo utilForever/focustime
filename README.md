@@ -140,7 +140,14 @@ break_to_focus = false
 [daily_goal]
 minutes = 120
 pomodoros = 4
+
+[wakatime]
+project = "focustime"
+language = "Pomodoro"
 ```
+
+`[wakatime]` is optional. If omitted (or set to blank values), `focustime` uses
+the defaults above for heartbeat metadata labels.
 
 ## Site manager workflow
 

@@ -6,7 +6,8 @@ use crate::blocker::{
     BulkAddResult, EditSiteResult, HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
 };
 use crate::config::{
-    AppConfig, AutoStartConfig, CustomProfileConfig, DailyGoalConfig, NotificationConfig, ProfileId,
+    AppConfig, AutoStartConfig, CustomProfileConfig, DailyGoalConfig, NotificationConfig,
+    ProfileId, WakatimeMetadataConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::stats::{
@@ -17,7 +18,7 @@ use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
 };
-use crate::wakatime::{WakatimeConfigStatus, WakatimeTracker};
+use crate::wakatime::{WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeTracker};
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
@@ -265,6 +266,7 @@ pub struct App {
     auto_start: AutoStartConfig,
     pub strict_mode: bool,
     daily_goal: DailyGoalConfig,
+    wakatime_metadata: WakatimeMetadataConfig,
     pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
     stats: FocusStats,
@@ -291,6 +293,7 @@ impl App {
         let auto_start = config.auto_start;
         let strict_mode = config.strict_mode;
         let daily_goal = config.daily_goal;
+        let wakatime_metadata = config.wakatime;
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (stats, stats_error) = match FocusStats::load() {
             Ok(stats) => (stats, None),
@@ -323,7 +326,10 @@ impl App {
             stats_error,
             history_feedback: None,
             phase_notification: None,
-            wakatime: WakatimeTracker::new(),
+            wakatime: WakatimeTracker::new_with_metadata(WakatimeHeartbeatMetadata {
+                project: wakatime_metadata.project.clone(),
+                language: wakatime_metadata.language.clone(),
+            }),
             selected_profile,
             custom_profile,
             profile_selection_index: profile_index(selected_profile),
@@ -334,6 +340,7 @@ impl App {
             auto_start,
             strict_mode,
             daily_goal,
+            wakatime_metadata,
             pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
             stats,
@@ -517,6 +524,7 @@ impl App {
             auto_start: self.auto_start,
             strict_mode: self.strict_mode,
             daily_goal: self.daily_goal,
+            wakatime: self.wakatime_metadata.clone(),
         }
     }
 
@@ -1572,6 +1580,7 @@ mod tests {
             auto_start: AutoStartConfig::default(),
             strict_mode: false,
             daily_goal: DailyGoalConfig::default(),
+            wakatime: WakatimeMetadataConfig::default(),
         };
         let app = App::from_config(config);
         assert_eq!(app.selected_profile, ProfileId::Classic);
@@ -1777,6 +1786,28 @@ mod tests {
         assert_eq!(persisted.auto_start, AutoStartConfig::default());
         assert!(persisted.strict_mode);
         assert_eq!(persisted.daily_goal, DailyGoalConfig::default());
+        assert_eq!(persisted.wakatime, WakatimeMetadataConfig::default());
+    }
+
+    #[test]
+    fn persisted_config_preserves_wakatime_metadata() {
+        let config = AppConfig {
+            wakatime: WakatimeMetadataConfig {
+                project: "Team Focus".to_string(),
+                language: "Deep Work".to_string(),
+            },
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+
+        let persisted = app.persisted_config();
+        assert_eq!(
+            persisted.wakatime,
+            WakatimeMetadataConfig {
+                project: "Team Focus".to_string(),
+                language: "Deep Work".to_string(),
+            }
+        );
     }
 
     #[test]
