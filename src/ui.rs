@@ -634,7 +634,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
 
 fn render_session_planner(frame: &mut Frame, app: &App) {
     let area = frame.area();
-    let outer = centered_rect(62, 78, area);
+    let outer = centered_rect(66, 82, area);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -647,22 +647,33 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1), // current task
+            Constraint::Length(2), // current task
             Constraint::Length(1), // spacer
-            Constraint::Min(4),    // task labels list
+            Constraint::Min(5),    // task labels list
             Constraint::Length(3), // add input
             Constraint::Length(2), // feedback
-            Constraint::Length(2), // hints
+            Constraint::Length(3), // hints
         ])
         .split(outer);
 
-    let current_text = app
-        .selected_task_label
-        .as_ref()
-        .map(|label| format!("Selected task: {label}"))
-        .unwrap_or_else(|| "Selected task: none (required before focus starts)".to_string());
+    let current_text = app.selected_task_label.as_ref().map_or_else(
+        || {
+            vec![
+                Line::from("Selected task:"),
+                Line::from("  none (required before focus starts)"),
+            ]
+        },
+        |label| {
+            vec![
+                Line::from("Selected task:"),
+                Line::from(format!("  {label}")),
+            ]
+        },
+    );
     frame.render_widget(
-        Paragraph::new(current_text).style(Style::default().fg(Color::White)),
+        Paragraph::new(current_text)
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: true }),
         inner[0],
     );
 
@@ -723,7 +734,7 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
     let input_text = if app.planner_input_active {
         app.planner_input.clone()
     } else {
-        "Type a label and press [Enter] to add + select".to_string()
+        "Type a label, then press [Enter] to add and select".to_string()
     };
     frame.render_widget(
         Paragraph::new(input_text)
@@ -752,16 +763,18 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
 
     let hints = if app.planner_input_active {
         vec![
-            Line::from("Input: type task label, then [Enter] to save"),
+            Line::from("Input: type task label, then [Enter]"),
+            Line::from("Input: [Esc] Cancel"),
             Line::from(if app.strict_mode_enforced_for_focus() {
-                "Input: [Esc] Cancel  [q/Ctrl-C] Quit (Locked)"
+                "View: [t/Esc] Back  [q/Ctrl-C] Quit (Locked)"
             } else {
-                "Input: [Esc] Cancel  [q/Ctrl-C] Quit"
+                "View: [t/Esc] Back  [q/Ctrl-C] Quit"
             }),
         ]
     } else {
         vec![
-            Line::from("Planner: [↑/↓] Move  [Enter] Select  [a] Add"),
+            Line::from("Planner: [↑/↓] Move"),
+            Line::from("Planner: [Enter] Select  [a] Add label"),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "View: [t/Esc] Back  [q/Ctrl-C] Quit (Locked)"
             } else {
