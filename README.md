@@ -117,6 +117,19 @@ Open profile manager from timer view with **`p`**.
 
 Profile selection and custom values are persisted in `config.toml`.
 
+## Session planner
+
+Open the session planner from timer view with **`t`**.
+
+- `a`: add a new task label
+- `↑/↓`: move selection
+- `Enter`: select highlighted task label
+- `t` or `Esc`: return to timer view
+- while adding a label, `Enter` saves and `Esc` cancels
+
+Starting a focus session from idle now requires a selected task label. The timer
+view always shows the current task label (or a reminder to select one).
+
 ### Example config
 
 ```toml
@@ -246,6 +259,9 @@ From timer view:
 - while the history panel is open, press **`e`** to export `focustime-stats.json` and `focustime-stats.csv` into the current working directory
 - press **`h`** or **`Esc`** to return to timer view
 
+Exports include daily/weekly aggregates plus labeled focus-session records where
+task labels were attached.
+
 ## The way the system works
 
 `focustime` is a single-binary Rust TUI app composed of seven modules in `src/`:
@@ -256,7 +272,7 @@ From timer view:
 - `src/blocker.rs`: hosts-file site blocking and unblocking.
 - `src/wakatime.rs`: heartbeat tracking integration.
 - `src/notifications.rs`: phase transition notifications and optional sound.
-- `src/ui.rs`: Ratatui rendering for timer, site manager, profile, history, and setup diagnostics views.
+- `src/ui.rs`: Ratatui rendering for timer, session planner, site manager, profile, history, and setup diagnostics views.
 
 WakaTime tracking is optional and activates only when an API key is configured
 (read from `~/.wakatime.cfg`).
@@ -264,7 +280,7 @@ WakaTime tracking is optional and activates only when an API key is configured
 Runtime flow (high-level):
 
 1. The main loop renders UI and reads keyboard input.
-2. `App` handles key events (`start/pause`, `stop`, `next`, site manager actions).
+2. `App` handles key events (`start/pause`, `stop`, `next`, session planner actions, site manager actions).
 3. Timer ticks advance every elapsed second while running.
 4. Phase-completion notifications are dispatched asynchronously.
 5. Blocking is applied during focus phases and removed outside focus.

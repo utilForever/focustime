@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::app::{
     App, AppMode, DailyGoalProgress, HistoryFeedbackLevel, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS,
-    SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
+    PlannerFeedbackLevel, SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
 };
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
@@ -19,6 +19,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         AppMode::Timer => render_timer(frame, app),
         AppMode::SiteManager => render_site_manager(frame, app),
         AppMode::ProfileManager => render_profile_manager(frame, app),
+        AppMode::SessionPlanner => render_session_planner(frame, app),
         AppMode::StatsHistory => render_stats_history(frame, app),
         AppMode::SetupDiagnostics => render_setup_diagnostics(frame, app),
     }
@@ -42,6 +43,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
             Constraint::Length(2), // phase + pomodoro count
             Constraint::Length(3), // MM:SS
             Constraint::Length(1), // active profile
+            Constraint::Length(1), // selected task label
             Constraint::Length(3), // progress bar
             Constraint::Length(2), // status
             Constraint::Length(1), // latest phase notification
@@ -56,13 +58,14 @@ fn render_timer(frame: &mut Frame, app: &App) {
     render_timer_phase_header(frame, app, inner[0]);
     render_timer_countdown(frame, app, inner[1]);
     render_timer_profile(frame, app, inner[2]);
-    render_timer_progress_bar(frame, app, inner[3]);
-    render_timer_status(frame, app, inner[4]);
-    render_timer_phase_notice(frame, app, inner[5]);
-    render_timer_stats_summary(frame, app, inner[6]);
-    render_timer_goal_streak_summary(frame, app, inner[7]);
-    render_timer_wakatime_status(frame, app, inner[8]);
-    render_timer_hints(frame, app, inner[10]);
+    render_timer_task_label(frame, app, inner[3]);
+    render_timer_progress_bar(frame, app, inner[4]);
+    render_timer_status(frame, app, inner[5]);
+    render_timer_phase_notice(frame, app, inner[6]);
+    render_timer_stats_summary(frame, app, inner[7]);
+    render_timer_goal_streak_summary(frame, app, inner[8]);
+    render_timer_wakatime_status(frame, app, inner[9]);
+    render_timer_hints(frame, app, inner[11]);
 }
 
 fn render_timer_phase_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -106,6 +109,24 @@ fn render_timer_profile(frame: &mut Frame, app: &App, area: Rect) {
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(profile_widget, area);
+}
+
+fn render_timer_task_label(frame: &mut Frame, app: &App, area: Rect) {
+    let (text, style) = if let Some(label) = app.current_task_label() {
+        (
+            format!("Task: {label}"),
+            Style::default().fg(Color::LightYellow),
+        )
+    } else {
+        (
+            "Task: not selected ([t] Planner)".to_string(),
+            Style::default().fg(Color::Yellow),
+        )
+    };
+    let widget = Paragraph::new(text)
+        .alignment(Alignment::Center)
+        .style(style);
+    frame.render_widget(widget, area);
 }
 
 fn render_timer_progress_bar(frame: &mut Frame, app: &App, area: Rect) {
@@ -289,9 +310,9 @@ fn timer_primary_hint(app: &App) -> &'static str {
 
 fn timer_secondary_hint(app: &App) -> &'static str {
     if app.strict_mode_enforced_for_focus() {
-        "Views: [h] History  [p] Profiles (Locked)  [b] Sites  [d] Setup  [q/Esc] Quit (Locked)"
+        "Views: [h] History  [p] Profiles (Locked)  [t] Planner  [b] Sites  [d] Setup  [q/Esc] Quit (Locked)"
     } else {
-        "Views: [h] History  [p] Profiles  [b] Sites  [d] Setup  [q/Esc] Quit"
+        "Views: [h] History  [p] Profiles  [t] Planner  [b] Sites  [d] Setup  [q/Esc] Quit"
     }
 }
 
@@ -609,6 +630,151 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints_widget, inner[7]);
+}
+
+fn render_session_planner(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+    let outer = centered_rect(62, 78, area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Session Planner ")
+        .title_alignment(Alignment::Center)
+        .style(Style::default().fg(Color::Cyan));
+    frame.render_widget(block, outer);
+
+    let inner = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(2)
+        .constraints([
+            Constraint::Length(1), // current task
+            Constraint::Length(1), // spacer
+            Constraint::Min(4),    // task labels list
+            Constraint::Length(3), // add input
+            Constraint::Length(2), // feedback
+            Constraint::Length(2), // hints
+        ])
+        .split(outer);
+
+    let current_text = app
+        .selected_task_label
+        .as_ref()
+        .map(|label| format!("Selected task: {label}"))
+        .unwrap_or_else(|| "Selected task: none (required before focus starts)".to_string());
+    frame.render_widget(
+        Paragraph::new(current_text).style(Style::default().fg(Color::White)),
+        inner[0],
+    );
+
+    if app.task_labels.is_empty() {
+        frame.render_widget(
+            Paragraph::new("No task labels yet. Press [a] to add one.")
+                .style(Style::default().fg(Color::DarkGray))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Task Labels "),
+                ),
+            inner[2],
+        );
+    } else {
+        let items: Vec<ListItem> = app
+            .task_labels
+            .iter()
+            .map(|label| {
+                let marker = if app
+                    .selected_task_label
+                    .as_ref()
+                    .is_some_and(|selected| selected.eq_ignore_ascii_case(label))
+                {
+                    "✓"
+                } else {
+                    " "
+                };
+                ListItem::new(format!(" {marker} {label}"))
+            })
+            .collect();
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Task Labels "),
+            )
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("▶ ");
+        let mut state = ListState::default();
+        state.select(Some(
+            app.planner_selection_index
+                .min(app.task_labels.len().saturating_sub(1)),
+        ));
+        frame.render_stateful_widget(list, inner[2], &mut state);
+    }
+
+    let input_title = if app.planner_input_active {
+        " Add task label "
+    } else {
+        " Add task label ([a] to type) "
+    };
+    let input_text = if app.planner_input_active {
+        app.planner_input.clone()
+    } else {
+        "Type a label and press [Enter] to add + select".to_string()
+    };
+    frame.render_widget(
+        Paragraph::new(input_text)
+            .style(if app.planner_input_active {
+                Style::default().fg(Color::White)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            })
+            .block(Block::default().borders(Borders::ALL).title(input_title)),
+        inner[3],
+    );
+
+    if let Some(feedback) = app.planner_feedback.as_ref() {
+        let (prefix, color) = match feedback.level {
+            PlannerFeedbackLevel::Success => ("✓", Color::Green),
+            PlannerFeedbackLevel::Warning => ("⚠", Color::Yellow),
+        };
+        frame.render_widget(
+            Paragraph::new(format!("{prefix}  {}", feedback.message))
+                .style(Style::default().fg(color))
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true }),
+            inner[4],
+        );
+    }
+
+    let hints = if app.planner_input_active {
+        vec![
+            Line::from("Input: type task label, then [Enter] to save"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "Input: [Esc] Cancel  [q/Ctrl-C] Quit (Locked)"
+            } else {
+                "Input: [Esc] Cancel  [q/Ctrl-C] Quit"
+            }),
+        ]
+    } else {
+        vec![
+            Line::from("Planner: [↑/↓] Move  [Enter] Select  [a] Add"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "View: [t/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+            } else {
+                "View: [t/Esc] Back  [q/Ctrl-C] Quit"
+            }),
+        ]
+    };
+    frame.render_widget(
+        Paragraph::new(hints)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray)),
+        inner[5],
+    );
 }
 
 fn render_stats_history(frame: &mut Frame, app: &App) {
@@ -963,6 +1129,12 @@ mod tests {
     }
 
     #[test]
+    fn timer_secondary_hint_includes_planner_shortcut() {
+        let app = App::default();
+        assert!(timer_secondary_hint(&app).contains("[t] Planner"));
+    }
+
+    #[test]
     fn timer_secondary_hint_includes_setup_shortcut_in_strict_mode() {
         let mut app = App::default();
         app.strict_mode = true;
@@ -970,6 +1142,16 @@ mod tests {
         app.timer.status = TimerStatus::Running;
 
         assert!(timer_secondary_hint(&app).contains("[d] Setup"));
+    }
+
+    #[test]
+    fn timer_secondary_hint_includes_planner_shortcut_in_strict_mode() {
+        let mut app = App::default();
+        app.strict_mode = true;
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        assert!(timer_secondary_hint(&app).contains("[t] Planner"));
     }
 
     #[test]
@@ -1062,6 +1244,41 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("[e] Export CSV + JSON"));
+    }
+
+    #[test]
+    fn timer_view_renders_selected_task_label() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Task: Docs"));
+    }
+
+    #[test]
+    fn session_planner_view_renders_title() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::SessionPlanner;
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Session Planner"));
     }
 
     #[test]
