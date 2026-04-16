@@ -12,6 +12,9 @@ const HEARTBEAT_INTERVAL_SECS: u64 = 120;
 const HEARTBEAT_RETRY_BACKOFF_SECS: [u64; 2] = [1, 2];
 const HEARTBEAT_MAX_ATTEMPTS: u8 = 3;
 const DEFAULT_API_URL: &str = "https://wakatime.com";
+const DEFAULT_HEARTBEAT_ENTITY: &str = "focustime";
+const DEFAULT_HEARTBEAT_PROJECT: &str = "focustime";
+const DEFAULT_HEARTBEAT_LANGUAGE: &str = "Pomodoro";
 
 #[derive(Debug, Serialize)]
 struct Heartbeat {
@@ -53,6 +56,30 @@ pub struct WakatimeConfigDiagnostics {
     pub config_path: Option<String>,
     pub status: WakatimeConfigStatus,
     pub detail: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WakatimeHeartbeatMetadata {
+    pub project: String,
+    pub language: String,
+}
+
+impl WakatimeHeartbeatMetadata {
+    pub fn normalized(&self) -> Self {
+        Self {
+            project: normalize_nonempty_or_default(&self.project, DEFAULT_HEARTBEAT_PROJECT),
+            language: normalize_nonempty_or_default(&self.language, DEFAULT_HEARTBEAT_LANGUAGE),
+        }
+    }
+}
+
+impl Default for WakatimeHeartbeatMetadata {
+    fn default() -> Self {
+        Self {
+            project: DEFAULT_HEARTBEAT_PROJECT.to_string(),
+            language: DEFAULT_HEARTBEAT_LANGUAGE.to_string(),
+        }
+    }
 }
 
 fn current_unix_epoch_secs() -> u64 {
@@ -196,12 +223,17 @@ pub struct WakatimeTracker {
     last_successful_heartbeat_epoch_secs: Option<u64>,
     /// Latches an immediate heartbeat request while another worker is in flight.
     pending_immediate_heartbeat: bool,
+    heartbeat_metadata: WakatimeHeartbeatMetadata,
     #[cfg(test)]
     disable_network_io: bool,
 }
 
 impl WakatimeTracker {
     pub fn new() -> Self {
+        Self::new_with_metadata(WakatimeHeartbeatMetadata::default())
+    }
+
+    pub fn new_with_metadata(metadata: WakatimeHeartbeatMetadata) -> Self {
         let config = WakatimeConfig::load();
         let (result_tx, result_rx) = mpsc::channel();
         Self {
@@ -216,6 +248,7 @@ impl WakatimeTracker {
             last_error: None,
             last_successful_heartbeat_epoch_secs: None,
             pending_immediate_heartbeat: false,
+            heartbeat_metadata: metadata.normalized(),
             #[cfg(test)]
             disable_network_io: false,
         }
@@ -379,14 +412,7 @@ impl WakatimeTracker {
             .map(|d| d.as_secs_f64())
             .unwrap_or(0.0);
 
-        let heartbeat = Heartbeat {
-            entity: "focustime".to_string(),
-            entity_type: "app".to_string(),
-            time: now,
-            project: "focustime".to_string(),
-            language: "Pomodoro".to_string(),
-            is_write: false,
-        };
+        let heartbeat = build_heartbeat_payload(now, &self.heartbeat_metadata);
         let result_tx = self.result_tx.clone();
 
         std::thread::spawn(move || {
@@ -416,6 +442,7 @@ impl WakatimeTracker {
             last_error: None,
             last_successful_heartbeat_epoch_secs: None,
             pending_immediate_heartbeat: false,
+            heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
             disable_network_io: true,
         }
     }
@@ -435,6 +462,7 @@ impl WakatimeTracker {
             last_error: None,
             last_successful_heartbeat_epoch_secs: None,
             pending_immediate_heartbeat: false,
+            heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
             disable_network_io: true,
         }
     }
@@ -530,6 +558,18 @@ impl Default for WakatimeTracker {
     }
 }
 
+fn build_heartbeat_payload(now: f64, metadata: &WakatimeHeartbeatMetadata) -> Heartbeat {
+    let metadata = metadata.normalized();
+    Heartbeat {
+        entity: DEFAULT_HEARTBEAT_ENTITY.to_string(),
+        entity_type: "app".to_string(),
+        time: now,
+        project: metadata.project,
+        language: metadata.language,
+        is_write: false,
+    }
+}
+
 fn parse_setting_line(line: &str) -> Option<(&str, &str)> {
     let (key, value) = line.split_once('=')?;
     let value = value.trim();
@@ -537,6 +577,15 @@ fn parse_setting_line(line: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some((key.trim(), value))
+}
+
+fn normalize_nonempty_or_default(value: &str, default: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        default.to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 fn config_diagnostics_from_read_result(
@@ -598,8 +647,39 @@ mod tests {
             last_error: None,
             last_successful_heartbeat_epoch_secs: None,
             pending_immediate_heartbeat: false,
+            heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
             disable_network_io: true,
         }
+    }
+
+    #[test]
+    fn heartbeat_payload_uses_configured_metadata() {
+        let metadata = WakatimeHeartbeatMetadata {
+            project: "Team Focus".to_string(),
+            language: "Deep Work".to_string(),
+        };
+
+        let payload = build_heartbeat_payload(123.0, &metadata);
+
+        assert_eq!(payload.entity, DEFAULT_HEARTBEAT_ENTITY.to_string());
+        assert_eq!(payload.entity_type, "app");
+        assert_eq!(payload.time, 123.0);
+        assert_eq!(payload.project, "Team Focus");
+        assert_eq!(payload.language, "Deep Work");
+        assert!(!payload.is_write);
+    }
+
+    #[test]
+    fn heartbeat_payload_normalizes_blank_metadata_to_defaults() {
+        let metadata = WakatimeHeartbeatMetadata {
+            project: "   ".to_string(),
+            language: "".to_string(),
+        };
+
+        let payload = build_heartbeat_payload(123.0, &metadata);
+
+        assert_eq!(payload.project, DEFAULT_HEARTBEAT_PROJECT);
+        assert_eq!(payload.language, DEFAULT_HEARTBEAT_LANGUAGE);
     }
 
     #[test]
