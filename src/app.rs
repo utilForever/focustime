@@ -1317,12 +1317,28 @@ impl App {
     }
 
     fn set_history_feedback_for_export(&mut self, paths: ExportedStatsFiles) {
+        let export_dir = paths
+            .json_path
+            .parent()
+            .or_else(|| paths.csv_path.parent())
+            .unwrap_or_else(|| Path::new("."));
+        let json_name = paths
+            .json_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("focustime-stats.json");
+        let csv_name = paths
+            .csv_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("focustime-stats.csv");
         self.set_history_feedback(
             HistoryFeedbackLevel::Success,
             format!(
-                "Exported JSON: {}\nExported CSV: {}",
-                paths.json_path.display(),
-                paths.csv_path.display()
+                "Exported to {}: JSON {}, CSV {}",
+                export_dir.display(),
+                json_name,
+                csv_name
             ),
         );
     }
@@ -1613,6 +1629,10 @@ mod tests {
 
         let feedback = app.history_feedback.as_ref().unwrap();
         assert_eq!(feedback.level, HistoryFeedbackLevel::Success);
+        assert!(feedback.message.contains("Exported to "));
+        assert!(!feedback.message.contains('\n'));
+        assert!(feedback.message.contains("JSON focustime-stats.json"));
+        assert!(feedback.message.contains("CSV focustime-stats.csv"));
         assert!(feedback.message.contains("focustime-stats.json"));
         assert!(feedback.message.contains("focustime-stats.csv"));
         assert!(export_dir.join("focustime-stats.json").exists());

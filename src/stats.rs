@@ -1,7 +1,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs, io,
+    fs::{self, OpenOptions},
+    io::{self, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use chrono::Datelike;
@@ -11,6 +14,7 @@ use serde::{Deserialize, Serialize};
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
 const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
+static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SessionStats {
@@ -500,36 +504,82 @@ fn write_atomic_bytes(path: &Path, content: &[u8]) -> io::Result<()> {
         fs::create_dir_all(parent)?;
     }
 
+    let (tmp_path, mut tmp_file) = create_unique_temp_file(path)?;
+    tmp_file.write_all(content)?;
+    tmp_file.flush()?;
+    drop(tmp_file);
+
     // Best-effort atomic write: temp file + rename.
     // On Windows, rename cannot replace an existing file; fall back to
     // remove+rename when destination already exists.
-    let tmp = path.with_extension(
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .map_or_else(|| "tmp".to_string(), |ext| format!("{ext}.tmp")),
-    );
-    fs::write(&tmp, content)?;
     #[cfg(target_os = "windows")]
     {
-        match fs::rename(&tmp, path) {
+        match fs::rename(&tmp_path, path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
                 fs::remove_file(path)?;
-                fs::rename(&tmp, path)
+                fs::rename(&tmp_path, path)
             }
-            Err(e) => Err(e),
+            Err(e) => {
+                let _ = fs::remove_file(&tmp_path);
+                Err(e)
+            }
         }
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        fs::rename(&tmp, path)
+        match fs::rename(&tmp_path, path) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let _ = fs::remove_file(&tmp_path);
+                Err(e)
+            }
+        }
     }
+}
+
+fn create_unique_temp_file(path: &Path) -> io::Result<(PathBuf, fs::File)> {
+    const MAX_ATTEMPTS: usize = 32;
+
+    for _ in 0..MAX_ATTEMPTS {
+        let candidate = create_unique_temp_path(path);
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => return Ok((candidate, file)),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "failed to allocate unique temporary export path",
+    ))
+}
+
+fn create_unique_temp_path(path: &Path) -> PathBuf {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let target_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("focustime-export");
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let pid = std::process::id();
+    let seq = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    parent.join(format!(".{target_name}.{pid}.{nanos}.{seq}.tmp"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -800,6 +850,15 @@ mod tests {
         assert!(result.is_err());
 
         fs::remove_dir_all(export_root).unwrap();
+    }
+
+    #[test]
+    fn create_unique_temp_path_changes_between_calls() {
+        let target = Path::new("focustime-stats.json");
+        let first = create_unique_temp_path(target);
+        let second = create_unique_temp_path(target);
+
+        assert_ne!(first, second);
     }
 
     fn unique_temp_dir(label: &str) -> PathBuf {
