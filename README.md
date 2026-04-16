@@ -236,6 +236,7 @@ inactive when today's goal is off.
 From timer view:
 
 - press **`h`** to open the history panel with weekly and daily summaries
+- while the history panel is open, press **`e`** to export `focustime-stats.json` and `focustime-stats.csv` into the current working directory
 - press **`h`** or **`Esc`** to return to timer view
 
 ## The way the system works

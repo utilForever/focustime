@@ -8,8 +8,8 @@ use ratatui::{
 };
 
 use crate::app::{
-    App, AppMode, DailyGoalProgress, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, SetupCheck,
-    SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
+    App, AppMode, DailyGoalProgress, HistoryFeedbackLevel, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS,
+    SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
 };
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
@@ -630,8 +630,8 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
             Constraint::Length(1), // goal + streak summary
             Constraint::Length(1), // spacer
             Constraint::Min(3),    // history list
-            Constraint::Length(1), // error line
-            Constraint::Length(1), // hints
+            Constraint::Length(2), // status line
+            Constraint::Length(2), // hints
         ])
         .split(outer);
 
@@ -699,15 +699,33 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         "  No completed focus history yet.",
     );
 
-    if let Some(err) = app.stats_error.as_ref() {
-        render_centered_error(frame, inner[4], format!("⚠  {err}"));
+    if let Some(feedback) = app.history_feedback.as_ref() {
+        let (prefix, color) = match feedback.level {
+            HistoryFeedbackLevel::Success => ("✓", Color::Green),
+            HistoryFeedbackLevel::Warning => ("⚠", Color::Yellow),
+        };
+        let message = format!("{prefix}  {}", feedback.message);
+        let feedback_widget = Paragraph::new(message)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(color))
+            .wrap(Wrap { trim: true });
+        frame.render_widget(feedback_widget, inner[4]);
+    } else if let Some(err) = app.stats_error.as_ref() {
+        let error_widget = Paragraph::new(format!("⚠  {err}"))
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Red))
+            .wrap(Wrap { trim: true });
+        frame.render_widget(error_widget, inner[4]);
     }
 
-    let hints = Paragraph::new(if app.strict_mode_enforced_for_focus() {
-        "[h/Esc] Back  [q/Ctrl-C] Quit (Locked)"
-    } else {
-        "[h/Esc] Back  [q/Ctrl-C] Quit"
-    })
+    let hints = Paragraph::new(vec![
+        Line::from("History: [e] Export CSV + JSON"),
+        Line::from(if app.strict_mode_enforced_for_focus() {
+            "View: [h/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+        } else {
+            "View: [h/Esc] Back  [q/Ctrl-C] Quit"
+        }),
+    ])
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints, inner[5]);
@@ -1027,6 +1045,23 @@ mod tests {
         assert!(text.contains("Weekly Totals"));
         assert!(text.contains(&format_week_label(2026, 15)));
         assert!(text.contains("75m"));
+    }
+
+    #[test]
+    fn history_view_hints_include_export_shortcut() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::StatsHistory;
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("[e] Export CSV + JSON"));
     }
 
     #[test]

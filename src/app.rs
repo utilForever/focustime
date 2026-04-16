@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::blocker::{
@@ -8,8 +10,8 @@ use crate::config::{
 };
 use crate::notifications::PhaseNotifier;
 use crate::stats::{
-    DailyGoalSnapshot, DailyStats, FocusStats, GoalStreak, SessionStats, WeeklyStats,
-    current_day_key,
+    DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusStats, GoalStreak, SessionStats,
+    WeeklyStats, current_day_key,
 };
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -126,9 +128,21 @@ pub enum SiteFeedbackLevel {
     Warning,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryFeedbackLevel {
+    Success,
+    Warning,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SiteFeedback {
     pub level: SiteFeedbackLevel,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryFeedback {
+    pub level: HistoryFeedbackLevel,
     pub message: String,
 }
 
@@ -238,6 +252,7 @@ pub struct App {
     pub config_error: Option<String>,
     /// Last error from persisting focus stats.
     pub stats_error: Option<String>,
+    pub history_feedback: Option<HistoryFeedback>,
     pub phase_notification: Option<String>,
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
@@ -306,6 +321,7 @@ impl App {
             setup_diagnostics,
             config_error: None,
             stats_error,
+            history_feedback: None,
             phase_notification: None,
             wakatime: WakatimeTracker::new(),
             selected_profile,
@@ -634,6 +650,9 @@ impl App {
         match key.code {
             KeyCode::Esc | KeyCode::Char('h') => {
                 self.mode = AppMode::Timer;
+            }
+            KeyCode::Char('e') => {
+                self.export_stats_history();
             }
             _ => {}
         }
@@ -1129,6 +1148,7 @@ impl App {
 
     fn open_stats_history(&mut self) {
         self.pending_timer_action = None;
+        self.history_feedback = None;
         self.mode = AppMode::StatsHistory;
     }
 
@@ -1243,6 +1263,29 @@ impl App {
         }
     }
 
+    fn export_stats_history(&mut self) {
+        let current_dir = match std::env::current_dir() {
+            Ok(path) => path,
+            Err(e) => {
+                self.set_history_feedback(
+                    HistoryFeedbackLevel::Warning,
+                    format!("Export failed: cannot determine current directory ({e})"),
+                );
+                return;
+            }
+        };
+        self.export_stats_to_dir(&current_dir);
+    }
+
+    fn export_stats_to_dir(&mut self, dir: &Path) {
+        self.history_feedback = None;
+        match self.stats.export_to_dir(dir) {
+            Ok(paths) => self.set_history_feedback_for_export(paths),
+            Err(e) => self
+                .set_history_feedback(HistoryFeedbackLevel::Warning, format!("Export failed: {e}")),
+        }
+    }
+
     fn sync_wakatime_tracking_for_state(&mut self) {
         let focus_running = self.focus_running_for_current_state();
         if focus_running && !self.wakatime.is_tracking() {
@@ -1264,6 +1307,40 @@ impl App {
             level,
             message: message.into(),
         });
+    }
+
+    fn set_history_feedback(&mut self, level: HistoryFeedbackLevel, message: impl Into<String>) {
+        self.history_feedback = Some(HistoryFeedback {
+            level,
+            message: message.into(),
+        });
+    }
+
+    fn set_history_feedback_for_export(&mut self, paths: ExportedStatsFiles) {
+        let export_dir = paths
+            .json_path
+            .parent()
+            .or_else(|| paths.csv_path.parent())
+            .unwrap_or_else(|| Path::new("."));
+        let json_name = paths
+            .json_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("focustime-stats.json");
+        let csv_name = paths
+            .csv_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("focustime-stats.csv");
+        self.set_history_feedback(
+            HistoryFeedbackLevel::Success,
+            format!(
+                "Exported to {}: JSON {}, CSV {}",
+                export_dir.display(),
+                json_name,
+                csv_name
+            ),
+        );
     }
 
     fn refresh_setup_diagnostics(&mut self) {
@@ -1449,6 +1526,10 @@ pub(crate) fn should_handle_key(key: &KeyEvent) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     fn key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::NONE)
@@ -1526,6 +1607,65 @@ mod tests {
         app.timer.remaining_secs = 1;
         app.on_tick(false); // third focus completion -> long break
         assert_eq!(app.timer.phase, TimerPhase::LongBreak);
+    }
+
+    #[test]
+    fn export_stats_to_dir_writes_files_and_reports_success() {
+        let mut app = App::default();
+        app.insert_daily_stats_for_tests(
+            "2026-04-06",
+            DailyStats {
+                pomodoros_completed: 2,
+                focused_seconds: 50 * 60,
+                goal: Some(DailyGoalSnapshot {
+                    minutes: 25,
+                    pomodoros: 1,
+                }),
+            },
+        );
+
+        let export_dir = unique_temp_dir("app-export");
+        app.export_stats_to_dir(&export_dir);
+
+        let feedback = app.history_feedback.as_ref().unwrap();
+        assert_eq!(feedback.level, HistoryFeedbackLevel::Success);
+        assert!(feedback.message.contains("Exported to "));
+        assert!(!feedback.message.contains('\n'));
+        assert!(feedback.message.contains("JSON focustime-stats.json"));
+        assert!(feedback.message.contains("CSV focustime-stats.csv"));
+        assert!(feedback.message.contains("focustime-stats.json"));
+        assert!(feedback.message.contains("focustime-stats.csv"));
+        assert!(export_dir.join("focustime-stats.json").exists());
+        assert!(export_dir.join("focustime-stats.csv").exists());
+
+        fs::remove_dir_all(export_dir).unwrap();
+    }
+
+    #[test]
+    fn export_stats_to_dir_reports_warning_for_invalid_target() {
+        let mut app = App::default();
+        let export_root = unique_temp_dir("app-export-error");
+        let not_a_directory = export_root.join("occupied-file");
+        fs::write(&not_a_directory, "occupied").unwrap();
+
+        app.export_stats_to_dir(&not_a_directory);
+
+        let feedback = app.history_feedback.as_ref().unwrap();
+        assert_eq!(feedback.level, HistoryFeedbackLevel::Warning);
+        assert!(feedback.message.starts_with("Export failed:"));
+
+        fs::remove_dir_all(export_root).unwrap();
+    }
+
+    fn unique_temp_dir(label: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("focustime-{label}-{}-{unique}", std::process::id()));
+        fs::create_dir_all(&path).unwrap();
+        path
     }
 
     #[test]
