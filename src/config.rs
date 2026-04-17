@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
@@ -28,6 +29,15 @@ pub struct AppConfig {
     /// Sites that should be blocked during focus sessions.
     #[serde(default)]
     pub blocked_sites: Vec<String>,
+    /// Named blocklist profiles.
+    ///
+    /// Each profile stores a separate blocked-sites list. This field supports
+    /// issue #110 and supersedes `blocked_sites` as the primary representation.
+    #[serde(default)]
+    pub blocklist_profiles: Vec<BlocklistProfileConfig>,
+    /// Name of the active blocklist profile.
+    #[serde(default = "default_blocklist_profile_name")]
+    pub selected_blocklist_profile: String,
     /// Selected profile identifier.
     #[serde(default)]
     pub selected_profile: ProfileId,
@@ -56,6 +66,23 @@ pub struct AppConfig {
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
     pub wakatime: WakatimeMetadataConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BlocklistProfileConfig {
+    #[serde(default = "default_blocklist_profile_name")]
+    pub name: String,
+    #[serde(default)]
+    pub sites: Vec<String>,
+}
+
+impl Default for BlocklistProfileConfig {
+    fn default() -> Self {
+        Self {
+            name: default_blocklist_profile_name(),
+            sites: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -135,6 +162,10 @@ fn default_wakatime_project() -> String {
 
 fn default_wakatime_language() -> String {
     "Pomodoro".to_string()
+}
+
+fn default_blocklist_profile_name() -> String {
+    "Default".to_string()
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
@@ -239,6 +270,8 @@ impl Default for AppConfig {
             long_break_secs: default_long_break_secs(),
             long_break_interval: default_long_break_interval(),
             blocked_sites: Vec::new(),
+            blocklist_profiles: Vec::new(),
+            selected_blocklist_profile: default_blocklist_profile_name(),
             selected_profile: ProfileId::default(),
             custom_profile: None,
             notifications: NotificationConfig::default(),
@@ -251,6 +284,10 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    pub fn normalized(self) -> Self {
+        self.normalize()
+    }
+
     /// Load the config from disk, falling back to [`AppConfig::default`] on any
     /// error (missing file, parse error, corrupt data, etc.).
     #[cfg_attr(test, allow(dead_code))]
@@ -337,6 +374,18 @@ impl AppConfig {
         self.long_break_interval =
             nonzero_or_default_u32(self.long_break_interval, default_long_break_interval());
         self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
+        self.blocklist_profiles =
+            normalize_blocklist_profiles(&self.blocklist_profiles, &self.blocked_sites);
+        self.selected_blocklist_profile = normalize_selected_blocklist_profile(
+            &self.selected_blocklist_profile,
+            &self.blocklist_profiles,
+        );
+        self.blocked_sites = self
+            .blocklist_profiles
+            .iter()
+            .find(|profile| profile.name == self.selected_blocklist_profile)
+            .map(|profile| profile.sites.clone())
+            .unwrap_or_default();
         self.wakatime = self.wakatime.normalized();
         self
     }
@@ -412,6 +461,73 @@ fn normalize_nonempty_or_default_string(value: &str, default: &str) -> String {
     }
 }
 
+fn normalize_blocklist_profiles(
+    profiles: &[BlocklistProfileConfig],
+    legacy_blocked_sites: &[String],
+) -> Vec<BlocklistProfileConfig> {
+    let mut normalized = Vec::new();
+    let mut seen_names = HashSet::new();
+
+    for profile in profiles {
+        let base_name =
+            normalize_nonempty_or_default_string(&profile.name, &default_blocklist_profile_name());
+        let name = make_unique_profile_name(&base_name, &mut seen_names);
+        normalized.push(BlocklistProfileConfig {
+            name,
+            sites: profile.sites.clone(),
+        });
+    }
+
+    if normalized.is_empty() {
+        return vec![BlocklistProfileConfig {
+            name: default_blocklist_profile_name(),
+            sites: legacy_blocked_sites.to_vec(),
+        }];
+    }
+
+    normalized
+}
+
+fn normalize_selected_blocklist_profile(
+    selected_name: &str,
+    profiles: &[BlocklistProfileConfig],
+) -> String {
+    let selected_name = selected_name.trim();
+    if selected_name.is_empty() {
+        return profiles
+            .first()
+            .map(|profile| profile.name.clone())
+            .unwrap_or_else(default_blocklist_profile_name);
+    }
+
+    if let Some(profile) = profiles
+        .iter()
+        .find(|profile| profile.name.eq_ignore_ascii_case(selected_name))
+    {
+        profile.name.clone()
+    } else {
+        profiles
+            .first()
+            .map(|profile| profile.name.clone())
+            .unwrap_or_else(default_blocklist_profile_name)
+    }
+}
+
+fn make_unique_profile_name(base_name: &str, seen_names: &mut HashSet<String>) -> String {
+    if seen_names.insert(base_name.to_ascii_lowercase()) {
+        return base_name.to_string();
+    }
+
+    let mut suffix = 2usize;
+    loop {
+        let candidate = format!("{base_name} ({suffix})");
+        if seen_names.insert(candidate.to_ascii_lowercase()) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -432,6 +548,8 @@ mod tests {
         assert_eq!(cfg.selected_profile, ProfileId::Custom);
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
+        assert_eq!(cfg.selected_blocklist_profile, "Default");
+        assert!(cfg.blocklist_profiles.is_empty());
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
@@ -447,6 +565,17 @@ mod tests {
             long_break_secs: 20 * 60,
             long_break_interval: 3,
             blocked_sites: vec!["example.com".to_string(), "reddit.com".to_string()],
+            blocklist_profiles: vec![
+                BlocklistProfileConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["example.com".to_string(), "reddit.com".to_string()],
+                },
+                BlocklistProfileConfig {
+                    name: "Study".to_string(),
+                    sites: vec!["x.com".to_string()],
+                },
+            ],
+            selected_blocklist_profile: "Study".to_string(),
             selected_profile: ProfileId::DeepWork,
             custom_profile: Some(CustomProfileConfig {
                 focus_secs: 30 * 60,
@@ -479,6 +608,11 @@ mod tests {
         assert_eq!(parsed.long_break_secs, original.long_break_secs);
         assert_eq!(parsed.long_break_interval, original.long_break_interval);
         assert_eq!(parsed.blocked_sites, original.blocked_sites);
+        assert_eq!(parsed.blocklist_profiles, original.blocklist_profiles);
+        assert_eq!(
+            parsed.selected_blocklist_profile,
+            original.selected_blocklist_profile
+        );
         assert_eq!(parsed.selected_profile, original.selected_profile);
         assert_eq!(parsed.custom_profile, original.custom_profile);
         assert_eq!(parsed.notifications, original.notifications);
@@ -499,6 +633,8 @@ mod tests {
         assert_eq!(cfg.selected_profile, ProfileId::Custom);
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
+        assert!(cfg.blocklist_profiles.is_empty());
+        assert_eq!(cfg.selected_blocklist_profile, "Default");
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
@@ -564,6 +700,8 @@ long_break_interval = 3
             long_break_secs: 15 * 60,
             long_break_interval: 4,
             blocked_sites: Vec::new(),
+            blocklist_profiles: vec![BlocklistProfileConfig::default()],
+            selected_blocklist_profile: "Default".to_string(),
             selected_profile: ProfileId::Custom,
             custom_profile: Some(CustomProfileConfig {
                 focus_secs: 40 * 60,
@@ -617,6 +755,8 @@ long_break_interval = 3
         assert_eq!(cfg.selected_profile, ProfileId::Custom);
         assert!(cfg.custom_profile.is_none());
         assert!(cfg.blocked_sites.is_empty());
+        assert_eq!(cfg.selected_blocklist_profile, "Default");
+        assert!(cfg.blocklist_profiles.is_empty());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
@@ -692,5 +832,51 @@ language = ""
         let toml_str = toml::to_string_pretty(&original).unwrap();
         let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
         assert!(parsed.blocked_sites.is_empty());
+        assert_eq!(parsed.selected_blocklist_profile, "Default");
+        assert!(parsed.blocklist_profiles.is_empty());
+    }
+
+    #[test]
+    fn normalize_migrates_legacy_blocked_sites_into_default_profile() {
+        let cfg = AppConfig {
+            blocked_sites: vec!["reddit.com".to_string(), "youtube.com".to_string()],
+            blocklist_profiles: Vec::new(),
+            selected_blocklist_profile: String::new(),
+            ..AppConfig::default()
+        }
+        .normalize();
+
+        assert_eq!(cfg.blocklist_profiles.len(), 1);
+        assert_eq!(cfg.blocklist_profiles[0].name, "Default");
+        assert_eq!(
+            cfg.blocklist_profiles[0].sites,
+            vec!["reddit.com".to_string(), "youtube.com".to_string()]
+        );
+        assert_eq!(cfg.selected_blocklist_profile, "Default");
+        assert_eq!(cfg.blocked_sites, cfg.blocklist_profiles[0].sites);
+    }
+
+    #[test]
+    fn normalize_deduplicates_profile_names_and_fixes_selection() {
+        let cfg = AppConfig {
+            blocklist_profiles: vec![
+                BlocklistProfileConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["a.com".to_string()],
+                },
+                BlocklistProfileConfig {
+                    name: "work".to_string(),
+                    sites: vec!["b.com".to_string()],
+                },
+            ],
+            selected_blocklist_profile: "missing".to_string(),
+            ..AppConfig::default()
+        }
+        .normalize();
+
+        assert_eq!(cfg.blocklist_profiles[0].name, "Work");
+        assert_eq!(cfg.blocklist_profiles[1].name, "work (2)");
+        assert_eq!(cfg.selected_blocklist_profile, "Work");
+        assert_eq!(cfg.blocked_sites, vec!["a.com".to_string()]);
     }
 }
