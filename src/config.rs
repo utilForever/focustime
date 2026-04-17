@@ -58,6 +58,11 @@ pub struct AppConfig {
     /// confirmation before stop/reset.
     #[serde(default)]
     pub strict_mode: bool,
+    /// Duration of a break-glass unblock override in seconds.
+    ///
+    /// This value is clamped to a non-zero default during normalization.
+    #[serde(default = "default_break_glass_duration_secs")]
+    pub break_glass_duration_secs: u64,
     /// Daily goal settings for focus minutes and completed pomodoros.
     ///
     /// A value of `0` disables the corresponding goal.
@@ -166,6 +171,10 @@ fn default_wakatime_language() -> String {
 
 fn default_blocklist_profile_name() -> String {
     "Default".to_string()
+}
+
+fn default_break_glass_duration_secs() -> u64 {
+    5 * 60
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
@@ -277,6 +286,7 @@ impl Default for AppConfig {
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
             strict_mode: false,
+            break_glass_duration_secs: default_break_glass_duration_secs(),
             daily_goal: DailyGoalConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
         }
@@ -373,6 +383,10 @@ impl AppConfig {
             nonzero_or_default_u64(self.long_break_secs, default_long_break_secs());
         self.long_break_interval =
             nonzero_or_default_u32(self.long_break_interval, default_long_break_interval());
+        self.break_glass_duration_secs = nonzero_or_default_u64(
+            self.break_glass_duration_secs,
+            default_break_glass_duration_secs(),
+        );
         self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
         self.blocklist_profiles =
             normalize_blocklist_profiles(&self.blocklist_profiles, &self.blocked_sites);
@@ -553,6 +567,10 @@ mod tests {
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
+        assert_eq!(
+            cfg.break_glass_duration_secs,
+            default_break_glass_duration_secs()
+        );
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
         assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }
@@ -592,6 +610,7 @@ mod tests {
                 break_to_focus: false,
             },
             strict_mode: true,
+            break_glass_duration_secs: 7 * 60,
             daily_goal: DailyGoalConfig {
                 minutes: 180,
                 pomodoros: 6,
@@ -618,6 +637,10 @@ mod tests {
         assert_eq!(parsed.notifications, original.notifications);
         assert_eq!(parsed.auto_start, original.auto_start);
         assert_eq!(parsed.strict_mode, original.strict_mode);
+        assert_eq!(
+            parsed.break_glass_duration_secs,
+            original.break_glass_duration_secs
+        );
         assert_eq!(parsed.daily_goal, original.daily_goal);
         assert_eq!(parsed.wakatime, original.wakatime);
     }
@@ -638,8 +661,25 @@ mod tests {
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
+        assert_eq!(
+            cfg.break_glass_duration_secs,
+            default_break_glass_duration_secs()
+        );
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
         assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
+    }
+
+    #[test]
+    fn normalize_clamps_zero_break_glass_duration_to_default() {
+        let cfg = AppConfig {
+            break_glass_duration_secs: 0,
+            ..AppConfig::default()
+        }
+        .normalize();
+        assert_eq!(
+            cfg.break_glass_duration_secs,
+            default_break_glass_duration_secs()
+        );
     }
 
     #[test]
@@ -712,6 +752,7 @@ long_break_interval = 3
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
             strict_mode: false,
+            break_glass_duration_secs: default_break_glass_duration_secs(),
             daily_goal: DailyGoalConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
         };
@@ -759,6 +800,10 @@ long_break_interval = 3
         assert!(cfg.blocklist_profiles.is_empty());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert!(!cfg.strict_mode);
+        assert_eq!(
+            cfg.break_glass_duration_secs,
+            default_break_glass_duration_secs()
+        );
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
         assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }

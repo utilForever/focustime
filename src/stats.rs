@@ -99,11 +99,20 @@ pub struct FocusSessionRecord {
     pub focused_seconds: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BreakGlassOverrideEvent {
+    pub timestamp_epoch_secs: u64,
+    pub date: String,
+    pub task_label: Option<String>,
+    pub duration_seconds: u64,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 struct StatsExport {
     daily: Vec<DailyExportRow>,
     weekly: Vec<WeeklyExportRow>,
     sessions: Vec<SessionExportRow>,
+    overrides: Vec<BreakGlassOverrideExportRow>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -134,6 +143,15 @@ struct SessionExportRow {
     focused_minutes: u64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct BreakGlassOverrideExportRow {
+    timestamp_epoch_secs: u64,
+    date: String,
+    task_label: Option<String>,
+    duration_seconds: u64,
+    duration_minutes: u64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct CsvExportRow {
     record_type: &'static str,
@@ -148,6 +166,8 @@ struct CsvExportRow {
     goal_pomodoros: Option<u32>,
     goal_met: Option<bool>,
     task_label: Option<String>,
+    break_glass_timestamp_epoch_secs: Option<u64>,
+    break_glass_duration_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -160,6 +180,8 @@ struct PersistedStats {
     selected_task_label: Option<String>,
     #[serde(default)]
     focus_sessions: Vec<FocusSessionRecord>,
+    #[serde(default)]
+    break_glass_overrides: Vec<BreakGlassOverrideEvent>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -169,6 +191,7 @@ pub struct FocusStats {
     task_labels: Vec<String>,
     selected_task_label: Option<String>,
     focus_sessions: Vec<FocusSessionRecord>,
+    break_glass_overrides: Vec<BreakGlassOverrideEvent>,
 }
 
 impl FocusStats {
@@ -212,12 +235,27 @@ impl FocusStats {
                 });
             }
         }
+        let mut break_glass_overrides = Vec::new();
+        for event in persisted.break_glass_overrides {
+            if event.duration_seconds == 0 {
+                continue;
+            }
+            break_glass_overrides.push(BreakGlassOverrideEvent {
+                timestamp_epoch_secs: event.timestamp_epoch_secs,
+                date: event.date.trim().to_string(),
+                task_label: event
+                    .task_label
+                    .and_then(|label| normalize_task_label(&label)),
+                duration_seconds: event.duration_seconds,
+            });
+        }
         Self {
             session: SessionStats::default(),
             daily: persisted.daily,
             task_labels,
             selected_task_label,
             focus_sessions,
+            break_glass_overrides,
         }
     }
 
@@ -227,6 +265,7 @@ impl FocusStats {
             task_labels: self.task_labels.clone(),
             selected_task_label: self.selected_task_label.clone(),
             focus_sessions: self.focus_sessions.clone(),
+            break_glass_overrides: self.break_glass_overrides.clone(),
         }
     }
 
@@ -286,6 +325,32 @@ impl FocusStats {
         }
     }
 
+    pub fn record_break_glass_override_event(
+        &mut self,
+        day_key: &str,
+        timestamp_epoch_secs: u64,
+        task_label: Option<&str>,
+        duration_seconds: u64,
+    ) {
+        if duration_seconds == 0 {
+            return;
+        }
+
+        let normalized_task_label = task_label.and_then(normalize_task_label);
+        if let Some(task_label) = normalized_task_label.as_ref()
+            && task_label_index(&self.task_labels, task_label).is_none()
+        {
+            self.task_labels.push(task_label.clone());
+        }
+
+        self.break_glass_overrides.push(BreakGlassOverrideEvent {
+            timestamp_epoch_secs,
+            date: day_key.to_string(),
+            task_label: normalized_task_label,
+            duration_seconds,
+        });
+    }
+
     pub fn sync_goal_snapshot(&mut self, day_key: &str, goal: DailyGoalSnapshot) -> bool {
         let Some(daily) = self.daily.get_mut(day_key) else {
             return false;
@@ -342,6 +407,15 @@ impl FocusStats {
         weekly
     }
 
+    pub fn recent_break_glass_overrides(&self, limit: usize) -> Vec<BreakGlassOverrideEvent> {
+        self.break_glass_overrides
+            .iter()
+            .rev()
+            .take(limit)
+            .cloned()
+            .collect()
+    }
+
     pub fn export_to_dir(&self, dir: &Path) -> io::Result<ExportedStatsFiles> {
         fs::create_dir_all(dir)?;
         let export = self.export_data();
@@ -366,6 +440,7 @@ impl FocusStats {
             daily: self.export_daily_rows(),
             weekly: self.export_weekly_rows(),
             sessions: self.export_session_rows(),
+            overrides: self.export_break_glass_override_rows(),
         }
     }
 
@@ -408,6 +483,19 @@ impl FocusStats {
                 task_label: session.task_label.clone(),
                 focused_seconds: session.focused_seconds,
                 focused_minutes: session.focused_seconds / 60,
+            })
+            .collect()
+    }
+
+    fn export_break_glass_override_rows(&self) -> Vec<BreakGlassOverrideExportRow> {
+        self.break_glass_overrides
+            .iter()
+            .map(|event| BreakGlassOverrideExportRow {
+                timestamp_epoch_secs: event.timestamp_epoch_secs,
+                date: event.date.clone(),
+                task_label: event.task_label.clone(),
+                duration_seconds: event.duration_seconds,
+                duration_minutes: event.duration_seconds / 60,
             })
             .collect()
     }
@@ -503,8 +591,9 @@ impl StatsExport {
     }
 
     fn csv_rows(&self) -> Vec<CsvExportRow> {
-        let mut rows =
-            Vec::with_capacity(self.daily.len() + self.weekly.len() + self.sessions.len());
+        let mut rows = Vec::with_capacity(
+            self.daily.len() + self.weekly.len() + self.sessions.len() + self.overrides.len(),
+        );
 
         for daily in &self.daily {
             rows.push(CsvExportRow {
@@ -520,6 +609,8 @@ impl StatsExport {
                 goal_pomodoros: daily.goal.map(|goal| goal.pomodoros),
                 goal_met: daily.goal.map(|_| daily.goal_met),
                 task_label: None,
+                break_glass_timestamp_epoch_secs: None,
+                break_glass_duration_seconds: None,
             });
         }
 
@@ -537,6 +628,8 @@ impl StatsExport {
                 goal_pomodoros: None,
                 goal_met: None,
                 task_label: None,
+                break_glass_timestamp_epoch_secs: None,
+                break_glass_duration_seconds: None,
             });
         }
 
@@ -554,6 +647,27 @@ impl StatsExport {
                 goal_pomodoros: None,
                 goal_met: None,
                 task_label: Some(session.task_label.clone()),
+                break_glass_timestamp_epoch_secs: None,
+                break_glass_duration_seconds: None,
+            });
+        }
+
+        for override_event in &self.overrides {
+            rows.push(CsvExportRow {
+                record_type: "break_glass_override",
+                date: Some(override_event.date.clone()),
+                week_label: None,
+                year: None,
+                week: None,
+                pomodoros_completed: 0,
+                focused_seconds: 0,
+                focused_minutes: 0,
+                goal_minutes: None,
+                goal_pomodoros: None,
+                goal_met: None,
+                task_label: override_event.task_label.clone(),
+                break_glass_timestamp_epoch_secs: Some(override_event.timestamp_epoch_secs),
+                break_glass_duration_seconds: Some(override_event.duration_seconds),
             });
         }
 
@@ -888,6 +1002,28 @@ mod tests {
     }
 
     #[test]
+    fn persisted_stats_round_trip_preserves_break_glass_overrides() {
+        let mut original = FocusStats::default();
+        original.record_break_glass_override_event(
+            "2026-04-09",
+            1_711_000_000,
+            Some("Project A"),
+            300,
+        );
+
+        let persisted = original.to_persisted();
+        let toml_str = toml::to_string_pretty(&persisted).unwrap();
+        let restored = FocusStats::try_from_toml(&toml_str).unwrap();
+        let recent = restored.recent_break_glass_overrides(1);
+
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].date, "2026-04-09");
+        assert_eq!(recent[0].timestamp_epoch_secs, 1_711_000_000);
+        assert_eq!(recent[0].task_label.as_deref(), Some("Project A"));
+        assert_eq!(recent[0].duration_seconds, 300);
+    }
+
+    #[test]
     fn invalid_toml_returns_parse_error() {
         assert!(FocusStats::try_from_toml("this is not valid toml").is_err());
     }
@@ -979,6 +1115,12 @@ mod tests {
         };
         stats.record_focus_elapsed("2026-04-06", 30 * 60, goal);
         stats.record_completed_pomodoro_with_task("2026-04-06", goal, Some("Project A"), 30 * 60);
+        stats.record_break_glass_override_event(
+            "2026-04-06",
+            1_711_000_000,
+            Some("Project A"),
+            300,
+        );
         stats.record_focus_elapsed("2026-04-08", 45 * 60, goal);
         stats.record_completed_pomodoro("2026-04-08", goal);
 
@@ -996,21 +1138,28 @@ mod tests {
         let daily = json_value["daily"].as_array().unwrap();
         let weekly = json_value["weekly"].as_array().unwrap();
         let sessions = json_value["sessions"].as_array().unwrap();
+        let overrides = json_value["overrides"].as_array().unwrap();
         assert_eq!(daily.len(), 2);
         assert_eq!(weekly.len(), 1);
         assert_eq!(sessions.len(), 1);
+        assert_eq!(overrides.len(), 1);
         assert_eq!(daily[0]["date"], "2026-04-06");
         assert_eq!(daily[0]["goal_met"], true);
         assert_eq!(weekly[0]["week_label"], "2026-W15");
         assert_eq!(weekly[0]["focused_minutes"], 75);
         assert_eq!(sessions[0]["task_label"], "Project A");
         assert_eq!(sessions[0]["focused_minutes"], 30);
+        assert_eq!(overrides[0]["duration_seconds"], 300);
+        assert_eq!(overrides[0]["task_label"], "Project A");
 
         let csv = fs::read_to_string(&exported.csv_path).unwrap();
-        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label"));
-        assert!(csv.contains("daily,2026-04-06,,,,1,1800,30,25,1,true,"));
-        assert!(csv.contains("weekly,,2026-W15,2026,15,2,4500,75,,,,"));
-        assert!(csv.contains("focus_session,2026-04-06,,,,1,1800,30,,,,Project A"));
+        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds"));
+        assert!(csv.contains("daily,2026-04-06,,,,1,1800,30,25,1,true,,,"));
+        assert!(csv.contains("weekly,,2026-W15,2026,15,2,4500,75,,,,,,"));
+        assert!(csv.contains("focus_session,2026-04-06,,,,1,1800,30,,,,Project A,,"));
+        assert!(
+            csv.contains("break_glass_override,2026-04-06,,,,0,0,0,,,,Project A,1711000000,300")
+        );
 
         fs::remove_dir_all(export_dir).unwrap();
     }
