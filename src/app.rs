@@ -666,14 +666,14 @@ impl App {
     fn persisted_config(&self) -> AppConfig {
         let custom_profile = self.custom_profile.normalized();
         let mut blocklist_profiles = self.blocklist_profiles.clone();
+        if blocklist_profiles.is_empty() {
+            blocklist_profiles.push(BlocklistProfileConfig::default());
+        }
         let active_index = self
             .active_blocklist_profile
             .min(blocklist_profiles.len().saturating_sub(1));
         if let Some(active_profile) = blocklist_profiles.get_mut(active_index) {
             active_profile.sites = self.blocker.sites.clone();
-        }
-        if blocklist_profiles.is_empty() {
-            blocklist_profiles.push(BlocklistProfileConfig::default());
         }
         let selected_blocklist_profile = blocklist_profiles
             .get(active_index)
@@ -2394,6 +2394,27 @@ mod tests {
                 project: "Team Focus".to_string(),
                 language: "Deep Work".to_string(),
             }
+        );
+    }
+
+    #[test]
+    fn persisted_config_seeds_fallback_profile_with_active_sites() {
+        let mut app = App::default();
+        app.blocklist_profiles.clear();
+        app.blocker.sites = vec!["example.com".to_string(), "github.com".to_string()];
+
+        let persisted = app.persisted_config();
+
+        assert_eq!(persisted.selected_blocklist_profile, "Default");
+        assert_eq!(persisted.blocklist_profiles.len(), 1);
+        assert_eq!(persisted.blocklist_profiles[0].name, "Default");
+        assert_eq!(
+            persisted.blocklist_profiles[0].sites,
+            vec!["example.com".to_string(), "github.com".to_string()]
+        );
+        assert_eq!(
+            persisted.blocked_sites,
+            vec!["example.com".to_string(), "github.com".to_string()]
         );
     }
 
