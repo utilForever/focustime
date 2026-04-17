@@ -10,6 +10,8 @@ use std::{
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 
+use crate::task_labels::{canonical_task_label, normalize_task_label, task_label_index};
+
 #[cfg_attr(test, allow(dead_code))]
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
@@ -559,21 +561,6 @@ impl StatsExport {
     }
 }
 
-fn normalize_task_label(value: &str) -> Option<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-fn task_label_index(labels: &[String], candidate: &str) -> Option<usize> {
-    labels
-        .iter()
-        .position(|label| label.eq_ignore_ascii_case(candidate))
-}
-
 fn normalize_task_planner_state(
     labels: Vec<String>,
     selected: Option<String>,
@@ -590,7 +577,9 @@ fn normalize_task_planner_state(
         }
     }
 
-    let normalized_selected = selected.and_then(|value| normalize_task_label(&value));
+    let normalized_selected = selected
+        .and_then(|value| normalize_task_label(&value))
+        .map(|value| canonical_task_label(&normalized_labels, &value).unwrap_or(value));
     if let Some(selected_label) = normalized_selected.as_ref() {
         let key = selected_label.to_ascii_lowercase();
         if seen.insert(key) {
@@ -785,7 +774,7 @@ mod tests {
 
         let (labels, selected) = stats.task_planner_state();
         assert_eq!(labels, vec!["Docs".to_string(), "Bugfix".to_string()]);
-        assert_eq!(selected, Some("docs".to_string()));
+        assert_eq!(selected, Some("Docs".to_string()));
     }
 
     #[test]

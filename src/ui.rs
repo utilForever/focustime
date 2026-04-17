@@ -761,7 +761,7 @@ fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
         " Add task label ([a] to type) "
     };
     let input_text = if app.planner_input_active {
-        app.planner_input.clone()
+        format!("{}|", app.planner_input)
     } else {
         "Type a label, then press [Enter] to add and select".to_string()
     };
@@ -799,9 +799,9 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
             Line::from("Input: type task label, then [Enter]"),
             Line::from("Input: [Esc] Cancel"),
             Line::from(if app.strict_mode_enforced_for_focus() {
-                "View: [t/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+                "View: [q/Ctrl-C] Quit (Locked)"
             } else {
-                "View: [t/Esc] Back  [q/Ctrl-C] Quit"
+                "View: [q/Ctrl-C] Quit"
             }),
         ]
     } else {

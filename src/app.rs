@@ -14,6 +14,7 @@ use crate::stats::{
     DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusStats, GoalStreak, SessionStats,
     WeeklyStats, current_day_key,
 };
+use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
@@ -1746,21 +1747,6 @@ fn display_input_value(input: &str) -> String {
     } else {
         trimmed.to_string()
     }
-}
-
-fn normalize_task_label(input: &str) -> Option<String> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-fn task_label_index(labels: &[String], label: &str) -> Option<usize> {
-    labels
-        .iter()
-        .position(|existing| existing.eq_ignore_ascii_case(label))
 }
 
 impl Drop for App {
