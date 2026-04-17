@@ -10,6 +10,8 @@ use std::{
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 
+use crate::task_labels::{canonical_task_label, normalize_task_label, task_label_index};
+
 #[cfg_attr(test, allow(dead_code))]
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
@@ -90,10 +92,18 @@ pub struct ExportedStatsFiles {
     pub csv_path: PathBuf,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FocusSessionRecord {
+    pub date: String,
+    pub task_label: String,
+    pub focused_seconds: u64,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 struct StatsExport {
     daily: Vec<DailyExportRow>,
     weekly: Vec<WeeklyExportRow>,
+    sessions: Vec<SessionExportRow>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -116,6 +126,14 @@ struct WeeklyExportRow {
     focused_minutes: u64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct SessionExportRow {
+    date: String,
+    task_label: String,
+    focused_seconds: u64,
+    focused_minutes: u64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct CsvExportRow {
     record_type: &'static str,
@@ -129,18 +147,28 @@ struct CsvExportRow {
     goal_minutes: Option<u64>,
     goal_pomodoros: Option<u32>,
     goal_met: Option<bool>,
+    task_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 struct PersistedStats {
     #[serde(default)]
     daily: BTreeMap<String, DailyStats>,
+    #[serde(default)]
+    task_labels: Vec<String>,
+    #[serde(default)]
+    selected_task_label: Option<String>,
+    #[serde(default)]
+    focus_sessions: Vec<FocusSessionRecord>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct FocusStats {
     session: SessionStats,
     daily: BTreeMap<String, DailyStats>,
+    task_labels: Vec<String>,
+    selected_task_label: Option<String>,
+    focus_sessions: Vec<FocusSessionRecord>,
 }
 
 impl FocusStats {
@@ -172,15 +200,33 @@ impl FocusStats {
     }
 
     fn from_persisted(persisted: PersistedStats) -> Self {
+        let (task_labels, selected_task_label) =
+            normalize_task_planner_state(persisted.task_labels, persisted.selected_task_label);
+        let mut focus_sessions = Vec::new();
+        for session in persisted.focus_sessions {
+            if let Some(task_label) = normalize_task_label(&session.task_label) {
+                focus_sessions.push(FocusSessionRecord {
+                    date: session.date.trim().to_string(),
+                    task_label,
+                    focused_seconds: session.focused_seconds,
+                });
+            }
+        }
         Self {
             session: SessionStats::default(),
             daily: persisted.daily,
+            task_labels,
+            selected_task_label,
+            focus_sessions,
         }
     }
 
     fn to_persisted(&self) -> PersistedStats {
         PersistedStats {
             daily: self.daily.clone(),
+            task_labels: self.task_labels.clone(),
+            selected_task_label: self.selected_task_label.clone(),
+            focus_sessions: self.focus_sessions.clone(),
         }
     }
 
@@ -212,10 +258,32 @@ impl FocusStats {
     }
 
     pub fn record_completed_pomodoro(&mut self, day_key: &str, goal: DailyGoalSnapshot) {
+        self.record_completed_pomodoro_with_task(day_key, goal, None, 0);
+    }
+
+    pub fn record_completed_pomodoro_with_task(
+        &mut self,
+        day_key: &str,
+        goal: DailyGoalSnapshot,
+        task_label: Option<&str>,
+        focused_seconds: u64,
+    ) {
         self.session.pomodoros_completed = self.session.pomodoros_completed.saturating_add(1);
         let daily = self.daily.entry(day_key.to_string()).or_default();
         daily.pomodoros_completed = daily.pomodoros_completed.saturating_add(1);
         daily.goal = Some(goal);
+
+        if let Some(task_label) = task_label.and_then(normalize_task_label) {
+            if task_label_index(&self.task_labels, &task_label).is_none() {
+                self.task_labels.push(task_label.clone());
+            }
+            self.selected_task_label = Some(task_label.clone());
+            self.focus_sessions.push(FocusSessionRecord {
+                date: day_key.to_string(),
+                task_label,
+                focused_seconds,
+            });
+        }
     }
 
     pub fn sync_goal_snapshot(&mut self, day_key: &str, goal: DailyGoalSnapshot) -> bool {
@@ -237,6 +305,25 @@ impl FocusStats {
 
     pub fn daily_for(&self, day_key: &str) -> DailyStats {
         self.daily.get(day_key).copied().unwrap_or_default()
+    }
+
+    pub fn task_planner_state(&self) -> (Vec<String>, Option<String>) {
+        (self.task_labels.clone(), self.selected_task_label.clone())
+    }
+
+    pub fn update_task_planner_state(
+        &mut self,
+        labels: Vec<String>,
+        selected: Option<String>,
+    ) -> bool {
+        let (task_labels, selected_task_label) = normalize_task_planner_state(labels, selected);
+        if self.task_labels == task_labels && self.selected_task_label == selected_task_label {
+            return false;
+        }
+
+        self.task_labels = task_labels;
+        self.selected_task_label = selected_task_label;
+        true
     }
 
     pub fn recent_daily(&self, limit: usize) -> Vec<(String, DailyStats)> {
@@ -278,6 +365,7 @@ impl FocusStats {
         StatsExport {
             daily: self.export_daily_rows(),
             weekly: self.export_weekly_rows(),
+            sessions: self.export_session_rows(),
         }
     }
 
@@ -308,6 +396,18 @@ impl FocusStats {
                 pomodoros_completed: stats.pomodoros_completed,
                 focused_seconds: stats.focused_seconds,
                 focused_minutes: stats.focused_minutes(),
+            })
+            .collect()
+    }
+
+    fn export_session_rows(&self) -> Vec<SessionExportRow> {
+        self.focus_sessions
+            .iter()
+            .map(|session| SessionExportRow {
+                date: session.date.clone(),
+                task_label: session.task_label.clone(),
+                focused_seconds: session.focused_seconds,
+                focused_minutes: session.focused_seconds / 60,
             })
             .collect()
     }
@@ -403,7 +503,8 @@ impl StatsExport {
     }
 
     fn csv_rows(&self) -> Vec<CsvExportRow> {
-        let mut rows = Vec::with_capacity(self.daily.len() + self.weekly.len());
+        let mut rows =
+            Vec::with_capacity(self.daily.len() + self.weekly.len() + self.sessions.len());
 
         for daily in &self.daily {
             rows.push(CsvExportRow {
@@ -418,6 +519,7 @@ impl StatsExport {
                 goal_minutes: daily.goal.map(|goal| goal.minutes),
                 goal_pomodoros: daily.goal.map(|goal| goal.pomodoros),
                 goal_met: daily.goal.map(|_| daily.goal_met),
+                task_label: None,
             });
         }
 
@@ -434,11 +536,58 @@ impl StatsExport {
                 goal_minutes: None,
                 goal_pomodoros: None,
                 goal_met: None,
+                task_label: None,
+            });
+        }
+
+        for session in &self.sessions {
+            rows.push(CsvExportRow {
+                record_type: "focus_session",
+                date: Some(session.date.clone()),
+                week_label: None,
+                year: None,
+                week: None,
+                pomodoros_completed: 1,
+                focused_seconds: session.focused_seconds,
+                focused_minutes: session.focused_minutes,
+                goal_minutes: None,
+                goal_pomodoros: None,
+                goal_met: None,
+                task_label: Some(session.task_label.clone()),
             });
         }
 
         rows
     }
+}
+
+fn normalize_task_planner_state(
+    labels: Vec<String>,
+    selected: Option<String>,
+) -> (Vec<String>, Option<String>) {
+    let mut normalized_labels = Vec::new();
+    let mut seen = BTreeSet::new();
+    for label in labels {
+        let Some(label) = normalize_task_label(&label) else {
+            continue;
+        };
+        let key = label.to_ascii_lowercase();
+        if seen.insert(key) {
+            normalized_labels.push(label);
+        }
+    }
+
+    let normalized_selected = selected
+        .and_then(|value| normalize_task_label(&value))
+        .map(|value| canonical_task_label(&normalized_labels, &value).unwrap_or(value));
+    if let Some(selected_label) = normalized_selected.as_ref() {
+        let key = selected_label.to_ascii_lowercase();
+        if seen.insert(key) {
+            normalized_labels.push(selected_label.clone());
+        }
+    }
+
+    (normalized_labels, normalized_selected)
 }
 
 pub fn current_day_key() -> String {
@@ -607,6 +756,25 @@ mod tests {
         assert_eq!(day.focused_seconds, 125);
         assert_eq!(day.focused_minutes(), 2);
         assert_eq!(day.goal, Some(goal));
+    }
+
+    #[test]
+    fn task_planner_state_normalizes_and_deduplicates_labels() {
+        let mut stats = FocusStats::default();
+        let changed = stats.update_task_planner_state(
+            vec![
+                "  Docs  ".to_string(),
+                "docs".to_string(),
+                "".to_string(),
+                "Bugfix".to_string(),
+            ],
+            Some("  docs ".to_string()),
+        );
+        assert!(changed);
+
+        let (labels, selected) = stats.task_planner_state();
+        assert_eq!(labels, vec!["Docs".to_string(), "Bugfix".to_string()]);
+        assert_eq!(selected, Some("Docs".to_string()));
     }
 
     #[test]
@@ -810,7 +978,7 @@ mod tests {
             pomodoros: 1,
         };
         stats.record_focus_elapsed("2026-04-06", 30 * 60, goal);
-        stats.record_completed_pomodoro("2026-04-06", goal);
+        stats.record_completed_pomodoro_with_task("2026-04-06", goal, Some("Project A"), 30 * 60);
         stats.record_focus_elapsed("2026-04-08", 45 * 60, goal);
         stats.record_completed_pomodoro("2026-04-08", goal);
 
@@ -827,17 +995,22 @@ mod tests {
         let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
         let daily = json_value["daily"].as_array().unwrap();
         let weekly = json_value["weekly"].as_array().unwrap();
+        let sessions = json_value["sessions"].as_array().unwrap();
         assert_eq!(daily.len(), 2);
         assert_eq!(weekly.len(), 1);
+        assert_eq!(sessions.len(), 1);
         assert_eq!(daily[0]["date"], "2026-04-06");
         assert_eq!(daily[0]["goal_met"], true);
         assert_eq!(weekly[0]["week_label"], "2026-W15");
         assert_eq!(weekly[0]["focused_minutes"], 75);
+        assert_eq!(sessions[0]["task_label"], "Project A");
+        assert_eq!(sessions[0]["focused_minutes"], 30);
 
         let csv = fs::read_to_string(&exported.csv_path).unwrap();
-        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met"));
-        assert!(csv.contains("daily,2026-04-06,,,,1,1800,30,25,1,true"));
-        assert!(csv.contains("weekly,,2026-W15,2026,15,2,4500,75,,,"));
+        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label"));
+        assert!(csv.contains("daily,2026-04-06,,,,1,1800,30,25,1,true,"));
+        assert!(csv.contains("weekly,,2026-W15,2026,15,2,4500,75,,,,"));
+        assert!(csv.contains("focus_session,2026-04-06,,,,1,1800,30,,,,Project A"));
 
         fs::remove_dir_all(export_dir).unwrap();
     }

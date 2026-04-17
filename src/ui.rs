@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::app::{
     App, AppMode, DailyGoalProgress, HistoryFeedbackLevel, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS,
-    SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
+    PlannerFeedbackLevel, SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
 };
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
@@ -19,6 +19,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         AppMode::Timer => render_timer(frame, app),
         AppMode::SiteManager => render_site_manager(frame, app),
         AppMode::ProfileManager => render_profile_manager(frame, app),
+        AppMode::SessionPlanner => render_session_planner(frame, app),
         AppMode::StatsHistory => render_stats_history(frame, app),
         AppMode::SetupDiagnostics => render_setup_diagnostics(frame, app),
     }
@@ -27,7 +28,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 fn render_timer(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
-    let outer = centered_rect(72, 72, area);
+    let outer = centered_rect(88, 90, area);
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" focustime ")
@@ -37,32 +38,26 @@ fn render_timer(frame: &mut Frame, app: &App) {
 
     let inner = Layout::default()
         .direction(Direction::Vertical)
-        .margin(2)
+        .margin(1)
         .constraints([
             Constraint::Length(2), // phase + pomodoro count
-            Constraint::Length(3), // MM:SS
-            Constraint::Length(1), // active profile
-            Constraint::Length(3), // progress bar
-            Constraint::Length(2), // status
+            Constraint::Min(10),   // body
             Constraint::Length(1), // latest phase notification
-            Constraint::Length(1), // stats summary
-            Constraint::Length(1), // goal + streak summary
-            Constraint::Length(1), // wakatime status
-            Constraint::Min(0),    // spacer
-            Constraint::Length(2), // key hints
+            Constraint::Length(4), // key hints
         ])
         .split(outer);
 
     render_timer_phase_header(frame, app, inner[0]);
-    render_timer_countdown(frame, app, inner[1]);
-    render_timer_profile(frame, app, inner[2]);
-    render_timer_progress_bar(frame, app, inner[3]);
-    render_timer_status(frame, app, inner[4]);
-    render_timer_phase_notice(frame, app, inner[5]);
-    render_timer_stats_summary(frame, app, inner[6]);
-    render_timer_goal_streak_summary(frame, app, inner[7]);
-    render_timer_wakatime_status(frame, app, inner[8]);
-    render_timer_hints(frame, app, inner[10]);
+
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
+        .split(inner[1]);
+    render_timer_focus_panel(frame, app, body[0]);
+    render_timer_session_panel(frame, app, body[1]);
+
+    render_timer_phase_notice(frame, app, inner[2]);
+    render_timer_hints(frame, app, inner[3]);
 }
 
 fn render_timer_phase_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -96,19 +91,41 @@ fn render_timer_countdown(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(time_widget, area);
 }
 
-fn render_timer_profile(frame: &mut Frame, app: &App, area: Rect) {
-    let profile_text = format!(
-        "Profile: {} ({})",
-        app.selected_profile_name(),
-        app.profile_summary(app.selected_profile)
-    );
-    let profile_widget = Paragraph::new(profile_text)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(profile_widget, area);
+fn render_timer_focus_panel(frame: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default().borders(Borders::ALL).title(" ⏱  Timer ");
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // countdown
+            Constraint::Length(1), // spacer
+            Constraint::Length(5), // progress
+            Constraint::Min(0),    // spacer
+        ])
+        .split(inner);
+
+    render_timer_countdown(frame, app, layout[0]);
+    render_timer_progress_bar(frame, app, layout[2]);
 }
 
 fn render_timer_progress_bar(frame: &mut Frame, app: &App, area: Rect) {
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // progress label
+            Constraint::Length(1), // empty line
+            Constraint::Length(3), // progress bar
+        ])
+        .split(area);
+    frame.render_widget(
+        Paragraph::new("⏳ Progress")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray)),
+        layout[0],
+    );
+
     let elapsed_ratio = 1.0 - app.timer.progress();
     let gauge = Gauge::default()
         .block(Block::default().borders(Borders::NONE))
@@ -118,34 +135,67 @@ fn render_timer_progress_bar(frame: &mut Frame, app: &App, area: Rect) {
                 .bg(Color::DarkGray),
         )
         .ratio(elapsed_ratio);
-    frame.render_widget(gauge, area);
+    frame.render_widget(gauge, layout[2]);
 }
 
-fn render_timer_status(frame: &mut Frame, app: &App, area: Rect) {
+fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" 🧭 Session Overview ");
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
     let (status_text, strict_status_text) = timer_status_text(app);
-    let status_widget = Paragraph::new(vec![
-        Line::from(status_text),
-        Line::from(strict_status_text),
-    ])
-    .alignment(Alignment::Center)
-    .style(Style::default().fg(Color::Gray));
-    frame.render_widget(status_widget, area);
+    let profile_line = format!(
+        "🗂  Profile: {} ({})",
+        app.selected_profile_name(),
+        app.profile_summary(app.selected_profile)
+    );
+    let (task_text, task_style) = if let Some(label) = app.current_task_label() {
+        (
+            format!("🎯 Task: {label}"),
+            Style::default().fg(Color::LightYellow),
+        )
+    } else {
+        (
+            "🎯 Task: not selected ([t] Planner)".to_string(),
+            Style::default().fg(Color::Yellow),
+        )
+    };
+    let (stats_text, stats_style) = timer_stats_line(app);
+    let goal_line = format!("🔥 {}", format_timer_goal_streak_line(app));
+    let (waka_text, waka_color) = wakatime_status_line(app);
+
+    let lines = vec![
+        Line::from(""),
+        Line::styled(status_text, Style::default().fg(Color::Gray)),
+        Line::styled(strict_status_text, Style::default().fg(Color::DarkGray)),
+        Line::from(""),
+        Line::styled(profile_line, Style::default().fg(Color::DarkGray)),
+        Line::styled(task_text, task_style),
+        Line::from(""),
+        Line::styled(format!("📈 {stats_text}"), stats_style),
+        Line::styled(goal_line, Style::default().fg(Color::DarkGray)),
+        Line::styled(waka_text, Style::default().fg(waka_color)),
+    ];
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
 fn timer_status_text(app: &App) -> (&'static str, &'static str) {
     let status_text = match app.timer.status {
-        TimerStatus::Running => "▶  Running",
-        TimerStatus::Paused => "⏸  Paused",
-        TimerStatus::Idle => "⏹  Idle",
+        TimerStatus::Running => "📍 Status: ▶ Running",
+        TimerStatus::Paused => "📍 Status: ⏸ Paused",
+        TimerStatus::Idle => "📍 Status: ⏹ Idle",
     };
     let strict_text = if app.strict_reset_confirmation_pending() {
-        "🔒 Strict mode: press [s] again to confirm stop/reset"
+        "🔒 Strict mode: confirm reset with [s]"
     } else if app.strict_mode_enforced_for_focus() {
-        "🔒 Strict mode active: skip locked, stop requires confirmation"
+        "🔒 Strict mode: active (skip/quit locked, reset confirm)"
     } else if app.strict_mode {
-        "🔒 Strict mode armed: enforced during active focus only"
+        "🔒 Strict mode: armed (enforced during active focus)"
     } else {
-        "🔓 Strict mode off"
+        "🔓 Strict mode: off"
     };
     (status_text, strict_text)
 }
@@ -167,14 +217,6 @@ fn phase_notice_line(app: &App) -> (String, Style) {
             Style::default().fg(Color::DarkGray),
         )
     }
-}
-
-fn render_timer_stats_summary(frame: &mut Frame, app: &App, area: Rect) {
-    let (text, style) = timer_stats_line(app);
-    let stats_widget = Paragraph::new(text)
-        .alignment(Alignment::Center)
-        .style(style);
-    frame.render_widget(stats_widget, area);
 }
 
 fn timer_stats_line(app: &App) -> (String, Style) {
@@ -199,31 +241,16 @@ fn timer_stats_line(app: &App) -> (String, Style) {
     }
 }
 
-fn render_timer_goal_streak_summary(frame: &mut Frame, app: &App, area: Rect) {
-    let goal_widget = Paragraph::new(format_timer_goal_streak_line(app))
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(goal_widget, area);
-}
-
-fn render_timer_wakatime_status(frame: &mut Frame, app: &App, area: Rect) {
-    let (waka_text, waka_color) = wakatime_status_line(app);
-    let waka_widget = Paragraph::new(waka_text)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(waka_color));
-    frame.render_widget(waka_widget, area);
-}
-
 fn wakatime_status_line(app: &App) -> (String, Color) {
     let runtime_state = app.wakatime.runtime_state();
     let (status_text, status_color) = match &runtime_state {
         WakatimeRuntimeState::NotConfigured => {
-            ("⏱ WakaTime: not configured".to_string(), Color::DarkGray)
+            ("⏱  WakaTime: not configured".to_string(), Color::DarkGray)
         }
-        WakatimeRuntimeState::Idle => ("⏱ WakaTime: idle".to_string(), Color::DarkGray),
-        WakatimeRuntimeState::Tracking => ("⏱ WakaTime: tracking".to_string(), Color::Green),
+        WakatimeRuntimeState::Idle => ("⏱  WakaTime: idle".to_string(), Color::DarkGray),
+        WakatimeRuntimeState::Tracking => ("⏱  WakaTime: tracking".to_string(), Color::Green),
         WakatimeRuntimeState::Sending => {
-            ("⏱ WakaTime: sending heartbeat...".to_string(), Color::Cyan)
+            ("⏱  WakaTime: sending heartbeat...".to_string(), Color::Cyan)
         }
         WakatimeRuntimeState::Retrying {
             attempt,
@@ -232,11 +259,11 @@ fn wakatime_status_line(app: &App) -> (String, Color) {
             error,
         } => (
             format!(
-                "⏱ WakaTime: retrying ({attempt}/{max_attempts}) in {next_backoff_secs}s ({error})"
+                "⏱  WakaTime: retrying ({attempt}/{max_attempts}) in {next_backoff_secs}s ({error})"
             ),
             Color::Yellow,
         ),
-        WakatimeRuntimeState::Error(error) => (format!("⏱ WakaTime: error ({error})"), Color::Red),
+        WakatimeRuntimeState::Error(error) => (format!("⏱  WakaTime: error ({error})"), Color::Red),
     };
 
     if matches!(runtime_state, WakatimeRuntimeState::NotConfigured) {
@@ -271,27 +298,37 @@ fn render_timer_hints(frame: &mut Frame, app: &App, area: Rect) {
     let hints_widget = Paragraph::new(vec![
         Line::from(timer_primary_hint(app)),
         Line::from(timer_secondary_hint(app)),
+        Line::from(timer_tertiary_hint(app)),
     ])
     .alignment(Alignment::Center)
-    .style(Style::default().fg(Color::DarkGray));
+    .style(Style::default().fg(Color::DarkGray))
+    .wrap(Wrap { trim: true });
     frame.render_widget(hints_widget, area);
 }
 
 fn timer_primary_hint(app: &App) -> &'static str {
     if app.strict_reset_confirmation_pending() {
-        "Timer: [Space] Run/Pause  [s] Confirm Stop/Reset  [n] Next (Locked)"
+        "⌨  Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)"
     } else if app.strict_mode_enforced_for_focus() {
-        "Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)"
+        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)"
     } else {
-        "Timer: [Space] Run/Pause  [s] Stop  [n] Next"
+        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next"
     }
 }
 
 fn timer_secondary_hint(app: &App) -> &'static str {
     if app.strict_mode_enforced_for_focus() {
-        "Views: [h] History  [p] Profiles (Locked)  [b] Sites  [d] Setup  [q/Esc] Quit (Locked)"
+        "🧭 Views: [t] Planner  [h] History  [p] Profiles (Locked)  [b] Sites  [d] Setup"
     } else {
-        "Views: [h] History  [p] Profiles  [b] Sites  [d] Setup  [q/Esc] Quit"
+        "🧭 Views: [t] Planner  [h] History  [p] Profiles  [b] Sites  [d] Setup"
+    }
+}
+
+fn timer_tertiary_hint(app: &App) -> &'static str {
+    if app.strict_mode_enforced_for_focus() {
+        "🚪 Quit: [q/Esc] Locked during active focus"
+    } else {
+        "🚪 Quit: [q/Esc]"
     }
 }
 
@@ -609,6 +646,181 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hints_widget, inner[7]);
+}
+
+fn render_session_planner(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+    let outer = centered_rect(66, 82, area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Session Planner ")
+        .title_alignment(Alignment::Center)
+        .style(Style::default().fg(Color::Cyan));
+    frame.render_widget(block, outer);
+
+    let inner = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(2)
+        .constraints([
+            Constraint::Length(2), // current task
+            Constraint::Length(1), // spacer
+            Constraint::Min(5),    // task labels list
+            Constraint::Length(3), // add input
+            Constraint::Length(2), // feedback
+            Constraint::Length(3), // hints
+        ])
+        .split(outer);
+
+    render_session_planner_selected_task(frame, app, inner[0]);
+    render_session_planner_labels(frame, app, inner[2]);
+    render_session_planner_input(frame, app, inner[3]);
+    render_session_planner_feedback(frame, app, inner[4]);
+    render_session_planner_hints(frame, app, inner[5]);
+}
+
+fn render_session_planner_selected_task(frame: &mut Frame, app: &App, area: Rect) {
+    let selected_text = app.selected_task_label.as_ref().map_or_else(
+        || {
+            vec![
+                Line::from("Selected task:"),
+                Line::from("  none (required before focus starts)"),
+            ]
+        },
+        |label| {
+            vec![
+                Line::from("Selected task:"),
+                Line::from(format!("  {label}")),
+            ]
+        },
+    );
+    frame.render_widget(
+        Paragraph::new(selected_text)
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
+}
+
+fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
+    if app.task_labels.is_empty() {
+        frame.render_widget(
+            Paragraph::new("No task labels yet. Press [a] to add one.")
+                .style(Style::default().fg(Color::DarkGray))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Task Labels "),
+                ),
+            area,
+        );
+        return;
+    }
+
+    let items: Vec<ListItem> = app
+        .task_labels
+        .iter()
+        .map(|label| {
+            let marker = if app
+                .selected_task_label
+                .as_ref()
+                .is_some_and(|selected| selected.eq_ignore_ascii_case(label))
+            {
+                "✓"
+            } else {
+                " "
+            };
+            ListItem::new(format!(" {marker} {label}"))
+        })
+        .collect();
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Task Labels "),
+        )
+        .highlight_style(
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+    let mut state = ListState::default();
+    state.select(Some(
+        app.planner_selection_index
+            .min(app.task_labels.len().saturating_sub(1)),
+    ));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
+    let input_title = if app.planner_input_active {
+        " Add task label "
+    } else {
+        " Add task label ([a] to type) "
+    };
+    let input_text = if app.planner_input_active {
+        format!("{}|", app.planner_input)
+    } else {
+        "Type a label, then press [Enter] to add and select".to_string()
+    };
+    frame.render_widget(
+        Paragraph::new(input_text)
+            .style(if app.planner_input_active {
+                Style::default().fg(Color::White)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            })
+            .block(Block::default().borders(Borders::ALL).title(input_title)),
+        area,
+    );
+}
+
+fn render_session_planner_feedback(frame: &mut Frame, app: &App, area: Rect) {
+    if let Some(feedback) = app.planner_feedback.as_ref() {
+        let (prefix, color) = match feedback.level {
+            PlannerFeedbackLevel::Success => ("✓", Color::Green),
+            PlannerFeedbackLevel::Warning => ("⚠", Color::Yellow),
+        };
+        frame.render_widget(
+            Paragraph::new(format!("{prefix}  {}", feedback.message))
+                .style(Style::default().fg(color))
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true }),
+            area,
+        );
+    }
+}
+
+fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
+    let hints = if app.planner_input_active {
+        vec![
+            Line::from("Input: type task label, then [Enter]"),
+            Line::from("Input: [Esc] Cancel"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "View: [q/Ctrl-C] Quit (Locked)"
+            } else {
+                "View: [q/Ctrl-C] Quit"
+            }),
+        ]
+    } else {
+        vec![
+            Line::from("Planner: [↑/↓] Move"),
+            Line::from("Planner: [Enter] Select  [a] Add label"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "View: [t/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+            } else {
+                "View: [t/Esc] Back  [q/Ctrl-C] Quit"
+            }),
+        ]
+    };
+    frame.render_widget(
+        Paragraph::new(hints)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray)),
+        area,
+    );
 }
 
 fn render_stats_history(frame: &mut Frame, app: &App) {
@@ -963,6 +1175,12 @@ mod tests {
     }
 
     #[test]
+    fn timer_secondary_hint_includes_planner_shortcut() {
+        let app = App::default();
+        assert!(timer_secondary_hint(&app).contains("[t] Planner"));
+    }
+
+    #[test]
     fn timer_secondary_hint_includes_setup_shortcut_in_strict_mode() {
         let mut app = App::default();
         app.strict_mode = true;
@@ -970,6 +1188,16 @@ mod tests {
         app.timer.status = TimerStatus::Running;
 
         assert!(timer_secondary_hint(&app).contains("[d] Setup"));
+    }
+
+    #[test]
+    fn timer_secondary_hint_includes_planner_shortcut_in_strict_mode() {
+        let mut app = App::default();
+        app.strict_mode = true;
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        assert!(timer_secondary_hint(&app).contains("[t] Planner"));
     }
 
     #[test]
@@ -1065,6 +1293,41 @@ mod tests {
     }
 
     #[test]
+    fn timer_view_renders_selected_task_label() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Task: Docs"));
+    }
+
+    #[test]
+    fn session_planner_view_renders_title() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::SessionPlanner;
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Session Planner"));
+    }
+
+    #[test]
     fn week_label_uses_zero_padded_iso_format() {
         assert_eq!(format_week_label(2026, 5), "2026-W05");
     }
@@ -1076,7 +1339,7 @@ mod tests {
 
         let (text, color) = wakatime_status_line(&app);
 
-        assert_eq!(text, "⏱ WakaTime: idle · last success not yet sent");
+        assert_eq!(text, "⏱  WakaTime: idle · last success not yet sent");
         assert_eq!(color, Color::DarkGray);
     }
 
@@ -1089,7 +1352,7 @@ mod tests {
 
         let (text, color) = wakatime_status_line(&app);
 
-        assert!(text.starts_with("⏱ WakaTime: idle · last success "));
+        assert!(text.starts_with("⏱  WakaTime: idle · last success "));
         assert!(!text.contains("not yet sent"));
         assert_eq!(color, Color::DarkGray);
     }
@@ -1101,7 +1364,7 @@ mod tests {
 
         let (text, color) = wakatime_status_line(&app);
 
-        assert_eq!(text, "⏱ WakaTime: not configured");
+        assert_eq!(text, "⏱  WakaTime: not configured");
         assert_eq!(color, Color::DarkGray);
     }
 }

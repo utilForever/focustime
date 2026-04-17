@@ -14,6 +14,7 @@ use crate::stats::{
     DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusStats, GoalStreak, SessionStats,
     WeeklyStats, current_day_key,
 };
+use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
@@ -43,6 +44,7 @@ pub enum AppMode {
     Timer,
     SiteManager,
     ProfileManager,
+    SessionPlanner,
     StatsHistory,
     SetupDiagnostics,
 }
@@ -135,9 +137,21 @@ pub enum HistoryFeedbackLevel {
     Warning,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlannerFeedbackLevel {
+    Success,
+    Warning,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SiteFeedback {
     pub level: SiteFeedbackLevel,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannerFeedback {
+    pub level: PlannerFeedbackLevel,
     pub message: String,
 }
 
@@ -244,6 +258,13 @@ pub struct App {
     pub site_input_active: bool,
     site_edit_index: Option<usize>,
     pub site_feedback: Option<SiteFeedback>,
+    pub task_labels: Vec<String>,
+    pub selected_task_label: Option<String>,
+    pub planner_selection_index: usize,
+    pub planner_input: String,
+    pub planner_input_active: bool,
+    pub planner_feedback: Option<PlannerFeedback>,
+    active_focus_task_label: Option<String>,
     /// Index of the highlighted site in the SiteManager list.
     pub selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
@@ -299,6 +320,11 @@ impl App {
             Ok(stats) => (stats, None),
             Err(e) => (FocusStats::default(), Some(e)),
         };
+        let (task_labels, selected_task_label) = stats.task_planner_state();
+        let planner_selection_index = selected_task_label
+            .as_ref()
+            .and_then(|label| task_label_index(&task_labels, label))
+            .unwrap_or(0);
         let timer = TimerState::with_profile(
             profile_spec.focus_secs,
             profile_spec.short_break_secs,
@@ -319,6 +345,13 @@ impl App {
             site_input_active: false,
             site_edit_index: None,
             site_feedback: None,
+            task_labels,
+            selected_task_label,
+            planner_selection_index,
+            planner_input: String::new(),
+            planner_input_active: false,
+            planner_feedback: None,
+            active_focus_task_label: None,
             selected_site: 0,
             block_error: None,
             setup_diagnostics,
@@ -350,31 +383,96 @@ impl App {
     }
 
     pub fn on_tick(&mut self, is_catchup: bool) {
-        let was_focus_running = self.focus_running_for_current_state();
-        let was_focus_phase = self.timer.phase == TimerPhase::Focus;
         let completed_phase = self.timer.phase;
-        if was_focus_running && !is_catchup {
+        let completed_focus_secs = self.timer.focus_secs;
+        if self.should_record_focus_elapsed(is_catchup) {
             self.record_focus_elapsed(1);
         }
 
         let phase_changed = self.timer.tick();
-        if !is_catchup && phase_changed && was_focus_phase && self.timer.phase != TimerPhase::Focus
-        {
-            self.record_completed_focus_session();
-        }
         if phase_changed {
-            self.pending_timer_action = None;
-            if !is_catchup && self.should_auto_start_transition(completed_phase, self.timer.phase) {
-                self.timer.status = TimerStatus::Running;
-            }
-            if !is_catchup {
-                self.phase_notification = self
-                    .notifier
-                    .notify_phase_completion(completed_phase, self.timer.phase);
-            }
-            self.apply_blocking_for_phase();
+            self.handle_phase_change(completed_phase, completed_focus_secs, is_catchup);
         }
         self.flush_stats_if_dirty(false);
+    }
+
+    fn should_record_focus_elapsed(&self, is_catchup: bool) -> bool {
+        !is_catchup && self.focus_running_for_current_state()
+    }
+
+    fn should_record_completed_focus_session(
+        &self,
+        completed_phase: TimerPhase,
+        is_catchup: bool,
+    ) -> bool {
+        !is_catchup && completed_phase == TimerPhase::Focus && self.timer.phase != TimerPhase::Focus
+    }
+
+    fn should_block_focus_autostart(&self) -> bool {
+        self.timer.phase == TimerPhase::Focus && self.selected_task_label.is_none()
+    }
+
+    fn handle_phase_change(
+        &mut self,
+        completed_phase: TimerPhase,
+        completed_focus_secs: u64,
+        is_catchup: bool,
+    ) {
+        self.pending_timer_action = None;
+        if self.should_record_completed_focus_session(completed_phase, is_catchup) {
+            self.record_completed_focus_session(completed_focus_secs);
+            self.active_focus_task_label = None;
+        }
+
+        let blocked_focus_autostart =
+            self.apply_auto_start_after_phase_change(completed_phase, is_catchup);
+        self.update_phase_notification_after_phase_change(
+            completed_phase,
+            is_catchup,
+            blocked_focus_autostart,
+        );
+
+        if self.timer.phase != TimerPhase::Focus {
+            self.active_focus_task_label = None;
+        }
+        self.apply_blocking_for_phase();
+    }
+
+    fn apply_auto_start_after_phase_change(
+        &mut self,
+        completed_phase: TimerPhase,
+        is_catchup: bool,
+    ) -> bool {
+        if is_catchup || !self.should_auto_start_transition(completed_phase, self.timer.phase) {
+            return false;
+        }
+
+        if self.should_block_focus_autostart() {
+            return true;
+        }
+
+        self.timer.status = TimerStatus::Running;
+        if self.timer.phase == TimerPhase::Focus {
+            self.active_focus_task_label = self.selected_task_label.clone();
+        }
+        false
+    }
+
+    fn update_phase_notification_after_phase_change(
+        &mut self,
+        completed_phase: TimerPhase,
+        is_catchup: bool,
+        blocked_focus_autostart: bool,
+    ) {
+        if !is_catchup {
+            self.phase_notification = self
+                .notifier
+                .notify_phase_completion(completed_phase, self.timer.phase);
+        }
+        if blocked_focus_autostart {
+            self.phase_notification =
+                Some("Select a task label with [t] before starting focus.".to_string());
+        }
     }
 
     /// Advance WakaTime tracking by `elapsed_secs` simulated seconds.
@@ -396,6 +494,16 @@ impl App {
 
     pub fn selected_profile_name(&self) -> &'static str {
         self.selected_profile.label()
+    }
+
+    pub fn current_task_label(&self) -> Option<&str> {
+        if self.focus_session_active_for_current_state() {
+            self.active_focus_task_label
+                .as_deref()
+                .or(self.selected_task_label.as_deref())
+        } else {
+            self.selected_task_label.as_deref()
+        }
     }
 
     pub fn profile_values(&self, profile: ProfileId) -> (u64, u64, u64, u32) {
@@ -577,6 +685,7 @@ impl App {
             AppMode::Timer => self.handle_key_timer(key),
             AppMode::SiteManager => self.handle_key_site_manager(key),
             AppMode::ProfileManager => self.handle_key_profile_manager(key),
+            AppMode::SessionPlanner => self.handle_key_session_planner(key),
             AppMode::StatsHistory => self.handle_key_stats_history(key),
             AppMode::SetupDiagnostics => self.handle_key_setup_diagnostics(key),
         }
@@ -610,6 +719,14 @@ impl App {
         match key.code {
             // Start / pause
             KeyCode::Char(' ') => {
+                if self.timer.phase == TimerPhase::Focus
+                    && self.timer.status == TimerStatus::Idle
+                    && self.selected_task_label.is_none()
+                {
+                    self.phase_notification =
+                        Some("Select a task label with [t] before starting focus.".to_string());
+                    return;
+                }
                 self.update_timer_and_sync(TimerState::toggle_pause);
             }
             // Stop / reset current phase
@@ -637,6 +754,10 @@ impl App {
                     return;
                 }
                 self.open_profile_manager();
+            }
+            // Open session planner
+            KeyCode::Char('t') => {
+                self.open_session_planner();
             }
             // Open stats history
             KeyCode::Char('h') => {
@@ -738,6 +859,98 @@ impl App {
                 self.begin_profile_edit();
             }
             _ => {}
+        }
+    }
+
+    fn handle_key_session_planner(&mut self, key: KeyEvent) {
+        if self.planner_input_active {
+            match key.code {
+                KeyCode::Enter => self.commit_planner_input(),
+                KeyCode::Esc => self.cancel_planner_input(),
+                KeyCode::Backspace => {
+                    self.planner_input.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.planner_input.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        if self.handle_quit_key(&key, false) {
+            return;
+        }
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('t') => {
+                self.mode = AppMode::Timer;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.planner_selection_index = self.planner_selection_index.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') if !self.task_labels.is_empty() => {
+                self.planner_selection_index =
+                    (self.planner_selection_index + 1).min(self.task_labels.len() - 1);
+            }
+            KeyCode::Char('a') => self.start_planner_input(),
+            KeyCode::Enter => self.select_planner_label(),
+            _ => {}
+        }
+    }
+
+    fn start_planner_input(&mut self) {
+        self.planner_input.clear();
+        self.planner_input_active = true;
+        self.planner_feedback = None;
+    }
+
+    fn cancel_planner_input(&mut self) {
+        self.planner_input.clear();
+        self.planner_input_active = false;
+    }
+
+    fn commit_planner_input(&mut self) {
+        let Some(label) = normalize_task_label(&self.planner_input) else {
+            self.set_planner_feedback(PlannerFeedbackLevel::Warning, "Task label cannot be empty");
+            return;
+        };
+        self.planner_input_active = false;
+        self.planner_input.clear();
+
+        if let Some(existing_index) = task_label_index(&self.task_labels, &label) {
+            self.planner_selection_index = existing_index;
+            self.selected_task_label = self.task_labels.get(existing_index).cloned();
+            self.sync_task_planner_state();
+            self.set_planner_feedback(
+                PlannerFeedbackLevel::Warning,
+                format!("`{label}` already exists, selected existing label"),
+            );
+            return;
+        }
+
+        self.task_labels.push(label.clone());
+        self.clamp_planner_selection();
+        self.planner_selection_index = self.task_labels.len().saturating_sub(1);
+        self.selected_task_label = Some(label.clone());
+        self.sync_task_planner_state();
+        self.set_planner_feedback(
+            PlannerFeedbackLevel::Success,
+            format!("Added and selected `{label}`"),
+        );
+    }
+
+    fn select_planner_label(&mut self) {
+        if self.task_labels.is_empty() {
+            self.set_planner_feedback(PlannerFeedbackLevel::Warning, "No task labels available");
+            return;
+        }
+
+        self.clamp_planner_selection();
+        if let Some(label) = self.task_labels.get(self.planner_selection_index).cloned() {
+            self.selected_task_label = Some(label.clone());
+            self.sync_task_planner_state();
+            self.set_planner_feedback(PlannerFeedbackLevel::Success, format!("Selected `{label}`"));
         }
     }
 
@@ -854,6 +1067,7 @@ impl App {
             profile_spec.long_break_secs,
             profile_spec.long_break_interval,
         );
+        self.active_focus_task_label = None;
         self.selected_profile = profile;
         self.profile_selection_index = profile_index(profile);
         self.pending_timer_action = None;
@@ -892,10 +1106,8 @@ impl App {
                 self.mode = AppMode::Timer;
             }
             // Navigate down
-            KeyCode::Down | KeyCode::Char('j') => {
-                if !self.blocker.sites.is_empty() {
-                    self.selected_site = (self.selected_site + 1).min(self.blocker.sites.len() - 1);
-                }
+            KeyCode::Down | KeyCode::Char('j') if !self.blocker.sites.is_empty() => {
+                self.selected_site = (self.selected_site + 1).min(self.blocker.sites.len() - 1);
             }
             // Navigate up
             KeyCode::Up | KeyCode::Char('k') => {
@@ -1103,6 +1315,26 @@ impl App {
         }
     }
 
+    fn clamp_planner_selection(&mut self) {
+        if self.task_labels.is_empty() {
+            self.planner_selection_index = 0;
+        } else {
+            self.planner_selection_index = self
+                .planner_selection_index
+                .min(self.task_labels.len().saturating_sub(1));
+        }
+    }
+
+    fn sync_task_planner_state(&mut self) {
+        if self
+            .stats
+            .update_task_planner_state(self.task_labels.clone(), self.selected_task_label.clone())
+        {
+            self.stats_dirty = true;
+            self.flush_stats_if_dirty(false);
+        }
+    }
+
     fn handle_quit_key(&mut self, key: &KeyEvent, esc_quits: bool) -> bool {
         let is_quit_key = matches!(
             key.code,
@@ -1133,8 +1365,15 @@ impl App {
     }
 
     fn update_timer_and_sync(&mut self, action: fn(&mut TimerState)) {
+        let was_focus_active = self.focus_session_active_for_current_state();
         self.pending_timer_action = None;
         action(&mut self.timer);
+        let is_focus_active = self.focus_session_active_for_current_state();
+        if !was_focus_active && is_focus_active {
+            self.active_focus_task_label = self.selected_task_label.clone();
+        } else if was_focus_active && !is_focus_active {
+            self.active_focus_task_label = None;
+        }
         self.apply_blocking_for_phase();
     }
 
@@ -1152,6 +1391,19 @@ impl App {
         self.profile_edit_snapshot = None;
         self.profile_selection_index = profile_index(self.selected_profile);
         self.clamp_profile_selection();
+    }
+
+    fn open_session_planner(&mut self) {
+        self.mode = AppMode::SessionPlanner;
+        self.planner_feedback = None;
+        self.planner_input.clear();
+        self.planner_input_active = false;
+        if let Some(selected) = self.selected_task_label.as_ref()
+            && let Some(index) = task_label_index(&self.task_labels, selected)
+        {
+            self.planner_selection_index = index;
+        }
+        self.clamp_planner_selection();
     }
 
     fn open_stats_history(&mut self) {
@@ -1200,11 +1452,15 @@ impl App {
     }
 
     fn should_block_for_current_state(&self) -> bool {
-        self.timer.phase == TimerPhase::Focus && self.timer.status != TimerStatus::Idle
+        self.focus_session_active_for_current_state()
     }
 
     fn focus_running_for_current_state(&self) -> bool {
         self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running
+    }
+
+    fn focus_session_active_for_current_state(&self) -> bool {
+        self.timer.phase == TimerPhase::Focus && self.timer.status != TimerStatus::Idle
     }
 
     fn should_auto_start_transition(
@@ -1246,10 +1502,19 @@ impl App {
         }
     }
 
-    fn record_completed_focus_session(&mut self) {
+    fn record_completed_focus_session(&mut self, focused_seconds: u64) {
         let day_key = current_day_key();
-        self.stats
-            .record_completed_pomodoro(&day_key, self.current_goal_snapshot());
+        let goal = self.current_goal_snapshot();
+        if self.active_focus_task_label.is_some() {
+            self.stats.record_completed_pomodoro_with_task(
+                &day_key,
+                goal,
+                self.active_focus_task_label.as_deref(),
+                focused_seconds,
+            );
+        } else {
+            self.stats.record_completed_pomodoro(&day_key, goal);
+        }
         self.stats_dirty = true;
     }
 
@@ -1312,6 +1577,13 @@ impl App {
 
     fn set_site_feedback(&mut self, level: SiteFeedbackLevel, message: impl Into<String>) {
         self.site_feedback = Some(SiteFeedback {
+            level,
+            message: message.into(),
+        });
+    }
+
+    fn set_planner_feedback(&mut self, level: PlannerFeedbackLevel, message: impl Into<String>) {
+        self.planner_feedback = Some(PlannerFeedback {
             level,
             message: message.into(),
         });
@@ -2413,6 +2685,8 @@ mod tests {
             ..AppConfig::default()
         };
         let mut app = App::from_config(config);
+        app.task_labels = vec!["Auto Task".to_string()];
+        app.selected_task_label = Some("Auto Task".to_string());
         app.timer.phase = TimerPhase::ShortBreak;
         app.timer.status = TimerStatus::Running;
         app.timer.remaining_secs = 1;
@@ -2832,6 +3106,42 @@ mod tests {
             app.wakatime.runtime_state(),
             crate::wakatime::WakatimeRuntimeState::Error("HTTP 503".to_string())
         );
+    }
+
+    #[test]
+    fn focus_does_not_start_without_selected_task_label() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char(' ')));
+
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("Select a task label with [t] before starting focus.")
+        );
+    }
+
+    #[test]
+    fn session_planner_adds_label_and_allows_focus_start() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('t')));
+        assert_eq!(app.mode, AppMode::SessionPlanner);
+
+        app.handle_key(key(KeyCode::Char('a')));
+        for c in "Docs".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
+        assert_eq!(app.current_task_label(), Some("Docs"));
+
+        app.handle_key(key(KeyCode::Char('t')));
+        assert_eq!(app.mode, AppMode::Timer);
+
+        app.handle_key(key(KeyCode::Char(' ')));
+        assert_eq!(app.timer.status, TimerStatus::Running);
     }
 
     #[test]
