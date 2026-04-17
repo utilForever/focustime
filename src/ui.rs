@@ -8,8 +8,9 @@ use ratatui::{
 };
 
 use crate::app::{
-    App, AppMode, DailyGoalProgress, HistoryFeedbackLevel, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS,
-    PlannerFeedbackLevel, SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
+    App, AppMode, BlocklistProfileInputMode, DailyGoalProgress, HistoryFeedbackLevel,
+    PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, PlannerFeedbackLevel, SetupCheck, SetupCheckLevel,
+    SiteFeedbackLevel, SiteInputMode,
 };
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
@@ -360,11 +361,13 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         .margin(2)
         .constraints([
             Constraint::Length(1), // status line
+            Constraint::Length(1), // profile line
             Constraint::Length(1), // DoH warning
             Constraint::Length(1), // spacer
             Constraint::Min(3),    // site list
             Constraint::Length(1), // spacer
-            Constraint::Length(3), // input area
+            Constraint::Length(3), // site input area
+            Constraint::Length(3), // profile input area
             Constraint::Length(1), // error line
             Constraint::Length(1), // spacer
             Constraint::Length(2), // key hints
@@ -398,17 +401,35 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         inner[0],
     );
 
+    let profile_text = format!(
+        "Profile: {} ({}/{})",
+        app.active_blocklist_profile_name(),
+        app.active_blocklist_profile_position(),
+        app.blocklist_profile_count()
+    );
+    frame.render_widget(
+        Paragraph::new(profile_text)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Cyan)),
+        inner[1],
+    );
+
     // DoH warning
     let doh_warning =
         Paragraph::new("⚠ Disable DNS-over-HTTPS in your browser for blocking to work")
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Yellow));
-    frame.render_widget(doh_warning, inner[1]);
+    frame.render_widget(doh_warning, inner[2]);
 
     let input_mode = app.site_input_mode();
+    let profile_input_mode = app.blocklist_profile_input_mode();
 
     // Site list
-    let list_title = format!(" Blocked Sites ({}) ", app.blocker.sites.len());
+    let list_title = format!(
+        " Blocked Sites · {} ({}) ",
+        app.active_blocklist_profile_name(),
+        app.blocker.sites.len()
+    );
     let list_block = Block::default()
         .borders(Borders::ALL)
         .title(list_title)
@@ -418,7 +439,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         let empty = Paragraph::new("  No sites blocked yet. Press [a] to add one.")
             .style(Style::default().fg(Color::DarkGray))
             .block(list_block);
-        frame.render_widget(empty, inner[3]);
+        frame.render_widget(empty, inner[4]);
     } else {
         let items: Vec<ListItem> = app
             .blocker
@@ -439,7 +460,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
 
         let mut list_state = ListState::default();
         list_state.select(Some(app.selected_site));
-        frame.render_stateful_widget(list, inner[3], &mut list_state);
+        frame.render_stateful_widget(list, inner[4], &mut list_state);
     }
 
     // Input area
@@ -469,7 +490,36 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             } else {
                 Style::default().fg(Color::DarkGray)
             });
-    frame.render_widget(input_widget, inner[5]);
+    frame.render_widget(input_widget, inner[6]);
+
+    let profile_input_title = match profile_input_mode {
+        Some(BlocklistProfileInputMode::Create) => " New Blocklist Profile ",
+        Some(BlocklistProfileInputMode::Rename) => " Rename Blocklist Profile ",
+        None => " Blocklist Profiles ",
+    };
+    let profile_input_block = Block::default()
+        .borders(Borders::ALL)
+        .title(profile_input_title)
+        .style(if app.blocklist_profile_input_active {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        });
+    let profile_input_text = if app.blocklist_profile_input_active {
+        format!("{}_", app.blocklist_profile_input)
+    } else {
+        "Use [n] to create, [r] to rename, [x] to delete, [[ ] to switch".to_string()
+    };
+    frame.render_widget(
+        Paragraph::new(profile_input_text)
+            .block(profile_input_block)
+            .style(if app.blocklist_profile_input_active {
+                Style::default().fg(Color::Yellow)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            }),
+        inner[7],
+    );
 
     // Error line
     if let Some(err) = app.block_error.as_ref() {
@@ -478,9 +528,9 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         } else {
             " (try running with elevated privileges)"
         };
-        render_centered_error(frame, inner[6], format!("⚠  {err}{privilege_hint}"));
+        render_centered_error(frame, inner[8], format!("⚠  {err}{privilege_hint}"));
     } else if let Some(err) = app.config_error.as_ref() {
-        render_centered_error(frame, inner[6], format!("⚠  {err}"));
+        render_centered_error(frame, inner[8], format!("⚠  {err}"));
     } else if let Some(feedback) = app.site_feedback.as_ref() {
         let (prefix, color) = match feedback.level {
             SiteFeedbackLevel::Success => ("✓", Color::Green),
@@ -489,7 +539,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         let feedback_widget = Paragraph::new(format!("{prefix}  {}", feedback.message))
             .alignment(Alignment::Center)
             .style(Style::default().fg(color));
-        frame.render_widget(feedback_widget, inner[6]);
+        frame.render_widget(feedback_widget, inner[8]);
     }
 
     // Key hints
@@ -504,21 +554,26 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
                 SiteInputMode::Edit => "Tip: enter one hostname, then press [Enter]",
             }),
         ]
+    } else if app.blocklist_profile_input_active {
+        vec![
+            Line::from("Profile: [Enter] Save  [Esc] Cancel"),
+            Line::from("Tip: use descriptive names like Work, Study, or Deep Work"),
+        ]
     } else if app.strict_mode_enforced_for_focus() {
         vec![
             Line::from("Sites: [a] Add  [e] Edit  [d/Del] Remove  [↑/↓] Move"),
-            Line::from("View: [b/Esc] Back  [q] Quit (Locked)"),
+            Line::from("Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [q] Quit (Locked)"),
         ]
     } else {
         vec![
             Line::from("Sites: [a] Add  [e] Edit  [d/Del] Remove  [↑/↓] Move"),
-            Line::from("View: [b/Esc] Back  [q] Quit"),
+            Line::from("Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [b/Esc] Back"),
         ]
     };
     let hints_widget = Paragraph::new(hint_lines)
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints_widget, inner[8]);
+    frame.render_widget(hints_widget, inner[10]);
 }
 
 fn render_profile_manager(frame: &mut Frame, app: &App) {

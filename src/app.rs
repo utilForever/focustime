@@ -6,8 +6,8 @@ use crate::blocker::{
     BulkAddResult, EditSiteResult, HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
 };
 use crate::config::{
-    AppConfig, AutoStartConfig, CustomProfileConfig, DailyGoalConfig, NotificationConfig,
-    ProfileId, WakatimeMetadataConfig,
+    AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
+    NotificationConfig, ProfileId, WakatimeMetadataConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::stats::{
@@ -38,6 +38,7 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 11] = [
 ];
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
+const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
@@ -105,6 +106,13 @@ fn profile_for_index(index: usize) -> ProfileId {
         .unwrap_or(PROFILE_IDS[PROFILE_IDS.len() - 1])
 }
 
+fn blocklist_profile_index(profiles: &[BlocklistProfileConfig], selected_name: &str) -> usize {
+    profiles
+        .iter()
+        .position(|profile| profile.name.eq_ignore_ascii_case(selected_name))
+        .unwrap_or(0)
+}
+
 #[derive(Debug, Clone)]
 struct ProfileEditSnapshot {
     custom_profile: CustomProfileConfig,
@@ -123,6 +131,12 @@ enum PendingTimerAction {
 pub enum SiteInputMode {
     Add,
     Edit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlocklistProfileInputMode {
+    Create,
+    Rename,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -257,6 +271,11 @@ pub struct App {
     /// Whether the user is currently typing a new site.
     pub site_input_active: bool,
     site_edit_index: Option<usize>,
+    pub blocklist_profiles: Vec<BlocklistProfileConfig>,
+    active_blocklist_profile: usize,
+    pub blocklist_profile_input: String,
+    pub blocklist_profile_input_active: bool,
+    blocklist_profile_input_mode: Option<BlocklistProfileInputMode>,
     pub site_feedback: Option<SiteFeedback>,
     pub task_labels: Vec<String>,
     pub selected_task_label: Option<String>,
@@ -308,6 +327,7 @@ impl App {
     }
 
     fn from_config(config: AppConfig) -> Self {
+        let config = config.normalized();
         let selected_profile = config.selected_profile;
         let custom_profile = config.effective_custom_profile();
         let notification_settings = config.notifications;
@@ -315,6 +335,9 @@ impl App {
         let strict_mode = config.strict_mode;
         let daily_goal = config.daily_goal;
         let wakatime_metadata = config.wakatime;
+        let blocklist_profiles = config.blocklist_profiles.clone();
+        let active_blocklist_profile =
+            blocklist_profile_index(&blocklist_profiles, &config.selected_blocklist_profile);
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (stats, stats_error) = match FocusStats::load() {
             Ok(stats) => (stats, None),
@@ -332,7 +355,7 @@ impl App {
             profile_spec.long_break_interval,
         );
         let mut blocker = SiteBlocker::new();
-        for site in &config.blocked_sites {
+        for site in &blocklist_profiles[active_blocklist_profile].sites {
             blocker.add_site(site.clone());
         }
         let setup_diagnostics = SetupDiagnostics::collect(&blocker);
@@ -344,6 +367,11 @@ impl App {
             site_input: String::new(),
             site_input_active: false,
             site_edit_index: None,
+            blocklist_profiles,
+            active_blocklist_profile,
+            blocklist_profile_input: String::new(),
+            blocklist_profile_input_active: false,
+            blocklist_profile_input_mode: None,
             site_feedback: None,
             task_labels,
             selected_task_label,
@@ -614,10 +642,44 @@ impl App {
         }
     }
 
+    pub fn blocklist_profile_input_mode(&self) -> Option<BlocklistProfileInputMode> {
+        self.blocklist_profile_input_mode
+    }
+
+    pub fn active_blocklist_profile_name(&self) -> &str {
+        self.blocklist_profiles
+            .get(self.active_blocklist_profile)
+            .map(|profile| profile.name.as_str())
+            .unwrap_or(DEFAULT_BLOCKLIST_PROFILE_NAME)
+    }
+
+    pub fn active_blocklist_profile_position(&self) -> usize {
+        self.active_blocklist_profile.saturating_add(1)
+    }
+
+    pub fn blocklist_profile_count(&self) -> usize {
+        self.blocklist_profiles.len()
+    }
+
     /// Persist the current blocked-sites list and timer preferences to disk.
     /// Failures are best-effort; the error is surfaced through `config_error`.
     fn persisted_config(&self) -> AppConfig {
         let custom_profile = self.custom_profile.normalized();
+        let mut blocklist_profiles = self.blocklist_profiles.clone();
+        let active_index = self
+            .active_blocklist_profile
+            .min(blocklist_profiles.len().saturating_sub(1));
+        if let Some(active_profile) = blocklist_profiles.get_mut(active_index) {
+            active_profile.sites = self.blocker.sites.clone();
+        }
+        if blocklist_profiles.is_empty() {
+            blocklist_profiles.push(BlocklistProfileConfig::default());
+        }
+        let selected_blocklist_profile = blocklist_profiles
+            .get(active_index)
+            .or_else(|| blocklist_profiles.first())
+            .map(|profile| profile.name.clone())
+            .unwrap_or_else(|| DEFAULT_BLOCKLIST_PROFILE_NAME.to_string());
         AppConfig {
             // Keep legacy fields aligned with the editable custom profile so
             // older releases retain user-configured values.
@@ -626,6 +688,8 @@ impl App {
             long_break_secs: custom_profile.long_break_secs,
             long_break_interval: custom_profile.long_break_interval,
             blocked_sites: self.blocker.sites.clone(),
+            blocklist_profiles,
+            selected_blocklist_profile,
             selected_profile: self.selected_profile,
             custom_profile: Some(custom_profile),
             notifications: self.notification_settings,
@@ -1077,6 +1141,25 @@ impl App {
     }
 
     fn handle_key_site_manager(&mut self, key: KeyEvent) {
+        if self.blocklist_profile_input_active {
+            match key.code {
+                KeyCode::Enter => {
+                    self.commit_blocklist_profile_input();
+                }
+                KeyCode::Esc => {
+                    self.cancel_blocklist_profile_input();
+                }
+                KeyCode::Backspace => {
+                    self.blocklist_profile_input.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.blocklist_profile_input.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+
         if self.site_input_active {
             match key.code {
                 KeyCode::Enter => {
@@ -1125,6 +1208,26 @@ impl App {
             KeyCode::Char('d') | KeyCode::Delete => {
                 self.remove_selected_site();
             }
+            // Previous blocklist profile
+            KeyCode::Char('[') => {
+                self.select_previous_blocklist_profile();
+            }
+            // Next blocklist profile
+            KeyCode::Char(']') => {
+                self.select_next_blocklist_profile();
+            }
+            // Create blocklist profile
+            KeyCode::Char('n') => {
+                self.start_blocklist_profile_input(BlocklistProfileInputMode::Create);
+            }
+            // Rename active blocklist profile
+            KeyCode::Char('r') => {
+                self.start_blocklist_profile_input(BlocklistProfileInputMode::Rename);
+            }
+            // Delete active blocklist profile
+            KeyCode::Char('x') => {
+                self.delete_active_blocklist_profile();
+            }
             _ => {}
         }
     }
@@ -1156,6 +1259,26 @@ impl App {
         self.site_edit_index = None;
     }
 
+    fn start_blocklist_profile_input(&mut self, mode: BlocklistProfileInputMode) {
+        self.blocklist_profile_input_active = true;
+        self.blocklist_profile_input_mode = Some(mode);
+        self.site_feedback = None;
+        match mode {
+            BlocklistProfileInputMode::Create => {
+                self.blocklist_profile_input.clear();
+            }
+            BlocklistProfileInputMode::Rename => {
+                self.blocklist_profile_input = self.active_blocklist_profile_name().to_string();
+            }
+        }
+    }
+
+    fn cancel_blocklist_profile_input(&mut self) {
+        self.blocklist_profile_input.clear();
+        self.blocklist_profile_input_active = false;
+        self.blocklist_profile_input_mode = None;
+    }
+
     fn commit_site_input(&mut self) {
         let input = self.site_input.clone();
 
@@ -1169,6 +1292,77 @@ impl App {
 
         if committed {
             self.cancel_site_input();
+        }
+    }
+
+    fn commit_blocklist_profile_input(&mut self) {
+        let Some(mode) = self.blocklist_profile_input_mode else {
+            return;
+        };
+
+        let name = self.blocklist_profile_input.trim().to_string();
+        if name.is_empty() {
+            self.set_site_feedback(SiteFeedbackLevel::Warning, "Profile name cannot be empty");
+            return;
+        }
+
+        let has_duplicate = self
+            .blocklist_profiles
+            .iter()
+            .enumerate()
+            .any(|(index, profile)| {
+                let is_current = mode == BlocklistProfileInputMode::Rename
+                    && index == self.active_blocklist_profile;
+                !is_current && profile.name.eq_ignore_ascii_case(&name)
+            });
+        if has_duplicate {
+            self.set_site_feedback(
+                SiteFeedbackLevel::Warning,
+                format!("Profile `{name}` already exists"),
+            );
+            return;
+        }
+
+        match mode {
+            BlocklistProfileInputMode::Create => {
+                self.sync_active_profile_sites_from_blocker();
+                self.blocklist_profiles.push(BlocklistProfileConfig {
+                    name: name.clone(),
+                    sites: Vec::new(),
+                });
+                self.active_blocklist_profile = self.blocklist_profiles.len().saturating_sub(1);
+                self.load_active_profile_sites_into_blocker();
+                self.clamp_selection();
+                self.cancel_blocklist_profile_input();
+                self.save_config();
+                self.sync_blocking_after_site_mutation();
+                self.set_site_feedback(
+                    SiteFeedbackLevel::Success,
+                    format!("Created profile `{name}`"),
+                );
+            }
+            BlocklistProfileInputMode::Rename => {
+                let old_name = self.active_blocklist_profile_name().to_string();
+                if old_name == name {
+                    self.set_site_feedback(
+                        SiteFeedbackLevel::Warning,
+                        format!("No change for profile `{name}`"),
+                    );
+                    return;
+                }
+                if let Some(profile) = self
+                    .blocklist_profiles
+                    .get_mut(self.active_blocklist_profile)
+                {
+                    profile.name = name.clone();
+                }
+                self.cancel_blocklist_profile_input();
+                self.save_config();
+                self.set_site_feedback(
+                    SiteFeedbackLevel::Success,
+                    format!("Renamed profile `{old_name}` -> `{name}`"),
+                );
+            }
         }
     }
 
@@ -1277,6 +1471,78 @@ impl App {
         }
     }
 
+    fn select_previous_blocklist_profile(&mut self) {
+        if self.blocklist_profiles.len() <= 1 {
+            return;
+        }
+        let next = if self.active_blocklist_profile == 0 {
+            self.blocklist_profiles.len().saturating_sub(1)
+        } else {
+            self.active_blocklist_profile.saturating_sub(1)
+        };
+        self.switch_blocklist_profile(next);
+    }
+
+    fn select_next_blocklist_profile(&mut self) {
+        if self.blocklist_profiles.len() <= 1 {
+            return;
+        }
+        let next = (self.active_blocklist_profile + 1) % self.blocklist_profiles.len();
+        self.switch_blocklist_profile(next);
+    }
+
+    fn switch_blocklist_profile(&mut self, next_index: usize) {
+        if next_index >= self.blocklist_profiles.len()
+            || next_index == self.active_blocklist_profile
+        {
+            return;
+        }
+
+        self.sync_active_profile_sites_from_blocker();
+        self.active_blocklist_profile = next_index;
+        self.load_active_profile_sites_into_blocker();
+        self.clamp_selection();
+        self.save_config();
+        self.sync_blocking_after_site_mutation();
+        self.set_site_feedback(
+            SiteFeedbackLevel::Success,
+            format!(
+                "Switched to profile `{}`",
+                self.active_blocklist_profile_name()
+            ),
+        );
+    }
+
+    fn delete_active_blocklist_profile(&mut self) {
+        if self.blocklist_profiles.len() <= 1 {
+            self.set_site_feedback(
+                SiteFeedbackLevel::Warning,
+                "At least one blocklist profile is required",
+            );
+            return;
+        }
+
+        self.sync_active_profile_sites_from_blocker();
+        let removed = self
+            .blocklist_profiles
+            .remove(self.active_blocklist_profile);
+        if self.active_blocklist_profile >= self.blocklist_profiles.len() {
+            self.active_blocklist_profile = self.blocklist_profiles.len().saturating_sub(1);
+        }
+        self.load_active_profile_sites_into_blocker();
+        self.clamp_selection();
+        self.save_config();
+        self.sync_blocking_after_site_mutation();
+        self.set_site_feedback(
+            SiteFeedbackLevel::Success,
+            format!(
+                "Deleted profile `{}` (active: `{}`)",
+                removed.name,
+                self.active_blocklist_profile_name()
+            ),
+        );
+    }
+
     pub fn is_running(&self) -> bool {
         self.timer.status == TimerStatus::Running
     }
@@ -1302,6 +1568,38 @@ impl App {
             self.selected_site = 0;
         } else {
             self.selected_site = self.selected_site.min(self.blocker.sites.len() - 1);
+        }
+    }
+
+    fn clamp_blocklist_profile_selection(&mut self) {
+        if self.blocklist_profiles.is_empty() {
+            self.blocklist_profiles
+                .push(BlocklistProfileConfig::default());
+            self.active_blocklist_profile = 0;
+            return;
+        }
+        self.active_blocklist_profile = self
+            .active_blocklist_profile
+            .min(self.blocklist_profiles.len().saturating_sub(1));
+    }
+
+    fn sync_active_profile_sites_from_blocker(&mut self) {
+        self.clamp_blocklist_profile_selection();
+        if let Some(active_profile) = self
+            .blocklist_profiles
+            .get_mut(self.active_blocklist_profile)
+        {
+            active_profile.sites = self.blocker.sites.clone();
+        }
+    }
+
+    fn load_active_profile_sites_into_blocker(&mut self) {
+        self.clamp_blocklist_profile_selection();
+        self.blocker.sites.clear();
+        if let Some(active_profile) = self.blocklist_profiles.get(self.active_blocklist_profile) {
+            for site in &active_profile.sites {
+                self.blocker.add_site(site.clone());
+            }
         }
     }
 
@@ -1381,6 +1679,8 @@ impl App {
         self.pending_timer_action = None;
         self.mode = AppMode::SiteManager;
         self.cancel_site_input();
+        self.cancel_blocklist_profile_input();
+        self.clamp_blocklist_profile_selection();
         self.clamp_selection();
     }
 
@@ -1425,6 +1725,7 @@ impl App {
 
     fn finalize_site_mutation(&mut self) {
         self.clamp_selection();
+        self.sync_active_profile_sites_from_blocker();
         self.save_config();
         self.sync_blocking_after_site_mutation();
     }
@@ -1824,6 +2125,8 @@ mod tests {
         let app = App::default();
 
         assert!(app.blocker.sites.is_empty());
+        assert_eq!(app.blocklist_profile_count(), 1);
+        assert_eq!(app.active_blocklist_profile_name(), "Default");
         assert_eq!(app.timer.focus_secs, DEFAULT_FOCUS_SECS);
         assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
         assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
@@ -1841,6 +2144,8 @@ mod tests {
             long_break_secs: 8 * 60,
             long_break_interval: 2,
             blocked_sites: Vec::new(),
+            blocklist_profiles: vec![BlocklistProfileConfig::default()],
+            selected_blocklist_profile: "Default".to_string(),
             selected_profile: ProfileId::Classic,
             custom_profile: Some(CustomProfileConfig {
                 focus_secs: 40 * 60,
@@ -2059,6 +2364,9 @@ mod tests {
         assert!(persisted.strict_mode);
         assert_eq!(persisted.daily_goal, DailyGoalConfig::default());
         assert_eq!(persisted.wakatime, WakatimeMetadataConfig::default());
+        assert_eq!(persisted.selected_blocklist_profile, "Default");
+        assert_eq!(persisted.blocklist_profiles.len(), 1);
+        assert_eq!(persisted.blocklist_profiles[0].name, "Default");
     }
 
     #[test]
@@ -2624,6 +2932,89 @@ mod tests {
         app.timer.phase = TimerPhase::Focus;
         app.timer.status = TimerStatus::Running;
         assert!(app.should_resync_blocking_after_site_mutation());
+    }
+
+    #[test]
+    fn site_manager_switches_between_blocklist_profiles() {
+        let config = AppConfig {
+            blocklist_profiles: vec![
+                BlocklistProfileConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["a.com".to_string()],
+                },
+                BlocklistProfileConfig {
+                    name: "Study".to_string(),
+                    sites: vec!["b.com".to_string(), "c.com".to_string()],
+                },
+            ],
+            selected_blocklist_profile: "Work".to_string(),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.handle_key(key(KeyCode::Char('b')));
+
+        assert_eq!(app.active_blocklist_profile_name(), "Work");
+        assert_eq!(app.blocker.sites, vec!["a.com".to_string()]);
+
+        app.handle_key(key(KeyCode::Char(']')));
+
+        assert_eq!(app.active_blocklist_profile_name(), "Study");
+        assert_eq!(
+            app.blocker.sites,
+            vec!["b.com".to_string(), "c.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn site_manager_create_rename_and_delete_blocklist_profile() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('b')));
+
+        app.handle_key(key(KeyCode::Char('n')));
+        for c in "Work".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.blocklist_profile_count(), 2);
+        assert_eq!(app.active_blocklist_profile_name(), "Work");
+        assert!(app.blocker.sites.is_empty());
+
+        app.handle_key(key(KeyCode::Char('r')));
+        for _ in 0.."Work".len() {
+            app.handle_key(key(KeyCode::Backspace));
+        }
+        for c in "Deep Work".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.active_blocklist_profile_name(), "Deep Work");
+
+        app.handle_key(key(KeyCode::Char('x')));
+
+        assert_eq!(app.blocklist_profile_count(), 1);
+        assert_eq!(app.active_blocklist_profile_name(), "Default");
+    }
+
+    #[test]
+    fn persisted_config_mirrors_active_profile_sites_to_legacy_blocked_sites() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('a')));
+        for c in "example.com".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        let persisted = app.persisted_config();
+        assert_eq!(persisted.selected_blocklist_profile, "Default");
+        assert_eq!(persisted.blocked_sites, vec!["example.com".to_string()]);
+        assert_eq!(persisted.blocklist_profiles.len(), 1);
+        assert_eq!(
+            persisted.blocklist_profiles[0].sites,
+            vec!["example.com".to_string()]
+        );
     }
 
     #[test]

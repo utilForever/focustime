@@ -134,7 +134,16 @@ view always shows the current task label (or a reminder to select one).
 
 ```toml
 selected_profile = "custom"
+selected_blocklist_profile = "Work"
 strict_mode = false
+
+[[blocklist_profiles]]
+name = "Work"
+sites = ["youtube.com", "reddit.com"]
+
+[[blocklist_profiles]]
+name = "Study"
+sites = ["x.com", "news.ycombinator.com"]
 
 [custom_profile]
 focus_secs = 1800
@@ -169,6 +178,10 @@ Open the site manager from timer view with **`b`**.
 - `a`: add/import hostnames
 - `e`: edit the selected hostname
 - `d` or `Delete`: remove the selected hostname
+- `[` / `]`: switch active blocklist profile
+- `n`: create a blocklist profile
+- `r`: rename the active blocklist profile
+- `x`: delete the active blocklist profile
 - `↑/↓`: move selection
 - `b`: return to timer view
 - `Esc`: return to timer view only when add/edit mode is not active
