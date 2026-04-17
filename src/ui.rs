@@ -146,7 +146,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let (status_text, strict_status_text) = timer_status_text(app);
+    let (status_text, strict_status_text, break_glass_status_text) = timer_status_text(app);
     let profile_line = format!(
         "🗂  Profile: {} ({})",
         app.selected_profile_name(),
@@ -171,6 +171,10 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
         Line::from(""),
         Line::styled(status_text, Style::default().fg(Color::Gray)),
         Line::styled(strict_status_text, Style::default().fg(Color::DarkGray)),
+        Line::styled(
+            break_glass_status_text,
+            Style::default().fg(Color::DarkGray),
+        ),
         Line::from(""),
         Line::styled(profile_line, Style::default().fg(Color::DarkGray)),
         Line::styled(task_text, task_style),
@@ -183,32 +187,32 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-fn timer_status_text(app: &App) -> (String, String) {
+fn timer_status_text(app: &App) -> (String, String, String) {
     let status_text = match app.timer.status {
         TimerStatus::Running => "📍 Status: ▶ Running".to_string(),
         TimerStatus::Paused => "📍 Status: ⏸ Paused".to_string(),
         TimerStatus::Idle => "📍 Status: ⏹ Idle".to_string(),
     };
     let strict_text = if app.strict_reset_confirmation_pending() {
-        "🔒 Strict mode: confirm reset with [s]".to_string()
+        "🔒 Strict: confirm reset [s]".to_string()
     } else if app.strict_mode_enforced_for_focus() {
-        "🔒 Strict mode: active (skip/quit locked, reset confirm)".to_string()
+        "🔒 Strict: active (skip/quit locked)".to_string()
     } else if app.strict_mode {
-        "🔒 Strict mode: armed (enforced during active focus)".to_string()
+        "🔒 Strict: armed".to_string()
     } else {
-        "🔓 Strict mode: off".to_string()
+        "🔓 Strict: off".to_string()
     };
     let break_glass_text = if app.break_glass_confirmation_pending() {
-        "🚨 Break-glass: confirm unblock with [u]".to_string()
+        "🚨 Break-glass: confirm [u]".to_string()
     } else if let Some(remaining_secs) = app.break_glass_override_remaining_secs() {
         format!(
-            "🚨 Break-glass: active ({} left)",
+            "🚨 Break-glass: active ({})",
             format_duration_label(remaining_secs)
         )
     } else {
         "🚨 Break-glass: off".to_string()
     };
-    (status_text, format!("{strict_text} · {break_glass_text}"))
+    (status_text, strict_text, break_glass_text)
 }
 
 fn render_timer_phase_notice(frame: &mut Frame, app: &App, area: Rect) {
@@ -1332,8 +1336,8 @@ mod tests {
             crossterm::event::KeyModifiers::NONE,
         ));
 
-        let (_, status_detail) = timer_status_text(&app);
-        assert!(status_detail.contains("Break-glass: active"));
+        let (_, _, break_glass_status) = timer_status_text(&app);
+        assert!(break_glass_status.contains("Break-glass: active"));
     }
 
     #[test]
