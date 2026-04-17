@@ -146,7 +146,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let (status_text, strict_status_text) = timer_status_text(app);
+    let (status_text, strict_status_text, break_glass_status_text) = timer_status_text(app);
     let profile_line = format!(
         "🗂  Profile: {} ({})",
         app.selected_profile_name(),
@@ -171,6 +171,10 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
         Line::from(""),
         Line::styled(status_text, Style::default().fg(Color::Gray)),
         Line::styled(strict_status_text, Style::default().fg(Color::DarkGray)),
+        Line::styled(
+            break_glass_status_text,
+            Style::default().fg(Color::DarkGray),
+        ),
         Line::from(""),
         Line::styled(profile_line, Style::default().fg(Color::DarkGray)),
         Line::styled(task_text, task_style),
@@ -183,22 +187,32 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-fn timer_status_text(app: &App) -> (&'static str, &'static str) {
+fn timer_status_text(app: &App) -> (String, String, String) {
     let status_text = match app.timer.status {
-        TimerStatus::Running => "📍 Status: ▶ Running",
-        TimerStatus::Paused => "📍 Status: ⏸ Paused",
-        TimerStatus::Idle => "📍 Status: ⏹ Idle",
+        TimerStatus::Running => "📍 Status: ▶ Running".to_string(),
+        TimerStatus::Paused => "📍 Status: ⏸ Paused".to_string(),
+        TimerStatus::Idle => "📍 Status: ⏹ Idle".to_string(),
     };
     let strict_text = if app.strict_reset_confirmation_pending() {
-        "🔒 Strict mode: confirm reset with [s]"
+        "🔒 Strict: confirm reset [s]".to_string()
     } else if app.strict_mode_enforced_for_focus() {
-        "🔒 Strict mode: active (skip/quit locked, reset confirm)"
+        "🔒 Strict: active (skip/quit locked)".to_string()
     } else if app.strict_mode {
-        "🔒 Strict mode: armed (enforced during active focus)"
+        "🔒 Strict: armed".to_string()
     } else {
-        "🔓 Strict mode: off"
+        "🔓 Strict: off".to_string()
     };
-    (status_text, strict_text)
+    let break_glass_text = if app.break_glass_confirmation_pending() {
+        "🚨 Break-glass: confirm [u]".to_string()
+    } else if let Some(remaining_secs) = app.break_glass_override_remaining_secs() {
+        format!(
+            "🚨 Break-glass: active ({})",
+            format_duration_label(remaining_secs)
+        )
+    } else {
+        "🚨 Break-glass: off".to_string()
+    };
+    (status_text, strict_text, break_glass_text)
 }
 
 fn render_timer_phase_notice(frame: &mut Frame, app: &App, area: Rect) {
@@ -295,6 +309,16 @@ fn format_wakatime_heartbeat_timestamp(epoch_secs: u64) -> String {
         .unwrap_or_else(|| epoch_secs.to_string())
 }
 
+fn format_duration_label(duration_secs: u64) -> String {
+    let minutes = duration_secs / 60;
+    let remaining_seconds = duration_secs % 60;
+    if remaining_seconds == 0 {
+        format!("{minutes}m")
+    } else {
+        format!("{minutes}:{remaining_seconds:02}")
+    }
+}
+
 fn render_timer_hints(frame: &mut Frame, app: &App, area: Rect) {
     let hints_widget = Paragraph::new(vec![
         Line::from(timer_primary_hint(app)),
@@ -308,12 +332,14 @@ fn render_timer_hints(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn timer_primary_hint(app: &App) -> &'static str {
-    if app.strict_reset_confirmation_pending() {
-        "⌨  Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)"
+    if app.break_glass_confirmation_pending() {
+        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [u] Confirm unblock"
+    } else if app.strict_reset_confirmation_pending() {
+        "⌨  Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)  [u] Unblock"
     } else if app.strict_mode_enforced_for_focus() {
-        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)"
+        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)  [u] Unblock"
     } else {
-        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next"
+        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [u] Unblock"
     }
 }
 
@@ -382,6 +408,15 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         Span::styled(
             "Blocking is ACTIVE during this focus session",
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )
+    } else if app.break_glass_override_active() {
+        let remaining_secs = app.break_glass_override_remaining_secs().unwrap_or(0);
+        Span::styled(
+            format!(
+                "Break-glass override active — blocking paused ({} left)",
+                format_duration_label(remaining_secs)
+            ),
+            Style::default().fg(Color::Yellow),
         )
     } else if focus_session_active {
         // Focus session is running/paused but blocking is not active
@@ -924,10 +959,15 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(goal_summary, inner[1]);
 
+    let history_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+        .split(inner[3]);
+
     let history_sections = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
-        .split(inner[3]);
+        .split(history_layout[0]);
 
     let weekly_items: Vec<ListItem> = app
         .recent_weekly_stats(6)
@@ -966,6 +1006,28 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         " Recent Days ",
         history_items,
         "  No completed focus history yet.",
+    );
+
+    let override_items: Vec<ListItem> = app
+        .recent_break_glass_overrides(4)
+        .into_iter()
+        .map(|event| {
+            let task_label = event.task_label.unwrap_or_else(|| "Unlabeled".to_string());
+            ListItem::new(format!(
+                "  {} {} · {} · {}",
+                event.date,
+                format_wakatime_heartbeat_timestamp(event.timestamp_epoch_secs),
+                task_label,
+                format_duration_label(event.duration_seconds)
+            ))
+        })
+        .collect();
+    render_history_panel(
+        frame,
+        history_layout[1],
+        " Break-glass Audit ",
+        override_items,
+        "  No break-glass overrides yet.",
     );
 
     if let Some(feedback) = app.history_feedback.as_ref() {
@@ -1238,6 +1300,47 @@ mod tests {
     }
 
     #[test]
+    fn timer_primary_hint_includes_break_glass_shortcut() {
+        let app = App::default();
+        assert!(timer_primary_hint(&app).contains("[u] Unblock"));
+    }
+
+    #[test]
+    fn timer_primary_hint_shows_break_glass_confirmation_prompt() {
+        let mut app = App::default();
+        app.blocker.add_site("example.com".to_string());
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('u'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        assert!(timer_primary_hint(&app).contains("Confirm unblock"));
+    }
+
+    #[test]
+    fn timer_status_text_shows_active_break_glass_state() {
+        let mut app = App::default();
+        app.blocker.add_site("example.com".to_string());
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('u'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('u'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        let (_, _, break_glass_status) = timer_status_text(&app);
+        assert!(break_glass_status.contains("Break-glass: active"));
+    }
+
+    #[test]
     fn timer_secondary_hint_includes_setup_shortcut_in_strict_mode() {
         let mut app = App::default();
         app.strict_mode = true;
@@ -1328,6 +1431,7 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("Weekly Totals"));
+        assert!(text.contains("Break-glass Audit"));
         assert!(text.contains(&format_week_label(2026, 15)));
         assert!(text.contains("75m"));
     }

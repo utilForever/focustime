@@ -136,6 +136,7 @@ view always shows the current task label (or a reminder to select one).
 selected_profile = "custom"
 selected_blocklist_profile = "Work"
 strict_mode = false
+break_glass_duration_secs = 300
 
 [[blocklist_profiles]]
 name = "Work"
@@ -245,6 +246,17 @@ When strict mode is enabled during an active focus session:
 - `s` (stop/reset) requires confirmation by pressing `s` again
 - `p` (profile manager) is disabled, so profile switching is locked
 - quit shortcuts (`q`, `Esc`, `Ctrl-C`) are disabled until focus is no longer active
+
+## Break-glass override for site blocking
+
+During an active focus session, you can temporarily pause site blocking with an explicit two-step confirm:
+
+- press `u` to arm break-glass
+- press `u` again to confirm and temporarily unblock
+
+While active, timer status shows a live countdown. When the countdown expires, blocking resumes automatically if focus is still active.
+
+Override events are recorded for audit visibility in the History view and included in export metadata (`focustime-stats.json` and `focustime-stats.csv`).
 
 ## Session stats and history
 
