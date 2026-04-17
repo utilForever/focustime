@@ -562,7 +562,9 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
     } else if app.strict_mode_enforced_for_focus() {
         vec![
             Line::from("Sites: [a] Add  [e] Edit  [d/Del] Remove  [↑/↓] Move"),
-            Line::from("Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [q] Quit (Locked)"),
+            Line::from(
+                "Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [b/Esc] Back  [q] Quit (Locked)",
+            ),
         ]
     } else {
         vec![

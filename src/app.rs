@@ -760,6 +760,11 @@ impl App {
             return;
         }
 
+        if self.blocklist_profile_input_active {
+            self.blocklist_profile_input.push_str(&text);
+            return;
+        }
+
         if !self.site_input_active {
             self.start_site_input(SiteInputMode::Add);
         }
@@ -1233,6 +1238,7 @@ impl App {
     }
 
     fn start_site_input(&mut self, mode: SiteInputMode) {
+        self.cancel_blocklist_profile_input();
         self.site_input_active = true;
         self.site_feedback = None;
         match mode {
@@ -1260,6 +1266,7 @@ impl App {
     }
 
     fn start_blocklist_profile_input(&mut self, mode: BlocklistProfileInputMode) {
+        self.cancel_site_input();
         self.blocklist_profile_input_active = true;
         self.blocklist_profile_input_mode = Some(mode);
         self.site_feedback = None;
@@ -2847,6 +2854,40 @@ mod tests {
         assert_eq!(feedback.level, SiteFeedbackLevel::Warning);
         assert!(feedback.message.contains("Added 2 sites"));
         assert!(feedback.message.contains("invalid hostname"));
+    }
+
+    #[test]
+    fn site_manager_paste_targets_blocklist_profile_input_when_active() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('n')));
+
+        app.handle_paste("Work".to_string());
+
+        assert!(app.blocklist_profile_input_active);
+        assert_eq!(app.blocklist_profile_input, "Work");
+        assert!(!app.site_input_active);
+        assert!(app.site_input.is_empty());
+    }
+
+    #[test]
+    fn site_manager_input_modes_are_mutually_exclusive() {
+        let mut app = App::default();
+        app.mode = AppMode::SiteManager;
+
+        app.start_blocklist_profile_input(BlocklistProfileInputMode::Create);
+        assert!(app.blocklist_profile_input_active);
+        assert!(!app.site_input_active);
+
+        app.start_site_input(SiteInputMode::Add);
+        assert!(app.site_input_active);
+        assert!(!app.blocklist_profile_input_active);
+        assert!(app.blocklist_profile_input.is_empty());
+
+        app.start_blocklist_profile_input(BlocklistProfileInputMode::Rename);
+        assert!(app.blocklist_profile_input_active);
+        assert!(!app.site_input_active);
+        assert!(app.site_input.is_empty());
     }
 
     #[test]
