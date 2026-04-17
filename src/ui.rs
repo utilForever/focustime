@@ -672,7 +672,15 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
         ])
         .split(outer);
 
-    let current_text = app.selected_task_label.as_ref().map_or_else(
+    render_session_planner_selected_task(frame, app, inner[0]);
+    render_session_planner_labels(frame, app, inner[2]);
+    render_session_planner_input(frame, app, inner[3]);
+    render_session_planner_feedback(frame, app, inner[4]);
+    render_session_planner_hints(frame, app, inner[5]);
+}
+
+fn render_session_planner_selected_task(frame: &mut Frame, app: &App, area: Rect) {
+    let selected_text = app.selected_task_label.as_ref().map_or_else(
         || {
             vec![
                 Line::from("Selected task:"),
@@ -687,12 +695,14 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
         },
     );
     frame.render_widget(
-        Paragraph::new(current_text)
+        Paragraph::new(selected_text)
             .style(Style::default().fg(Color::White))
             .wrap(Wrap { trim: true }),
-        inner[0],
+        area,
     );
+}
 
+fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
     if app.task_labels.is_empty() {
         frame.render_widget(
             Paragraph::new("No task labels yet. Press [a] to add one.")
@@ -702,46 +712,49 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
                         .borders(Borders::ALL)
                         .title(" Task Labels "),
                 ),
-            inner[2],
+            area,
         );
-    } else {
-        let items: Vec<ListItem> = app
-            .task_labels
-            .iter()
-            .map(|label| {
-                let marker = if app
-                    .selected_task_label
-                    .as_ref()
-                    .is_some_and(|selected| selected.eq_ignore_ascii_case(label))
-                {
-                    "✓"
-                } else {
-                    " "
-                };
-                ListItem::new(format!(" {marker} {label}"))
-            })
-            .collect();
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Task Labels "),
-            )
-            .highlight_style(
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol("▶ ");
-        let mut state = ListState::default();
-        state.select(Some(
-            app.planner_selection_index
-                .min(app.task_labels.len().saturating_sub(1)),
-        ));
-        frame.render_stateful_widget(list, inner[2], &mut state);
+        return;
     }
 
+    let items: Vec<ListItem> = app
+        .task_labels
+        .iter()
+        .map(|label| {
+            let marker = if app
+                .selected_task_label
+                .as_ref()
+                .is_some_and(|selected| selected.eq_ignore_ascii_case(label))
+            {
+                "✓"
+            } else {
+                " "
+            };
+            ListItem::new(format!(" {marker} {label}"))
+        })
+        .collect();
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Task Labels "),
+        )
+        .highlight_style(
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+    let mut state = ListState::default();
+    state.select(Some(
+        app.planner_selection_index
+            .min(app.task_labels.len().saturating_sub(1)),
+    ));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
     let input_title = if app.planner_input_active {
         " Add task label "
     } else {
@@ -760,9 +773,11 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
                 Style::default().fg(Color::DarkGray)
             })
             .block(Block::default().borders(Borders::ALL).title(input_title)),
-        inner[3],
+        area,
     );
+}
 
+fn render_session_planner_feedback(frame: &mut Frame, app: &App, area: Rect) {
     if let Some(feedback) = app.planner_feedback.as_ref() {
         let (prefix, color) = match feedback.level {
             PlannerFeedbackLevel::Success => ("✓", Color::Green),
@@ -773,10 +788,12 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
                 .style(Style::default().fg(color))
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: true }),
-            inner[4],
+            area,
         );
     }
+}
 
+fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
     let hints = if app.planner_input_active {
         vec![
             Line::from("Input: type task label, then [Enter]"),
@@ -802,7 +819,7 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
         Paragraph::new(hints)
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::DarkGray)),
-        inner[5],
+        area,
     );
 }
 

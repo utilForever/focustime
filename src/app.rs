@@ -382,48 +382,96 @@ impl App {
     }
 
     pub fn on_tick(&mut self, is_catchup: bool) {
-        let was_focus_running = self.focus_running_for_current_state();
-        let was_focus_phase = self.timer.phase == TimerPhase::Focus;
         let completed_phase = self.timer.phase;
         let completed_focus_secs = self.timer.focus_secs;
-        if was_focus_running && !is_catchup {
+        if self.should_record_focus_elapsed(is_catchup) {
             self.record_focus_elapsed(1);
         }
 
         let phase_changed = self.timer.tick();
-        if !is_catchup && phase_changed && was_focus_phase && self.timer.phase != TimerPhase::Focus
-        {
+        if phase_changed {
+            self.handle_phase_change(completed_phase, completed_focus_secs, is_catchup);
+        }
+        self.flush_stats_if_dirty(false);
+    }
+
+    fn should_record_focus_elapsed(&self, is_catchup: bool) -> bool {
+        !is_catchup && self.focus_running_for_current_state()
+    }
+
+    fn should_record_completed_focus_session(
+        &self,
+        completed_phase: TimerPhase,
+        is_catchup: bool,
+    ) -> bool {
+        !is_catchup && completed_phase == TimerPhase::Focus && self.timer.phase != TimerPhase::Focus
+    }
+
+    fn should_block_focus_autostart(&self) -> bool {
+        self.timer.phase == TimerPhase::Focus && self.selected_task_label.is_none()
+    }
+
+    fn handle_phase_change(
+        &mut self,
+        completed_phase: TimerPhase,
+        completed_focus_secs: u64,
+        is_catchup: bool,
+    ) {
+        self.pending_timer_action = None;
+        if self.should_record_completed_focus_session(completed_phase, is_catchup) {
             self.record_completed_focus_session(completed_focus_secs);
             self.active_focus_task_label = None;
         }
-        if phase_changed {
-            self.pending_timer_action = None;
-            let mut blocked_focus_autostart = false;
-            if !is_catchup && self.should_auto_start_transition(completed_phase, self.timer.phase) {
-                if self.timer.phase == TimerPhase::Focus && self.selected_task_label.is_none() {
-                    blocked_focus_autostart = true;
-                } else {
-                    self.timer.status = TimerStatus::Running;
-                    if self.timer.phase == TimerPhase::Focus {
-                        self.active_focus_task_label = self.selected_task_label.clone();
-                    }
-                }
-            }
-            if !is_catchup {
-                self.phase_notification = self
-                    .notifier
-                    .notify_phase_completion(completed_phase, self.timer.phase);
-            }
-            if blocked_focus_autostart {
-                self.phase_notification =
-                    Some("Select a task label with [t] before starting focus.".to_string());
-            }
-            if self.timer.phase != TimerPhase::Focus {
-                self.active_focus_task_label = None;
-            }
-            self.apply_blocking_for_phase();
+
+        let blocked_focus_autostart =
+            self.apply_auto_start_after_phase_change(completed_phase, is_catchup);
+        self.update_phase_notification_after_phase_change(
+            completed_phase,
+            is_catchup,
+            blocked_focus_autostart,
+        );
+
+        if self.timer.phase != TimerPhase::Focus {
+            self.active_focus_task_label = None;
         }
-        self.flush_stats_if_dirty(false);
+        self.apply_blocking_for_phase();
+    }
+
+    fn apply_auto_start_after_phase_change(
+        &mut self,
+        completed_phase: TimerPhase,
+        is_catchup: bool,
+    ) -> bool {
+        if is_catchup || !self.should_auto_start_transition(completed_phase, self.timer.phase) {
+            return false;
+        }
+
+        if self.should_block_focus_autostart() {
+            return true;
+        }
+
+        self.timer.status = TimerStatus::Running;
+        if self.timer.phase == TimerPhase::Focus {
+            self.active_focus_task_label = self.selected_task_label.clone();
+        }
+        false
+    }
+
+    fn update_phase_notification_after_phase_change(
+        &mut self,
+        completed_phase: TimerPhase,
+        is_catchup: bool,
+        blocked_focus_autostart: bool,
+    ) {
+        if !is_catchup {
+            self.phase_notification = self
+                .notifier
+                .notify_phase_completion(completed_phase, self.timer.phase);
+        }
+        if blocked_focus_autostart {
+            self.phase_notification =
+                Some("Select a task label with [t] before starting focus.".to_string());
+        }
     }
 
     /// Advance WakaTime tracking by `elapsed_secs` simulated seconds.
@@ -840,11 +888,9 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.planner_selection_index = self.planner_selection_index.saturating_sub(1);
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if !self.task_labels.is_empty() {
-                    self.planner_selection_index =
-                        (self.planner_selection_index + 1).min(self.task_labels.len() - 1);
-                }
+            KeyCode::Down | KeyCode::Char('j') if !self.task_labels.is_empty() => {
+                self.planner_selection_index =
+                    (self.planner_selection_index + 1).min(self.task_labels.len() - 1);
             }
             KeyCode::Char('a') => self.start_planner_input(),
             KeyCode::Enter => self.select_planner_label(),
@@ -1059,10 +1105,8 @@ impl App {
                 self.mode = AppMode::Timer;
             }
             // Navigate down
-            KeyCode::Down | KeyCode::Char('j') => {
-                if !self.blocker.sites.is_empty() {
-                    self.selected_site = (self.selected_site + 1).min(self.blocker.sites.len() - 1);
-                }
+            KeyCode::Down | KeyCode::Char('j') if !self.blocker.sites.is_empty() => {
+                self.selected_site = (self.selected_site + 1).min(self.blocker.sites.len() - 1);
             }
             // Navigate up
             KeyCode::Up | KeyCode::Char('k') => {
