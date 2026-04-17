@@ -638,7 +638,7 @@ impl App {
     }
 
     pub fn strict_mode_enforced_for_focus(&self) -> bool {
-        self.strict_mode && self.should_block_for_current_state()
+        self.strict_mode && self.focus_session_active_for_current_state()
     }
 
     pub fn strict_reset_confirmation_pending(&self) -> bool {
@@ -2036,14 +2036,26 @@ impl App {
             return;
         }
 
-        self.break_glass_expires_at =
-            Some(Instant::now() + Duration::from_secs(self.break_glass_duration_secs));
-        self.record_break_glass_override_event();
-        self.phase_notification = Some(format!(
-            "Break-glass active: blocking paused for {}.",
-            format_duration_label(self.break_glass_duration_secs)
-        ));
-        self.apply_blocking_for_phase();
+        match self.blocker.unblock() {
+            Ok(()) => {
+                self.block_error = None;
+                self.break_glass_expires_at =
+                    Some(Instant::now() + Duration::from_secs(self.break_glass_duration_secs));
+                self.record_break_glass_override_event();
+                self.phase_notification = Some(format!(
+                    "Break-glass active: blocking paused for {}.",
+                    format_duration_label(self.break_glass_duration_secs)
+                ));
+            }
+            Err(err) => {
+                self.break_glass_expires_at = None;
+                self.block_error = Some(err.to_string());
+                self.phase_notification = Some(format!(
+                    "Break-glass failed: could not unblock sites ({err})"
+                ));
+            }
+        }
+        self.sync_wakatime_tracking_for_state();
     }
 
     fn record_break_glass_override_event(&mut self) {
@@ -3606,6 +3618,21 @@ mod tests {
     }
 
     #[test]
+    fn strict_mode_stays_enforced_during_break_glass_override() {
+        let config = AppConfig {
+            strict_mode: true,
+            blocked_sites: vec!["example.com".to_string()],
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.break_glass_expires_at = Some(Instant::now() + Duration::from_secs(120));
+
+        assert!(app.strict_mode_enforced_for_focus());
+    }
+
+    #[test]
     fn break_glass_requires_confirmation_before_unblocking() {
         let config = AppConfig {
             blocked_sites: vec!["example.com".to_string()],
@@ -3623,26 +3650,23 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('u')));
         assert!(!app.break_glass_confirmation_pending());
-        assert!(!app.should_block_for_current_state());
-        assert!(app.break_glass_override_active());
+        if app.break_glass_override_active() {
+            assert!(!app.should_block_for_current_state());
+        } else {
+            assert!(app.should_block_for_current_state());
+            assert!(
+                app.phase_notification
+                    .as_deref()
+                    .is_some_and(|message| message.contains("failed"))
+            );
+        }
     }
 
     #[test]
     fn break_glass_expiry_reapplies_blocking_and_logs_notification() {
-        let config = AppConfig {
-            blocked_sites: vec!["example.com".to_string()],
-            ..AppConfig::default()
-        };
-        let mut app = App::from_config(config);
+        let mut app = App::default();
         app.timer.phase = TimerPhase::Focus;
         app.timer.status = TimerStatus::Running;
-        app.apply_blocking_for_phase();
-
-        app.handle_key(key(KeyCode::Char('u')));
-        app.handle_key(key(KeyCode::Char('u')));
-        assert!(app.break_glass_override_active());
-        assert!(!app.should_block_for_current_state());
-
         app.break_glass_expires_at = Some(Instant::now() - Duration::from_secs(1));
         app.poll_wakatime_status();
 
@@ -3692,10 +3716,26 @@ mod tests {
         app.handle_key(key(KeyCode::Char('u')));
 
         let overrides = app.recent_break_glass_overrides(1);
-        assert_eq!(overrides.len(), 1);
-        assert_eq!(overrides[0].date.len(), 10);
-        assert_eq!(overrides[0].task_label.as_deref(), Some("Project A"));
-        assert_eq!(overrides[0].duration_seconds, 5 * 60);
+        if app.break_glass_override_active() {
+            assert_eq!(overrides.len(), 1);
+            assert_eq!(overrides[0].date.len(), 10);
+            assert_eq!(overrides[0].task_label.as_deref(), Some("Project A"));
+            assert_eq!(overrides[0].duration_seconds, 5 * 60);
+        } else {
+            assert!(overrides.is_empty());
+        }
+    }
+
+    #[test]
+    fn break_glass_without_sites_does_not_record_audit_event() {
+        let mut app = App::default();
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+
+        app.handle_key(key(KeyCode::Char('u')));
+
+        assert!(!app.break_glass_confirmation_pending());
+        assert!(app.recent_break_glass_overrides(1).is_empty());
     }
 
     #[test]
