@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-18
+
+### Added
+- **Session planner workflow (#120):** introduced timer-integrated task labeling with required task selection before starting focus sessions.
+- **Blocklist profile management (#121):** added create/rename/delete/switch flows for named site-blocking profiles in the site manager.
+- **Break-glass override for focus blocking (#122):** added explicit two-step temporary unblock control with automatic re-enable countdown during active focus sessions.
+
+### Changed
+- **Timer layout and UX polish:** improved timer screen readability and spacing in timer and session-planner views.
+- **v0.4.0 documentation refresh (#127):** updated README demo screenshots to reflect the latest UI.
+
 ## [0.3.2] - 2026-04-16
 
 ### Added
@@ -62,7 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/utilForever/focustime/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/utilForever/focustime/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/utilForever/focustime/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/utilForever/focustime/compare/v0.2.1...v0.3.0
