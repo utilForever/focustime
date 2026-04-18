@@ -31,16 +31,16 @@ TUI-based application for **Pomodoro timing**, **distraction-site blocking**, an
   </tr>
   <tr>
     <td align="center">
-      <img src="./assets/demo_site_blocking_init.png" alt="Site blocking init demo" width="600">
-      <p>Site blocking - Init</p>
-    </td>
-    <td align="center">
       <img src="./assets/demo_site_blocking_inactive.png" alt="Site blocking inactive demo" width="600">
-      <p>Site blocking - Inactive</p>
+      <p>Site Blocking - Inactive</p>
     </td>
     <td align="center">
       <img src="./assets/demo_site_blocking_active.png" alt="Site blocking active demo" width="600">
-      <p>Site blocking - Active</p>
+      <p>Site Blocking - Active</p>
+    </td>
+    <td align="center">
+      <img src="./assets/demo_session_planner.png" alt="Session planner demo" width="600">
+      <p>Session Planner</p>
     </td>
   </tr>
   <tr>
