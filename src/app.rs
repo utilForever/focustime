@@ -970,11 +970,11 @@ impl App {
 
     fn handle_key_profile_manager(&mut self, key: KeyEvent) {
         if self.profile_edit_active {
-            if self.handle_profile_edit_metadata_input(&key) {
+            if self.handle_quit_key(&key, false) {
                 return;
             }
 
-            if self.handle_quit_key(&key, false) {
+            if self.handle_profile_edit_metadata_input(&key) {
                 return;
             }
 
@@ -4051,6 +4051,21 @@ mod tests {
         app.handle_key(key(KeyCode::Char('e')));
         app.handle_key(ctrl_key(KeyCode::Char('c')));
         assert!(app.should_quit);
+    }
+
+    #[test]
+    fn q_quits_during_wakatime_metadata_edit() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..PROFILE_EDIT_WAKATIME_PROJECT_INDEX {
+            app.handle_key(key(KeyCode::Down));
+        }
+
+        app.handle_key(key(KeyCode::Char('q')));
+
+        assert!(app.should_quit);
+        assert_eq!(app.wakatime_metadata.project, "focustime");
     }
 
     #[test]
