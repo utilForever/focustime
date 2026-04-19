@@ -1152,7 +1152,7 @@ fn render_monthly_heatmap_panel(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     lines.push(Line::styled(
-        "  Low  .  :  *  O  #  High",
+        "  None  .   Low  :  *  O  #  High",
         Style::default().fg(Color::DarkGray),
     ));
 
