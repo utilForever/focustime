@@ -27,7 +27,7 @@ use crate::wakatime::{WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeT
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 11] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 13] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -39,7 +39,11 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 11] = [
     "Strict focus mode",
     "Goal minutes",
     "Goal pomodoros",
+    "WakaTime project",
+    "WakaTime language",
 ];
+const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = PROFILE_EDIT_FIELD_LABELS.len() - 2;
+const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = PROFILE_EDIT_FIELD_LABELS.len() - 1;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
@@ -124,6 +128,7 @@ struct ProfileEditSnapshot {
     auto_start: AutoStartConfig,
     strict_mode: bool,
     daily_goal: DailyGoalConfig,
+    wakatime_metadata: WakatimeMetadataConfig,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -652,7 +657,39 @@ impl App {
             8 => bool_label(self.strict_mode).to_string(),
             9 => format_daily_goal_minutes_label(self.daily_goal.minutes),
             10 => format_daily_goal_pomodoros_label(self.daily_goal.pomodoros),
+            PROFILE_EDIT_WAKATIME_PROJECT_INDEX => self.wakatime_metadata.project.clone(),
+            PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => self.wakatime_metadata.language.clone(),
             _ => String::new(),
+        }
+    }
+
+    fn profile_edit_metadata_field_mut(&mut self) -> Option<&mut String> {
+        match self.profile_edit_field {
+            PROFILE_EDIT_WAKATIME_PROJECT_INDEX => Some(&mut self.wakatime_metadata.project),
+            PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => Some(&mut self.wakatime_metadata.language),
+            _ => None,
+        }
+    }
+
+    fn handle_profile_edit_metadata_input(&mut self, key: &KeyEvent) -> bool {
+        let Some(field_value) = self.profile_edit_metadata_field_mut() else {
+            return false;
+        };
+
+        match key.code {
+            KeyCode::Backspace => {
+                field_value.pop();
+                true
+            }
+            KeyCode::Char(c)
+                if !key
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
+                field_value.push(c);
+                true
+            }
+            _ => false,
         }
     }
 
@@ -933,6 +970,10 @@ impl App {
 
     fn handle_key_profile_manager(&mut self, key: KeyEvent) {
         if self.profile_edit_active {
+            if self.handle_profile_edit_metadata_input(&key) {
+                return;
+            }
+
             if self.handle_quit_key(&key, false) {
                 return;
             }
@@ -1089,6 +1130,7 @@ impl App {
             auto_start: self.auto_start,
             strict_mode: self.strict_mode,
             daily_goal: self.daily_goal,
+            wakatime_metadata: self.wakatime_metadata.clone(),
         });
         self.profile_edit_active = true;
         self.profile_edit_field = 0;
@@ -1101,6 +1143,8 @@ impl App {
             self.auto_start = snapshot.auto_start;
             self.strict_mode = snapshot.strict_mode;
             self.daily_goal = snapshot.daily_goal;
+            self.wakatime_metadata = snapshot.wakatime_metadata;
+            self.sync_wakatime_metadata_to_tracker();
             self.rebuild_notifier();
         }
         self.profile_edit_active = false;
@@ -1116,6 +1160,7 @@ impl App {
             .as_ref()
             .is_some_and(|snapshot| snapshot.daily_goal != self.daily_goal);
         self.custom_profile = self.custom_profile.normalized();
+        self.wakatime_metadata = self.wakatime_metadata.normalized();
         if self.selected_profile == ProfileId::Custom {
             if custom_profile_changed {
                 if !self.apply_profile(ProfileId::Custom) {
@@ -1127,6 +1172,7 @@ impl App {
         } else {
             self.save_config();
         }
+        self.sync_wakatime_metadata_to_tracker();
         self.rebuild_notifier();
         if daily_goal_changed {
             self.sync_today_goal_snapshot();
@@ -1177,8 +1223,17 @@ impl App {
             10 => {
                 adjust_daily_goal_pomodoros(&mut self.daily_goal.pomodoros, increase);
             }
+            PROFILE_EDIT_WAKATIME_PROJECT_INDEX | PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => {}
             _ => {}
         }
+    }
+
+    fn sync_wakatime_metadata_to_tracker(&mut self) {
+        self.wakatime
+            .set_heartbeat_metadata(WakatimeHeartbeatMetadata {
+                project: self.wakatime_metadata.project.clone(),
+                language: self.wakatime_metadata.language.clone(),
+            });
     }
 
     fn apply_profile(&mut self, profile: ProfileId) -> bool {
@@ -2654,6 +2709,8 @@ mod tests {
         assert_eq!(app.profile_edit_field_value(8), "Off");
         assert_eq!(app.profile_edit_field_value(9), "Off");
         assert_eq!(app.profile_edit_field_value(10), "Off");
+        assert_eq!(app.profile_edit_field_value(11), "focustime");
+        assert_eq!(app.profile_edit_field_value(12), "Pomodoro");
     }
 
     #[test]
@@ -2761,6 +2818,80 @@ mod tests {
         let persisted = app.persisted_config();
         assert_eq!(persisted.daily_goal.minutes, 10);
         assert_eq!(persisted.daily_goal.pomodoros, 1);
+    }
+
+    #[test]
+    fn editing_wakatime_metadata_fields_updates_and_persists_settings() {
+        let config = AppConfig {
+            wakatime: WakatimeMetadataConfig {
+                project: "A".to_string(),
+                language: "B".to_string(),
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..11 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Backspace));
+        for c in "Team Focus".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Backspace));
+        for c in "Deep Work".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        let persisted = app.persisted_config();
+        assert_eq!(
+            persisted.wakatime,
+            WakatimeMetadataConfig {
+                project: "Team Focus".to_string(),
+                language: "Deep Work".to_string(),
+            }
+        );
+        assert_eq!(
+            app.wakatime.heartbeat_metadata_for_tests(),
+            WakatimeHeartbeatMetadata {
+                project: "Team Focus".to_string(),
+                language: "Deep Work".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn editing_wakatime_metadata_blank_values_fall_back_to_defaults() {
+        let config = AppConfig {
+            wakatime: WakatimeMetadataConfig {
+                project: "A".to_string(),
+                language: "B".to_string(),
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..11 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Backspace));
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Backspace));
+        app.handle_key(key(KeyCode::Enter));
+
+        let defaults = WakatimeMetadataConfig::default();
+        assert_eq!(app.wakatime_metadata, defaults);
+        assert_eq!(app.persisted_config().wakatime, defaults);
+        assert_eq!(
+            app.wakatime.heartbeat_metadata_for_tests(),
+            WakatimeHeartbeatMetadata::default()
+        );
     }
 
     #[test]
@@ -2986,6 +3117,43 @@ mod tests {
         assert!(!app.profile_edit_active);
         assert!(app.notification_settings.enabled);
         assert!(app.notification_settings.sound);
+    }
+
+    #[test]
+    fn cancelling_profile_edit_restores_wakatime_metadata() {
+        let config = AppConfig {
+            wakatime: WakatimeMetadataConfig {
+                project: "Team Focus".to_string(),
+                language: "Deep Work".to_string(),
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        for _ in 0..11 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        app.handle_key(key(KeyCode::Char('X')));
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Char('Y')));
+        app.handle_key(key(KeyCode::Esc));
+
+        assert_eq!(
+            app.wakatime_metadata,
+            WakatimeMetadataConfig {
+                project: "Team Focus".to_string(),
+                language: "Deep Work".to_string(),
+            }
+        );
+        assert_eq!(
+            app.wakatime.heartbeat_metadata_for_tests(),
+            WakatimeHeartbeatMetadata {
+                project: "Team Focus".to_string(),
+                language: "Deep Work".to_string(),
+            }
+        );
     }
 
     #[test]
@@ -3542,6 +3710,7 @@ mod tests {
             auto_start: app.auto_start,
             strict_mode: app.strict_mode,
             daily_goal: app.daily_goal,
+            wakatime_metadata: app.wakatime_metadata.clone(),
         });
         app.custom_profile.focus_secs = app.custom_profile.focus_secs.saturating_add(60);
         app.notification_settings.enabled = false;
@@ -3582,6 +3751,7 @@ mod tests {
             auto_start: app.auto_start,
             strict_mode: app.strict_mode,
             daily_goal: app.daily_goal,
+            wakatime_metadata: app.wakatime_metadata.clone(),
         });
 
         app.handle_key(key(KeyCode::Right));

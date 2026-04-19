@@ -113,7 +113,7 @@ Open profile manager from timer view with **`p`**.
 - `↑/↓`: move between profiles
 - `Enter`: apply selected profile
 - `e`: open profile/settings editor
-- In editor: `↑/↓` selects field, `←/→` adjusts value, `Enter` saves
+- In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values, `Type/Backspace` edits WakaTime project/language, `Enter` saves
 
 Profile selection and custom values are persisted in `config.toml`.
 
@@ -233,8 +233,8 @@ You can configure notification and auto-start settings directly from the TUI:
 
 - open profile manager with `p`
 - press `e` to open the editor
-- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily goal (minutes)**, or **Daily goal (pomodoros)**
-- use `←/→` to adjust values (or toggle `Off`/`On` for boolean fields), then `Enter` to save
+- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily goal (minutes)**, **Daily goal (pomodoros)**, **WakaTime project**, or **WakaTime language**
+- use `←/→` to adjust values (or toggle `Off`/`On` for boolean fields), use `Type/Backspace` for WakaTime text fields, then `Enter` to save
 
 ## Strict focus mode
 

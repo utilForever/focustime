@@ -370,6 +370,10 @@ impl WakatimeTracker {
         self.set_tracking_state(false);
     }
 
+    pub fn set_heartbeat_metadata(&mut self, metadata: WakatimeHeartbeatMetadata) {
+        self.heartbeat_metadata = metadata.normalized();
+    }
+
     fn set_tracking_state(&mut self, tracking: bool) {
         self.tracking = tracking;
         self.secs_since_last_heartbeat = 0;
@@ -477,6 +481,11 @@ impl WakatimeTracker {
         let _ = self.result_tx.send(HeartbeatEvent::Failed {
             error: error.into(),
         });
+    }
+
+    #[cfg(test)]
+    pub(crate) fn heartbeat_metadata_for_tests(&self) -> WakatimeHeartbeatMetadata {
+        self.heartbeat_metadata.clone()
     }
 }
 
@@ -772,6 +781,22 @@ mod tests {
         tracker.on_focus_stop();
         assert!(!tracker.is_tracking());
         assert_eq!(tracker.secs_since_last_heartbeat, 0);
+    }
+
+    #[test]
+    fn set_heartbeat_metadata_normalizes_and_updates_values() {
+        let mut tracker = tracker_with(None, false, 0);
+        tracker.set_heartbeat_metadata(WakatimeHeartbeatMetadata {
+            project: " Team Focus ".to_string(),
+            language: " ".to_string(),
+        });
+        assert_eq!(
+            tracker.heartbeat_metadata,
+            WakatimeHeartbeatMetadata {
+                project: "Team Focus".to_string(),
+                language: DEFAULT_HEARTBEAT_LANGUAGE.to_string(),
+            }
+        );
     }
 
     #[test]
