@@ -675,9 +675,9 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     frame.render_stateful_widget(list, inner[2], &mut list_state);
 
     let editor_title = if app.profile_edit_active {
-        " Custom + notification + auto-start settings editor "
+        " Custom + notification + auto-start + goal + WakaTime settings editor "
     } else {
-        " Custom + notification + auto-start settings ([e] to edit) "
+        " Custom + notification + auto-start + goal + WakaTime settings ([e] to edit) "
     };
     let editor_block = Block::default()
         .borders(Borders::ALL)
@@ -713,7 +713,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
 
     let hints = if app.profile_edit_active {
         vec![
-            Line::from("Edit: [↑/↓] Field  [←/→] Change value"),
+            Line::from("Edit: [↑/↓] Field  [←/→] Change value  [Type/Backspace] WakaTime metadata"),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit (Locked)"
             } else {
