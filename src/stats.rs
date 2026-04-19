@@ -10,6 +10,7 @@ use std::{
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 
+use crate::config::ProfileId;
 use crate::task_labels::{canonical_task_label, normalize_task_label, task_label_index};
 
 #[cfg_attr(test, allow(dead_code))]
@@ -70,6 +71,43 @@ impl WeeklyStats {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MonthlyStats {
+    pub year: i32,
+    pub month: u32,
+    pub pomodoros_completed: u32,
+    pub focused_seconds: u64,
+}
+
+impl MonthlyStats {
+    pub fn focused_minutes(self) -> u64 {
+        self.focused_seconds / 60
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HeatmapDayStats {
+    pub day: u32,
+    pub pomodoros_completed: u32,
+    pub focused_seconds: u64,
+}
+
+impl HeatmapDayStats {
+    pub fn focused_minutes(self) -> u64 {
+        self.focused_seconds / 60
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MonthlyHeatmap {
+    pub year: i32,
+    pub month: u32,
+    pub first_weekday_monday0: u32,
+    pub days_in_month: u32,
+    pub max_focused_minutes: u64,
+    pub days: Vec<HeatmapDayStats>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct DailyStats {
     #[serde(default)]
@@ -97,6 +135,40 @@ pub struct FocusSessionRecord {
     pub date: String,
     pub task_label: String,
     pub focused_seconds: u64,
+    #[serde(default)]
+    pub profile: Option<ProfileId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ProfileBucket {
+    Classic,
+    DeepWork,
+    Custom,
+    Unknown,
+}
+
+impl ProfileBucket {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Classic => "Classic",
+            Self::DeepWork => "Deep Work",
+            Self::Custom => "Custom",
+            Self::Unknown => "Unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProfileTotals {
+    pub profile: ProfileBucket,
+    pub pomodoros_completed: u32,
+    pub focused_seconds: u64,
+}
+
+impl ProfileTotals {
+    pub fn focused_minutes(self) -> u64 {
+        self.focused_seconds / 60
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -141,6 +213,7 @@ struct SessionExportRow {
     task_label: String,
     focused_seconds: u64,
     focused_minutes: u64,
+    profile: Option<ProfileId>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -232,6 +305,7 @@ impl FocusStats {
                     date: session.date.trim().to_string(),
                     task_label,
                     focused_seconds: session.focused_seconds,
+                    profile: session.profile,
                 });
             }
         }
@@ -297,7 +371,7 @@ impl FocusStats {
     }
 
     pub fn record_completed_pomodoro(&mut self, day_key: &str, goal: DailyGoalSnapshot) {
-        self.record_completed_pomodoro_with_task(day_key, goal, None, 0);
+        self.record_completed_pomodoro_with_task(day_key, goal, None, 0, None);
     }
 
     pub fn record_completed_pomodoro_with_task(
@@ -306,6 +380,7 @@ impl FocusStats {
         goal: DailyGoalSnapshot,
         task_label: Option<&str>,
         focused_seconds: u64,
+        profile: Option<ProfileId>,
     ) {
         self.session.pomodoros_completed = self.session.pomodoros_completed.saturating_add(1);
         let daily = self.daily.entry(day_key.to_string()).or_default();
@@ -321,6 +396,7 @@ impl FocusStats {
                 date: day_key.to_string(),
                 task_label,
                 focused_seconds,
+                profile,
             });
         }
     }
@@ -400,11 +476,58 @@ impl FocusStats {
             .collect()
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn recent_weekly(&self, limit: usize) -> Vec<WeeklyStats> {
         let mut weekly = self.weekly_stats();
         weekly.reverse();
         weekly.truncate(limit);
         weekly
+    }
+
+    pub fn recent_monthly(&self, limit: usize) -> Vec<MonthlyStats> {
+        let mut monthly = self.monthly_stats();
+        monthly.reverse();
+        monthly.truncate(limit);
+        monthly
+    }
+
+    pub fn latest_monthly_heatmap(&self) -> MonthlyHeatmap {
+        let (year, month) = self.latest_recorded_month_key().unwrap_or_else(|| {
+            let now = chrono::Local::now().date_naive();
+            (now.year(), now.month())
+        });
+        self.monthly_heatmap(year, month)
+    }
+
+    pub fn profile_totals(&self) -> Vec<ProfileTotals> {
+        let mut by_profile: BTreeMap<ProfileBucket, ProfileTotals> = BTreeMap::new();
+        for session in &self.focus_sessions {
+            let profile = match session.profile {
+                Some(ProfileId::Classic) => ProfileBucket::Classic,
+                Some(ProfileId::DeepWork) => ProfileBucket::DeepWork,
+                Some(ProfileId::Custom) => ProfileBucket::Custom,
+                None => ProfileBucket::Unknown,
+            };
+            let entry = by_profile.entry(profile).or_insert(ProfileTotals {
+                profile,
+                pomodoros_completed: 0,
+                focused_seconds: 0,
+            });
+            entry.pomodoros_completed = entry.pomodoros_completed.saturating_add(1);
+            entry.focused_seconds = entry
+                .focused_seconds
+                .saturating_add(session.focused_seconds);
+        }
+
+        let mut totals: Vec<ProfileTotals> = by_profile.into_values().collect();
+        totals.sort_by(|left, right| {
+            right
+                .focused_seconds
+                .cmp(&left.focused_seconds)
+                .then_with(|| right.pomodoros_completed.cmp(&left.pomodoros_completed))
+                .then_with(|| left.profile.cmp(&right.profile))
+        });
+        totals
     }
 
     pub fn recent_break_glass_overrides(&self, limit: usize) -> Vec<BreakGlassOverrideEvent> {
@@ -483,6 +606,7 @@ impl FocusStats {
                 task_label: session.task_label.clone(),
                 focused_seconds: session.focused_seconds,
                 focused_minutes: session.focused_seconds / 60,
+                profile: session.profile,
             })
             .collect()
     }
@@ -522,6 +646,72 @@ impl FocusStats {
         }
 
         weekly.into_values().collect()
+    }
+
+    fn monthly_stats(&self) -> Vec<MonthlyStats> {
+        let mut monthly = BTreeMap::new();
+
+        for (day_key, stats) in &self.daily {
+            let Ok(day) = chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d") else {
+                continue;
+            };
+            let entry = monthly
+                .entry((day.year(), day.month()))
+                .or_insert_with(|| MonthlyStats {
+                    year: day.year(),
+                    month: day.month(),
+                    ..MonthlyStats::default()
+                });
+            entry.pomodoros_completed = entry
+                .pomodoros_completed
+                .saturating_add(stats.pomodoros_completed);
+            entry.focused_seconds = entry.focused_seconds.saturating_add(stats.focused_seconds);
+        }
+
+        monthly.into_values().collect()
+    }
+
+    fn latest_recorded_month_key(&self) -> Option<(i32, u32)> {
+        self.daily
+            .keys()
+            .rev()
+            .find_map(|day_key| chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d").ok())
+            .map(|day| (day.year(), day.month()))
+    }
+
+    fn monthly_heatmap(&self, year: i32, month: u32) -> MonthlyHeatmap {
+        let (year, month) = if chrono::NaiveDate::from_ymd_opt(year, month, 1).is_some() {
+            (year, month)
+        } else {
+            let now = chrono::Local::now().date_naive();
+            (now.year(), now.month())
+        };
+
+        let month_start = chrono::NaiveDate::from_ymd_opt(year, month, 1)
+            .expect("validated month/year should produce valid first day");
+        let days_in_month = days_in_month(year, month);
+        let mut max_focused_minutes = 0;
+        let mut days = Vec::with_capacity(days_in_month as usize);
+        for day in 1..=days_in_month {
+            let day_key = format!("{year:04}-{month:02}-{day:02}");
+            let stats = self.daily_for(&day_key);
+            let focused_minutes = stats.focused_minutes();
+            max_focused_minutes = max_focused_minutes.max(focused_minutes);
+            days.push(HeatmapDayStats {
+                day,
+                pomodoros_completed: stats.pomodoros_completed,
+                focused_seconds: stats.focused_seconds,
+            });
+        }
+
+        MonthlyHeatmap {
+            year,
+            month,
+            first_weekday_monday0: month_start.weekday().num_days_from_monday(),
+            days_in_month,
+            max_focused_minutes,
+            days,
+        }
     }
 
     #[cfg(test)]
@@ -843,6 +1033,20 @@ fn create_unique_temp_path(path: &Path) -> PathBuf {
     parent.join(format!(".{target_name}.{pid}.{nanos}.{seq}.tmp"))
 }
 
+fn days_in_month(year: i32, month: u32) -> u32 {
+    let (next_year, next_month) = if month == 12 {
+        (year.saturating_add(1), 1)
+    } else {
+        (year, month.saturating_add(1))
+    };
+    let next_month_start = chrono::NaiveDate::from_ymd_opt(next_year, next_month, 1)
+        .expect("validated month rollover should produce next month start");
+    next_month_start
+        .pred_opt()
+        .expect("month start should have a predecessor")
+        .day()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1024,6 +1228,33 @@ mod tests {
     }
 
     #[test]
+    fn persisted_stats_round_trip_preserves_focus_session_profile() {
+        let mut original = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        original.record_focus_elapsed("2026-04-09", 25 * 60, goal);
+        original.record_completed_pomodoro_with_task(
+            "2026-04-09",
+            goal,
+            Some("Project A"),
+            25 * 60,
+            Some(ProfileId::DeepWork),
+        );
+
+        let persisted = original.to_persisted();
+        let toml_str = toml::to_string_pretty(&persisted).unwrap();
+        let restored = FocusStats::try_from_toml(&toml_str).unwrap();
+        let profile_totals = restored.profile_totals();
+
+        assert_eq!(profile_totals.len(), 1);
+        assert_eq!(profile_totals[0].profile, ProfileBucket::DeepWork);
+        assert_eq!(profile_totals[0].pomodoros_completed, 1);
+        assert_eq!(profile_totals[0].focused_minutes(), 25);
+    }
+
+    #[test]
     fn invalid_toml_returns_parse_error() {
         assert!(FocusStats::try_from_toml("this is not valid toml").is_err());
     }
@@ -1107,6 +1338,143 @@ mod tests {
     }
 
     #[test]
+    fn recent_monthly_aggregates_and_orders_newest_first() {
+        let mut stats = FocusStats::default();
+        stats.insert_daily_for_tests(
+            "2026-03-31",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 15 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-01",
+            DailyStats {
+                pomodoros_completed: 2,
+                focused_seconds: 60 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-08",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 30 * 60,
+                goal: None,
+            },
+        );
+
+        let recent = stats.recent_monthly(2);
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].year, 2026);
+        assert_eq!(recent[0].month, 4);
+        assert_eq!(recent[0].pomodoros_completed, 3);
+        assert_eq!(recent[0].focused_minutes(), 90);
+        assert_eq!(recent[1].year, 2026);
+        assert_eq!(recent[1].month, 3);
+        assert_eq!(recent[1].pomodoros_completed, 1);
+        assert_eq!(recent[1].focused_minutes(), 15);
+    }
+
+    #[test]
+    fn latest_monthly_heatmap_uses_latest_recorded_month_data() {
+        let mut stats = FocusStats::default();
+        stats.insert_daily_for_tests(
+            "2026-03-31",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 15 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-01",
+            DailyStats {
+                pomodoros_completed: 2,
+                focused_seconds: 60 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-03",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 45 * 60,
+                goal: None,
+            },
+        );
+
+        let heatmap = stats.latest_monthly_heatmap();
+        assert_eq!(heatmap.year, 2026);
+        assert_eq!(heatmap.month, 4);
+        assert_eq!(heatmap.days_in_month, 30);
+        assert_eq!(heatmap.max_focused_minutes, 60);
+        assert_eq!(heatmap.days[0].day, 1);
+        assert_eq!(heatmap.days[0].pomodoros_completed, 2);
+        assert_eq!(heatmap.days[0].focused_minutes(), 60);
+        assert_eq!(heatmap.days[1].day, 2);
+        assert_eq!(heatmap.days[1].focused_minutes(), 0);
+        assert_eq!(heatmap.days[2].day, 3);
+        assert_eq!(heatmap.days[2].focused_minutes(), 45);
+    }
+
+    #[test]
+    fn profile_totals_groups_by_profile_and_unknown() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-09",
+            goal,
+            Some("Project A"),
+            50 * 60,
+            Some(ProfileId::DeepWork),
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-10",
+            goal,
+            Some("Project B"),
+            25 * 60,
+            Some(ProfileId::Classic),
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-11",
+            goal,
+            Some("Project C"),
+            40 * 60,
+            None,
+        );
+
+        let totals = stats.profile_totals();
+        assert_eq!(totals.len(), 3);
+        let deep_work = totals
+            .iter()
+            .find(|entry| entry.profile == ProfileBucket::DeepWork)
+            .copied()
+            .unwrap();
+        let classic = totals
+            .iter()
+            .find(|entry| entry.profile == ProfileBucket::Classic)
+            .copied()
+            .unwrap();
+        let unknown = totals
+            .iter()
+            .find(|entry| entry.profile == ProfileBucket::Unknown)
+            .copied()
+            .unwrap();
+
+        assert_eq!(deep_work.pomodoros_completed, 1);
+        assert_eq!(deep_work.focused_minutes(), 50);
+        assert_eq!(classic.pomodoros_completed, 1);
+        assert_eq!(classic.focused_minutes(), 25);
+        assert_eq!(unknown.pomodoros_completed, 1);
+        assert_eq!(unknown.focused_minutes(), 40);
+    }
+
+    #[test]
     fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         let mut stats = FocusStats::default();
         let goal = DailyGoalSnapshot {
@@ -1114,7 +1482,13 @@ mod tests {
             pomodoros: 1,
         };
         stats.record_focus_elapsed("2026-04-06", 30 * 60, goal);
-        stats.record_completed_pomodoro_with_task("2026-04-06", goal, Some("Project A"), 30 * 60);
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-06",
+            goal,
+            Some("Project A"),
+            30 * 60,
+            Some(ProfileId::Classic),
+        );
         stats.record_break_glass_override_event(
             "2026-04-06",
             1_711_000_000,
@@ -1149,6 +1523,7 @@ mod tests {
         assert_eq!(weekly[0]["focused_minutes"], 75);
         assert_eq!(sessions[0]["task_label"], "Project A");
         assert_eq!(sessions[0]["focused_minutes"], 30);
+        assert_eq!(sessions[0]["profile"], "classic");
         assert_eq!(overrides[0]["duration_seconds"], 300);
         assert_eq!(overrides[0]["task_label"], "Project A");
 

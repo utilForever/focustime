@@ -917,7 +917,7 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
 
 fn render_stats_history(frame: &mut Frame, app: &App) {
     let area = frame.area();
-    let outer = centered_rect(65, 80, area);
+    let outer = centered_rect(86, 84, area);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -933,7 +933,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
             Constraint::Length(1), // session + today summary
             Constraint::Length(1), // goal + streak summary
             Constraint::Length(1), // spacer
-            Constraint::Min(3),    // history list
+            Constraint::Min(8),    // history panels
             Constraint::Length(2), // status line
             Constraint::Length(2), // hints
         ])
@@ -961,21 +961,25 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
 
     let history_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+        .constraints([Constraint::Percentage(56), Constraint::Percentage(44)])
         .split(inner[3]);
 
-    let history_sections = Layout::default()
+    let top_sections = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+        .constraints([
+            Constraint::Percentage(34),
+            Constraint::Percentage(33),
+            Constraint::Percentage(33),
+        ])
         .split(history_layout[0]);
 
-    let weekly_items: Vec<ListItem> = app
-        .recent_weekly_stats(6)
+    let monthly_items: Vec<ListItem> = app
+        .recent_monthly_stats(6)
         .into_iter()
         .map(|stats| {
             ListItem::new(format!(
                 "  {}   🍅{}   {}m",
-                format_week_label(stats.year, stats.week),
+                format_month_label(stats.year, stats.month),
                 stats.pomodoros_completed,
                 stats.focused_minutes()
             ))
@@ -983,11 +987,38 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
-        history_sections[0],
-        " Weekly Totals ",
-        weekly_items,
-        "  No weekly totals yet.",
+        top_sections[0],
+        " Monthly Trend ",
+        monthly_items,
+        "  No monthly totals yet.",
     );
+
+    render_monthly_heatmap_panel(frame, top_sections[1], app);
+
+    let profile_items: Vec<ListItem> = app
+        .profile_focus_totals()
+        .into_iter()
+        .map(|stats| {
+            ListItem::new(format!(
+                "  {:<9}  🍅{}   {}m",
+                stats.profile.label(),
+                stats.pomodoros_completed,
+                stats.focused_minutes()
+            ))
+        })
+        .collect();
+    render_history_panel(
+        frame,
+        top_sections[2],
+        " Profile Totals ",
+        profile_items,
+        "  No profile totals yet.",
+    );
+
+    let bottom_sections = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(56), Constraint::Percentage(44)])
+        .split(history_layout[1]);
 
     let history_items: Vec<ListItem> = app
         .recent_daily_stats(10)
@@ -1002,7 +1033,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
-        history_sections[1],
+        bottom_sections[0],
         " Recent Days ",
         history_items,
         "  No completed focus history yet.",
@@ -1024,7 +1055,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
-        history_layout[1],
+        bottom_sections[1],
         " Break-glass Audit ",
         override_items,
         "  No break-glass overrides yet.",
@@ -1080,6 +1111,56 @@ fn render_history_panel(
             .style(Style::default().fg(Color::Gray));
         frame.render_widget(list, area);
     }
+}
+
+fn render_monthly_heatmap_panel(frame: &mut Frame, area: Rect, app: &App) {
+    let heatmap = app.latest_monthly_heatmap();
+    let title = format!(
+        " Heatmap {} ",
+        format_month_label(heatmap.year, heatmap.month)
+    );
+    let mut lines: Vec<Line> = vec![Line::styled(
+        "  Mo Tu We Th Fr Sa Su",
+        Style::default().fg(Color::DarkGray),
+    )];
+
+    let mut weekday = heatmap.first_weekday_monday0 as usize;
+    let mut week_spans = vec![Span::raw("  ")];
+    for _ in 0..weekday {
+        week_spans.push(Span::raw("   "));
+    }
+    for day in heatmap.days {
+        let (symbol, color) =
+            heatmap_cell_symbol(day.focused_minutes(), heatmap.max_focused_minutes);
+        week_spans.push(Span::styled(
+            format!("{symbol}  "),
+            Style::default().fg(color),
+        ));
+        if weekday == 6 {
+            lines.push(Line::from(week_spans));
+            week_spans = vec![Span::raw("  ")];
+            weekday = 0;
+        } else {
+            weekday += 1;
+        }
+    }
+    if weekday != 0 {
+        for _ in weekday..7 {
+            week_spans.push(Span::raw("   "));
+        }
+        lines.push(Line::from(week_spans));
+    }
+
+    lines.push(Line::styled(
+        "  None  .   Low  :  *  O  #  High",
+        Style::default().fg(Color::DarkGray),
+    ));
+
+    let widget = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(title))
+        .style(Style::default().fg(Color::Gray))
+        .wrap(Wrap { trim: false });
+    frame.render_widget(widget, area);
 }
 
 fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
@@ -1222,8 +1303,24 @@ fn format_history_goal_streak_line(app: &App) -> String {
     }
 }
 
-fn format_week_label(year: i32, week: u32) -> String {
-    format!("{year:04}-W{week:02}")
+fn heatmap_cell_symbol(focused_minutes: u64, max_focused_minutes: u64) -> (char, Color) {
+    if focused_minutes == 0 || max_focused_minutes == 0 {
+        return ('.', Color::DarkGray);
+    }
+
+    let scaled = (focused_minutes.saturating_mul(4))
+        .saturating_add(max_focused_minutes.saturating_sub(1))
+        / max_focused_minutes;
+    match scaled.clamp(1, 4) {
+        1 => (':', Color::Green),
+        2 => ('*', Color::Yellow),
+        3 => ('O', Color::LightRed),
+        _ => ('#', Color::Red),
+    }
+}
+
+fn format_month_label(year: i32, month: u32) -> String {
+    format!("{year:04}-{month:02}")
 }
 
 fn phase_color(phase: TimerPhase) -> Color {
@@ -1401,7 +1498,7 @@ mod tests {
     }
 
     #[test]
-    fn history_view_renders_weekly_summary_panel() {
+    fn history_view_renders_monthly_heatmap_and_profile_panels() {
         let width = 100;
         let height = 24;
         let backend = TestBackend::new(width, height);
@@ -1430,9 +1527,11 @@ mod tests {
             .expect("render should succeed");
 
         let text = terminal_text(&terminal, width, height);
-        assert!(text.contains("Weekly Totals"));
+        assert!(text.contains("Monthly Trend"));
+        assert!(text.contains("Heatmap 2026-04"));
+        assert!(text.contains("Profile Totals"));
         assert!(text.contains("Break-glass Audit"));
-        assert!(text.contains(&format_week_label(2026, 15)));
+        assert!(text.contains(&format_month_label(2026, 4)));
         assert!(text.contains("75m"));
     }
 
@@ -1489,8 +1588,8 @@ mod tests {
     }
 
     #[test]
-    fn week_label_uses_zero_padded_iso_format() {
-        assert_eq!(format_week_label(2026, 5), "2026-W05");
+    fn month_label_uses_zero_padded_iso_format() {
+        assert_eq!(format_month_label(2026, 5), "2026-05");
     }
 
     #[test]

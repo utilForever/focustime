@@ -15,7 +15,8 @@ use crate::config::{
 use crate::notifications::PhaseNotifier;
 use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusStats,
-    GoalStreak, SessionStats, WeeklyStats, current_day_key,
+    GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileTotals, SessionStats, WeeklyStats,
+    current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -288,6 +289,7 @@ pub struct App {
     pub planner_input_active: bool,
     pub planner_feedback: Option<PlannerFeedback>,
     active_focus_task_label: Option<String>,
+    active_focus_profile: Option<ProfileId>,
     /// Index of the highlighted site in the SiteManager list.
     pub selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
@@ -387,6 +389,7 @@ impl App {
             planner_input_active: false,
             planner_feedback: None,
             active_focus_task_label: None,
+            active_focus_profile: None,
             selected_site: 0,
             block_error: None,
             setup_diagnostics,
@@ -459,6 +462,7 @@ impl App {
         if self.should_record_completed_focus_session(completed_phase, is_catchup) {
             self.record_completed_focus_session(completed_focus_secs);
             self.active_focus_task_label = None;
+            self.active_focus_profile = None;
         }
 
         let blocked_focus_autostart =
@@ -471,6 +475,7 @@ impl App {
 
         if self.timer.phase != TimerPhase::Focus {
             self.active_focus_task_label = None;
+            self.active_focus_profile = None;
             self.break_glass_expires_at = None;
         }
         self.apply_blocking_for_phase();
@@ -492,6 +497,7 @@ impl App {
         self.timer.status = TimerStatus::Running;
         if self.timer.phase == TimerPhase::Focus {
             self.active_focus_task_label = self.selected_task_label.clone();
+            self.active_focus_profile = Some(self.selected_profile);
         }
         false
     }
@@ -608,8 +614,21 @@ impl App {
         self.stats.recent_daily(limit)
     }
 
+    #[allow(dead_code)]
     pub fn recent_weekly_stats(&self, limit: usize) -> Vec<WeeklyStats> {
         self.stats.recent_weekly(limit)
+    }
+
+    pub fn recent_monthly_stats(&self, limit: usize) -> Vec<MonthlyStats> {
+        self.stats.recent_monthly(limit)
+    }
+
+    pub fn latest_monthly_heatmap(&self) -> MonthlyHeatmap {
+        self.stats.latest_monthly_heatmap()
+    }
+
+    pub fn profile_focus_totals(&self) -> Vec<ProfileTotals> {
+        self.stats.profile_totals()
     }
 
     #[cfg(test)]
@@ -1177,6 +1196,7 @@ impl App {
             profile_spec.long_break_interval,
         );
         self.active_focus_task_label = None;
+        self.active_focus_profile = None;
         self.selected_profile = profile;
         self.profile_selection_index = profile_index(profile);
         self.pending_timer_action = None;
@@ -1716,8 +1736,10 @@ impl App {
         let is_focus_active = self.focus_session_active_for_current_state();
         if !was_focus_active && is_focus_active {
             self.active_focus_task_label = self.selected_task_label.clone();
+            self.active_focus_profile = Some(self.selected_profile);
         } else if was_focus_active && !is_focus_active {
             self.active_focus_task_label = None;
+            self.active_focus_profile = None;
             self.break_glass_expires_at = None;
         }
         self.apply_blocking_for_phase();
@@ -1873,6 +1895,7 @@ impl App {
                 goal,
                 self.active_focus_task_label.as_deref(),
                 focused_seconds,
+                self.active_focus_profile,
             );
         } else {
             self.stats.record_completed_pomodoro(&day_key, goal);
@@ -3751,6 +3774,27 @@ mod tests {
 
         assert_eq!(app.session_stats().focused_minutes(), 2);
         assert_eq!(app.today_stats().focused_minutes(), 2);
+    }
+
+    #[test]
+    fn completed_focus_session_tracks_active_profile_for_history_totals() {
+        let config = AppConfig {
+            selected_profile: ProfileId::DeepWork,
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Project A".to_string()];
+        app.selected_task_label = Some("Project A".to_string());
+
+        app.handle_key(key(KeyCode::Char(' ')));
+        app.timer.remaining_secs = 1;
+        app.on_tick(false);
+
+        let totals = app.profile_focus_totals();
+        assert_eq!(totals.len(), 1);
+        assert_eq!(totals[0].profile, crate::stats::ProfileBucket::DeepWork);
+        assert_eq!(totals[0].pomodoros_completed, 1);
+        assert_eq!(totals[0].focused_minutes(), 50);
     }
 
     #[test]
