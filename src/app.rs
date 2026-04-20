@@ -1113,9 +1113,17 @@ impl App {
     }
 
     fn sync_recovery_snapshot(&mut self) {
+        let recovery_task_label = if self.focus_session_active_for_current_state() {
+            self.active_focus_task_label
+                .clone()
+                .or_else(|| self.selected_task_label.clone())
+        } else {
+            self.selected_task_label.clone()
+        };
+
         let snapshot = InProgressSessionSnapshot::from_timer_state(
             &self.timer,
-            self.selected_task_label.clone(),
+            recovery_task_label,
             self.selected_profile,
         );
 
@@ -4976,6 +4984,22 @@ mod tests {
         app.handle_key(key(KeyCode::Char('s')));
         assert_eq!(app.timer.status, TimerStatus::Idle);
         assert!(session_recovery::test_saved_snapshot().is_none());
+    }
+
+    #[test]
+    fn recovery_snapshot_prefers_active_focus_label_over_selected_label() {
+        let mut app = App::default();
+        app.task_labels = vec!["Task A".to_string(), "Task B".to_string()];
+        app.selected_task_label = Some("Task A".to_string());
+
+        app.handle_key(key(KeyCode::Char(' ')));
+        assert_eq!(app.active_focus_task_label.as_deref(), Some("Task A"));
+
+        app.selected_task_label = Some("Task B".to_string());
+        app.sync_recovery_snapshot();
+
+        let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+        assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task A"));
     }
 
     #[test]
