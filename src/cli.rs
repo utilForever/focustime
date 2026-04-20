@@ -58,6 +58,18 @@ enum PrimaryCommand {
     Export(Option<PathBuf>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ParsedToken {
+    Help,
+    Json,
+    Start,
+    Status,
+    Profile(Option<ProfileId>),
+    Export(Option<PathBuf>),
+    UnknownOption(String),
+    Positional(String),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 struct ProfileSpec {
     focus_secs: u64,
@@ -135,74 +147,113 @@ where
         .into_iter()
         .map(|arg| arg.to_string_lossy().to_string())
         .collect();
-    let mut output = OutputMode::Text;
-    let mut show_help = false;
-    let mut primary: Option<PrimaryCommand> = None;
-    let mut index = 0usize;
+    let tokens = classify_args(&args)?;
+    let (show_help, output) = parse_global_tokens(&tokens)?;
+    let primary = parse_primary_command(&tokens)?;
+    finalize_cli_action(show_help, output, primary)
+}
 
+fn classify_args(args: &[String]) -> Result<Vec<ParsedToken>, String> {
+    let mut tokens = Vec::new();
+    let mut index = 0usize;
     while index < args.len() {
         let arg = &args[index];
-        match arg.as_str() {
-            "-h" | "--help" => {
-                show_help = true;
+        if arg == "-h" || arg == "--help" {
+            tokens.push(ParsedToken::Help);
+        } else if arg == "--json" {
+            tokens.push(ParsedToken::Json);
+        } else if arg == "--start" {
+            tokens.push(ParsedToken::Start);
+        } else if arg == "--status" {
+            tokens.push(ParsedToken::Status);
+        } else if arg == "--profile" {
+            let mut selected = None;
+            if let Some(next) = args.get(index + 1)
+                && !next.starts_with('-')
+            {
+                selected = Some(parse_profile_id(next)?);
+                index += 1;
             }
-            "--json" => {
-                output = OutputMode::Json;
+            tokens.push(ParsedToken::Profile(selected));
+        } else if arg == "--export" {
+            let mut export_dir = None;
+            if let Some(next) = args.get(index + 1)
+                && !next.starts_with('-')
+            {
+                export_dir = Some(PathBuf::from(next));
+                index += 1;
             }
-            "--start" => {
-                set_primary_command(&mut primary, PrimaryCommand::Start)?;
+            tokens.push(ParsedToken::Export(export_dir));
+        } else if let Some(value) = arg.strip_prefix("--profile=") {
+            if value.trim().is_empty() {
+                return Err(invalid_usage("`--profile=` requires a profile value."));
             }
-            "--status" => {
-                set_primary_command(&mut primary, PrimaryCommand::Status)?;
+            tokens.push(ParsedToken::Profile(Some(parse_profile_id(value)?)));
+        } else if let Some(value) = arg.strip_prefix("--export=") {
+            if value.trim().is_empty() {
+                return Err(invalid_usage("`--export=` requires a target directory."));
             }
-            "--profile" => {
-                let mut selected = None;
-                if let Some(next) = args.get(index + 1)
-                    && !next.starts_with('-')
-                {
-                    selected = Some(parse_profile_id(next)?);
-                    index += 1;
-                }
-                set_primary_command(&mut primary, PrimaryCommand::Profile(selected))?;
-            }
-            "--export" => {
-                let mut export_dir = None;
-                if let Some(next) = args.get(index + 1)
-                    && !next.starts_with('-')
-                {
-                    export_dir = Some(PathBuf::from(next));
-                    index += 1;
-                }
-                set_primary_command(&mut primary, PrimaryCommand::Export(export_dir))?;
-            }
-            _ => {
-                if let Some(value) = arg.strip_prefix("--profile=") {
-                    if value.trim().is_empty() {
-                        return Err(invalid_usage("`--profile=` requires a profile value."));
-                    }
-                    let parsed = parse_profile_id(value)?;
-                    set_primary_command(&mut primary, PrimaryCommand::Profile(Some(parsed)))?;
-                } else if let Some(value) = arg.strip_prefix("--export=") {
-                    if value.trim().is_empty() {
-                        return Err(invalid_usage("`--export=` requires a target directory."));
-                    }
-                    set_primary_command(
-                        &mut primary,
-                        PrimaryCommand::Export(Some(PathBuf::from(value))),
-                    )?;
-                } else if arg.starts_with('-') {
-                    return Err(invalid_usage(&format!("Unknown option `{arg}`.")));
-                } else {
-                    return Err(invalid_usage(&format!(
-                        "Unexpected positional argument `{arg}`."
-                    )));
-                }
-            }
+            tokens.push(ParsedToken::Export(Some(PathBuf::from(value))));
+        } else if arg.starts_with('-') {
+            tokens.push(ParsedToken::UnknownOption(arg.clone()));
+        } else {
+            tokens.push(ParsedToken::Positional(arg.clone()));
         }
-
         index += 1;
     }
+    Ok(tokens)
+}
 
+fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
+    let mut show_help = false;
+    let mut output = OutputMode::Text;
+    for token in tokens {
+        match token {
+            ParsedToken::Help => show_help = true,
+            ParsedToken::Json => output = OutputMode::Json,
+            ParsedToken::UnknownOption(option) => {
+                return Err(invalid_usage(&format!("Unknown option `{option}`.")));
+            }
+            ParsedToken::Positional(value) => {
+                return Err(invalid_usage(&format!(
+                    "Unexpected positional argument `{value}`."
+                )));
+            }
+            ParsedToken::Start
+            | ParsedToken::Status
+            | ParsedToken::Profile(_)
+            | ParsedToken::Export(_) => {}
+        }
+    }
+    Ok((show_help, output))
+}
+
+fn parse_primary_command(tokens: &[ParsedToken]) -> Result<Option<PrimaryCommand>, String> {
+    let mut primary: Option<PrimaryCommand> = None;
+    for token in tokens {
+        match token {
+            ParsedToken::Start => set_primary_command(&mut primary, PrimaryCommand::Start)?,
+            ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
+            ParsedToken::Profile(profile) => {
+                set_primary_command(&mut primary, PrimaryCommand::Profile(*profile))?
+            }
+            ParsedToken::Export(dir) => {
+                set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
+            }
+            ParsedToken::Help
+            | ParsedToken::Json
+            | ParsedToken::UnknownOption(_)
+            | ParsedToken::Positional(_) => {}
+        }
+    }
+    Ok(primary)
+}
+
+fn finalize_cli_action(
+    show_help: bool,
+    output: OutputMode,
+    primary: Option<PrimaryCommand>,
+) -> Result<CliAction, String> {
     if show_help {
         return Ok(CliAction::ShowHelp);
     }
@@ -326,7 +377,11 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let active_sites_count = config
         .blocklist_profiles
         .iter()
-        .find(|profile| profile.name == config.selected_blocklist_profile)
+        .find(|profile| {
+            profile
+                .name
+                .eq_ignore_ascii_case(&config.selected_blocklist_profile)
+        })
         .map(|profile| profile.sites.len())
         .unwrap_or_default();
 
@@ -657,5 +712,22 @@ mod tests {
     fn parse_rejects_json_with_start() {
         let error = parse(&["--start", "--json"]).unwrap_err();
         assert!(error.contains("not supported with `--start`"));
+    }
+
+    #[test]
+    fn build_status_output_matches_blocklist_profile_case_insensitively() {
+        let config = AppConfig {
+            blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+                name: "Work".to_string(),
+                sites: vec!["youtube.com".to_string(), "reddit.com".to_string()],
+            }],
+            selected_blocklist_profile: "work".to_string(),
+            ..AppConfig::default()
+        };
+        let stats = FocusStats::default();
+
+        let output = build_status_output(&config, &stats);
+
+        assert_eq!(output.blocked_sites_count, 2);
     }
 }
