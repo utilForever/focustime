@@ -211,6 +211,8 @@ struct WeeklyExportRow {
 struct SessionExportRow {
     date: String,
     task_label: String,
+    focus_intention: String,
+    task_note: String,
     focused_seconds: u64,
     focused_minutes: u64,
     profile: Option<ProfileId>,
@@ -241,6 +243,8 @@ struct CsvExportRow {
     task_label: Option<String>,
     break_glass_timestamp_epoch_secs: Option<u64>,
     break_glass_duration_seconds: Option<u64>,
+    focus_intention: Option<String>,
+    task_note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -601,12 +605,17 @@ impl FocusStats {
     fn export_session_rows(&self) -> Vec<SessionExportRow> {
         self.focus_sessions
             .iter()
-            .map(|session| SessionExportRow {
-                date: session.date.clone(),
-                task_label: session.task_label.clone(),
-                focused_seconds: session.focused_seconds,
-                focused_minutes: session.focused_seconds / 60,
-                profile: session.profile,
+            .map(|session| {
+                let task_label = session.task_label.clone();
+                SessionExportRow {
+                    date: session.date.clone(),
+                    task_label: task_label.clone(),
+                    focus_intention: task_label.clone(),
+                    task_note: task_label,
+                    focused_seconds: session.focused_seconds,
+                    focused_minutes: session.focused_seconds / 60,
+                    profile: session.profile,
+                }
             })
             .collect()
     }
@@ -801,6 +810,8 @@ impl StatsExport {
                 task_label: None,
                 break_glass_timestamp_epoch_secs: None,
                 break_glass_duration_seconds: None,
+                focus_intention: None,
+                task_note: None,
             });
         }
 
@@ -820,6 +831,8 @@ impl StatsExport {
                 task_label: None,
                 break_glass_timestamp_epoch_secs: None,
                 break_glass_duration_seconds: None,
+                focus_intention: None,
+                task_note: None,
             });
         }
 
@@ -839,6 +852,8 @@ impl StatsExport {
                 task_label: Some(session.task_label.clone()),
                 break_glass_timestamp_epoch_secs: None,
                 break_glass_duration_seconds: None,
+                focus_intention: Some(session.focus_intention.clone()),
+                task_note: Some(session.task_note.clone()),
             });
         }
 
@@ -858,6 +873,8 @@ impl StatsExport {
                 task_label: override_event.task_label.clone(),
                 break_glass_timestamp_epoch_secs: Some(override_event.timestamp_epoch_secs),
                 break_glass_duration_seconds: Some(override_event.duration_seconds),
+                focus_intention: None,
+                task_note: None,
             });
         }
 
@@ -1522,18 +1539,24 @@ mod tests {
         assert_eq!(weekly[0]["week_label"], "2026-W15");
         assert_eq!(weekly[0]["focused_minutes"], 75);
         assert_eq!(sessions[0]["task_label"], "Project A");
+        assert_eq!(sessions[0]["focus_intention"], "Project A");
+        assert_eq!(sessions[0]["task_note"], "Project A");
         assert_eq!(sessions[0]["focused_minutes"], 30);
         assert_eq!(sessions[0]["profile"], "classic");
         assert_eq!(overrides[0]["duration_seconds"], 300);
         assert_eq!(overrides[0]["task_label"], "Project A");
 
         let csv = fs::read_to_string(&exported.csv_path).unwrap();
-        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds"));
-        assert!(csv.contains("daily,2026-04-06,,,,1,1800,30,25,1,true,,,"));
-        assert!(csv.contains("weekly,,2026-W15,2026,15,2,4500,75,,,,,,"));
-        assert!(csv.contains("focus_session,2026-04-06,,,,1,1800,30,,,,Project A,,"));
+        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note"));
+        assert!(csv.contains("daily,2026-04-06,,,,1,1800,30,25,1,true,,,,,"));
+        assert!(csv.contains("weekly,,2026-W15,2026,15,2,4500,75,,,,,,,,"));
         assert!(
-            csv.contains("break_glass_override,2026-04-06,,,,0,0,0,,,,Project A,1711000000,300")
+            csv.contains(
+                "focus_session,2026-04-06,,,,1,1800,30,,,,Project A,,,Project A,Project A"
+            )
+        );
+        assert!(
+            csv.contains("break_glass_override,2026-04-06,,,,0,0,0,,,,Project A,1711000000,300,,")
         );
 
         fs::remove_dir_all(export_dir).unwrap();

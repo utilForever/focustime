@@ -285,7 +285,8 @@ From timer view:
 - press **`h`** or **`Esc`** to return to timer view
 
 Exports include daily/weekly aggregates plus labeled focus-session records where
-task labels were attached.
+task labels were attached. Focus-session rows also include `focus_intention` and
+`task_note` fields (mirroring `task_label`) for downstream consumers.
 
 ## The way the system works
 
