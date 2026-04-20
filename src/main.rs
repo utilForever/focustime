@@ -1,5 +1,6 @@
 mod app;
 mod blocker;
+mod cli;
 mod config;
 mod notifications;
 mod stats;
@@ -9,7 +10,7 @@ mod ui;
 mod wakatime;
 
 use std::{
-    io,
+    io, process,
     time::{Duration, Instant},
 };
 
@@ -25,6 +26,7 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 
 use app::App;
 use app::should_handle_key;
+use cli::{CliAction, execute_command, parse_args, usage_text};
 
 /// RAII guard that restores the terminal on drop, ensuring cleanup on any exit path.
 struct TerminalGuard {
@@ -78,13 +80,41 @@ impl Drop for TerminalGuard {
 }
 
 fn main() -> io::Result<()> {
+    let cli_action = match parse_args(std::env::args_os().skip(1)) {
+        Ok(action) => action,
+        Err(error) => {
+            eprintln!("{error}");
+            process::exit(2);
+        }
+    };
+
+    let mut app = App::new();
+    match cli_action {
+        CliAction::ShowHelp => {
+            println!("{}", usage_text());
+            return Ok(());
+        }
+        CliAction::RunCommand(command) => {
+            if let Err(error) = execute_command(command) {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+            return Ok(());
+        }
+        CliAction::RunTui { start_immediately } => {
+            if start_immediately && let Err(error) = app.start_focus_for_cli() {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        }
+    }
+
     let mut guard = TerminalGuard::new()?;
-    run_app(&mut guard.terminal)
+    run_app(&mut guard.terminal, app)
 }
 
-fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
+fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) -> io::Result<()> {
     let tick_rate = Duration::from_millis(100);
-    let mut app = App::new();
     let mut last_tick = Instant::now();
     let mut tick_accumulator: u64 = 0; // milliseconds accumulated towards next second
 
@@ -96,38 +126,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
             .checked_sub(last_tick.elapsed())
             .unwrap_or(Duration::ZERO);
 
-        if event::poll(timeout)? {
-            match event::read()? {
-                Event::Key(key) if should_handle_key(&key) => app.handle_key(key),
-                Event::Paste(text) => app.handle_paste(text),
-                _ => {}
-            }
-        }
-
-        if last_tick.elapsed() >= tick_rate {
-            let elapsed_ms = last_tick.elapsed().as_millis() as u64;
-            last_tick = Instant::now();
-
-            if app.is_running() {
-                tick_accumulator += elapsed_ms;
-                let mut elapsed_secs: u64 = 0;
-                while tick_accumulator >= 1000 {
-                    tick_accumulator -= 1000;
-                    elapsed_secs += 1;
-                }
-                let is_catchup = elapsed_secs > 1;
-                for _ in 0..elapsed_secs {
-                    app.on_tick(is_catchup);
-                }
-                // Advance WakaTime once per UI frame to avoid burst heartbeats
-                // after a suspend/resume catch-up.
-                if elapsed_secs > 0 {
-                    app.on_wakatime_elapsed(elapsed_secs);
-                }
-            } else {
-                tick_accumulator = 0;
-            }
-        }
+        handle_terminal_event(&mut app, timeout)?;
+        tick_timer_if_due(&mut app, &mut last_tick, &mut tick_accumulator, tick_rate);
 
         if app.should_quit {
             break;
@@ -135,4 +135,55 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
     }
 
     Ok(())
+}
+
+fn handle_terminal_event(app: &mut App, timeout: Duration) -> io::Result<()> {
+    if !event::poll(timeout)? {
+        return Ok(());
+    }
+
+    match event::read()? {
+        Event::Key(key) if should_handle_key(&key) => app.handle_key(key),
+        Event::Paste(text) => app.handle_paste(text),
+        _ => {}
+    }
+    Ok(())
+}
+
+fn tick_timer_if_due(
+    app: &mut App,
+    last_tick: &mut Instant,
+    tick_accumulator: &mut u64,
+    tick_rate: Duration,
+) {
+    if last_tick.elapsed() < tick_rate {
+        return;
+    }
+
+    let elapsed_ms = last_tick.elapsed().as_millis() as u64;
+    *last_tick = Instant::now();
+    if !app.is_running() {
+        *tick_accumulator = 0;
+        return;
+    }
+
+    advance_running_timer(app, tick_accumulator, elapsed_ms);
+}
+
+fn advance_running_timer(app: &mut App, tick_accumulator: &mut u64, elapsed_ms: u64) {
+    *tick_accumulator += elapsed_ms;
+    let mut elapsed_secs: u64 = 0;
+    while *tick_accumulator >= 1000 {
+        *tick_accumulator -= 1000;
+        elapsed_secs += 1;
+    }
+    let is_catchup = elapsed_secs > 1;
+    for _ in 0..elapsed_secs {
+        app.on_tick(is_catchup);
+    }
+    // Advance WakaTime once per UI frame to avoid burst heartbeats
+    // after a suspend/resume catch-up.
+    if elapsed_secs > 0 {
+        app.on_wakatime_elapsed(elapsed_secs);
+    }
 }
