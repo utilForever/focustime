@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-04-20
+
+### Added
+- **History v2 monthly insights (#129):** introduced monthly trend and heatmap views in History for faster long-horizon focus analysis.
+- **In-app WakaTime metadata editor (#130):** added editable WakaTime project/language fields in the profile settings flow.
+- **Focus intention export fields (#131):** exported `focus_intention` and `task_note` alongside `task_label` in stats export outputs.
+
+### Changed
+- **WakaTime metadata editor quit handling:** preserved timer-view quit behavior while editing metadata fields.
+
 ## [0.4.0] - 2026-04-18
 
 ### Added
@@ -73,7 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/utilForever/focustime/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/utilForever/focustime/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/utilForever/focustime/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/utilForever/focustime/compare/v0.3.0...v0.3.1
