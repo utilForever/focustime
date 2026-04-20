@@ -233,11 +233,17 @@ fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
 }
 
 fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
-    let mut show_help = false;
+    let show_help = tokens
+        .iter()
+        .any(|token| matches!(token, ParsedToken::Help));
+    if show_help {
+        return Ok((true, OutputMode::Text));
+    }
+
     let mut output = OutputMode::Text;
     for token in tokens {
         match token {
-            ParsedToken::Help => show_help = true,
+            ParsedToken::Help => {}
             ParsedToken::Json => output = OutputMode::Json,
             ParsedToken::UnknownOption(option) => {
                 return Err(invalid_usage(&format!("Unknown option `{option}`.")));
@@ -619,6 +625,8 @@ fn invalid_usage(message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
 
     fn parse(values: &[&str]) -> Result<CliAction, String> {
         parse_args(values.iter().map(OsString::from))
@@ -653,6 +661,18 @@ mod tests {
             parsed,
             CliAction::RunCommand(CliCommand {
                 kind: CommandKind::Status,
+                output: OutputMode::Json
+            })
+        );
+    }
+
+    #[test]
+    fn parse_profile_supports_json_mode() {
+        let parsed = parse(&["--profile", "--json"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Profile { profile: None },
                 output: OutputMode::Json
             })
         );
@@ -763,6 +783,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_help_short_circuits_unknown_arguments() {
+        let parsed = parse(&["--help", "--unknown"]).unwrap();
+        assert_eq!(parsed, CliAction::ShowHelp);
+    }
+
+    #[test]
     fn parse_rejects_multiple_primary_commands() {
         let error = parse(&["--status", "--export"]).unwrap_err();
         assert!(error.contains("Multiple primary commands"));
@@ -784,6 +810,14 @@ mod tests {
     fn parse_rejects_json_with_start() {
         let error = parse(&["--start", "--json"]).unwrap_err();
         assert!(error.contains("not supported with `--start`"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn parse_rejects_non_utf8_arguments() {
+        let invalid = OsString::from_vec(vec![0x66, 0x6f, 0x80]);
+        let error = parse_args(vec![invalid]).unwrap_err();
+        assert!(error.contains("Arguments must be valid UTF-8."));
     }
 
     #[test]
