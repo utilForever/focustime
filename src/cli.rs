@@ -145,8 +145,11 @@ where
 {
     let args: Vec<String> = args
         .into_iter()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
+        .map(|arg| {
+            arg.into_string()
+                .map_err(|_| invalid_usage("Arguments must be valid UTF-8."))
+        })
+        .collect::<Result<_, _>>()?;
     let tokens = classify_args(&args)?;
     let (show_help, output) = parse_global_tokens(&tokens)?;
     let primary = parse_primary_command(&tokens)?;
@@ -707,6 +710,50 @@ mod tests {
                 output: OutputMode::Text
             })
         );
+    }
+
+    #[test]
+    fn parse_export_with_equals_accepts_directory() {
+        let parsed = parse(&["--export=reports"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Export {
+                    dir: Some(PathBuf::from("reports"))
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn classify_key_value_arg_accepts_profile_equals_value() {
+        let parsed = classify_key_value_arg("--profile=deep-work").unwrap();
+        assert_eq!(
+            parsed,
+            Some(ParsedToken::Profile(Some(ProfileId::DeepWork)))
+        );
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_profile_equals_value() {
+        let error = classify_key_value_arg("--profile=").unwrap_err();
+        assert!(error.contains("`--profile=` requires a profile value."));
+    }
+
+    #[test]
+    fn classify_key_value_arg_accepts_export_equals_value() {
+        let parsed = classify_key_value_arg("--export=reports").unwrap();
+        assert_eq!(
+            parsed,
+            Some(ParsedToken::Export(Some(PathBuf::from("reports"))))
+        );
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_export_equals_value() {
+        let error = classify_key_value_arg("--export=").unwrap_err();
+        assert!(error.contains("`--export=` requires a target directory."));
     }
 
     #[test]
