@@ -85,6 +85,7 @@ cargo run -- --start
 # Show or set the active profile
 cargo run -- --profile
 cargo run -- --profile deep-work
+cargo run -- --profile --json
 
 # Show persisted status (text or JSON)
 cargo run -- --status

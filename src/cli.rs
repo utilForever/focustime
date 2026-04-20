@@ -12,7 +12,7 @@ use crate::timer::{
 const USAGE_TEXT: &str = r#"Usage:
   focustime
   focustime --start
-  focustime --profile [classic|deep-work|custom]
+  focustime --profile [classic|deep-work|custom] [--json]
   focustime --status [--json]
   focustime --export[=DIR] [--json]
 
