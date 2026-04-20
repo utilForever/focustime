@@ -157,51 +157,76 @@ fn classify_args(args: &[String]) -> Result<Vec<ParsedToken>, String> {
     let mut tokens = Vec::new();
     let mut index = 0usize;
     while index < args.len() {
-        let arg = &args[index];
-        if arg == "-h" || arg == "--help" {
-            tokens.push(ParsedToken::Help);
-        } else if arg == "--json" {
-            tokens.push(ParsedToken::Json);
-        } else if arg == "--start" {
-            tokens.push(ParsedToken::Start);
-        } else if arg == "--status" {
-            tokens.push(ParsedToken::Status);
-        } else if arg == "--profile" {
-            let mut selected = None;
-            if let Some(next) = args.get(index + 1)
-                && !next.starts_with('-')
-            {
-                selected = Some(parse_profile_id(next)?);
-                index += 1;
-            }
-            tokens.push(ParsedToken::Profile(selected));
-        } else if arg == "--export" {
-            let mut export_dir = None;
-            if let Some(next) = args.get(index + 1)
-                && !next.starts_with('-')
-            {
-                export_dir = Some(PathBuf::from(next));
-                index += 1;
-            }
-            tokens.push(ParsedToken::Export(export_dir));
-        } else if let Some(value) = arg.strip_prefix("--profile=") {
-            if value.trim().is_empty() {
-                return Err(invalid_usage("`--profile=` requires a profile value."));
-            }
-            tokens.push(ParsedToken::Profile(Some(parse_profile_id(value)?)));
-        } else if let Some(value) = arg.strip_prefix("--export=") {
-            if value.trim().is_empty() {
-                return Err(invalid_usage("`--export=` requires a target directory."));
-            }
-            tokens.push(ParsedToken::Export(Some(PathBuf::from(value))));
-        } else if arg.starts_with('-') {
-            tokens.push(ParsedToken::UnknownOption(arg.clone()));
-        } else {
-            tokens.push(ParsedToken::Positional(arg.clone()));
-        }
-        index += 1;
+        let (token, consumed) = classify_arg(args, index)?;
+        tokens.push(token);
+        index += consumed;
     }
     Ok(tokens)
+}
+
+fn classify_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    let arg = &args[index];
+    if let Some(token) = classify_simple_flag(arg) {
+        return Ok((token, 1));
+    }
+    if arg == "--profile" {
+        return classify_profile_arg(args, index);
+    }
+    if arg == "--export" {
+        return classify_export_arg(args, index);
+    }
+    if let Some(token) = classify_key_value_arg(arg)? {
+        return Ok((token, 1));
+    }
+    if arg.starts_with('-') {
+        return Ok((ParsedToken::UnknownOption(arg.clone()), 1));
+    }
+    Ok((ParsedToken::Positional(arg.clone()), 1))
+}
+
+fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
+    match arg {
+        "-h" | "--help" => Some(ParsedToken::Help),
+        "--json" => Some(ParsedToken::Json),
+        "--start" => Some(ParsedToken::Start),
+        "--status" => Some(ParsedToken::Status),
+        _ => None,
+    }
+}
+
+fn classify_profile_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let selected = parse_profile_id(next)?;
+        return Ok((ParsedToken::Profile(Some(selected)), 2));
+    }
+    Ok((ParsedToken::Profile(None), 1))
+}
+
+fn classify_export_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((ParsedToken::Export(Some(PathBuf::from(next))), 2));
+    }
+    Ok((ParsedToken::Export(None), 1))
+}
+
+fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--profile=") {
+        if value.trim().is_empty() {
+            return Err(invalid_usage("`--profile=` requires a profile value."));
+        }
+        return Ok(Some(ParsedToken::Profile(Some(parse_profile_id(value)?))));
+    }
+    if let Some(value) = arg.strip_prefix("--export=") {
+        if value.trim().is_empty() {
+            return Err(invalid_usage("`--export=` requires a target directory."));
+        }
+        return Ok(Some(ParsedToken::Export(Some(PathBuf::from(value)))));
+    }
+    Ok(None)
 }
 
 fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
