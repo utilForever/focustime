@@ -184,6 +184,12 @@ sound = false
 focus_to_break = false
 break_to_focus = false
 
+[recurring_schedule]
+[[recurring_schedule.windows]]
+days = ["mon", "tue", "wed", "thu", "fri"]
+start = "09:00"
+end = "11:00"
+
 [daily_goal]
 minutes = 120
 pomodoros = 4
@@ -253,12 +259,25 @@ Natural, non-catchup phase transitions can also auto-start the next timer with s
 - `auto_start.focus_to_break` starts break timers automatically after focus completion on non-catchup ticks
 - `auto_start.break_to_focus` starts focus timers automatically after break completion on non-catchup ticks
 
+Recurring schedule windows can also trigger focus behavior at wall-clock times:
+
+- `recurring_schedule.windows[].days` accepts day tokens (`mon`..`sun`, case-insensitive)
+- `recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
+- when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
+- the timer session overview shows the current/next scheduled window
+
 You can configure notification and auto-start settings directly from the TUI:
 
 - open profile manager with `p`
 - press `e` to open the editor
-- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily goal (minutes)**, **Daily goal (pomodoros)**, **WakaTime project**, or **WakaTime language**
+- the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **WakaTime**, **Schedule**) to keep settings easier to scan
+- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily goal (minutes)**, **Daily goal (pomodoros)**, **WakaTime project/language**, or the **Schedule** fields
 - use `←/→` to adjust values (or toggle `Off`/`On` for boolean fields), use `Type/Backspace` for WakaTime text fields, then `Enter` to save
+- schedule editing is in-app:
+  - **Schedule add/remove**: `→` adds a window, `←` removes selected window
+  - **Schedule window**: `←/→` changes which window is selected
+  - **Schedule day** + **Schedule day enabled**: choose day cursor and toggle it `Off/On`
+  - **Schedule start/end**: adjust times in 15-minute steps
 
 ## Strict focus mode
 

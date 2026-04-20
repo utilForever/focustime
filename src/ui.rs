@@ -15,6 +15,19 @@ use crate::app::{
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
 
+const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
+const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
+const PROFILE_EDIT_GROUP_GOALS: [usize; 2] = [9, 10];
+const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [11, 12];
+const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 6] = [13, 14, 15, 16, 17, 18];
+const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
+    ("Timer", &PROFILE_EDIT_GROUP_TIMER),
+    ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
+    ("Goals", &PROFILE_EDIT_GROUP_GOALS),
+    ("WakaTime", &PROFILE_EDIT_GROUP_WAKATIME),
+    ("Schedule", &PROFILE_EDIT_GROUP_SCHEDULE),
+];
+
 pub fn render(frame: &mut Frame, app: &App) {
     match app.mode {
         AppMode::Timer => render_timer(frame, app),
@@ -166,6 +179,8 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let (stats_text, stats_style) = timer_stats_line(app);
     let goal_line = format!("🔥 {}", format_timer_goal_streak_line(app));
     let (waka_text, waka_color) = wakatime_status_line(app);
+    let schedule_next_text = app.recurring_schedule_next_window_text();
+    let schedule_status_text = app.recurring_schedule_status_text();
 
     let lines = vec![
         Line::from(""),
@@ -175,6 +190,8 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
             break_glass_status_text,
             Style::default().fg(Color::DarkGray),
         ),
+        Line::styled(schedule_next_text, Style::default().fg(Color::DarkGray)),
+        Line::styled(schedule_status_text, Style::default().fg(Color::DarkGray)),
         Line::from(""),
         Line::styled(profile_line, Style::default().fg(Color::DarkGray)),
         Line::styled(task_text, task_style),
@@ -616,7 +633,8 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
 fn render_profile_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let outer = centered_rect(70, 80, area);
-    let profile_editor_height = PROFILE_EDIT_FIELD_LABELS.len() as u16 + 2;
+    let profile_editor_height =
+        PROFILE_EDIT_FIELD_LABELS.len() as u16 + PROFILE_EDIT_GROUPS.len() as u16 + 4 + 2;
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -636,7 +654,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
             Constraint::Length(profile_editor_height),
             Constraint::Min(0),    // spacer
             Constraint::Length(1), // error line
-            Constraint::Length(2), // key hints
+            Constraint::Length(4), // key hints
         ])
         .split(outer);
 
@@ -648,18 +666,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         );
     frame.render_widget(current, inner[0]);
 
-    let items: Vec<ListItem> = PROFILE_IDS
-        .iter()
-        .map(|profile| {
-            let marker = if *profile == app.selected_profile {
-                "✓"
-            } else {
-                " "
-            };
-            let summary = app.profile_summary(*profile);
-            ListItem::new(format!(" {} {}  {}", marker, profile.label(), summary))
-        })
-        .collect();
+    let items = profile_list_items(app);
 
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title(" Profiles "))
@@ -674,46 +681,93 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     list_state.select(Some(app.profile_selection_index.min(PROFILE_IDS.len() - 1)));
     frame.render_stateful_widget(list, inner[2], &mut list_state);
 
-    let editor_title = if app.profile_edit_active {
-        " Custom + notification + auto-start + goal + WakaTime settings editor "
-    } else {
-        " Custom + notification + auto-start + goal + WakaTime settings ([e] to edit) "
-    };
-    let editor_block = Block::default()
-        .borders(Borders::ALL)
-        .title(editor_title)
-        .style(if app.profile_edit_active {
-            Style::default().fg(Color::Yellow)
-        } else {
-            Style::default().fg(Color::DarkGray)
-        });
-
-    let mut lines = Vec::with_capacity(PROFILE_EDIT_FIELD_LABELS.len());
-    for (index, label) in PROFILE_EDIT_FIELD_LABELS.iter().enumerate() {
-        let value = app.profile_edit_field_value(index);
-        let mut line = Line::from(format!("{label:<18} {value}"));
-        if app.profile_edit_active && index == app.profile_edit_field {
-            line = Line::from(vec![
-                Span::styled("> ", Style::default().fg(Color::Yellow)),
-                Span::styled(
-                    format!("{label:<18} {value}"),
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]);
-        }
-        lines.push(line);
-    }
+    let editor_block = profile_editor_block(app);
+    let lines = profile_editor_lines(app);
     frame.render_widget(Paragraph::new(lines).block(editor_block), inner[4]);
 
     if let Some(err) = app.config_error.as_ref() {
         render_centered_error(frame, inner[6], format!("⚠  {err}"));
     }
 
-    let hints = if app.profile_edit_active {
+    let hints = profile_manager_hints(app);
+    let hints_widget = Paragraph::new(hints)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(hints_widget, inner[7]);
+}
+
+fn profile_list_items(app: &App) -> Vec<ListItem<'static>> {
+    PROFILE_IDS
+        .iter()
+        .map(|profile| {
+            let marker = if *profile == app.selected_profile {
+                "✓"
+            } else {
+                " "
+            };
+            let summary = app.profile_summary(*profile);
+            ListItem::new(format!(" {} {}  {}", marker, profile.label(), summary))
+        })
+        .collect()
+}
+
+fn profile_editor_block(app: &App) -> Block<'static> {
+    let editor_title = if app.profile_edit_active {
+        " Settings editor "
+    } else {
+        " Settings ([e] to edit) "
+    };
+    Block::default()
+        .borders(Borders::ALL)
+        .title(editor_title)
+        .style(if app.profile_edit_active {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        })
+}
+
+fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
+    let mut lines = Vec::with_capacity(PROFILE_EDIT_FIELD_LABELS.len() + PROFILE_EDIT_GROUPS.len());
+    for (group_index, (group_name, fields)) in PROFILE_EDIT_GROUPS.iter().enumerate() {
+        lines.push(Line::styled(
+            format!(" {group_name} "),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ));
+        for index in *fields {
+            let value = app.profile_edit_field_value(*index);
+            let label = profile_edit_field_display_label(*index);
+            let mut line = Line::from(format!("{label:<22} {value}"));
+            if app.profile_edit_active && *index == app.profile_edit_field {
+                line = Line::from(vec![
+                    Span::styled("> ", Style::default().fg(Color::Yellow)),
+                    Span::styled(
+                        format!("{label:<22} {value}"),
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]);
+            }
+            lines.push(line);
+        }
+        if group_index + 1 != PROFILE_EDIT_GROUPS.len() {
+            lines.push(Line::from(""));
+        }
+    }
+    lines
+}
+
+fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
+    if app.profile_edit_active {
         vec![
-            Line::from("Edit: [↑/↓] Field  [←/→] Change value  [Type/Backspace] WakaTime metadata"),
+            Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule"),
+            Line::from(
+                "Edit: [↑/↓] Field  [←/→] Change value (schedule window/day/time/add/remove)",
+            ),
+            Line::from("Text input: [Type/Backspace] WakaTime project/language"),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit (Locked)"
             } else {
@@ -733,11 +787,32 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
                 "View: [p/Esc] Back  [q] Quit"
             }),
         ]
-    };
-    let hints_widget = Paragraph::new(hints)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints_widget, inner[7]);
+    }
+}
+
+fn profile_edit_field_display_label(field_index: usize) -> &'static str {
+    match field_index {
+        0 => "Focus",
+        1 => "Short break",
+        2 => "Long break",
+        3 => "Long-break cadence",
+        4 => "Phase notifications",
+        5 => "Sound alert",
+        6 => "Auto-start break",
+        7 => "Auto-start focus",
+        8 => "Strict focus mode",
+        9 => "Goal minutes",
+        10 => "Goal pomodoros",
+        11 => "WakaTime project",
+        12 => "WakaTime language",
+        13 => "Window selector",
+        14 => "Day selector",
+        15 => "Day enabled",
+        16 => "Start time",
+        17 => "End time",
+        18 => "Add/remove",
+        _ => "",
+    }
 }
 
 fn render_session_planner(frame: &mut Frame, app: &App) {
@@ -1568,6 +1643,46 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("Task: Docs"));
+    }
+
+    #[test]
+    fn timer_view_renders_schedule_status_lines() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let app = App::default();
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Schedule: none configured"));
+        assert!(text.contains("Scheduled auto-start: off"));
+    }
+
+    #[test]
+    fn profile_editor_renders_schedule_fields() {
+        let width = 120;
+        let height = 60;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::ProfileManager;
+        app.profile_edit_active = true;
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Schedule"));
+        assert!(text.contains("Window selector"));
+        assert!(text.contains("Day selector"));
+        assert!(text.contains("Start time"));
+        assert!(text.contains("End time"));
+        assert!(text.contains("Add/remove"));
     }
 
     #[test]

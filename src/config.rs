@@ -52,6 +52,9 @@ pub struct AppConfig {
     /// Auto-start preferences for natural phase transitions.
     #[serde(default)]
     pub auto_start: AutoStartConfig,
+    /// Recurring schedule windows for automatic focus startup.
+    #[serde(default)]
+    pub recurring_schedule: RecurringScheduleConfig,
     /// Whether strict focus mode is enabled.
     ///
     /// When enabled, active focus sessions disallow skip and require
@@ -104,6 +107,62 @@ pub struct AutoStartConfig {
     pub focus_to_break: bool,
     #[serde(default)]
     pub break_to_focus: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct RecurringScheduleConfig {
+    #[serde(default)]
+    pub windows: Vec<RecurringFocusWindowConfig>,
+}
+
+impl RecurringScheduleConfig {
+    pub fn normalized(&self) -> Self {
+        let windows = self
+            .windows
+            .iter()
+            .map(RecurringFocusWindowConfig::normalized)
+            .filter(|window| {
+                let Some(start_minutes) = parse_schedule_time_minutes(&window.start) else {
+                    return false;
+                };
+                let Some(end_minutes) = parse_schedule_time_minutes(&window.end) else {
+                    return false;
+                };
+                start_minutes < end_minutes
+            })
+            .collect();
+        Self { windows }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RecurringFocusWindowConfig {
+    #[serde(default = "default_schedule_window_days")]
+    pub days: Vec<String>,
+    #[serde(default = "default_schedule_window_start")]
+    pub start: String,
+    #[serde(default = "default_schedule_window_end")]
+    pub end: String,
+}
+
+impl RecurringFocusWindowConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            days: normalize_schedule_days(&self.days),
+            start: normalize_schedule_time_or_default(&self.start, default_schedule_window_start),
+            end: normalize_schedule_time_or_default(&self.end, default_schedule_window_end),
+        }
+    }
+}
+
+impl Default for RecurringFocusWindowConfig {
+    fn default() -> Self {
+        Self {
+            days: default_schedule_window_days(),
+            start: default_schedule_window_start(),
+            end: default_schedule_window_end(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -167,6 +226,24 @@ fn default_wakatime_project() -> String {
 
 fn default_wakatime_language() -> String {
     "Pomodoro".to_string()
+}
+
+fn default_schedule_window_days() -> Vec<String> {
+    vec![
+        "mon".to_string(),
+        "tue".to_string(),
+        "wed".to_string(),
+        "thu".to_string(),
+        "fri".to_string(),
+    ]
+}
+
+fn default_schedule_window_start() -> String {
+    "09:00".to_string()
+}
+
+fn default_schedule_window_end() -> String {
+    "10:00".to_string()
 }
 
 fn default_blocklist_profile_name() -> String {
@@ -285,6 +362,7 @@ impl Default for AppConfig {
             custom_profile: None,
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
+            recurring_schedule: RecurringScheduleConfig::default(),
             strict_mode: false,
             break_glass_duration_secs: default_break_glass_duration_secs(),
             daily_goal: DailyGoalConfig::default(),
@@ -388,6 +466,7 @@ impl AppConfig {
             default_break_glass_duration_secs(),
         );
         self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
+        self.recurring_schedule = self.recurring_schedule.normalized();
         self.blocklist_profiles =
             normalize_blocklist_profiles(&self.blocklist_profiles, &self.blocked_sites);
         self.selected_blocklist_profile = normalize_selected_blocklist_profile(
@@ -473,6 +552,46 @@ fn normalize_nonempty_or_default_string(value: &str, default: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+fn normalize_schedule_days(days: &[String]) -> Vec<String> {
+    let mut normalized = Vec::new();
+    let mut seen = HashSet::new();
+    for day in days {
+        let token = day.trim().to_ascii_lowercase();
+        if token.is_empty() {
+            continue;
+        }
+        if seen.insert(token.clone()) {
+            normalized.push(token);
+        }
+    }
+    if normalized.is_empty() {
+        return default_schedule_window_days();
+    }
+    normalized
+}
+
+fn normalize_schedule_time_or_default(value: &str, default: fn() -> String) -> String {
+    let candidate = value.trim();
+    if parse_schedule_time_minutes(candidate).is_some() {
+        candidate.to_string()
+    } else {
+        default()
+    }
+}
+
+fn parse_schedule_time_minutes(value: &str) -> Option<u16> {
+    let (hours, minutes) = value.split_once(':')?;
+    if hours.len() != 2 || minutes.len() != 2 {
+        return None;
+    }
+    let hour = hours.parse::<u16>().ok()?;
+    let minute = minutes.parse::<u16>().ok()?;
+    if hour > 23 || minute > 59 {
+        return None;
+    }
+    Some(hour * 60 + minute)
 }
 
 fn normalize_blocklist_profiles(
@@ -566,6 +685,7 @@ mod tests {
         assert!(cfg.blocklist_profiles.is_empty());
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
+        assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(
             cfg.break_glass_duration_secs,
@@ -609,6 +729,13 @@ mod tests {
                 focus_to_break: true,
                 break_to_focus: false,
             },
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![RecurringFocusWindowConfig {
+                    days: vec!["mon".to_string(), "wed".to_string()],
+                    start: "09:15".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
             strict_mode: true,
             break_glass_duration_secs: 7 * 60,
             daily_goal: DailyGoalConfig {
@@ -636,6 +763,7 @@ mod tests {
         assert_eq!(parsed.custom_profile, original.custom_profile);
         assert_eq!(parsed.notifications, original.notifications);
         assert_eq!(parsed.auto_start, original.auto_start);
+        assert_eq!(parsed.recurring_schedule, original.recurring_schedule);
         assert_eq!(parsed.strict_mode, original.strict_mode);
         assert_eq!(
             parsed.break_glass_duration_secs,
@@ -660,6 +788,7 @@ mod tests {
         assert_eq!(cfg.selected_blocklist_profile, "Default");
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
+        assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(
             cfg.break_glass_duration_secs,
@@ -695,6 +824,48 @@ focus_to_break = true
     }
 
     #[test]
+    fn partial_recurring_schedule_window_uses_defaults_for_missing_fields() {
+        let partial = r#"
+[recurring_schedule]
+[[recurring_schedule.windows]]
+start = "08:30"
+"#;
+        let cfg: AppConfig = toml::from_str(partial).unwrap();
+
+        assert_eq!(cfg.recurring_schedule.windows.len(), 1);
+        let window = &cfg.recurring_schedule.windows[0];
+        assert_eq!(window.start, "08:30");
+        assert_eq!(window.end, default_schedule_window_end());
+        assert_eq!(window.days, default_schedule_window_days());
+    }
+
+    #[test]
+    fn normalize_drops_recurring_windows_with_invalid_time_ranges() {
+        let cfg = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![
+                    RecurringFocusWindowConfig {
+                        days: vec!["mon".to_string()],
+                        start: "09:00".to_string(),
+                        end: "11:00".to_string(),
+                    },
+                    RecurringFocusWindowConfig {
+                        days: vec!["tue".to_string()],
+                        start: "18:00".to_string(),
+                        end: "09:00".to_string(),
+                    },
+                ],
+            },
+            ..AppConfig::default()
+        }
+        .normalize();
+
+        assert_eq!(cfg.recurring_schedule.windows.len(), 1);
+        assert_eq!(cfg.recurring_schedule.windows[0].start, "09:00");
+        assert_eq!(cfg.recurring_schedule.windows[0].end, "11:00");
+    }
+
+    #[test]
     fn unknown_selected_profile_falls_back_to_custom_without_dropping_config() {
         let config = r#"
 focus_secs = 1500
@@ -712,6 +883,10 @@ blocked_sites = ["reddit.com", "youtube.com"]
         assert_eq!(parsed.long_break_interval, 3);
         assert_eq!(parsed.blocked_sites, vec!["reddit.com", "youtube.com"]);
         assert_eq!(parsed.auto_start, AutoStartConfig::default());
+        assert_eq!(
+            parsed.recurring_schedule,
+            RecurringScheduleConfig::default()
+        );
         assert_eq!(parsed.daily_goal, DailyGoalConfig::default());
         assert_eq!(parsed.wakatime, WakatimeMetadataConfig::default());
     }
@@ -751,6 +926,7 @@ long_break_interval = 3
             }),
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
+            recurring_schedule: RecurringScheduleConfig::default(),
             strict_mode: false,
             break_glass_duration_secs: default_break_glass_duration_secs(),
             daily_goal: DailyGoalConfig::default(),
@@ -799,6 +975,7 @@ long_break_interval = 3
         assert_eq!(cfg.selected_blocklist_profile, "Default");
         assert!(cfg.blocklist_profiles.is_empty());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
+        assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
         assert!(!cfg.strict_mode);
         assert_eq!(
             cfg.break_glass_duration_secs,
