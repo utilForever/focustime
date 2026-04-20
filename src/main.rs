@@ -1,5 +1,6 @@
 mod app;
 mod blocker;
+mod cli;
 mod config;
 mod notifications;
 mod stats;
@@ -9,7 +10,7 @@ mod ui;
 mod wakatime;
 
 use std::{
-    io,
+    io, process,
     time::{Duration, Instant},
 };
 
@@ -25,6 +26,7 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 
 use app::App;
 use app::should_handle_key;
+use cli::{CliAction, execute_command, parse_args, usage_text};
 
 /// RAII guard that restores the terminal on drop, ensuring cleanup on any exit path.
 struct TerminalGuard {
@@ -78,13 +80,41 @@ impl Drop for TerminalGuard {
 }
 
 fn main() -> io::Result<()> {
+    let cli_action = match parse_args(std::env::args_os().skip(1)) {
+        Ok(action) => action,
+        Err(error) => {
+            eprintln!("{error}");
+            process::exit(2);
+        }
+    };
+
+    let mut app = App::new();
+    match cli_action {
+        CliAction::ShowHelp => {
+            println!("{}", usage_text());
+            return Ok(());
+        }
+        CliAction::RunCommand(command) => {
+            if let Err(error) = execute_command(command) {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+            return Ok(());
+        }
+        CliAction::RunTui { start_immediately } => {
+            if start_immediately && let Err(error) = app.start_focus_for_cli() {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        }
+    }
+
     let mut guard = TerminalGuard::new()?;
-    run_app(&mut guard.terminal)
+    run_app(&mut guard.terminal, app)
 }
 
-fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
+fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) -> io::Result<()> {
     let tick_rate = Duration::from_millis(100);
-    let mut app = App::new();
     let mut last_tick = Instant::now();
     let mut tick_accumulator: u64 = 0; // milliseconds accumulated towards next second
 

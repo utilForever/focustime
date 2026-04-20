@@ -74,6 +74,29 @@ cd focustime
 cargo run
 ```
 
+## CLI automation commands
+
+`focustime` supports non-interactive CLI commands for scripting and automation.
+
+```sh
+# Launch TUI with focus timer already started
+cargo run -- --start
+
+# Show or set the active profile
+cargo run -- --profile
+cargo run -- --profile deep-work
+
+# Show persisted status (text or JSON)
+cargo run -- --status
+cargo run -- --status --json
+
+# Export stats to current directory or a target directory
+cargo run -- --export
+cargo run -- --export=./reports --json
+```
+
+When no CLI command is provided, `focustime` keeps the default interactive TUI mode.
+
 > Site blocking updates your OS hosts file and may require elevated privileges
 > (`sudo`/Administrator). If permissions are insufficient, timer functionality
 > still works, but blocking operations can fail.

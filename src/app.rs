@@ -542,6 +542,20 @@ impl App {
         self.sync_break_glass_override();
     }
 
+    pub fn start_focus_for_cli(&mut self) -> Result<(), String> {
+        if self.timer.phase != TimerPhase::Focus || self.timer.status != TimerStatus::Idle {
+            return Err("Cannot start focus: timer is not idle in focus phase.".to_string());
+        }
+        if self.selected_task_label.is_none() {
+            return Err(
+                "Cannot start focus: select a task label first (run TUI and press [t])."
+                    .to_string(),
+            );
+        }
+        self.update_timer_and_sync(TimerState::toggle_pause);
+        Ok(())
+    }
+
     pub fn selected_profile_name(&self) -> &'static str {
         self.selected_profile.label()
     }
@@ -4093,6 +4107,28 @@ mod tests {
             app.phase_notification.as_deref(),
             Some("Select a task label with [t] before starting focus.")
         );
+    }
+
+    #[test]
+    fn cli_start_fails_without_selected_task_label() {
+        let mut app = App::default();
+
+        let result = app.start_focus_for_cli();
+
+        assert!(result.is_err());
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+    }
+
+    #[test]
+    fn cli_start_begins_focus_when_task_label_exists() {
+        let mut app = App::default();
+        app.selected_task_label = Some("Docs".to_string());
+
+        let result = app.start_focus_for_cli();
+
+        assert!(result.is_ok());
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(app.active_focus_task_label, Some("Docs".to_string()));
     }
 
     #[test]
