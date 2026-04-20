@@ -618,7 +618,7 @@ impl App {
             );
         }
 
-        "🗓 Schedule: no upcoming window".to_string()
+        "🗓  Schedule: no upcoming window".to_string()
     }
 
     pub fn recurring_schedule_status_text(&self) -> String {
@@ -2520,6 +2520,9 @@ impl App {
             return;
         }
 
+        // Scheduled windows always target focus. If we're currently in a break phase
+        // (idle/paused/running), advance to focus first so schedule auto-start checks
+        // and manual [Space] behavior both operate on the focus phase.
         if self.timer.phase != TimerPhase::Focus {
             self.update_timer_and_sync(TimerState::next_phase);
         }
