@@ -634,7 +634,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let outer = centered_rect(70, 80, area);
     let profile_editor_height =
-        PROFILE_EDIT_FIELD_LABELS.len() as u16 + PROFILE_EDIT_GROUPS.len() as u16 + 4;
+        PROFILE_EDIT_FIELD_LABELS.len() as u16 + PROFILE_EDIT_GROUPS.len() as u16 + 4 + 2;
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -666,18 +666,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         );
     frame.render_widget(current, inner[0]);
 
-    let items: Vec<ListItem> = PROFILE_IDS
-        .iter()
-        .map(|profile| {
-            let marker = if *profile == app.selected_profile {
-                "✓"
-            } else {
-                " "
-            };
-            let summary = app.profile_summary(*profile);
-            ListItem::new(format!(" {} {}  {}", marker, profile.label(), summary))
-        })
-        .collect();
+    let items = profile_list_items(app);
 
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title(" Profiles "))
@@ -692,20 +681,53 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
     list_state.select(Some(app.profile_selection_index.min(PROFILE_IDS.len() - 1)));
     frame.render_stateful_widget(list, inner[2], &mut list_state);
 
+    let editor_block = profile_editor_block(app);
+    let lines = profile_editor_lines(app);
+    frame.render_widget(Paragraph::new(lines).block(editor_block), inner[4]);
+
+    if let Some(err) = app.config_error.as_ref() {
+        render_centered_error(frame, inner[6], format!("⚠  {err}"));
+    }
+
+    let hints = profile_manager_hints(app);
+    let hints_widget = Paragraph::new(hints)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(hints_widget, inner[7]);
+}
+
+fn profile_list_items(app: &App) -> Vec<ListItem<'static>> {
+    PROFILE_IDS
+        .iter()
+        .map(|profile| {
+            let marker = if *profile == app.selected_profile {
+                "✓"
+            } else {
+                " "
+            };
+            let summary = app.profile_summary(*profile);
+            ListItem::new(format!(" {} {}  {}", marker, profile.label(), summary))
+        })
+        .collect()
+}
+
+fn profile_editor_block(app: &App) -> Block<'static> {
     let editor_title = if app.profile_edit_active {
         " Settings editor "
     } else {
         " Settings ([e] to edit) "
     };
-    let editor_block = Block::default()
+    Block::default()
         .borders(Borders::ALL)
         .title(editor_title)
         .style(if app.profile_edit_active {
             Style::default().fg(Color::Yellow)
         } else {
             Style::default().fg(Color::DarkGray)
-        });
+        })
+}
 
+fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
     let mut lines = Vec::with_capacity(PROFILE_EDIT_FIELD_LABELS.len() + PROFILE_EDIT_GROUPS.len());
     for (group_index, (group_name, fields)) in PROFILE_EDIT_GROUPS.iter().enumerate() {
         lines.push(Line::styled(
@@ -735,13 +757,11 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
             lines.push(Line::from(""));
         }
     }
-    frame.render_widget(Paragraph::new(lines).block(editor_block), inner[4]);
+    lines
+}
 
-    if let Some(err) = app.config_error.as_ref() {
-        render_centered_error(frame, inner[6], format!("⚠  {err}"));
-    }
-
-    let hints = if app.profile_edit_active {
+fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
+    if app.profile_edit_active {
         vec![
             Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule"),
             Line::from(
@@ -767,11 +787,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
                 "View: [p/Esc] Back  [q] Quit"
             }),
         ]
-    };
-    let hints_widget = Paragraph::new(hints)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints_widget, inner[7]);
+    }
 }
 
 fn profile_edit_field_display_label(field_index: usize) -> &'static str {
@@ -1665,6 +1681,8 @@ mod tests {
         assert!(text.contains("Window selector"));
         assert!(text.contains("Day selector"));
         assert!(text.contains("Start time"));
+        assert!(text.contains("End time"));
+        assert!(text.contains("Add/remove"));
     }
 
     #[test]

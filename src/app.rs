@@ -2520,6 +2520,10 @@ impl App {
             return;
         }
 
+        if self.timer.phase != TimerPhase::Focus {
+            self.update_timer_and_sync(TimerState::next_phase);
+        }
+
         if self.can_auto_start_focus_for_schedule() {
             self.update_timer_and_sync(TimerState::toggle_pause);
             self.phase_notification =
@@ -4093,6 +4097,36 @@ mod tests {
                 "Scheduled window started. Select a task label with [t], then press [Space] to start focus."
             )
         );
+    }
+
+    #[test]
+    fn recurring_schedule_auto_start_switches_idle_break_to_focus() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+        app.timer.phase = TimerPhase::ShortBreak;
+        app.timer.status = TimerStatus::Idle;
+
+        app.sync_recurring_schedule(now);
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("Scheduled window started. Focus auto-started.")
+        );
+        assert!(app.schedule_armed_occurrence_key.is_none());
     }
 
     #[test]
