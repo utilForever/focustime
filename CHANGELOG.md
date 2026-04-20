@@ -10,64 +10,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.1] - 2026-04-20
 
 ### Added
+
 - **History v2 monthly insights (#129):** introduced monthly trend and heatmap views in History for faster long-horizon focus analysis.
 - **In-app WakaTime metadata editor (#130):** added editable WakaTime project/language fields in the profile settings flow.
-- **Focus intention export fields (#131):** exported `focus_intention` and `task_note` alongside `task_label` in stats export outputs.
+- **Focus intention export fields (#131):** added `focus_intention` and `task_note` alongside `task_label` in stats export file outputs (JSON/CSV)
 
 ### Changed
+
 - **WakaTime metadata editor quit handling:** preserved timer-view quit behavior while editing metadata fields.
 
 ## [0.4.0] - 2026-04-18
 
 ### Added
+
 - **Session planner workflow (#120):** introduced timer-integrated task labeling with required task selection before starting focus sessions.
 - **Blocklist profile management (#121):** added create/rename/delete/switch flows for named site-blocking profiles in the site manager.
 - **Break-glass override for focus blocking (#122):** added explicit two-step temporary unblock control with automatic re-enable countdown during active focus sessions.
 
 ### Changed
+
 - **Timer layout and UX polish:** improved timer screen readability and spacing in timer and session-planner views.
 - **v0.4.0 documentation refresh (#127):** updated README demo screenshots to reflect the latest UI.
 
 ## [0.3.2] - 2026-04-16
 
 ### Added
+
 - **Stats export from History (#105):** added `e` shortcut in History view to export persisted focus data as `focustime-stats.json` and `focustime-stats.csv` in the current working directory.
 - **Configurable WakaTime metadata labels (#106):** added optional `[wakatime]` `project` and `language` config fields so heartbeat labels can be customized while preserving default behavior.
 
 ### Changed
+
 - **Stats export documentation polish:** clarified Windows export overwrite behavior in user-facing docs.
 
 ## [0.3.1] - 2026-04-16
 
 ### Added
+
 - **Streak tracking (#101):** added current-streak and best-streak tracking based on completed daily focus goals while preserving historical accuracy when goals change later.
 - **Weekly history summaries (#102):** added weekly aggregation of focused minutes and completed Pomodoros in the History view.
 
 ## [0.3.0] - 2026-04-15
 
 ### Added
+
 - **Daily focus goals and live progress (#92):** introduced configurable daily minute/pomodoro goals with live progress shown in timer and history views.
 - **Auto-start phase options (#93):** added opt-in auto-start controls for focus-to-break and break-to-focus transitions on natural (non-catchup) completions.
 - **Setup diagnostics screen (#96):** added in-app diagnostics for blocking permissions, hosts file write access, and WakaTime configuration readiness.
 - **WakaTime success timestamp visibility (#95):** surfaced the last successful heartbeat time in the timer status line when tracking is configured.
 
 ### Changed
+
 - **Windows keyboard input handling (#94):** fixed duplicate key processing on Windows and added regression coverage for key filtering behavior.
 - **v0.3.0 visual documentation refresh (#99):** updated README screenshots to reflect current UI and workflows.
 
 ## [0.2.1] - 2026-04-13
 
 ### Added
+
 - **Strict focus mode safeguards (#74):** optional strict mode now blocks skip/profile/quit shortcuts during active focus and requires explicit confirmation before stop/reset.
 - **SonarCloud analysis pipeline (#75):** added SonarCloud workflow and project configuration for continuous quality checks on pushes and pull requests.
 
 ### Changed
+
 - **WakaTime tracking reliability and visibility (#72):** improved heartbeat retry behavior and surfaced clearer runtime tracking/retrying/error status in the timer view.
 - **Site manager bulk import and editing flow (#73):** added comma/newline batch input support with stronger inline validation and duplicate handling.
 
 ## [0.2.0] - 2026-04-10
 
 ### Added
+
 - **Persistent settings and blocked sites (#50):** timer preferences, selected profile, notification settings, and blocked-site lists are now saved to `config.toml` and restored at startup with safe fallback defaults for missing/corrupt config.
 - **Configurable Pomodoro profiles (#51):** includes built-in **Classic** and **Deep Work** presets plus an editable **Custom** profile with configurable focus/short-break/long-break durations and long-break cadence.
 - **Session stats and daily history (#52):** tracks focused time and completed Pomodoros for the active session and per-day aggregates, then surfaces them in the timer summary and history view.
@@ -77,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-04-06
 
 ### Added
+
 - Initial release of `focustime` as a Rust TUI application.
 - Pomodoro timer with focus, short break, and long break session flow.
 - Distraction website blocking through hosts file updates during focus sessions.
