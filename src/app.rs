@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use chrono::{DateTime, Local};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::blocker::{
@@ -10,9 +11,13 @@ use crate::blocker::{
 };
 use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
-    NotificationConfig, ProfileId, WakatimeMetadataConfig,
+    NotificationConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
+    WakatimeMetadataConfig,
 };
 use crate::notifications::PhaseNotifier;
+use crate::schedule::{
+    RecurringWindow, active_occurrence, compile_windows, next_occurrence_after, occurrence_key,
+};
 use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusStats,
     GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileTotals, SessionStats, WeeklyStats,
@@ -27,7 +32,7 @@ use crate::wakatime::{WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeT
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 13] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 19] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -41,12 +46,27 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 13] = [
     "Goal pomodoros",
     "WakaTime project",
     "WakaTime language",
+    "Schedule window",
+    "Schedule day",
+    "Schedule day enabled",
+    "Schedule start",
+    "Schedule end",
+    "Schedule add/remove",
 ];
-const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = PROFILE_EDIT_FIELD_LABELS.len() - 2;
-const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = PROFILE_EDIT_FIELD_LABELS.len() - 1;
+const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = 11;
+const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = 12;
+const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 13;
+const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 14;
+const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 15;
+const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 16;
+const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 17;
+const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 18;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
+const SCHEDULE_TIME_STEP_MINUTES: u16 = 15;
+const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const SCHEDULE_DAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
@@ -126,6 +146,7 @@ struct ProfileEditSnapshot {
     custom_profile: CustomProfileConfig,
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
+    recurring_schedule: RecurringScheduleConfig,
     strict_mode: bool,
     daily_goal: DailyGoalConfig,
     wakatime_metadata: WakatimeMetadataConfig,
@@ -312,9 +333,15 @@ pub struct App {
     pub profile_selection_index: usize,
     pub profile_edit_active: bool,
     pub profile_edit_field: usize,
+    profile_edit_schedule_window: usize,
+    profile_edit_schedule_day: usize,
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
+    recurring_schedule: RecurringScheduleConfig,
+    recurring_windows: Vec<RecurringWindow>,
+    schedule_armed_occurrence_key: Option<String>,
+    last_schedule_occurrence_key: Option<String>,
     pub strict_mode: bool,
     break_glass_duration_secs: u64,
     break_glass_expires_at: Option<Instant>,
@@ -345,6 +372,8 @@ impl App {
         let custom_profile = config.effective_custom_profile();
         let notification_settings = config.notifications;
         let auto_start = config.auto_start;
+        let recurring_schedule = config.recurring_schedule.clone();
+        let recurring_windows = compile_windows(&recurring_schedule.windows);
         let strict_mode = config.strict_mode;
         let break_glass_duration_secs = config.break_glass_duration_secs;
         let daily_goal = config.daily_goal;
@@ -411,9 +440,15 @@ impl App {
             profile_selection_index: profile_index(selected_profile),
             profile_edit_active: false,
             profile_edit_field: 0,
+            profile_edit_schedule_window: 0,
+            profile_edit_schedule_day: 0,
             profile_edit_snapshot: None,
             notification_settings,
             auto_start,
+            recurring_schedule,
+            recurring_windows,
+            schedule_armed_occurrence_key: None,
+            last_schedule_occurrence_key: None,
             strict_mode,
             break_glass_duration_secs,
             break_glass_expires_at: None,
@@ -540,6 +575,7 @@ impl App {
     pub fn poll_wakatime_status(&mut self) {
         self.wakatime.poll_events();
         self.sync_break_glass_override();
+        self.sync_recurring_schedule(Local::now());
     }
 
     pub fn start_focus_for_cli(&mut self) -> Result<(), String> {
@@ -558,6 +594,41 @@ impl App {
 
     pub fn selected_profile_name(&self) -> &'static str {
         self.selected_profile.label()
+    }
+
+    pub fn recurring_schedule_next_window_text(&self) -> String {
+        if self.recurring_windows.is_empty() {
+            return "🗓  Schedule: none configured".to_string();
+        }
+
+        let now = Local::now();
+        if let Some(active) = active_occurrence(now, &self.recurring_windows) {
+            return format!(
+                "🗓  Schedule: active now (until {})",
+                active.end.format("%H:%M")
+            );
+        }
+
+        if let Some(next) = next_occurrence_after(now, &self.recurring_windows) {
+            return format!(
+                "🗓  Schedule: next {} {}-{}",
+                next.start.format("%a"),
+                next.start.format("%H:%M"),
+                next.end.format("%H:%M")
+            );
+        }
+
+        "🗓 Schedule: no upcoming window".to_string()
+    }
+
+    pub fn recurring_schedule_status_text(&self) -> String {
+        if self.recurring_windows.is_empty() {
+            "⚙  Scheduled auto-start: off".to_string()
+        } else if self.schedule_armed_occurrence_key.is_some() {
+            "⚙  Scheduled auto-start: armed (press [Space] to start focus)".to_string()
+        } else {
+            "⚙  Scheduled auto-start: ready".to_string()
+        }
     }
 
     pub fn current_task_label(&self) -> Option<&str> {
@@ -673,8 +744,200 @@ impl App {
             10 => format_daily_goal_pomodoros_label(self.daily_goal.pomodoros),
             PROFILE_EDIT_WAKATIME_PROJECT_INDEX => self.wakatime_metadata.project.clone(),
             PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => self.wakatime_metadata.language.clone(),
+            PROFILE_EDIT_SCHEDULE_WINDOW_INDEX => {
+                if self.recurring_schedule.windows.is_empty() {
+                    "none".to_string()
+                } else {
+                    format!(
+                        "{}/{}",
+                        self.profile_edit_schedule_window.saturating_add(1),
+                        self.recurring_schedule.windows.len()
+                    )
+                }
+            }
+            PROFILE_EDIT_SCHEDULE_DAY_INDEX => {
+                if let Some(window) = self.selected_schedule_window() {
+                    let day_label = self.selected_schedule_day_label();
+                    let days = format_schedule_days_for_display(&window.days);
+                    format!("{day_label} ({days})")
+                } else {
+                    "n/a".to_string()
+                }
+            }
+            PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX => self
+                .selected_schedule_day_enabled()
+                .map(|enabled| bool_label(enabled).to_string())
+                .unwrap_or_else(|| "n/a".to_string()),
+            PROFILE_EDIT_SCHEDULE_START_INDEX => self
+                .selected_schedule_window()
+                .map(|window| window.start.clone())
+                .unwrap_or_else(|| "n/a".to_string()),
+            PROFILE_EDIT_SCHEDULE_END_INDEX => self
+                .selected_schedule_window()
+                .map(|window| window.end.clone())
+                .unwrap_or_else(|| "n/a".to_string()),
+            PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX => {
+                if self.recurring_schedule.windows.is_empty() {
+                    "→ Add window".to_string()
+                } else {
+                    "← Remove · → Add".to_string()
+                }
+            }
             _ => String::new(),
         }
+    }
+
+    fn selected_schedule_window(&self) -> Option<&RecurringFocusWindowConfig> {
+        self.recurring_schedule
+            .windows
+            .get(self.profile_edit_schedule_window)
+    }
+
+    fn selected_schedule_window_mut(&mut self) -> Option<&mut RecurringFocusWindowConfig> {
+        self.recurring_schedule
+            .windows
+            .get_mut(self.profile_edit_schedule_window)
+    }
+
+    fn selected_schedule_day_token(&self) -> &'static str {
+        SCHEDULE_DAY_TOKENS[self
+            .profile_edit_schedule_day
+            .min(SCHEDULE_DAY_TOKENS.len() - 1)]
+    }
+
+    fn selected_schedule_day_label(&self) -> &'static str {
+        SCHEDULE_DAY_LABELS[self
+            .profile_edit_schedule_day
+            .min(SCHEDULE_DAY_LABELS.len() - 1)]
+    }
+
+    fn selected_schedule_day_enabled(&self) -> Option<bool> {
+        let day = self.selected_schedule_day_token();
+        self.selected_schedule_window().map(|window| {
+            window
+                .days
+                .iter()
+                .any(|candidate| candidate.eq_ignore_ascii_case(day))
+        })
+    }
+
+    fn clamp_profile_edit_schedule_selection(&mut self) {
+        if self.recurring_schedule.windows.is_empty() {
+            self.profile_edit_schedule_window = 0;
+        } else {
+            self.profile_edit_schedule_window = self
+                .profile_edit_schedule_window
+                .min(self.recurring_schedule.windows.len().saturating_sub(1));
+        }
+        self.profile_edit_schedule_day = self
+            .profile_edit_schedule_day
+            .min(SCHEDULE_DAY_TOKENS.len().saturating_sub(1));
+    }
+
+    fn cycle_schedule_window(&mut self, increase: bool) {
+        if self.recurring_schedule.windows.is_empty() {
+            return;
+        }
+        let total = self.recurring_schedule.windows.len();
+        if increase {
+            self.profile_edit_schedule_window = (self.profile_edit_schedule_window + 1) % total;
+        } else if self.profile_edit_schedule_window == 0 {
+            self.profile_edit_schedule_window = total - 1;
+        } else {
+            self.profile_edit_schedule_window = self.profile_edit_schedule_window.saturating_sub(1);
+        }
+    }
+
+    fn cycle_schedule_day(&mut self, increase: bool) {
+        let total = SCHEDULE_DAY_TOKENS.len();
+        if increase {
+            self.profile_edit_schedule_day = (self.profile_edit_schedule_day + 1) % total;
+        } else if self.profile_edit_schedule_day == 0 {
+            self.profile_edit_schedule_day = total - 1;
+        } else {
+            self.profile_edit_schedule_day = self.profile_edit_schedule_day.saturating_sub(1);
+        }
+    }
+
+    fn set_schedule_day_enabled(&mut self, enabled: bool) {
+        let selected_day = self.selected_schedule_day_token().to_string();
+        let Some(window) = self.selected_schedule_window_mut() else {
+            return;
+        };
+
+        let currently_enabled = window
+            .days
+            .iter()
+            .any(|day| day.eq_ignore_ascii_case(&selected_day));
+        if enabled == currently_enabled {
+            return;
+        }
+
+        if enabled {
+            window.days.push(selected_day);
+            sort_schedule_days(&mut window.days);
+            return;
+        }
+
+        if window.days.len() <= 1 {
+            return;
+        }
+        window
+            .days
+            .retain(|day| !day.eq_ignore_ascii_case(&selected_day));
+        sort_schedule_days(&mut window.days);
+    }
+
+    fn adjust_selected_schedule_time(&mut self, is_start: bool, increase: bool) {
+        let Some(window) = self.selected_schedule_window_mut() else {
+            return;
+        };
+
+        let mut start = parse_hhmm_minutes(&window.start).unwrap_or(9 * 60);
+        let mut end = parse_hhmm_minutes(&window.end).unwrap_or(10 * 60);
+        if end <= start {
+            end = start.saturating_add(1).min(23 * 60 + 59);
+        }
+
+        if is_start {
+            if increase {
+                start = start
+                    .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                    .min(end.saturating_sub(1));
+            } else {
+                start = start.saturating_sub(SCHEDULE_TIME_STEP_MINUTES);
+            }
+        } else if increase {
+            end = end
+                .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                .min(23 * 60 + 59)
+                .max(start.saturating_add(1));
+        } else {
+            end = end
+                .saturating_sub(SCHEDULE_TIME_STEP_MINUTES)
+                .max(start.saturating_add(1));
+        }
+
+        window.start = format_hhmm(start);
+        window.end = format_hhmm(end);
+    }
+
+    fn adjust_schedule_windows_collection(&mut self, increase: bool) {
+        if increase {
+            self.recurring_schedule
+                .windows
+                .push(RecurringFocusWindowConfig::default());
+            self.profile_edit_schedule_window = self.recurring_schedule.windows.len() - 1;
+            return;
+        }
+
+        if self.recurring_schedule.windows.is_empty() {
+            return;
+        }
+        self.recurring_schedule
+            .windows
+            .remove(self.profile_edit_schedule_window);
+        self.clamp_profile_edit_schedule_selection();
     }
 
     fn profile_edit_metadata_field_mut(&mut self) -> Option<&mut String> {
@@ -791,6 +1054,7 @@ impl App {
             custom_profile: Some(custom_profile),
             notifications: self.notification_settings,
             auto_start: self.auto_start,
+            recurring_schedule: self.recurring_schedule.clone(),
             strict_mode: self.strict_mode,
             break_glass_duration_secs: self.break_glass_duration_secs,
             daily_goal: self.daily_goal,
@@ -1142,12 +1406,16 @@ impl App {
             custom_profile: self.custom_profile.clone(),
             notification_settings: self.notification_settings,
             auto_start: self.auto_start,
+            recurring_schedule: self.recurring_schedule.clone(),
             strict_mode: self.strict_mode,
             daily_goal: self.daily_goal,
             wakatime_metadata: self.wakatime_metadata.clone(),
         });
         self.profile_edit_active = true;
         self.profile_edit_field = 0;
+        self.profile_edit_schedule_window = 0;
+        self.profile_edit_schedule_day = 0;
+        self.clamp_profile_edit_schedule_selection();
     }
 
     fn cancel_profile_edit(&mut self) {
@@ -1155,25 +1423,35 @@ impl App {
             self.custom_profile = snapshot.custom_profile;
             self.notification_settings = snapshot.notification_settings;
             self.auto_start = snapshot.auto_start;
+            self.recurring_schedule = snapshot.recurring_schedule;
             self.strict_mode = snapshot.strict_mode;
             self.daily_goal = snapshot.daily_goal;
             self.wakatime_metadata = snapshot.wakatime_metadata;
             self.sync_wakatime_metadata_to_tracker();
             self.rebuild_notifier();
+            self.rebuild_recurring_windows();
         }
         self.profile_edit_active = false;
         self.profile_edit_field = 0;
+        self.profile_edit_schedule_window = 0;
+        self.profile_edit_schedule_day = 0;
+        self.clamp_profile_edit_schedule_selection();
     }
 
     fn commit_profile_edit(&mut self) {
         let custom_profile_changed = self.profile_edit_snapshot.as_ref().is_some_and(|snapshot| {
             snapshot.custom_profile.normalized() != self.custom_profile.normalized()
         });
+        let normalized_schedule = self.recurring_schedule.normalized();
+        let schedule_changed = self.profile_edit_snapshot.as_ref().is_some_and(|snapshot| {
+            snapshot.recurring_schedule.normalized() != normalized_schedule
+        });
         let daily_goal_changed = self
             .profile_edit_snapshot
             .as_ref()
             .is_some_and(|snapshot| snapshot.daily_goal != self.daily_goal);
         self.custom_profile = self.custom_profile.normalized();
+        self.recurring_schedule = normalized_schedule;
         self.wakatime_metadata = self.wakatime_metadata.normalized();
         if self.selected_profile == ProfileId::Custom {
             if custom_profile_changed {
@@ -1188,11 +1466,20 @@ impl App {
         }
         self.sync_wakatime_metadata_to_tracker();
         self.rebuild_notifier();
+        self.rebuild_recurring_windows();
+        if schedule_changed {
+            self.schedule_armed_occurrence_key = None;
+            self.last_schedule_occurrence_key = None;
+            self.sync_recurring_schedule(Local::now());
+        }
         if daily_goal_changed {
             self.sync_today_goal_snapshot();
         }
         self.profile_edit_active = false;
         self.profile_edit_field = 0;
+        self.profile_edit_schedule_window = 0;
+        self.profile_edit_schedule_day = 0;
+        self.clamp_profile_edit_schedule_selection();
         self.profile_edit_snapshot = None;
     }
 
@@ -1237,6 +1524,24 @@ impl App {
             10 => {
                 adjust_daily_goal_pomodoros(&mut self.daily_goal.pomodoros, increase);
             }
+            PROFILE_EDIT_SCHEDULE_WINDOW_INDEX => {
+                self.cycle_schedule_window(increase);
+            }
+            PROFILE_EDIT_SCHEDULE_DAY_INDEX => {
+                self.cycle_schedule_day(increase);
+            }
+            PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX => {
+                self.set_schedule_day_enabled(increase);
+            }
+            PROFILE_EDIT_SCHEDULE_START_INDEX => {
+                self.adjust_selected_schedule_time(true, increase);
+            }
+            PROFILE_EDIT_SCHEDULE_END_INDEX => {
+                self.adjust_selected_schedule_time(false, increase);
+            }
+            PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX => {
+                self.adjust_schedule_windows_collection(increase);
+            }
             PROFILE_EDIT_WAKATIME_PROJECT_INDEX | PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => {}
             _ => {}
         }
@@ -1248,6 +1553,10 @@ impl App {
                 project: self.wakatime_metadata.project.clone(),
                 language: self.wakatime_metadata.language.clone(),
             });
+    }
+
+    fn rebuild_recurring_windows(&mut self) {
+        self.recurring_windows = compile_windows(&self.recurring_schedule.windows);
     }
 
     fn apply_profile(&mut self, profile: ProfileId) -> bool {
@@ -1806,6 +2115,7 @@ impl App {
         if !was_focus_active && is_focus_active {
             self.active_focus_task_label = self.selected_task_label.clone();
             self.active_focus_profile = Some(self.selected_profile);
+            self.schedule_armed_occurrence_key = None;
         } else if was_focus_active && !is_focus_active {
             self.active_focus_task_label = None;
             self.active_focus_profile = None;
@@ -1827,9 +2137,12 @@ impl App {
         self.mode = AppMode::ProfileManager;
         self.profile_edit_active = false;
         self.profile_edit_field = 0;
+        self.profile_edit_schedule_window = 0;
+        self.profile_edit_schedule_day = 0;
         self.profile_edit_snapshot = None;
         self.profile_selection_index = profile_index(self.selected_profile);
         self.clamp_profile_selection();
+        self.clamp_profile_edit_schedule_selection();
     }
 
     fn open_session_planner(&mut self) {
@@ -2181,6 +2494,59 @@ impl App {
         self.apply_blocking_for_phase();
     }
 
+    fn sync_recurring_schedule(&mut self, now: DateTime<Local>) {
+        if self.recurring_windows.is_empty() {
+            self.schedule_armed_occurrence_key = None;
+            return;
+        }
+
+        let Some(active_window) = active_occurrence(now, &self.recurring_windows) else {
+            self.schedule_armed_occurrence_key = None;
+            return;
+        };
+
+        let active_occurrence_key = occurrence_key(&active_window);
+        if self.last_schedule_occurrence_key.as_deref() != Some(active_occurrence_key.as_str()) {
+            self.last_schedule_occurrence_key = Some(active_occurrence_key.clone());
+            self.handle_schedule_window_start(&active_occurrence_key);
+        } else if self.focus_session_active_for_current_state() {
+            self.schedule_armed_occurrence_key = None;
+        }
+    }
+
+    fn handle_schedule_window_start(&mut self, active_occurrence_key: &str) {
+        if self.focus_session_active_for_current_state() {
+            self.schedule_armed_occurrence_key = None;
+            return;
+        }
+
+        if self.can_auto_start_focus_for_schedule() {
+            self.update_timer_and_sync(TimerState::toggle_pause);
+            self.phase_notification =
+                Some("Scheduled window started. Focus auto-started.".to_string());
+            self.schedule_armed_occurrence_key = None;
+            return;
+        }
+
+        self.schedule_armed_occurrence_key = Some(active_occurrence_key.to_string());
+        self.phase_notification = Some(self.schedule_arm_notification());
+    }
+
+    fn can_auto_start_focus_for_schedule(&self) -> bool {
+        self.timer.phase == TimerPhase::Focus
+            && self.timer.status == TimerStatus::Idle
+            && self.selected_task_label.is_some()
+    }
+
+    fn schedule_arm_notification(&self) -> String {
+        if self.selected_task_label.is_none() {
+            "Scheduled window started. Select a task label with [t], then press [Space] to start focus."
+                .to_string()
+        } else {
+            "Scheduled window started. Press [Space] to start focus.".to_string()
+        }
+    }
+
     pub fn recent_break_glass_overrides(&self, limit: usize) -> Vec<BreakGlassOverrideEvent> {
         self.stats.recent_break_glass_overrides(limit)
     }
@@ -2246,6 +2612,52 @@ fn format_daily_goal_pomodoros_label(pomodoros: u32) -> String {
 
 fn bool_label(value: bool) -> &'static str {
     if value { "On" } else { "Off" }
+}
+
+fn parse_hhmm_minutes(value: &str) -> Option<u16> {
+    let (hours, minutes) = value.split_once(':')?;
+    if hours.len() != 2 || minutes.len() != 2 {
+        return None;
+    }
+    let hour = hours.parse::<u16>().ok()?;
+    let minute = minutes.parse::<u16>().ok()?;
+    if hour > 23 || minute > 59 {
+        return None;
+    }
+    Some(hour * 60 + minute)
+}
+
+fn format_hhmm(total_minutes: u16) -> String {
+    let hours = total_minutes / 60;
+    let minutes = total_minutes % 60;
+    format!("{hours:02}:{minutes:02}")
+}
+
+fn sort_schedule_days(days: &mut Vec<String>) {
+    let mut sorted = Vec::new();
+    for token in SCHEDULE_DAY_TOKENS {
+        if days.iter().any(|day| day.eq_ignore_ascii_case(token)) {
+            sorted.push(token.to_string());
+        }
+    }
+    if sorted.is_empty() {
+        sorted.push(SCHEDULE_DAY_TOKENS[0].to_string());
+    }
+    *days = sorted;
+}
+
+fn format_schedule_days_for_display(days: &[String]) -> String {
+    let mut labels = Vec::new();
+    for (index, token) in SCHEDULE_DAY_TOKENS.iter().enumerate() {
+        if days.iter().any(|day| day.eq_ignore_ascii_case(token)) {
+            labels.push(SCHEDULE_DAY_LABELS[index]);
+        }
+    }
+    if labels.is_empty() {
+        "none".to_string()
+    } else {
+        labels.join(",")
+    }
 }
 
 fn parse_day_key(day_key: &str) -> Option<chrono::NaiveDate> {
@@ -2375,6 +2787,7 @@ pub(crate) fn should_handle_key(key: &KeyEvent) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Datelike, Local, LocalResult, TimeZone, Weekday};
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
@@ -2386,6 +2799,27 @@ mod tests {
 
     fn ctrl_key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::CONTROL)
+    }
+
+    fn local_datetime_today(hour: u32, minute: u32) -> DateTime<Local> {
+        let today = Local::now().date_naive();
+        match Local.with_ymd_and_hms(today.year(), today.month(), today.day(), hour, minute, 0) {
+            LocalResult::Single(dt) => dt,
+            LocalResult::Ambiguous(earliest, _) => earliest,
+            LocalResult::None => panic!("local datetime should be representable in tests"),
+        }
+    }
+
+    fn weekday_token(day: Weekday) -> &'static str {
+        match day {
+            Weekday::Mon => "mon",
+            Weekday::Tue => "tue",
+            Weekday::Wed => "wed",
+            Weekday::Thu => "thu",
+            Weekday::Fri => "fri",
+            Weekday::Sat => "sat",
+            Weekday::Sun => "sun",
+        }
     }
 
     #[test]
@@ -2400,6 +2834,7 @@ mod tests {
         assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
         assert_eq!(app.timer.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
         assert_eq!(app.auto_start, AutoStartConfig::default());
+        assert_eq!(app.recurring_schedule, RecurringScheduleConfig::default());
         assert!(!app.strict_mode);
         assert_eq!(app.daily_goal, DailyGoalConfig::default());
     }
@@ -2423,6 +2858,7 @@ mod tests {
             }),
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
+            recurring_schedule: RecurringScheduleConfig::default(),
             strict_mode: false,
             break_glass_duration_secs: 5 * 60,
             daily_goal: DailyGoalConfig::default(),
@@ -2812,6 +3248,38 @@ mod tests {
     }
 
     #[test]
+    fn editing_recurring_schedule_fields_updates_and_persists_settings() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.profile_edit_field = PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX;
+        app.handle_key(key(KeyCode::Right)); // add default window
+        app.profile_edit_schedule_day = 6; // Sun
+        app.profile_edit_field = PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX;
+        app.handle_key(key(KeyCode::Right)); // enable Sunday
+        app.profile_edit_field = PROFILE_EDIT_SCHEDULE_START_INDEX;
+        app.handle_key(key(KeyCode::Right)); // 09:00 -> 09:15
+        app.profile_edit_field = PROFILE_EDIT_SCHEDULE_END_INDEX;
+        app.handle_key(key(KeyCode::Left)); // 10:00 -> 09:45
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.recurring_schedule.windows.len(), 1);
+        let window = &app.recurring_schedule.windows[0];
+        assert_eq!(window.start, "09:15");
+        assert_eq!(window.end, "09:45");
+        assert!(
+            window
+                .days
+                .iter()
+                .any(|day| day.eq_ignore_ascii_case("sun"))
+        );
+
+        let persisted = app.persisted_config();
+        assert_eq!(persisted.recurring_schedule, app.recurring_schedule);
+    }
+
+    #[test]
     fn editing_daily_goal_fields_updates_and_persists_settings() {
         let mut app = App::default();
 
@@ -2832,6 +3300,33 @@ mod tests {
         let persisted = app.persisted_config();
         assert_eq!(persisted.daily_goal.minutes, 10);
         assert_eq!(persisted.daily_goal.pomodoros, 1);
+    }
+
+    #[test]
+    fn cancelling_profile_edit_restores_recurring_schedule_settings() {
+        let original_schedule = RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["tue".to_string(), "thu".to_string()],
+                start: "13:00".to_string(),
+                end: "14:30".to_string(),
+            }],
+        };
+        let config = AppConfig {
+            recurring_schedule: original_schedule.clone(),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.profile_edit_field = PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX;
+        app.handle_key(key(KeyCode::Right)); // add extra window
+        app.profile_edit_field = PROFILE_EDIT_SCHEDULE_START_INDEX;
+        app.handle_key(key(KeyCode::Right));
+        app.handle_key(key(KeyCode::Esc)); // cancel edit
+
+        assert_eq!(app.recurring_schedule, original_schedule);
+        assert_eq!(app.recurring_windows.len(), 1);
     }
 
     #[test]
@@ -3545,6 +4040,89 @@ mod tests {
     }
 
     #[test]
+    fn recurring_schedule_auto_starts_focus_when_window_begins_and_task_is_selected() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+
+        app.sync_recurring_schedule(now);
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("Scheduled window started. Focus auto-started.")
+        );
+        assert!(app.schedule_armed_occurrence_key.is_none());
+    }
+
+    #[test]
+    fn recurring_schedule_arms_when_window_begins_without_task_label() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.sync_recurring_schedule(now);
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+        assert!(app.schedule_armed_occurrence_key.is_some());
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some(
+                "Scheduled window started. Select a task label with [t], then press [Space] to start focus."
+            )
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_does_not_retrigger_within_same_window_occurrence() {
+        let first_tick = local_datetime_today(10, 15);
+        let second_tick = local_datetime_today(10, 16);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(first_tick.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+
+        app.sync_recurring_schedule(first_tick);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+
+        app.timer.status = TimerStatus::Idle;
+        app.sync_recurring_schedule(second_tick);
+
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+    }
+
+    #[test]
     fn strict_mode_blocks_skip_during_active_focus() {
         let config = AppConfig {
             strict_mode: true,
@@ -3722,6 +4300,7 @@ mod tests {
             custom_profile: app.custom_profile.clone(),
             notification_settings: app.notification_settings,
             auto_start: app.auto_start,
+            recurring_schedule: app.recurring_schedule.clone(),
             strict_mode: app.strict_mode,
             daily_goal: app.daily_goal,
             wakatime_metadata: app.wakatime_metadata.clone(),
@@ -3763,6 +4342,7 @@ mod tests {
             custom_profile: app.custom_profile.clone(),
             notification_settings: app.notification_settings,
             auto_start: app.auto_start,
+            recurring_schedule: app.recurring_schedule.clone(),
             strict_mode: app.strict_mode,
             daily_goal: app.daily_goal,
             wakatime_metadata: app.wakatime_metadata.clone(),

@@ -3,6 +3,7 @@ mod blocker;
 mod cli;
 mod config;
 mod notifications;
+mod schedule;
 mod stats;
 mod task_labels;
 mod timer;
