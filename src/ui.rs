@@ -1658,8 +1658,8 @@ mod tests {
             .expect("render should succeed");
 
         let text = terminal_text(&terminal, width, height);
-        assert!(text.contains("Schedule: none configured"));
-        assert!(text.contains("Scheduled auto-start: off"));
+        assert!(text.contains("Next schedule: none configured"));
+        assert!(text.contains("Schedule status: off"));
     }
 
     #[test]
