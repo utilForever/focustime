@@ -82,12 +82,22 @@ cargo run
 # Launch TUI with focus timer already started
 cargo run -- --start
 
+# Control timer flow without entering TUI
+cargo run -- --pause
+cargo run -- --resume
+cargo run -- --stop
+cargo run -- --next --json
+
+# Select task label (creates label if it does not exist yet)
+cargo run -- --task "Write docs"
+cargo run -- --task=Write-docs --json
+
 # Show or set the active profile
 cargo run -- --profile
 cargo run -- --profile deep-work
 cargo run -- --profile --json
 
-# Show persisted status (text or JSON)
+# Show status (text or JSON, including live timer/session fields in JSON)
 cargo run -- --status
 cargo run -- --status --json
 
