@@ -355,6 +355,7 @@ pub struct App {
     recurring_windows: Vec<RecurringWindow>,
     schedule_armed_occurrence_key: Option<String>,
     last_schedule_occurrence_key: Option<String>,
+    current_frame_now: DateTime<Local>,
     pub strict_mode: bool,
     break_glass_duration_secs: u64,
     break_glass_expires_at: Option<Instant>,
@@ -462,6 +463,7 @@ impl App {
             recurring_windows,
             schedule_armed_occurrence_key: None,
             last_schedule_occurrence_key: None,
+            current_frame_now: Local::now(),
             strict_mode,
             break_glass_duration_secs,
             break_glass_expires_at: None,
@@ -590,9 +592,11 @@ impl App {
     /// Applies any completed async WakaTime heartbeat results to tracker state.
     /// Intended to be called once per UI frame.
     pub fn poll_wakatime_status(&mut self) {
+        let now = Local::now();
+        self.current_frame_now = now;
         self.wakatime.poll_events();
         self.sync_break_glass_override();
-        self.sync_recurring_schedule(Local::now());
+        self.sync_recurring_schedule(now);
     }
 
     pub fn start_focus_for_cli(&mut self) -> Result<(), String> {
@@ -689,7 +693,7 @@ impl App {
     }
 
     pub fn recurring_schedule_display_texts(&self) -> (String, String) {
-        self.recurring_schedule_texts_at(Local::now())
+        self.recurring_schedule_texts_at(self.current_frame_now)
     }
 
     fn recurring_schedule_texts_at(&self, now: DateTime<Local>) -> (String, String) {
@@ -1665,7 +1669,9 @@ impl App {
         if schedule_changed {
             self.schedule_armed_occurrence_key = None;
             self.last_schedule_occurrence_key = None;
-            self.sync_recurring_schedule(Local::now());
+            let now = Local::now();
+            self.current_frame_now = now;
+            self.sync_recurring_schedule(now);
         }
         if daily_goal_changed {
             self.sync_today_goal_snapshot();
@@ -3096,7 +3102,7 @@ mod tests {
     use crate::session_recovery::{
         self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
     };
-    use chrono::{Datelike, Local, LocalResult, TimeZone, Weekday};
+    use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, TimeZone, Weekday};
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
@@ -4411,6 +4417,33 @@ mod tests {
         assert_eq!(
             app.recurring_schedule_texts_at(now).0,
             "🗓  Next schedule: in progress until 11:00 · then today 14:00-15:00"
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_display_texts_use_current_frame_timestamp() {
+        let simulated_now = local_datetime_today(10, 15) + ChronoDuration::days(1);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(simulated_now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.current_frame_now = simulated_now;
+        app.task_labels.clear();
+        app.selected_task_label = None;
+        app.schedule_armed_occurrence_key = None;
+
+        let (next_text, status_text) = app.recurring_schedule_display_texts();
+        assert!(next_text.starts_with("🗓  Next schedule: in progress until 11:00"));
+        assert_eq!(
+            status_text,
+            "⚙  Schedule status: window active; select [t], then press [Space]"
         );
     }
 
