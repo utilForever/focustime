@@ -77,6 +77,8 @@ pub struct InProgressSessionSnapshot {
     pub phase: RecoveryTimerPhase,
     pub status: RecoveryTimerStatus,
     pub remaining_secs: u64,
+    #[serde(default)]
+    pub pomodoros_completed: u32,
     pub selected_task_label: Option<String>,
     pub selected_profile: ProfileId,
 }
@@ -99,6 +101,7 @@ impl InProgressSessionSnapshot {
             phase: RecoveryTimerPhase::from_timer_phase(timer.phase),
             status: RecoveryTimerStatus::from_timer_status(timer.status),
             remaining_secs: timer.remaining_secs,
+            pomodoros_completed: timer.pomodoros_completed,
             selected_task_label: Some(selected_task_label),
             selected_profile,
         })
@@ -284,6 +287,7 @@ mod tests {
             phase: RecoveryTimerPhase::Focus,
             status: RecoveryTimerStatus::Idle,
             remaining_secs: 10,
+            pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
         };
@@ -298,6 +302,7 @@ mod tests {
             phase: RecoveryTimerPhase::Focus,
             status: RecoveryTimerStatus::Running,
             remaining_secs: 0,
+            pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
         };
@@ -312,6 +317,7 @@ mod tests {
             phase: RecoveryTimerPhase::ShortBreak,
             status: RecoveryTimerStatus::Paused,
             remaining_secs: 31,
+            pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
         };
@@ -326,6 +332,7 @@ mod tests {
             phase: RecoveryTimerPhase::Focus,
             status: RecoveryTimerStatus::Running,
             remaining_secs: 50,
+            pomodoros_completed: 0,
             selected_task_label: None,
             selected_profile: ProfileId::Classic,
         };
@@ -340,6 +347,7 @@ mod tests {
             phase: RecoveryTimerPhase::LongBreak,
             status: RecoveryTimerStatus::Paused,
             remaining_secs: 90,
+            pomodoros_completed: 2,
             selected_task_label: Some("Docs".to_string()),
             selected_profile: ProfileId::DeepWork,
         };

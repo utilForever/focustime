@@ -1032,11 +1032,6 @@ impl App {
             Err(error) => {
                 self.phase_notification =
                     Some(format!("Ignored saved in-progress session: {error}."));
-                if let Err(clear_error) = session_recovery::clear() {
-                    self.config_error = Some(format!(
-                        "session recovery cleanup failed after load error: {clear_error}"
-                    ));
-                }
                 return;
             }
         };
@@ -1076,6 +1071,7 @@ impl App {
         recovered_timer.phase = snapshot.phase();
         recovered_timer.status = snapshot.status();
         recovered_timer.remaining_secs = snapshot.remaining_secs;
+        recovered_timer.pomodoros_completed = snapshot.pomodoros_completed;
         snapshot.validate_for_timer(&recovered_timer)?;
 
         let task_label = snapshot
@@ -2968,6 +2964,7 @@ mod tests {
             phase: RecoveryTimerPhase::from_timer_phase(phase),
             status: RecoveryTimerStatus::from_timer_status(status),
             remaining_secs,
+            pomodoros_completed: 0,
             selected_task_label: task_label.map(str::to_string),
             selected_profile,
         }
@@ -4937,6 +4934,25 @@ mod tests {
                 .as_deref()
                 .is_some_and(|message| message.contains("Recovered in-progress Focus session"))
         );
+    }
+
+    #[test]
+    fn startup_restores_pomodoro_count_for_phase_cadence() {
+        session_recovery::set_test_load_snapshot(Some(InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 1,
+            pomodoros_completed: 3,
+            selected_task_label: Some("Docs".to_string()),
+            selected_profile: ProfileId::Classic,
+        }));
+
+        let mut app = App::from_config(AppConfig::default());
+        assert_eq!(app.timer.pomodoros_completed, 3);
+
+        app.on_tick(false);
+
+        assert_eq!(app.timer.phase, TimerPhase::LongBreak);
     }
 
     #[test]
