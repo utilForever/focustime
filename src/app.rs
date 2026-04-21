@@ -18,6 +18,7 @@ use crate::notifications::PhaseNotifier;
 use crate::schedule::{
     RecurringWindow, active_occurrence, compile_windows, next_occurrence_after, occurrence_key,
 };
+use crate::session_recovery::{self, InProgressSessionSnapshot};
 use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusStats,
     GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileTotals, SessionStats, WeeklyStats,
@@ -402,7 +403,7 @@ impl App {
             blocker.add_site(site.clone());
         }
         let setup_diagnostics = SetupDiagnostics::collect(&blocker);
-        Self {
+        let mut app = Self {
             timer,
             should_quit: false,
             mode: AppMode::Timer,
@@ -459,7 +460,10 @@ impl App {
             stats,
             stats_dirty: false,
             stats_has_unsaved_elapsed: false,
-        }
+        };
+        app.restore_in_progress_session();
+        app.sync_recovery_snapshot();
+        app
     }
 
     pub fn on_tick(&mut self, is_catchup: bool) {
@@ -473,6 +477,7 @@ impl App {
         if phase_changed {
             self.handle_phase_change(completed_phase, completed_focus_secs, is_catchup);
         }
+        self.sync_recovery_snapshot();
         self.flush_stats_if_dirty(false);
     }
 
@@ -1021,6 +1026,117 @@ impl App {
         self.blocklist_profiles.len()
     }
 
+    fn restore_in_progress_session(&mut self) {
+        let loaded_snapshot = match session_recovery::load() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.phase_notification =
+                    Some(format!("Ignored saved in-progress session: {error}."));
+                return;
+            }
+        };
+
+        let Some(snapshot) = loaded_snapshot else {
+            return;
+        };
+
+        if let Err(reason) = self.try_apply_recovery_snapshot(snapshot.clone()) {
+            self.phase_notification = Some(format!("Ignored saved in-progress session: {reason}."));
+            if let Err(clear_error) = session_recovery::clear() {
+                self.config_error = Some(format!(
+                    "session recovery cleanup failed after invalid state: {clear_error}"
+                ));
+            }
+            return;
+        }
+
+        self.phase_notification = Some(format!(
+            "Recovered in-progress {} session ({} remaining).",
+            snapshot.phase().label(),
+            format_duration_label(snapshot.remaining_secs)
+        ));
+    }
+
+    fn try_apply_recovery_snapshot(
+        &mut self,
+        snapshot: InProgressSessionSnapshot,
+    ) -> Result<(), String> {
+        let profile_spec = profile_spec_for(snapshot.selected_profile, &self.custom_profile);
+        let mut recovered_timer = TimerState::with_profile(
+            profile_spec.focus_secs,
+            profile_spec.short_break_secs,
+            profile_spec.long_break_secs,
+            profile_spec.long_break_interval,
+        );
+        recovered_timer.phase = snapshot.phase();
+        recovered_timer.status = snapshot.status();
+        recovered_timer.remaining_secs = snapshot.remaining_secs;
+        recovered_timer.pomodoros_completed = snapshot.pomodoros_completed;
+        snapshot.validate_for_timer(&recovered_timer)?;
+
+        let task_label = snapshot
+            .normalized_task_label()
+            .ok_or_else(|| "saved task label is missing or invalid".to_string())?;
+        let selected_task_label =
+            if let Some(existing_index) = task_label_index(&self.task_labels, &task_label) {
+                self.task_labels[existing_index].clone()
+            } else {
+                self.task_labels.push(task_label.clone());
+                task_label
+            };
+
+        self.selected_profile = snapshot.selected_profile;
+        self.profile_selection_index = profile_index(snapshot.selected_profile);
+        self.timer = recovered_timer;
+        self.selected_task_label = Some(selected_task_label);
+        self.pending_timer_action = None;
+        self.break_glass_expires_at = None;
+        self.schedule_armed_occurrence_key = None;
+        self.last_schedule_occurrence_key = None;
+        self.active_focus_task_label = if self.timer.phase == TimerPhase::Focus {
+            self.selected_task_label.clone()
+        } else {
+            None
+        };
+        self.active_focus_profile = if self.timer.phase == TimerPhase::Focus {
+            Some(self.selected_profile)
+        } else {
+            None
+        };
+        self.apply_blocking_for_phase();
+        self.sync_task_planner_state();
+        Ok(())
+    }
+
+    fn sync_recovery_snapshot(&mut self) {
+        let recovery_task_label = if self.focus_session_active_for_current_state() {
+            self.active_focus_task_label
+                .clone()
+                .or_else(|| self.selected_task_label.clone())
+        } else {
+            self.selected_task_label.clone()
+        };
+
+        let snapshot = InProgressSessionSnapshot::from_timer_state(
+            &self.timer,
+            recovery_task_label,
+            self.selected_profile,
+        );
+
+        match snapshot {
+            Some(snapshot) => {
+                if let Err(error) = session_recovery::save(&snapshot) {
+                    self.config_error = Some(format!("session recovery save failed: {error}"));
+                }
+            }
+            None => {
+                if let Err(error) = session_recovery::clear() {
+                    self.config_error = Some(format!("session recovery clear failed: {error}"));
+                }
+            }
+        }
+    }
+
     /// Persist the current blocked-sites list and timer preferences to disk.
     /// Failures are best-effort; the error is surfaced through `config_error`.
     fn persisted_config(&self) -> AppConfig {
@@ -1369,6 +1485,7 @@ impl App {
             self.planner_selection_index = existing_index;
             self.selected_task_label = self.task_labels.get(existing_index).cloned();
             self.sync_task_planner_state();
+            self.sync_recovery_snapshot();
             self.set_planner_feedback(
                 PlannerFeedbackLevel::Warning,
                 format!("`{label}` already exists, selected existing label"),
@@ -1381,6 +1498,7 @@ impl App {
         self.planner_selection_index = self.task_labels.len().saturating_sub(1);
         self.selected_task_label = Some(label.clone());
         self.sync_task_planner_state();
+        self.sync_recovery_snapshot();
         self.set_planner_feedback(
             PlannerFeedbackLevel::Success,
             format!("Added and selected `{label}`"),
@@ -1397,6 +1515,7 @@ impl App {
         if let Some(label) = self.task_labels.get(self.planner_selection_index).cloned() {
             self.selected_task_label = Some(label.clone());
             self.sync_task_planner_state();
+            self.sync_recovery_snapshot();
             self.set_planner_feedback(PlannerFeedbackLevel::Success, format!("Selected `{label}`"));
         }
     }
@@ -1580,6 +1699,7 @@ impl App {
         self.pending_timer_action = None;
         self.save_config();
         self.apply_blocking_for_phase();
+        self.sync_recovery_snapshot();
         true
     }
 
@@ -2122,6 +2242,7 @@ impl App {
             self.break_glass_expires_at = None;
         }
         self.apply_blocking_for_phase();
+        self.sync_recovery_snapshot();
     }
 
     fn open_site_manager(&mut self) {
@@ -2794,6 +2915,9 @@ pub(crate) fn should_handle_key(key: &KeyEvent) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session_recovery::{
+        self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
+    };
     use chrono::{Datelike, Local, LocalResult, TimeZone, Weekday};
     use std::{
         fs,
@@ -2826,6 +2950,23 @@ mod tests {
             Weekday::Fri => "fri",
             Weekday::Sat => "sat",
             Weekday::Sun => "sun",
+        }
+    }
+
+    fn snapshot_for_tests(
+        phase: TimerPhase,
+        status: TimerStatus,
+        remaining_secs: u64,
+        task_label: Option<&str>,
+        selected_profile: ProfileId,
+    ) -> InProgressSessionSnapshot {
+        InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::from_timer_phase(phase),
+            status: RecoveryTimerStatus::from_timer_status(status),
+            remaining_secs,
+            pomodoros_completed: 0,
+            selected_task_label: task_label.map(str::to_string),
+            selected_profile,
         }
     }
 
@@ -4769,6 +4910,138 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char(' ')));
         assert_eq!(app.timer.status, TimerStatus::Running);
+    }
+
+    #[test]
+    fn startup_restores_valid_in_progress_snapshot() {
+        session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
+            TimerPhase::Focus,
+            TimerStatus::Running,
+            42,
+            Some("Docs"),
+            ProfileId::DeepWork,
+        )));
+
+        let app = App::from_config(AppConfig::default());
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(app.timer.remaining_secs, 42);
+        assert_eq!(app.selected_profile, ProfileId::DeepWork);
+        assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
+        assert!(
+            app.phase_notification
+                .as_deref()
+                .is_some_and(|message| message.contains("Recovered in-progress Focus session"))
+        );
+    }
+
+    #[test]
+    fn startup_restores_pomodoro_count_for_phase_cadence() {
+        session_recovery::set_test_load_snapshot(Some(InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 1,
+            pomodoros_completed: 3,
+            selected_task_label: Some("Docs".to_string()),
+            selected_profile: ProfileId::Classic,
+        }));
+
+        let mut app = App::from_config(AppConfig::default());
+        assert_eq!(app.timer.pomodoros_completed, 3);
+
+        app.on_tick(false);
+
+        assert_eq!(app.timer.phase, TimerPhase::LongBreak);
+    }
+
+    #[test]
+    fn startup_ignores_invalid_snapshot_and_starts_fresh() {
+        session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
+            TimerPhase::Focus,
+            TimerStatus::Idle,
+            60,
+            Some("Docs"),
+            ProfileId::Classic,
+        )));
+
+        let app = App::from_config(AppConfig::default());
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+        assert_eq!(app.timer.remaining_secs, DEFAULT_FOCUS_SECS);
+        assert!(
+            app.phase_notification
+                .as_deref()
+                .is_some_and(|message| message.contains("Ignored saved in-progress session"))
+        );
+        assert!(session_recovery::test_saved_snapshot().is_none());
+    }
+
+    #[test]
+    fn startup_reports_recovery_load_error() {
+        session_recovery::set_test_load_error("simulated read failure");
+
+        let app = App::from_config(AppConfig::default());
+
+        assert!(
+            app.phase_notification
+                .as_deref()
+                .is_some_and(|message| message.contains("Ignored saved in-progress session"))
+        );
+    }
+
+    #[test]
+    fn reset_clears_saved_recovery_snapshot() {
+        let mut app = App::default();
+        app.selected_task_label = Some("Docs".to_string());
+
+        app.handle_key(key(KeyCode::Char(' ')));
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert!(session_recovery::test_saved_snapshot().is_some());
+
+        app.handle_key(key(KeyCode::Char('s')));
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+        assert!(session_recovery::test_saved_snapshot().is_none());
+    }
+
+    #[test]
+    fn recovery_snapshot_prefers_active_focus_label_over_selected_label() {
+        let mut app = App::default();
+        app.task_labels = vec!["Task A".to_string(), "Task B".to_string()];
+        app.selected_task_label = Some("Task A".to_string());
+
+        app.handle_key(key(KeyCode::Char(' ')));
+        assert_eq!(app.active_focus_task_label.as_deref(), Some("Task A"));
+
+        app.selected_task_label = Some("Task B".to_string());
+        app.sync_recovery_snapshot();
+
+        let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+        assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task A"));
+    }
+
+    #[test]
+    fn planner_label_change_during_running_break_updates_recovery_snapshot() {
+        let mut app = App::default();
+        app.task_labels = vec!["Task A".to_string(), "Task B".to_string()];
+        app.selected_task_label = Some("Task A".to_string());
+        app.sync_task_planner_state();
+
+        app.handle_key(key(KeyCode::Char(' '))); // focus running
+        app.handle_key(key(KeyCode::Char('n'))); // short break idle
+        app.handle_key(key(KeyCode::Char(' '))); // short break running
+        assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+
+        app.open_session_planner();
+        app.planner_selection_index = 1;
+        app.select_planner_label();
+
+        let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+        assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task B"));
+        assert_eq!(snapshot.phase, RecoveryTimerPhase::ShortBreak);
+        assert_eq!(snapshot.status, RecoveryTimerStatus::Running);
     }
 
     #[test]

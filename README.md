@@ -279,6 +279,15 @@ You can configure notification and auto-start settings directly from the TUI:
   - **Schedule day** + **Schedule day enabled**: choose day cursor and toggle it `Off/On`
   - **Schedule start/end**: adjust times in 15-minute steps
 
+## Session recovery
+
+`focustime` persists in-progress timer sessions so restart/crash recovery can resume where you left off.
+
+- while a focus/break phase is running or paused, the app saves phase, remaining time, selected task label, and active profile
+- on startup, valid in-progress state is restored and shown in the timer notice line
+- stale or invalid saved recovery state is ignored safely with a warning notice
+- recovery state is cleared when an in-progress phase ends naturally or when you reset/skip out of the active session
+
 ## Strict focus mode
 
 `focustime` provides an optional strict mode (`strict_mode = false` by default).
