@@ -16,7 +16,8 @@ use crate::config::{
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
-    RecurringWindow, active_occurrence, compile_windows, next_occurrence_after, occurrence_key,
+    RecurringWindow, WindowOccurrence, active_occurrence, compile_windows, next_occurrence_after,
+    occurrence_key,
 };
 use crate::session_recovery::{self, InProgressSessionSnapshot};
 use crate::stats::{
@@ -157,6 +158,17 @@ struct ProfileEditSnapshot {
 enum PendingTimerAction {
     Reset,
     BreakGlassOverride,
+}
+
+#[derive(Debug, Clone)]
+struct ScheduleDisplayState {
+    has_schedule_windows: bool,
+    active_window: Option<WindowOccurrence>,
+    next_window: Option<WindowOccurrence>,
+    is_armed: bool,
+    has_selected_task: bool,
+    timer_phase: TimerPhase,
+    timer_status: TimerStatus,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -343,6 +355,7 @@ pub struct App {
     recurring_windows: Vec<RecurringWindow>,
     schedule_armed_occurrence_key: Option<String>,
     last_schedule_occurrence_key: Option<String>,
+    current_frame_now: DateTime<Local>,
     pub strict_mode: bool,
     break_glass_duration_secs: u64,
     break_glass_expires_at: Option<Instant>,
@@ -450,6 +463,7 @@ impl App {
             recurring_windows,
             schedule_armed_occurrence_key: None,
             last_schedule_occurrence_key: None,
+            current_frame_now: Local::now(),
             strict_mode,
             break_glass_duration_secs,
             break_glass_expires_at: None,
@@ -578,9 +592,11 @@ impl App {
     /// Applies any completed async WakaTime heartbeat results to tracker state.
     /// Intended to be called once per UI frame.
     pub fn poll_wakatime_status(&mut self) {
+        let now = Local::now();
+        self.current_frame_now = now;
         self.wakatime.poll_events();
         self.sync_break_glass_override();
-        self.sync_recurring_schedule(Local::now());
+        self.sync_recurring_schedule(now);
     }
 
     pub fn start_focus_for_cli(&mut self) -> Result<(), String> {
@@ -676,38 +692,27 @@ impl App {
         self.selected_profile.label()
     }
 
-    pub fn recurring_schedule_next_window_text(&self) -> String {
-        if self.recurring_windows.is_empty() {
-            return "🗓  Schedule: none configured".to_string();
-        }
-
-        let now = Local::now();
-        if let Some(active) = active_occurrence(now, &self.recurring_windows) {
-            return format!(
-                "🗓  Schedule: active now (until {})",
-                active.end.format("%H:%M")
-            );
-        }
-
-        if let Some(next) = next_occurrence_after(now, &self.recurring_windows) {
-            return format!(
-                "🗓  Schedule: next {} {}-{}",
-                next.start.format("%a"),
-                next.start.format("%H:%M"),
-                next.end.format("%H:%M")
-            );
-        }
-
-        "🗓  Schedule: no upcoming window".to_string()
+    pub fn recurring_schedule_display_texts(&self) -> (String, String) {
+        self.recurring_schedule_texts_at(self.current_frame_now)
     }
 
-    pub fn recurring_schedule_status_text(&self) -> String {
-        if self.recurring_windows.is_empty() {
-            "⚙  Scheduled auto-start: off".to_string()
-        } else if self.schedule_armed_occurrence_key.is_some() {
-            "⚙  Scheduled auto-start: armed (press [Space] to start focus)".to_string()
-        } else {
-            "⚙  Scheduled auto-start: ready".to_string()
+    fn recurring_schedule_texts_at(&self, now: DateTime<Local>) -> (String, String) {
+        let state = self.schedule_display_state_at(now);
+        (
+            schedule_next_window_text_from_state(&state, now),
+            schedule_status_text_from_state(&state),
+        )
+    }
+
+    fn schedule_display_state_at(&self, now: DateTime<Local>) -> ScheduleDisplayState {
+        ScheduleDisplayState {
+            has_schedule_windows: !self.recurring_windows.is_empty(),
+            active_window: active_occurrence(now, &self.recurring_windows),
+            next_window: next_occurrence_after(now, &self.recurring_windows),
+            is_armed: self.schedule_armed_occurrence_key.is_some(),
+            has_selected_task: self.selected_task_label.is_some(),
+            timer_phase: self.timer.phase,
+            timer_status: self.timer.status,
         }
     }
 
@@ -1664,7 +1669,9 @@ impl App {
         if schedule_changed {
             self.schedule_armed_occurrence_key = None;
             self.last_schedule_occurrence_key = None;
-            self.sync_recurring_schedule(Local::now());
+            let now = Local::now();
+            self.current_frame_now = now;
+            self.sync_recurring_schedule(now);
         }
         if daily_goal_changed {
             self.sync_today_goal_snapshot();
@@ -2863,6 +2870,108 @@ fn format_schedule_days_for_display(days: &[String]) -> String {
     }
 }
 
+fn schedule_next_window_text_from_state(
+    state: &ScheduleDisplayState,
+    now: DateTime<Local>,
+) -> String {
+    if !state.has_schedule_windows {
+        return "🗓  Next schedule: none configured".to_string();
+    }
+
+    if let Some(active) = state.active_window.as_ref() {
+        let mut text = format!(
+            "🗓  Next schedule: in progress until {}",
+            active.end.format("%H:%M")
+        );
+        if let Some(next) = state.next_window.as_ref() {
+            text.push_str(&format!(
+                " · then {}",
+                format_schedule_occurrence_for_display(next, now)
+            ));
+        }
+        return text;
+    }
+
+    if let Some(next) = state.next_window.as_ref() {
+        return format!(
+            "🗓  Next schedule: {}",
+            format_schedule_occurrence_for_display(next, now)
+        );
+    }
+
+    "🗓  Next schedule: no upcoming window".to_string()
+}
+
+fn schedule_status_text_from_state(state: &ScheduleDisplayState) -> String {
+    if !state.has_schedule_windows {
+        return "⚙  Schedule status: off".to_string();
+    }
+
+    if state.active_window.is_some() {
+        return schedule_active_window_status_text(state);
+    }
+
+    if state.is_armed {
+        return schedule_armed_status_text(state.has_selected_task);
+    }
+
+    "⚙  Schedule status: ready for next window".to_string()
+}
+
+fn schedule_active_window_status_text(state: &ScheduleDisplayState) -> String {
+    if state.timer_phase != TimerPhase::Focus {
+        return "⚙  Schedule status: window active; press [n] to switch to focus".to_string();
+    }
+
+    match state.timer_status {
+        TimerStatus::Running => "⚙  Schedule status: in window; focus running".to_string(),
+        TimerStatus::Paused => {
+            "⚙  Schedule status: window active; press [Space] to resume focus".to_string()
+        }
+        TimerStatus::Idle => {
+            schedule_idle_focus_status_text(state.has_selected_task, state.is_armed)
+        }
+    }
+}
+
+fn schedule_idle_focus_status_text(has_selected_task: bool, is_armed: bool) -> String {
+    if !has_selected_task {
+        "⚙  Schedule status: window active; select [t], then press [Space]".to_string()
+    } else if is_armed {
+        "⚙  Schedule status: armed; press [Space] to start focus".to_string()
+    } else {
+        "⚙  Schedule status: window active; press [Space] to start focus".to_string()
+    }
+}
+
+fn schedule_armed_status_text(has_selected_task: bool) -> String {
+    if has_selected_task {
+        "⚙  Schedule status: armed; press [Space] to start focus".to_string()
+    } else {
+        "⚙  Schedule status: armed; select [t], then press [Space]".to_string()
+    }
+}
+
+fn format_schedule_occurrence_for_display(
+    occurrence: &WindowOccurrence,
+    now: DateTime<Local>,
+) -> String {
+    let start_date = occurrence.start.date_naive();
+    let today = now.date_naive();
+    let day = if start_date == today {
+        "today".to_string()
+    } else if today.succ_opt() == Some(start_date) {
+        "tomorrow".to_string()
+    } else {
+        occurrence.start.format("%a").to_string()
+    };
+    format!(
+        "{day} {}-{}",
+        occurrence.start.format("%H:%M"),
+        occurrence.end.format("%H:%M")
+    )
+}
+
 fn parse_day_key(day_key: &str) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d").ok()
 }
@@ -2993,7 +3102,7 @@ mod tests {
     use crate::session_recovery::{
         self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
     };
-    use chrono::{Datelike, Local, LocalResult, TimeZone, Weekday};
+    use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, TimeZone, Weekday};
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
@@ -4260,6 +4369,196 @@ mod tests {
         assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
         assert_eq!(app.timer.status, TimerStatus::Idle);
         assert!(app.phase_notification.is_none());
+    }
+
+    #[test]
+    fn recurring_schedule_next_window_text_shows_upcoming_window_for_today() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "11:00".to_string(),
+                    end: "12:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+
+        assert_eq!(
+            app.recurring_schedule_texts_at(now).0,
+            "🗓  Next schedule: today 11:00-12:00"
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_next_window_text_shows_active_window_then_next_window() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![
+                    crate::config::RecurringFocusWindowConfig {
+                        days: vec![weekday_token(now.weekday()).to_string()],
+                        start: "10:00".to_string(),
+                        end: "11:00".to_string(),
+                    },
+                    crate::config::RecurringFocusWindowConfig {
+                        days: vec![weekday_token(now.weekday()).to_string()],
+                        start: "14:00".to_string(),
+                        end: "15:00".to_string(),
+                    },
+                ],
+            },
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+
+        assert_eq!(
+            app.recurring_schedule_texts_at(now).0,
+            "🗓  Next schedule: in progress until 11:00 · then today 14:00-15:00"
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_display_texts_use_current_frame_timestamp() {
+        let simulated_now = local_datetime_today(10, 15) + ChronoDuration::days(1);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(simulated_now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.current_frame_now = simulated_now;
+        app.task_labels.clear();
+        app.selected_task_label = None;
+        app.schedule_armed_occurrence_key = None;
+
+        let (next_text, status_text) = app.recurring_schedule_display_texts();
+        assert!(next_text.starts_with("🗓  Next schedule: in progress until 11:00"));
+        assert_eq!(
+            status_text,
+            "⚙  Schedule status: window active; select [t], then press [Space]"
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_status_text_guides_task_selection_when_active_and_armed() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.sync_recurring_schedule(now);
+
+        assert_eq!(
+            app.recurring_schedule_texts_at(now).1,
+            "⚙  Schedule status: window active; select [t], then press [Space]"
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_status_text_guides_start_when_active_and_idle() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+
+        assert_eq!(
+            app.recurring_schedule_texts_at(now).1,
+            "⚙  Schedule status: window active; press [Space] to start focus"
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_status_text_guides_resume_when_active_and_paused() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Paused;
+
+        assert_eq!(
+            app.recurring_schedule_texts_at(now).1,
+            "⚙  Schedule status: window active; press [Space] to resume focus"
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_status_text_guides_switch_to_focus_when_active_in_break() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.timer.phase = TimerPhase::ShortBreak;
+        app.timer.status = TimerStatus::Running;
+
+        assert_eq!(
+            app.recurring_schedule_texts_at(now).1,
+            "⚙  Schedule status: window active; press [n] to switch to focus"
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_status_text_shows_ready_for_upcoming_window() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "11:00".to_string(),
+                    end: "12:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+
+        assert_eq!(
+            app.recurring_schedule_texts_at(now).1,
+            "⚙  Schedule status: ready for next window"
+        );
     }
 
     #[test]
