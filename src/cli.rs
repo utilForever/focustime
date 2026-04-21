@@ -274,6 +274,11 @@ fn classify_task_arg(args: &[String], index: usize) -> Result<(ParsedToken, usiz
     if let Some(next) = args.get(index + 1)
         && !next.starts_with('-')
     {
+        if next.trim().is_empty() {
+            return Err(invalid_usage(
+                "`--task` requires a task label. Use `--task=LABEL` or `--task LABEL`.",
+            ));
+        }
         return Ok((ParsedToken::Task(next.clone()), 2));
     }
     Err(invalid_usage(
@@ -1178,6 +1183,12 @@ mod tests {
     #[test]
     fn parse_rejects_task_without_value() {
         let error = parse(&["--task"]).unwrap_err();
+        assert!(error.contains("`--task` requires a task label"));
+    }
+
+    #[test]
+    fn parse_rejects_task_with_blank_value() {
+        let error = parse(&["--task", "   "]).unwrap_err();
         assert!(error.contains("`--task` requires a task label"));
     }
 
