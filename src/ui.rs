@@ -179,8 +179,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let (stats_text, stats_style) = timer_stats_line(app);
     let goal_line = format!("🔥 {}", format_timer_goal_streak_line(app));
     let (waka_text, waka_color) = wakatime_status_line(app);
-    let schedule_next_text = app.recurring_schedule_next_window_text();
-    let schedule_status_text = app.recurring_schedule_status_text();
+    let (schedule_next_text, schedule_status_text) = app.recurring_schedule_display_texts();
 
     let lines = vec![
         Line::from(""),
