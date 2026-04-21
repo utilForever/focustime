@@ -1489,6 +1489,7 @@ impl App {
             self.planner_selection_index = existing_index;
             self.selected_task_label = self.task_labels.get(existing_index).cloned();
             self.sync_task_planner_state();
+            self.sync_recovery_snapshot();
             self.set_planner_feedback(
                 PlannerFeedbackLevel::Warning,
                 format!("`{label}` already exists, selected existing label"),
@@ -1501,6 +1502,7 @@ impl App {
         self.planner_selection_index = self.task_labels.len().saturating_sub(1);
         self.selected_task_label = Some(label.clone());
         self.sync_task_planner_state();
+        self.sync_recovery_snapshot();
         self.set_planner_feedback(
             PlannerFeedbackLevel::Success,
             format!("Added and selected `{label}`"),
@@ -1517,6 +1519,7 @@ impl App {
         if let Some(label) = self.task_labels.get(self.planner_selection_index).cloned() {
             self.selected_task_label = Some(label.clone());
             self.sync_task_planner_state();
+            self.sync_recovery_snapshot();
             self.set_planner_feedback(PlannerFeedbackLevel::Success, format!("Selected `{label}`"));
         }
     }
@@ -5000,6 +5003,29 @@ mod tests {
 
         let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
         assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task A"));
+    }
+
+    #[test]
+    fn planner_label_change_during_running_break_updates_recovery_snapshot() {
+        let mut app = App::default();
+        app.task_labels = vec!["Task A".to_string(), "Task B".to_string()];
+        app.selected_task_label = Some("Task A".to_string());
+        app.sync_task_planner_state();
+
+        app.handle_key(key(KeyCode::Char(' '))); // focus running
+        app.handle_key(key(KeyCode::Char('n'))); // short break idle
+        app.handle_key(key(KeyCode::Char(' '))); // short break running
+        assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+
+        app.open_session_planner();
+        app.planner_selection_index = 1;
+        app.select_planner_label();
+
+        let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+        assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task B"));
+        assert_eq!(snapshot.phase, RecoveryTimerPhase::ShortBreak);
+        assert_eq!(snapshot.status, RecoveryTimerStatus::Running);
     }
 
     #[test]
