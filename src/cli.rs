@@ -31,7 +31,7 @@ Options:
   --next     Skip to the next phase
   --task     Select task label (auto-creates unknown labels)
   --profile  Show current profile, or set it when value is provided
-  --status   Print persisted status summary
+  --status   Print status summary (includes live timer/session fields)
   --export   Export stats to current directory or DIR
   --json     Emit machine-readable JSON output
   -h, --help Show this help"#;
