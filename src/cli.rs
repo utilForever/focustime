@@ -1272,4 +1272,18 @@ mod tests {
         );
         assert_eq!(output.live.status, "idle");
     }
+
+    #[test]
+    fn cli_resume_requires_paused_timer() {
+        let mut app = App::default();
+        let error = app.resume_for_cli().unwrap_err();
+        assert_eq!(error, "Cannot resume: timer is not paused.");
+    }
+
+    #[test]
+    fn cli_stop_requires_non_idle_timer() {
+        let mut app = App::default();
+        let error = app.stop_for_cli().unwrap_err();
+        assert_eq!(error, "Cannot stop: timer is already idle.");
+    }
 }
