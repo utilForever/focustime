@@ -2902,35 +2902,47 @@ fn schedule_status_text_from_state(state: &ScheduleDisplayState) -> String {
     }
 
     if state.active_window.is_some() {
-        if state.timer_phase != TimerPhase::Focus {
-            return "⚙  Schedule status: window active; press [n] to switch to focus".to_string();
-        }
-
-        return match state.timer_status {
-            TimerStatus::Running => "⚙  Schedule status: in window; focus running".to_string(),
-            TimerStatus::Paused => {
-                "⚙  Schedule status: window active; press [Space] to resume focus".to_string()
-            }
-            TimerStatus::Idle => {
-                if !state.has_selected_task {
-                    "⚙  Schedule status: window active; select [t], then press [Space]".to_string()
-                } else if state.is_armed {
-                    "⚙  Schedule status: armed; press [Space] to start focus".to_string()
-                } else {
-                    "⚙  Schedule status: window active; press [Space] to start focus".to_string()
-                }
-            }
-        };
+        return schedule_active_window_status_text(state);
     }
 
     if state.is_armed {
-        if state.has_selected_task {
-            "⚙  Schedule status: armed; press [Space] to start focus".to_string()
-        } else {
-            "⚙  Schedule status: armed; select [t], then press [Space]".to_string()
+        return schedule_armed_status_text(state.has_selected_task);
+    }
+
+    "⚙  Schedule status: ready for next window".to_string()
+}
+
+fn schedule_active_window_status_text(state: &ScheduleDisplayState) -> String {
+    if state.timer_phase != TimerPhase::Focus {
+        return "⚙  Schedule status: window active; press [n] to switch to focus".to_string();
+    }
+
+    match state.timer_status {
+        TimerStatus::Running => "⚙  Schedule status: in window; focus running".to_string(),
+        TimerStatus::Paused => {
+            "⚙  Schedule status: window active; press [Space] to resume focus".to_string()
         }
+        TimerStatus::Idle => {
+            schedule_idle_focus_status_text(state.has_selected_task, state.is_armed)
+        }
+    }
+}
+
+fn schedule_idle_focus_status_text(has_selected_task: bool, is_armed: bool) -> String {
+    if !has_selected_task {
+        "⚙  Schedule status: window active; select [t], then press [Space]".to_string()
+    } else if is_armed {
+        "⚙  Schedule status: armed; press [Space] to start focus".to_string()
     } else {
-        "⚙  Schedule status: ready for next window".to_string()
+        "⚙  Schedule status: window active; press [Space] to start focus".to_string()
+    }
+}
+
+fn schedule_armed_status_text(has_selected_task: bool) -> String {
+    if has_selected_task {
+        "⚙  Schedule status: armed; press [Space] to start focus".to_string()
+    } else {
+        "⚙  Schedule status: armed; select [t], then press [Space]".to_string()
     }
 }
 
