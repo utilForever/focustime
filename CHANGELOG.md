@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CLI automation v2 commands (#137):** added non-interactive `--pause`, `--resume`, `--stop`, `--next`, and `--task` commands for scriptable timer/session control.
+
+### Changed
+
+- **Richer status JSON for automation (#137):** extended `--status --json` with live timer/session state fields from recovery-aware runtime context.
+
 ## [0.4.2] - 2026-04-20
 
 ### Added

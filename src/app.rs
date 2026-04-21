@@ -597,6 +597,81 @@ impl App {
         Ok(())
     }
 
+    pub fn pause_for_cli(&mut self) -> Result<(), String> {
+        if self.timer.status != TimerStatus::Running {
+            return Err("Cannot pause: timer is not running.".to_string());
+        }
+        self.update_timer_and_sync(TimerState::toggle_pause);
+        Ok(())
+    }
+
+    pub fn resume_for_cli(&mut self) -> Result<(), String> {
+        if self.timer.status != TimerStatus::Paused {
+            return Err("Cannot resume: timer is not paused.".to_string());
+        }
+        self.update_timer_and_sync(TimerState::toggle_pause);
+        Ok(())
+    }
+
+    pub fn stop_for_cli(&mut self) -> Result<(), String> {
+        if self.strict_mode_enforced_for_focus() {
+            return Err("Cannot stop: strict mode is active during focus.".to_string());
+        }
+        if self.timer.status == TimerStatus::Idle {
+            return Err("Cannot stop: timer is already idle.".to_string());
+        }
+        self.update_timer_and_sync(TimerState::reset);
+        Ok(())
+    }
+
+    pub fn next_phase_for_cli(&mut self) -> Result<(), String> {
+        if self.strict_mode_enforced_for_focus() {
+            return Err(
+                "Cannot skip to next phase: strict mode is active during focus.".to_string(),
+            );
+        }
+        self.update_timer_and_sync(TimerState::next_phase);
+        Ok(())
+    }
+
+    pub fn select_task_label_for_cli(&mut self, label: &str) -> Result<bool, String> {
+        let Some(label) = normalize_task_label(label) else {
+            return Err("Cannot select task label: label cannot be empty.".to_string());
+        };
+
+        if let Some(existing_index) = task_label_index(&self.task_labels, &label) {
+            self.planner_selection_index = existing_index;
+            self.selected_task_label = self.task_labels.get(existing_index).cloned();
+            self.sync_task_planner_state();
+            self.sync_recovery_snapshot();
+            return Ok(false);
+        }
+
+        self.task_labels.push(label.clone());
+        self.planner_selection_index = self.task_labels.len().saturating_sub(1);
+        self.selected_task_label = Some(label);
+        self.sync_task_planner_state();
+        self.sync_recovery_snapshot();
+        Ok(true)
+    }
+
+    pub fn selected_profile_id(&self) -> ProfileId {
+        self.selected_profile
+    }
+
+    pub fn selected_task_label_for_cli(&self) -> Option<String> {
+        self.selected_task_label.clone()
+    }
+
+    pub fn timer_state_for_cli(&self) -> (TimerPhase, TimerStatus, u64, u32) {
+        (
+            self.timer.phase,
+            self.timer.status,
+            self.timer.remaining_secs,
+            self.timer.pomodoros_completed,
+        )
+    }
+
     pub fn selected_profile_name(&self) -> &'static str {
         self.selected_profile.label()
     }
@@ -4887,6 +4962,73 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(app.timer.status, TimerStatus::Running);
         assert_eq!(app.active_focus_task_label, Some("Docs".to_string()));
+    }
+
+    #[test]
+    fn cli_pause_and_resume_transitions_timer_state() {
+        let mut app = App::default();
+        app.selected_task_label = Some("Docs".to_string());
+        app.start_focus_for_cli().unwrap();
+
+        app.pause_for_cli().unwrap();
+        assert_eq!(app.timer.status, TimerStatus::Paused);
+
+        app.resume_for_cli().unwrap();
+        assert_eq!(app.timer.status, TimerStatus::Running);
+    }
+
+    #[test]
+    fn cli_pause_requires_running_timer() {
+        let mut app = App::default();
+
+        let error = app.pause_for_cli().unwrap_err();
+
+        assert_eq!(error, "Cannot pause: timer is not running.");
+    }
+
+    #[test]
+    fn cli_stop_respects_strict_mode_during_focus() {
+        let mut app = App::default();
+        app.strict_mode = true;
+        app.selected_task_label = Some("Docs".to_string());
+        app.start_focus_for_cli().unwrap();
+
+        let error = app.stop_for_cli().unwrap_err();
+
+        assert_eq!(error, "Cannot stop: strict mode is active during focus.");
+        assert_eq!(app.timer.status, TimerStatus::Running);
+    }
+
+    #[test]
+    fn cli_next_respects_strict_mode_during_focus() {
+        let mut app = App::default();
+        app.strict_mode = true;
+        app.selected_task_label = Some("Docs".to_string());
+        app.start_focus_for_cli().unwrap();
+
+        let error = app.next_phase_for_cli().unwrap_err();
+
+        assert_eq!(
+            error,
+            "Cannot skip to next phase: strict mode is active during focus."
+        );
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+    }
+
+    #[test]
+    fn cli_task_selection_auto_creates_and_reuses_labels() {
+        let mut app = App::default();
+
+        let created = app.select_task_label_for_cli("  Docs  ").unwrap();
+        assert!(created);
+        assert_eq!(app.task_labels, vec!["Docs".to_string()]);
+        assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
+
+        let created = app.select_task_label_for_cli("docs").unwrap();
+        assert!(!created);
+        assert_eq!(app.task_labels, vec!["Docs".to_string()]);
+        assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
     }
 
     #[test]
