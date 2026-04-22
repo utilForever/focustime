@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.5.1] - 2026-04-22
+
+### Changed
+
+- **v0.5.1 release metadata/docs refresh (#156):** bumped crate version to `0.5.1`, updated the README latest-stable-release reference, and advanced changelog comparison links.
+
 ## [0.5.0] - 2026-04-22
 
 ### Added
@@ -121,7 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/utilForever/focustime/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/utilForever/focustime/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/utilForever/focustime/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/utilForever/focustime/compare/v0.4.0...v0.4.1
