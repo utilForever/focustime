@@ -68,7 +68,6 @@ const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
 pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
-const PLANNER_RECENT_LABEL_SOURCE_MULTIPLIER: usize = 3;
 const SCHEDULE_TIME_STEP_MINUTES: u16 = 15;
 const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const SCHEDULE_DAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -695,27 +694,38 @@ impl App {
             return Vec::new();
         }
 
-        let mut recent = Vec::new();
-        let mut seen = BTreeSet::new();
-        let source_limit = limit
-            .saturating_mul(PLANNER_RECENT_LABEL_SOURCE_MULTIPLIER)
-            .max(limit);
-        for label in self.stats.recent_task_labels(source_limit) {
-            let Some(existing_index) = task_label_index(&self.task_labels, &label) else {
-                continue;
-            };
-            let canonical = self.task_labels[existing_index].clone();
-            let key = canonical.to_ascii_lowercase();
-            if !seen.insert(key) {
-                continue;
-            }
-            recent.push(canonical);
-            if recent.len() >= limit {
-                break;
-            }
-        }
+        let mut source_limit = limit;
+        loop {
+            let source = self.stats.recent_task_labels(source_limit);
+            let exhausted = source.len() < source_limit;
+            let mut recent = Vec::new();
+            let mut seen = BTreeSet::new();
 
-        recent
+            for label in source {
+                let Some(existing_index) = task_label_index(&self.task_labels, &label) else {
+                    continue;
+                };
+                let canonical = self.task_labels[existing_index].clone();
+                let key = canonical.to_ascii_lowercase();
+                if !seen.insert(key) {
+                    continue;
+                }
+                recent.push(canonical);
+                if recent.len() >= limit {
+                    return recent;
+                }
+            }
+
+            if exhausted {
+                return recent;
+            }
+
+            let next_limit = source_limit.saturating_mul(2);
+            if next_limit == source_limit {
+                return recent;
+            }
+            source_limit = next_limit;
+        }
     }
 
     pub fn timer_state_for_cli(&self) -> (TimerPhase, TimerStatus, u64, u32) {
@@ -5668,6 +5678,44 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('2')));
         assert_eq!(app.selected_task_label.as_deref(), Some("Review"));
+    }
+
+    #[test]
+    fn planner_recent_labels_finds_older_valid_labels_after_stale_entries() {
+        let mut app = App::default();
+        app.task_labels = vec!["Keep A".to_string(), "Keep B".to_string()];
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+
+        app.stats.record_completed_pomodoro_with_task(
+            "2026-04-01",
+            goal,
+            Some("Keep A"),
+            25 * 60,
+            None,
+        );
+        app.stats.record_completed_pomodoro_with_task(
+            "2026-04-02",
+            goal,
+            Some("Keep B"),
+            25 * 60,
+            None,
+        );
+        for i in 0..20 {
+            let label = format!("Stale {i}");
+            app.stats.record_completed_pomodoro_with_task(
+                "2026-04-10",
+                goal,
+                Some(&label),
+                25 * 60,
+                None,
+            );
+        }
+
+        let recent = app.planner_recent_labels(2);
+        assert_eq!(recent, vec!["Keep B".to_string(), "Keep A".to_string()]);
     }
 
     #[test]
