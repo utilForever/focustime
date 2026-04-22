@@ -9,8 +9,8 @@ use ratatui::{
 
 use crate::app::{
     App, AppMode, BlocklistProfileInputMode, DailyGoalProgress, HistoryFeedbackLevel,
-    PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, PlannerFeedbackLevel, PlannerInputMode, SetupCheck,
-    SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
+    PLANNER_RECENT_LABEL_LIMIT, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, PlannerFeedbackLevel,
+    PlannerInputMode, SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
 };
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
@@ -963,7 +963,7 @@ fn render_session_planner_feedback(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn planner_recent_quick_pick_text(app: &App) -> String {
-    let recent = app.planner_recent_labels(5);
+    let recent = app.planner_recent_labels(PLANNER_RECENT_LABEL_LIMIT);
     if recent.is_empty() {
         return "Recent: none yet".to_string();
     }

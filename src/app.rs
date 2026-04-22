@@ -67,7 +67,8 @@ const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 18;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
-const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
+pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
+const PLANNER_RECENT_LABEL_SOURCE_MULTIPLIER: usize = 3;
 const SCHEDULE_TIME_STEP_MINUTES: u16 = 15;
 const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const SCHEDULE_DAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -696,7 +697,9 @@ impl App {
 
         let mut recent = Vec::new();
         let mut seen = BTreeSet::new();
-        let source_limit = self.task_labels.len().max(limit);
+        let source_limit = limit
+            .saturating_mul(PLANNER_RECENT_LABEL_SOURCE_MULTIPLIER)
+            .max(limit);
         for label in self.stats.recent_task_labels(source_limit) {
             let Some(existing_index) = task_label_index(&self.task_labels, &label) else {
                 continue;
@@ -1728,9 +1731,6 @@ impl App {
 
         self.clamp_planner_selection();
         let removed = self.task_labels.remove(self.planner_selection_index);
-        if self.planner_selection_index >= self.task_labels.len() && !self.task_labels.is_empty() {
-            self.planner_selection_index = self.task_labels.len().saturating_sub(1);
-        }
         self.clamp_planner_selection();
 
         let removed_was_selected = self
