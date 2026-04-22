@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+## [0.5.0] - 2026-04-22
+
+### Added
+
 - **CLI automation v2 commands (#137):** added non-interactive `--pause`, `--resume`, `--stop`, `--next`, and `--task` commands for scriptable timer/session control.
 
 ### Changed
@@ -115,7 +121,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/utilForever/focustime/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/utilForever/focustime/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/utilForever/focustime/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/utilForever/focustime/compare/v0.3.2...v0.4.0
