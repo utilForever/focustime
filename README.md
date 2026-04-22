@@ -45,15 +45,15 @@ TUI-based application for **Pomodoro timing**, **distraction-site blocking**, an
   </tr>
   <tr>
     <td align="center">
-      <img src="./assets/demo_history.png" alt="History demo" width="600">
-      <p>Daily Focus History</p>
+      <img src="./assets/demo_focus_history.png" alt="Focus history demo" width="600">
+      <p>Focus History</p>
     </td>
     <td align="center">
-      <img src="./assets/demo_profiles.png" alt="Profiles demo" width="600">
+      <img src="./assets/demo_pomodoro_profiles.png" alt="Pomodoro profiles demo" width="600">
       <p>Pomodoro Profiles</p>
     </td>
     <td align="center">
-      <img src="./assets/demo_diagnostics.png" alt="Setup diagnostics demo" width="600">
+      <img src="./assets/demo_setup_diagnostics.png" alt="Setup diagnostics demo" width="600">
       <p>Setup Diagnostics</p>
     </td>
   </tr>
