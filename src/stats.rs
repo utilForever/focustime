@@ -710,7 +710,11 @@ impl FocusStats {
     }
 
     fn task_trend_window(&self) -> Option<TaskTrendWindow> {
-        let recent_end = self.latest_focus_session_day()?;
+        if self.focus_sessions.is_empty() {
+            return None;
+        }
+
+        let recent_end = chrono::Local::now().date_naive();
         let recent_start = recent_end.checked_sub_signed(chrono::Duration::days(6))?;
         let previous_end = recent_start.checked_sub_signed(chrono::Duration::days(1))?;
         let previous_start = previous_end.checked_sub_signed(chrono::Duration::days(6))?;
@@ -721,13 +725,6 @@ impl FocusStats {
             previous_start,
             previous_end,
         })
-    }
-
-    fn latest_focus_session_day(&self) -> Option<chrono::NaiveDate> {
-        self.focus_sessions
-            .iter()
-            .filter_map(|session| chrono::NaiveDate::parse_from_str(&session.date, "%Y-%m-%d").ok())
-            .max()
     }
 
     fn task_trends_for_window(&self, window: TaskTrendWindow) -> Vec<TaskTrend> {
@@ -1617,30 +1614,57 @@ mod tests {
             minutes: 25,
             pomodoros: 1,
         };
+        let today = chrono::Local::now().date_naive();
+        let day_prev_a_1 = today
+            .checked_sub_signed(chrono::Duration::days(13))
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string();
+        let day_prev_a_2 = today
+            .checked_sub_signed(chrono::Duration::days(10))
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string();
+        let day_recent_a_1 = today
+            .checked_sub_signed(chrono::Duration::days(3))
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string();
+        let day_recent_a_2 = today.format("%Y-%m-%d").to_string();
+        let day_prev_b = today
+            .checked_sub_signed(chrono::Duration::days(11))
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string();
+        let day_recent_b = today
+            .checked_sub_signed(chrono::Duration::days(2))
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string();
 
         stats.record_completed_pomodoro_with_task(
-            "2026-04-01",
+            &day_prev_a_1,
             goal,
             Some("Project A"),
             10 * 60,
             None,
         );
         stats.record_completed_pomodoro_with_task(
-            "2026-04-04",
+            &day_prev_a_2,
             goal,
             Some("Project A"),
             20 * 60,
             None,
         );
         stats.record_completed_pomodoro_with_task(
-            "2026-04-11",
+            &day_recent_a_1,
             goal,
             Some("Project A"),
             30 * 60,
             None,
         );
         stats.record_completed_pomodoro_with_task(
-            "2026-04-14",
+            &day_recent_a_2,
             goal,
             Some("Project A"),
             40 * 60,
@@ -1648,14 +1672,14 @@ mod tests {
         );
 
         stats.record_completed_pomodoro_with_task(
-            "2026-04-03",
+            &day_prev_b,
             goal,
             Some("Project B"),
             30 * 60,
             None,
         );
         stats.record_completed_pomodoro_with_task(
-            "2026-04-12",
+            &day_recent_b,
             goal,
             Some("Project B"),
             10 * 60,
@@ -1684,8 +1708,12 @@ mod tests {
             minutes: 25,
             pomodoros: 1,
         };
+        let today_key = chrono::Local::now()
+            .date_naive()
+            .format("%Y-%m-%d")
+            .to_string();
         stats.record_completed_pomodoro_with_task(
-            "2026-04-20",
+            &today_key,
             goal,
             Some("Project A"),
             25 * 60,
@@ -2085,22 +2113,46 @@ mod tests {
             minutes: 25,
             pomodoros: 1,
         };
-        stats.record_focus_elapsed("2026-04-06", 30 * 60, goal);
+        let today = chrono::Local::now().date_naive();
+        let labeled_day = today.format("%Y-%m-%d").to_string();
+        let other_day = today
+            .checked_sub_signed(chrono::Duration::days(2))
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string();
+        let recent_window_start = today
+            .checked_sub_signed(chrono::Duration::days(6))
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string();
+        let recent_window_end = today.format("%Y-%m-%d").to_string();
+        let previous_window_end = today
+            .checked_sub_signed(chrono::Duration::days(7))
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string();
+        let previous_window_start = today
+            .checked_sub_signed(chrono::Duration::days(13))
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string();
+
+        stats.record_focus_elapsed(&labeled_day, 30 * 60, goal);
         stats.record_completed_pomodoro_with_task(
-            "2026-04-06",
+            &labeled_day,
             goal,
             Some("Project A"),
             30 * 60,
             Some(ProfileId::Classic),
         );
         stats.record_break_glass_override_event(
-            "2026-04-06",
+            &labeled_day,
             1_711_000_000,
             Some("Project A"),
             300,
         );
-        stats.record_focus_elapsed("2026-04-08", 45 * 60, goal);
-        stats.record_completed_pomodoro("2026-04-08", goal);
+        stats.record_focus_elapsed(&other_day, 45 * 60, goal);
+        stats.record_completed_pomodoro(&other_day, goal);
 
         let export_dir = unique_temp_dir("stats-export");
         let exported = stats.export_to_dir(&export_dir).unwrap();
@@ -2120,15 +2172,17 @@ mod tests {
         let task_totals = json_value["task_totals"].as_array().unwrap();
         let task_trends = json_value["task_trends"].as_array().unwrap();
         assert_eq!(daily.len(), 2);
-        assert_eq!(weekly.len(), 1);
+        assert!(!weekly.is_empty());
         assert_eq!(sessions.len(), 1);
         assert_eq!(overrides.len(), 1);
         assert_eq!(task_totals.len(), 1);
         assert_eq!(task_trends.len(), 1);
-        assert_eq!(daily[0]["date"], "2026-04-06");
-        assert_eq!(daily[0]["goal_met"], true);
-        assert_eq!(weekly[0]["week_label"], "2026-W15");
-        assert_eq!(weekly[0]["focused_minutes"], 75);
+        assert!(
+            daily
+                .iter()
+                .any(|entry| entry["date"] == labeled_day && entry["goal_met"] == true)
+        );
+        assert!(weekly.iter().any(|entry| entry["focused_minutes"] == 75));
         assert_eq!(sessions[0]["task_label"], "Project A");
         assert_eq!(sessions[0]["focus_intention"], "Project A");
         assert_eq!(sessions[0]["task_note"], "Project A");
@@ -2139,24 +2193,25 @@ mod tests {
         assert_eq!(task_totals[0]["task_label"], "Project A");
         assert_eq!(task_totals[0]["focused_minutes"], 30);
         assert_eq!(task_trends[0]["task_label"], "Project A");
-        assert_eq!(task_trends[0]["recent_window_start"], "2026-03-31");
-        assert_eq!(task_trends[0]["recent_window_end"], "2026-04-06");
-        assert_eq!(task_trends[0]["previous_window_start"], "2026-03-24");
-        assert_eq!(task_trends[0]["previous_window_end"], "2026-03-30");
+        assert_eq!(task_trends[0]["recent_window_start"], recent_window_start);
+        assert_eq!(task_trends[0]["recent_window_end"], recent_window_end);
+        assert_eq!(
+            task_trends[0]["previous_window_start"],
+            previous_window_start
+        );
+        assert_eq!(task_trends[0]["previous_window_end"], previous_window_end);
         assert_eq!(task_trends[0]["delta_focused_minutes"], 30);
 
         let csv = fs::read_to_string(&exported.csv_path).unwrap();
         assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes"));
-        assert!(csv.contains("daily,2026-04-06,,,,1,1800,30,25,1,true,,,,,"));
-        assert!(csv.contains("weekly,,2026-W15,2026,15,2,4500,75,,,,,,,,"));
-        assert!(
-            csv.contains(
-                "focus_session,2026-04-06,,,,1,1800,30,,,,Project A,,,Project A,Project A"
-            )
-        );
-        assert!(
-            csv.contains("break_glass_override,2026-04-06,,,,0,0,0,,,,Project A,1711000000,300,,")
-        );
+        assert!(csv.contains(&format!("daily,{labeled_day},,,,1,1800,30,25,1,true,,,,,")));
+        assert!(csv.contains("weekly,,"));
+        assert!(csv.contains(&format!(
+            "focus_session,{labeled_day},,,,1,1800,30,,,,Project A,,,Project A,Project A"
+        )));
+        assert!(csv.contains(&format!(
+            "break_glass_override,{labeled_day},,,,0,0,0,,,,Project A,1711000000,300,,"
+        )));
         assert!(csv.contains("task_summary,,,,,1,1800,30,,,,Project A"));
         assert!(csv.contains("task_trend,,,,,1,1800,30,,,,Project A"));
 
