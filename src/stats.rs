@@ -471,6 +471,29 @@ impl FocusStats {
         true
     }
 
+    pub fn recent_task_labels(&self, limit: usize) -> Vec<String> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let mut recent = Vec::new();
+        let mut seen = BTreeSet::new();
+        for session in self.focus_sessions.iter().rev() {
+            let Some(task_label) = normalize_task_label(&session.task_label) else {
+                continue;
+            };
+            let key = task_label.to_ascii_lowercase();
+            if !seen.insert(key) {
+                continue;
+            }
+            recent.push(task_label);
+            if recent.len() >= limit {
+                break;
+            }
+        }
+        recent
+    }
+
     pub fn recent_daily(&self, limit: usize) -> Vec<(String, DailyStats)> {
         self.daily
             .iter()
@@ -1110,6 +1133,53 @@ mod tests {
         let (labels, selected) = stats.task_planner_state();
         assert_eq!(labels, vec!["Docs".to_string(), "Bugfix".to_string()]);
         assert_eq!(selected, Some("Docs".to_string()));
+    }
+
+    #[test]
+    fn recent_task_labels_returns_newest_first_unique_labels() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        stats.record_completed_pomodoro_with_task("2026-04-07", goal, Some("Docs"), 25 * 60, None);
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-08",
+            goal,
+            Some("Bugfix"),
+            25 * 60,
+            None,
+        );
+        stats.record_completed_pomodoro_with_task("2026-04-09", goal, Some("docs"), 25 * 60, None);
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-10",
+            goal,
+            Some("Planning"),
+            25 * 60,
+            None,
+        );
+
+        let recent = stats.recent_task_labels(3);
+        assert_eq!(
+            recent,
+            vec![
+                "Planning".to_string(),
+                "docs".to_string(),
+                "Bugfix".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn recent_task_labels_respects_zero_limit() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        stats.record_completed_pomodoro_with_task("2026-04-10", goal, Some("Docs"), 25 * 60, None);
+
+        assert!(stats.recent_task_labels(0).is_empty());
     }
 
     #[test]

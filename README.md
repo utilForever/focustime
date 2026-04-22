@@ -156,10 +156,13 @@ Profile selection and custom values are persisted in `config.toml`.
 Open the session planner from timer view with **`t`**.
 
 - `a`: add a new task label
+- `e`: rename highlighted task label
+- `d` or `Delete`: delete highlighted task label
+- `r` or `1-5`: quick-pick recent task labels
 - `↑/↓`: move selection
 - `Enter`: select highlighted task label
 - `t` or `Esc`: return to timer view
-- while adding a label, `Enter` saves and `Esc` cancels
+- while adding/renaming a label, `Enter` saves and `Esc` cancels
 
 Starting a focus session from idle now requires a selected task label. The timer
 view always shows the current task label (or a reminder to select one).
