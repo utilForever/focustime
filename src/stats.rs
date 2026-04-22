@@ -171,6 +171,64 @@ impl ProfileTotals {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskTotals {
+    pub task_label: String,
+    pub pomodoros_completed: u32,
+    pub focused_seconds: u64,
+}
+
+impl TaskTotals {
+    pub fn focused_minutes(&self) -> u64 {
+        self.focused_seconds / 60
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskTrend {
+    pub task_label: String,
+    pub recent_pomodoros_completed: u32,
+    pub recent_focused_seconds: u64,
+    pub previous_pomodoros_completed: u32,
+    pub previous_focused_seconds: u64,
+}
+
+impl TaskTrend {
+    pub fn recent_focused_minutes(&self) -> u64 {
+        self.recent_focused_seconds / 60
+    }
+
+    pub fn previous_focused_minutes(&self) -> u64 {
+        self.previous_focused_seconds / 60
+    }
+
+    pub fn delta_focused_seconds(&self) -> i64 {
+        let recent = i128::from(self.recent_focused_seconds);
+        let previous = i128::from(self.previous_focused_seconds);
+        (recent - previous).clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
+    }
+
+    pub fn delta_focused_minutes(&self) -> i64 {
+        self.delta_focused_seconds() / 60
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TaskTrendWindow {
+    recent_start: chrono::NaiveDate,
+    recent_end: chrono::NaiveDate,
+    previous_start: chrono::NaiveDate,
+    previous_end: chrono::NaiveDate,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct TaskTrendAccumulator {
+    recent_pomodoros_completed: u32,
+    recent_focused_seconds: u64,
+    previous_pomodoros_completed: u32,
+    previous_focused_seconds: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BreakGlassOverrideEvent {
     pub timestamp_epoch_secs: u64,
@@ -185,6 +243,8 @@ struct StatsExport {
     weekly: Vec<WeeklyExportRow>,
     sessions: Vec<SessionExportRow>,
     overrides: Vec<BreakGlassOverrideExportRow>,
+    task_totals: Vec<TaskTotalsExportRow>,
+    task_trends: Vec<TaskTrendExportRow>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -227,6 +287,31 @@ struct BreakGlassOverrideExportRow {
     duration_minutes: u64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct TaskTotalsExportRow {
+    task_label: String,
+    pomodoros_completed: u32,
+    focused_seconds: u64,
+    focused_minutes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct TaskTrendExportRow {
+    task_label: String,
+    recent_window_start: String,
+    recent_window_end: String,
+    previous_window_start: String,
+    previous_window_end: String,
+    recent_pomodoros_completed: u32,
+    recent_focused_seconds: u64,
+    recent_focused_minutes: u64,
+    previous_pomodoros_completed: u32,
+    previous_focused_seconds: u64,
+    previous_focused_minutes: u64,
+    delta_focused_seconds: i64,
+    delta_focused_minutes: i64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct CsvExportRow {
     record_type: &'static str,
@@ -245,6 +330,15 @@ struct CsvExportRow {
     break_glass_duration_seconds: Option<u64>,
     focus_intention: Option<String>,
     task_note: Option<String>,
+    recent_window_start: Option<String>,
+    recent_window_end: Option<String>,
+    previous_window_start: Option<String>,
+    previous_window_end: Option<String>,
+    previous_pomodoros_completed: Option<u32>,
+    previous_focused_seconds: Option<u64>,
+    previous_focused_minutes: Option<u64>,
+    delta_focused_seconds: Option<i64>,
+    delta_focused_minutes: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -557,6 +651,55 @@ impl FocusStats {
         totals
     }
 
+    pub fn task_totals(&self, limit: usize) -> Vec<TaskTotals> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let mut by_task: BTreeMap<String, TaskTotals> = BTreeMap::new();
+        for session in &self.focus_sessions {
+            let Some(task_label) = normalize_task_label(&session.task_label) else {
+                continue;
+            };
+            let task_label =
+                canonical_task_label(&self.task_labels, &task_label).unwrap_or(task_label);
+            let key = task_label.to_ascii_lowercase();
+            let entry = by_task.entry(key).or_insert(TaskTotals {
+                task_label,
+                pomodoros_completed: 0,
+                focused_seconds: 0,
+            });
+            entry.pomodoros_completed = entry.pomodoros_completed.saturating_add(1);
+            entry.focused_seconds = entry
+                .focused_seconds
+                .saturating_add(session.focused_seconds);
+        }
+
+        let mut totals: Vec<TaskTotals> = by_task.into_values().collect();
+        totals.sort_by(|left, right| {
+            right
+                .focused_seconds
+                .cmp(&left.focused_seconds)
+                .then_with(|| right.pomodoros_completed.cmp(&left.pomodoros_completed))
+                .then_with(|| left.task_label.cmp(&right.task_label))
+        });
+        totals.truncate(limit);
+        totals
+    }
+
+    pub fn recent_task_trends(&self, limit: usize) -> Vec<TaskTrend> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let Some(window) = self.task_trend_window() else {
+            return Vec::new();
+        };
+        let mut trends = self.task_trends_for_window(window);
+        trends.truncate(limit);
+        trends
+    }
+
     pub fn recent_break_glass_overrides(&self, limit: usize) -> Vec<BreakGlassOverrideEvent> {
         self.break_glass_overrides
             .iter()
@@ -564,6 +707,98 @@ impl FocusStats {
             .take(limit)
             .cloned()
             .collect()
+    }
+
+    fn task_trend_window(&self) -> Option<TaskTrendWindow> {
+        let recent_end = self.latest_focus_session_day()?;
+        let recent_start = recent_end.checked_sub_signed(chrono::Duration::days(6))?;
+        let previous_end = recent_start.checked_sub_signed(chrono::Duration::days(1))?;
+        let previous_start = previous_end.checked_sub_signed(chrono::Duration::days(6))?;
+
+        Some(TaskTrendWindow {
+            recent_start,
+            recent_end,
+            previous_start,
+            previous_end,
+        })
+    }
+
+    fn latest_focus_session_day(&self) -> Option<chrono::NaiveDate> {
+        self.focus_sessions
+            .iter()
+            .filter_map(|session| chrono::NaiveDate::parse_from_str(&session.date, "%Y-%m-%d").ok())
+            .max()
+    }
+
+    fn task_trends_for_window(&self, window: TaskTrendWindow) -> Vec<TaskTrend> {
+        let mut by_task: BTreeMap<String, (String, TaskTrendAccumulator)> = BTreeMap::new();
+
+        for session in &self.focus_sessions {
+            let Ok(day) = chrono::NaiveDate::parse_from_str(&session.date, "%Y-%m-%d") else {
+                continue;
+            };
+            if day < window.previous_start || day > window.recent_end {
+                continue;
+            }
+
+            let Some(task_label) = normalize_task_label(&session.task_label) else {
+                continue;
+            };
+            let task_label =
+                canonical_task_label(&self.task_labels, &task_label).unwrap_or(task_label);
+            let key = task_label.to_ascii_lowercase();
+            let (_, entry) = by_task
+                .entry(key)
+                .or_insert_with(|| (task_label, TaskTrendAccumulator::default()));
+            if day >= window.recent_start {
+                entry.recent_pomodoros_completed =
+                    entry.recent_pomodoros_completed.saturating_add(1);
+                entry.recent_focused_seconds = entry
+                    .recent_focused_seconds
+                    .saturating_add(session.focused_seconds);
+            } else if day <= window.previous_end {
+                entry.previous_pomodoros_completed =
+                    entry.previous_pomodoros_completed.saturating_add(1);
+                entry.previous_focused_seconds = entry
+                    .previous_focused_seconds
+                    .saturating_add(session.focused_seconds);
+            }
+        }
+
+        let mut trends: Vec<TaskTrend> = by_task
+            .into_iter()
+            .filter_map(|(_, (task_label, totals))| {
+                let has_data = totals.recent_pomodoros_completed > 0
+                    || totals.previous_pomodoros_completed > 0
+                    || totals.recent_focused_seconds > 0
+                    || totals.previous_focused_seconds > 0;
+                has_data.then_some(TaskTrend {
+                    task_label,
+                    recent_pomodoros_completed: totals.recent_pomodoros_completed,
+                    recent_focused_seconds: totals.recent_focused_seconds,
+                    previous_pomodoros_completed: totals.previous_pomodoros_completed,
+                    previous_focused_seconds: totals.previous_focused_seconds,
+                })
+            })
+            .collect();
+
+        trends.sort_by(|left, right| {
+            right
+                .recent_focused_seconds
+                .cmp(&left.recent_focused_seconds)
+                .then_with(|| {
+                    right
+                        .previous_focused_seconds
+                        .cmp(&left.previous_focused_seconds)
+                })
+                .then_with(|| {
+                    right
+                        .recent_pomodoros_completed
+                        .cmp(&left.recent_pomodoros_completed)
+                })
+                .then_with(|| left.task_label.cmp(&right.task_label))
+        });
+        trends
     }
 
     pub fn export_to_dir(&self, dir: &Path) -> io::Result<ExportedStatsFiles> {
@@ -591,6 +826,8 @@ impl FocusStats {
             weekly: self.export_weekly_rows(),
             sessions: self.export_session_rows(),
             overrides: self.export_break_glass_override_rows(),
+            task_totals: self.export_task_totals_rows(),
+            task_trends: self.export_task_trend_rows(),
         }
     }
 
@@ -652,6 +889,57 @@ impl FocusStats {
                 task_label: event.task_label.clone(),
                 duration_seconds: event.duration_seconds,
                 duration_minutes: event.duration_seconds / 60,
+            })
+            .collect()
+    }
+
+    fn export_task_totals_rows(&self) -> Vec<TaskTotalsExportRow> {
+        self.task_totals(usize::MAX)
+            .into_iter()
+            .map(|totals| {
+                let focused_minutes = totals.focused_minutes();
+                TaskTotalsExportRow {
+                    task_label: totals.task_label,
+                    pomodoros_completed: totals.pomodoros_completed,
+                    focused_seconds: totals.focused_seconds,
+                    focused_minutes,
+                }
+            })
+            .collect()
+    }
+
+    fn export_task_trend_rows(&self) -> Vec<TaskTrendExportRow> {
+        let Some(window) = self.task_trend_window() else {
+            return Vec::new();
+        };
+
+        let recent_window_start = window.recent_start.format("%Y-%m-%d").to_string();
+        let recent_window_end = window.recent_end.format("%Y-%m-%d").to_string();
+        let previous_window_start = window.previous_start.format("%Y-%m-%d").to_string();
+        let previous_window_end = window.previous_end.format("%Y-%m-%d").to_string();
+
+        self.task_trends_for_window(window)
+            .into_iter()
+            .map(|trend| {
+                let recent_focused_minutes = trend.recent_focused_minutes();
+                let previous_focused_minutes = trend.previous_focused_minutes();
+                let delta_focused_seconds = trend.delta_focused_seconds();
+                let delta_focused_minutes = trend.delta_focused_minutes();
+                TaskTrendExportRow {
+                    task_label: trend.task_label,
+                    recent_window_start: recent_window_start.clone(),
+                    recent_window_end: recent_window_end.clone(),
+                    previous_window_start: previous_window_start.clone(),
+                    previous_window_end: previous_window_end.clone(),
+                    recent_pomodoros_completed: trend.recent_pomodoros_completed,
+                    recent_focused_seconds: trend.recent_focused_seconds,
+                    recent_focused_minutes,
+                    previous_pomodoros_completed: trend.previous_pomodoros_completed,
+                    previous_focused_seconds: trend.previous_focused_seconds,
+                    previous_focused_minutes,
+                    delta_focused_seconds,
+                    delta_focused_minutes,
+                }
             })
             .collect()
     }
@@ -814,7 +1102,12 @@ impl StatsExport {
 
     fn csv_rows(&self) -> Vec<CsvExportRow> {
         let mut rows = Vec::with_capacity(
-            self.daily.len() + self.weekly.len() + self.sessions.len() + self.overrides.len(),
+            self.daily.len()
+                + self.weekly.len()
+                + self.sessions.len()
+                + self.overrides.len()
+                + self.task_totals.len()
+                + self.task_trends.len(),
         );
 
         for daily in &self.daily {
@@ -835,6 +1128,15 @@ impl StatsExport {
                 break_glass_duration_seconds: None,
                 focus_intention: None,
                 task_note: None,
+                recent_window_start: None,
+                recent_window_end: None,
+                previous_window_start: None,
+                previous_window_end: None,
+                previous_pomodoros_completed: None,
+                previous_focused_seconds: None,
+                previous_focused_minutes: None,
+                delta_focused_seconds: None,
+                delta_focused_minutes: None,
             });
         }
 
@@ -856,6 +1158,15 @@ impl StatsExport {
                 break_glass_duration_seconds: None,
                 focus_intention: None,
                 task_note: None,
+                recent_window_start: None,
+                recent_window_end: None,
+                previous_window_start: None,
+                previous_window_end: None,
+                previous_pomodoros_completed: None,
+                previous_focused_seconds: None,
+                previous_focused_minutes: None,
+                delta_focused_seconds: None,
+                delta_focused_minutes: None,
             });
         }
 
@@ -877,6 +1188,15 @@ impl StatsExport {
                 break_glass_duration_seconds: None,
                 focus_intention: Some(session.focus_intention.clone()),
                 task_note: Some(session.task_note.clone()),
+                recent_window_start: None,
+                recent_window_end: None,
+                previous_window_start: None,
+                previous_window_end: None,
+                previous_pomodoros_completed: None,
+                previous_focused_seconds: None,
+                previous_focused_minutes: None,
+                delta_focused_seconds: None,
+                delta_focused_minutes: None,
             });
         }
 
@@ -898,6 +1218,75 @@ impl StatsExport {
                 break_glass_duration_seconds: Some(override_event.duration_seconds),
                 focus_intention: None,
                 task_note: None,
+                recent_window_start: None,
+                recent_window_end: None,
+                previous_window_start: None,
+                previous_window_end: None,
+                previous_pomodoros_completed: None,
+                previous_focused_seconds: None,
+                previous_focused_minutes: None,
+                delta_focused_seconds: None,
+                delta_focused_minutes: None,
+            });
+        }
+
+        for task_total in &self.task_totals {
+            rows.push(CsvExportRow {
+                record_type: "task_summary",
+                date: None,
+                week_label: None,
+                year: None,
+                week: None,
+                pomodoros_completed: task_total.pomodoros_completed,
+                focused_seconds: task_total.focused_seconds,
+                focused_minutes: task_total.focused_minutes,
+                goal_minutes: None,
+                goal_pomodoros: None,
+                goal_met: None,
+                task_label: Some(task_total.task_label.clone()),
+                break_glass_timestamp_epoch_secs: None,
+                break_glass_duration_seconds: None,
+                focus_intention: None,
+                task_note: None,
+                recent_window_start: None,
+                recent_window_end: None,
+                previous_window_start: None,
+                previous_window_end: None,
+                previous_pomodoros_completed: None,
+                previous_focused_seconds: None,
+                previous_focused_minutes: None,
+                delta_focused_seconds: None,
+                delta_focused_minutes: None,
+            });
+        }
+
+        for task_trend in &self.task_trends {
+            rows.push(CsvExportRow {
+                record_type: "task_trend",
+                date: None,
+                week_label: None,
+                year: None,
+                week: None,
+                pomodoros_completed: task_trend.recent_pomodoros_completed,
+                focused_seconds: task_trend.recent_focused_seconds,
+                focused_minutes: task_trend.recent_focused_minutes,
+                goal_minutes: None,
+                goal_pomodoros: None,
+                goal_met: None,
+                task_label: Some(task_trend.task_label.clone()),
+                break_glass_timestamp_epoch_secs: None,
+                break_glass_duration_seconds: None,
+                focus_intention: None,
+                task_note: None,
+                recent_window_start: Some(task_trend.recent_window_start.clone()),
+                recent_window_end: Some(task_trend.recent_window_end.clone()),
+                previous_window_start: Some(task_trend.previous_window_start.clone()),
+                previous_window_end: Some(task_trend.previous_window_end.clone()),
+                previous_pomodoros_completed: Some(task_trend.previous_pomodoros_completed),
+                previous_focused_seconds: Some(task_trend.previous_focused_seconds),
+                previous_focused_minutes: Some(task_trend.previous_focused_minutes),
+                delta_focused_seconds: Some(task_trend.delta_focused_seconds),
+                delta_focused_minutes: Some(task_trend.delta_focused_minutes),
             });
         }
 
@@ -1180,6 +1569,134 @@ mod tests {
         stats.record_completed_pomodoro_with_task("2026-04-10", goal, Some("Docs"), 25 * 60, None);
 
         assert!(stats.recent_task_labels(0).is_empty());
+    }
+
+    #[test]
+    fn task_totals_aggregate_focus_sessions_by_label() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-01",
+            goal,
+            Some("Project A"),
+            30 * 60,
+            Some(ProfileId::Classic),
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-02",
+            goal,
+            Some("project a"),
+            20 * 60,
+            Some(ProfileId::Classic),
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-03",
+            goal,
+            Some("Project B"),
+            40 * 60,
+            Some(ProfileId::DeepWork),
+        );
+
+        let totals = stats.task_totals(10);
+        assert_eq!(totals.len(), 2);
+        assert_eq!(totals[0].task_label, "Project A");
+        assert_eq!(totals[0].pomodoros_completed, 2);
+        assert_eq!(totals[0].focused_minutes(), 50);
+        assert_eq!(totals[1].task_label, "Project B");
+        assert_eq!(totals[1].pomodoros_completed, 1);
+        assert_eq!(totals[1].focused_minutes(), 40);
+    }
+
+    #[test]
+    fn recent_task_trends_compare_last_seven_days_vs_previous_window() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-01",
+            goal,
+            Some("Project A"),
+            10 * 60,
+            None,
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-04",
+            goal,
+            Some("Project A"),
+            20 * 60,
+            None,
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-11",
+            goal,
+            Some("Project A"),
+            30 * 60,
+            None,
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-14",
+            goal,
+            Some("Project A"),
+            40 * 60,
+            None,
+        );
+
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-03",
+            goal,
+            Some("Project B"),
+            30 * 60,
+            None,
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-12",
+            goal,
+            Some("Project B"),
+            10 * 60,
+            None,
+        );
+
+        let trends = stats.recent_task_trends(10);
+        assert_eq!(trends.len(), 2);
+        assert_eq!(trends[0].task_label, "Project A");
+        assert_eq!(trends[0].recent_pomodoros_completed, 2);
+        assert_eq!(trends[0].previous_pomodoros_completed, 2);
+        assert_eq!(trends[0].recent_focused_minutes(), 70);
+        assert_eq!(trends[0].previous_focused_minutes(), 30);
+        assert_eq!(trends[0].delta_focused_minutes(), 40);
+
+        assert_eq!(trends[1].task_label, "Project B");
+        assert_eq!(trends[1].recent_focused_minutes(), 10);
+        assert_eq!(trends[1].previous_focused_minutes(), 30);
+        assert_eq!(trends[1].delta_focused_minutes(), -20);
+    }
+
+    #[test]
+    fn recent_task_trends_handles_sparse_data() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-20",
+            goal,
+            Some("Project A"),
+            25 * 60,
+            None,
+        );
+
+        let trends = stats.recent_task_trends(5);
+        assert_eq!(trends.len(), 1);
+        assert_eq!(trends[0].task_label, "Project A");
+        assert_eq!(trends[0].previous_focused_minutes(), 0);
+        assert_eq!(trends[0].delta_focused_minutes(), 25);
     }
 
     #[test]
@@ -1600,10 +2117,14 @@ mod tests {
         let weekly = json_value["weekly"].as_array().unwrap();
         let sessions = json_value["sessions"].as_array().unwrap();
         let overrides = json_value["overrides"].as_array().unwrap();
+        let task_totals = json_value["task_totals"].as_array().unwrap();
+        let task_trends = json_value["task_trends"].as_array().unwrap();
         assert_eq!(daily.len(), 2);
         assert_eq!(weekly.len(), 1);
         assert_eq!(sessions.len(), 1);
         assert_eq!(overrides.len(), 1);
+        assert_eq!(task_totals.len(), 1);
+        assert_eq!(task_trends.len(), 1);
         assert_eq!(daily[0]["date"], "2026-04-06");
         assert_eq!(daily[0]["goal_met"], true);
         assert_eq!(weekly[0]["week_label"], "2026-W15");
@@ -1615,9 +2136,17 @@ mod tests {
         assert_eq!(sessions[0]["profile"], "classic");
         assert_eq!(overrides[0]["duration_seconds"], 300);
         assert_eq!(overrides[0]["task_label"], "Project A");
+        assert_eq!(task_totals[0]["task_label"], "Project A");
+        assert_eq!(task_totals[0]["focused_minutes"], 30);
+        assert_eq!(task_trends[0]["task_label"], "Project A");
+        assert_eq!(task_trends[0]["recent_window_start"], "2026-03-31");
+        assert_eq!(task_trends[0]["recent_window_end"], "2026-04-06");
+        assert_eq!(task_trends[0]["previous_window_start"], "2026-03-24");
+        assert_eq!(task_trends[0]["previous_window_end"], "2026-03-30");
+        assert_eq!(task_trends[0]["delta_focused_minutes"], 30);
 
         let csv = fs::read_to_string(&exported.csv_path).unwrap();
-        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note"));
+        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes"));
         assert!(csv.contains("daily,2026-04-06,,,,1,1800,30,25,1,true,,,,,"));
         assert!(csv.contains("weekly,,2026-W15,2026,15,2,4500,75,,,,,,,,"));
         assert!(
@@ -1628,6 +2157,8 @@ mod tests {
         assert!(
             csv.contains("break_glass_override,2026-04-06,,,,0,0,0,,,,Project A,1711000000,300,,")
         );
+        assert!(csv.contains("task_summary,,,,,1,1800,30,,,,Project A"));
+        assert!(csv.contains("task_trend,,,,,1,1800,30,,,,Project A"));
 
         fs::remove_dir_all(export_dir).unwrap();
     }

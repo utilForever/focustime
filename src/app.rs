@@ -23,8 +23,8 @@ use crate::schedule::{
 use crate::session_recovery::{self, InProgressSessionSnapshot};
 use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusStats,
-    GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileTotals, SessionStats, WeeklyStats,
-    current_day_key,
+    GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileTotals, SessionStats, TaskTotals, TaskTrend,
+    WeeklyStats, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -853,6 +853,14 @@ impl App {
 
     pub fn profile_focus_totals(&self) -> Vec<ProfileTotals> {
         self.stats.profile_totals()
+    }
+
+    pub fn task_focus_totals(&self, limit: usize) -> Vec<TaskTotals> {
+        self.stats.task_totals(limit)
+    }
+
+    pub fn recent_task_trends(&self, limit: usize) -> Vec<TaskTrend> {
+        self.stats.recent_task_trends(limit)
     }
 
     #[cfg(test)]
@@ -5331,6 +5339,27 @@ mod tests {
         assert_eq!(totals[0].profile, crate::stats::ProfileBucket::DeepWork);
         assert_eq!(totals[0].pomodoros_completed, 1);
         assert_eq!(totals[0].focused_minutes(), 50);
+    }
+
+    #[test]
+    fn completed_focus_session_updates_task_totals_and_trends() {
+        let mut app = App::default();
+        app.task_labels = vec!["Project A".to_string()];
+        app.selected_task_label = Some("Project A".to_string());
+
+        app.handle_key(key(KeyCode::Char(' ')));
+        app.timer.remaining_secs = 1;
+        app.on_tick(false);
+
+        let task_totals = app.task_focus_totals(5);
+        assert_eq!(task_totals.len(), 1);
+        assert_eq!(task_totals[0].task_label, "Project A");
+        assert_eq!(task_totals[0].pomodoros_completed, 1);
+
+        let trends = app.recent_task_trends(5);
+        assert_eq!(trends.len(), 1);
+        assert_eq!(trends[0].task_label, "Project A");
+        assert!(trends[0].delta_focused_minutes() > 0);
     }
 
     #[test]

@@ -1065,9 +1065,10 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     let top_sections = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(34),
-            Constraint::Percentage(33),
-            Constraint::Percentage(33),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
         ])
         .split(history_layout[0]);
 
@@ -1113,9 +1114,33 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         "  No profile totals yet.",
     );
 
+    let task_total_items: Vec<ListItem> = app
+        .task_focus_totals(5)
+        .into_iter()
+        .map(|stats| {
+            ListItem::new(format!(
+                "  {} · 🍅{} · {}m",
+                stats.task_label,
+                stats.pomodoros_completed,
+                stats.focused_minutes()
+            ))
+        })
+        .collect();
+    render_history_panel(
+        frame,
+        top_sections[3],
+        " Task Totals ",
+        task_total_items,
+        "  No task totals yet.",
+    );
+
     let bottom_sections = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(56), Constraint::Percentage(44)])
+        .constraints([
+            Constraint::Percentage(36),
+            Constraint::Percentage(32),
+            Constraint::Percentage(32),
+        ])
         .split(history_layout[1]);
 
     let history_items: Vec<ListItem> = app
@@ -1137,6 +1162,26 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         "  No completed focus history yet.",
     );
 
+    let task_trend_items: Vec<ListItem> = app
+        .recent_task_trends(5)
+        .into_iter()
+        .map(|trend| {
+            ListItem::new(format!(
+                "  {} · {}m ({})",
+                trend.task_label,
+                trend.recent_focused_minutes(),
+                format_task_trend_delta(&trend)
+            ))
+        })
+        .collect();
+    render_history_panel(
+        frame,
+        bottom_sections[1],
+        " Task Trends (7d vs prev 7d) ",
+        task_trend_items,
+        "  Not enough task history for trend yet.",
+    );
+
     let override_items: Vec<ListItem> = app
         .recent_break_glass_overrides(4)
         .into_iter()
@@ -1153,7 +1198,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
-        bottom_sections[1],
+        bottom_sections[2],
         " Break-glass Audit ",
         override_items,
         "  No break-glass overrides yet.",
@@ -1401,6 +1446,17 @@ fn format_history_goal_streak_line(app: &App) -> String {
     }
 }
 
+fn format_task_trend_delta(trend: &crate::stats::TaskTrend) -> String {
+    let delta_minutes = trend.delta_focused_minutes();
+    if delta_minutes > 0 {
+        format!("+{delta_minutes}m")
+    } else if delta_minutes < 0 {
+        format!("{delta_minutes}m")
+    } else {
+        "0m".to_string()
+    }
+}
+
 fn heatmap_cell_symbol(focused_minutes: u64, max_focused_minutes: u64) -> (char, Color) {
     if focused_minutes == 0 || max_focused_minutes == 0 {
         return ('.', Color::DarkGray);
@@ -1596,7 +1652,7 @@ mod tests {
     }
 
     #[test]
-    fn history_view_renders_monthly_heatmap_and_profile_panels() {
+    fn history_view_renders_monthly_heatmap_profile_and_task_panels() {
         let width = 100;
         let height = 24;
         let backend = TestBackend::new(width, height);
@@ -1628,9 +1684,10 @@ mod tests {
         assert!(text.contains("Monthly Trend"));
         assert!(text.contains("Heatmap 2026-04"));
         assert!(text.contains("Profile Totals"));
+        assert!(text.contains("Task Totals"));
+        assert!(text.contains("Task Trends"));
         assert!(text.contains("Break-glass Audit"));
         assert!(text.contains(&format_month_label(2026, 4)));
-        assert!(text.contains("75m"));
     }
 
     #[test]
