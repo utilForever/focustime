@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     path::Path,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -66,6 +67,7 @@ const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 18;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
+const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
 const SCHEDULE_TIME_STEP_MINUTES: u16 = 15;
 const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const SCHEDULE_DAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -180,6 +182,12 @@ pub enum SiteInputMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlocklistProfileInputMode {
     Create,
+    Rename,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlannerInputMode {
+    Add,
     Rename,
 }
 
@@ -326,6 +334,7 @@ pub struct App {
     pub planner_selection_index: usize,
     pub planner_input: String,
     pub planner_input_active: bool,
+    pub planner_input_mode: Option<PlannerInputMode>,
     pub planner_feedback: Option<PlannerFeedback>,
     active_focus_task_label: Option<String>,
     active_focus_profile: Option<ProfileId>,
@@ -435,6 +444,7 @@ impl App {
             planner_selection_index,
             planner_input: String::new(),
             planner_input_active: false,
+            planner_input_mode: None,
             planner_feedback: None,
             active_focus_task_label: None,
             active_focus_profile: None,
@@ -677,6 +687,32 @@ impl App {
 
     pub fn selected_task_label_for_cli(&self) -> Option<String> {
         self.selected_task_label.clone()
+    }
+
+    pub fn planner_recent_labels(&self, limit: usize) -> Vec<String> {
+        if limit == 0 || self.task_labels.is_empty() {
+            return Vec::new();
+        }
+
+        let mut recent = Vec::new();
+        let mut seen = BTreeSet::new();
+        let source_limit = self.task_labels.len().max(limit);
+        for label in self.stats.recent_task_labels(source_limit) {
+            let Some(existing_index) = task_label_index(&self.task_labels, &label) else {
+                continue;
+            };
+            let canonical = self.task_labels[existing_index].clone();
+            let key = canonical.to_ascii_lowercase();
+            if !seen.insert(key) {
+                continue;
+            }
+            recent.push(canonical);
+            if recent.len() >= limit {
+                break;
+            }
+        }
+
+        recent
     }
 
     pub fn timer_state_for_cli(&self) -> (TimerPhase, TimerStatus, u64, u32) {
@@ -1537,6 +1573,13 @@ impl App {
                     (self.planner_selection_index + 1).min(self.task_labels.len() - 1);
             }
             KeyCode::Char('a') => self.start_planner_input(),
+            KeyCode::Char('e') => self.start_planner_rename_input(),
+            KeyCode::Char('d') | KeyCode::Delete => self.remove_planner_label(),
+            KeyCode::Char('r') => self.select_recent_planner_label(0),
+            KeyCode::Char(c @ '1'..='9') => {
+                let index = (c as usize).saturating_sub('1' as usize);
+                self.select_recent_planner_label(index);
+            }
             KeyCode::Enter => self.select_planner_label(),
             _ => {}
         }
@@ -1545,27 +1588,60 @@ impl App {
     fn start_planner_input(&mut self) {
         self.planner_input.clear();
         self.planner_input_active = true;
+        self.planner_input_mode = Some(PlannerInputMode::Add);
+        self.planner_feedback = None;
+    }
+
+    fn start_planner_rename_input(&mut self) {
+        if self.task_labels.is_empty() {
+            self.set_planner_feedback(PlannerFeedbackLevel::Warning, "No task labels available");
+            return;
+        }
+
+        self.clamp_planner_selection();
+        let Some(label) = self.task_labels.get(self.planner_selection_index).cloned() else {
+            self.set_planner_feedback(PlannerFeedbackLevel::Warning, "No task labels available");
+            return;
+        };
+
+        self.planner_input = label;
+        self.planner_input_active = true;
+        self.planner_input_mode = Some(PlannerInputMode::Rename);
         self.planner_feedback = None;
     }
 
     fn cancel_planner_input(&mut self) {
         self.planner_input.clear();
         self.planner_input_active = false;
+        self.planner_input_mode = None;
     }
 
     fn commit_planner_input(&mut self) {
+        let Some(mode) = self.planner_input_mode else {
+            self.set_planner_feedback(
+                PlannerFeedbackLevel::Warning,
+                "Planner input mode unavailable",
+            );
+            return;
+        };
         let Some(label) = normalize_task_label(&self.planner_input) else {
             self.set_planner_feedback(PlannerFeedbackLevel::Warning, "Task label cannot be empty");
             return;
         };
-        self.planner_input_active = false;
-        self.planner_input.clear();
 
+        match mode {
+            PlannerInputMode::Add => self.commit_planner_add_input(label),
+            PlannerInputMode::Rename => self.commit_planner_rename_input(label),
+        }
+    }
+
+    fn commit_planner_add_input(&mut self, label: String) {
         if let Some(existing_index) = task_label_index(&self.task_labels, &label) {
             self.planner_selection_index = existing_index;
             self.selected_task_label = self.task_labels.get(existing_index).cloned();
             self.sync_task_planner_state();
             self.sync_recovery_snapshot();
+            self.cancel_planner_input();
             self.set_planner_feedback(
                 PlannerFeedbackLevel::Warning,
                 format!("`{label}` already exists, selected existing label"),
@@ -1579,9 +1655,142 @@ impl App {
         self.selected_task_label = Some(label.clone());
         self.sync_task_planner_state();
         self.sync_recovery_snapshot();
+        self.cancel_planner_input();
         self.set_planner_feedback(
             PlannerFeedbackLevel::Success,
             format!("Added and selected `{label}`"),
+        );
+    }
+
+    fn commit_planner_rename_input(&mut self, label: String) {
+        if self.task_labels.is_empty() {
+            self.set_planner_feedback(PlannerFeedbackLevel::Warning, "No task labels available");
+            return;
+        }
+
+        self.clamp_planner_selection();
+        let Some(current_label) = self.task_labels.get(self.planner_selection_index).cloned()
+        else {
+            self.set_planner_feedback(PlannerFeedbackLevel::Warning, "No task labels available");
+            return;
+        };
+
+        if current_label == label {
+            self.set_planner_feedback(
+                PlannerFeedbackLevel::Warning,
+                format!("No change for `{current_label}`"),
+            );
+            return;
+        }
+
+        if let Some(existing_index) = task_label_index(&self.task_labels, &label)
+            && existing_index != self.planner_selection_index
+        {
+            self.set_planner_feedback(
+                PlannerFeedbackLevel::Warning,
+                format!("`{label}` already exists"),
+            );
+            return;
+        }
+
+        if let Some(target) = self.task_labels.get_mut(self.planner_selection_index) {
+            *target = label.clone();
+        }
+        if self
+            .selected_task_label
+            .as_ref()
+            .is_some_and(|selected| selected.eq_ignore_ascii_case(&current_label))
+        {
+            self.selected_task_label = Some(label.clone());
+        }
+        if self
+            .active_focus_task_label
+            .as_ref()
+            .is_some_and(|active| active.eq_ignore_ascii_case(&current_label))
+        {
+            self.active_focus_task_label = Some(label.clone());
+        }
+
+        self.sync_task_planner_state();
+        self.sync_recovery_snapshot();
+        self.cancel_planner_input();
+        self.set_planner_feedback(
+            PlannerFeedbackLevel::Success,
+            format!("Renamed `{current_label}` -> `{label}`"),
+        );
+    }
+
+    fn remove_planner_label(&mut self) {
+        if self.task_labels.is_empty() {
+            self.set_planner_feedback(PlannerFeedbackLevel::Warning, "No task labels available");
+            return;
+        }
+
+        self.clamp_planner_selection();
+        let removed = self.task_labels.remove(self.planner_selection_index);
+        if self.planner_selection_index >= self.task_labels.len() && !self.task_labels.is_empty() {
+            self.planner_selection_index = self.task_labels.len().saturating_sub(1);
+        }
+        self.clamp_planner_selection();
+
+        let removed_was_selected = self
+            .selected_task_label
+            .as_ref()
+            .is_some_and(|selected| selected.eq_ignore_ascii_case(&removed));
+        let selected_label_missing = self
+            .selected_task_label
+            .as_ref()
+            .is_some_and(|selected| task_label_index(&self.task_labels, selected).is_none());
+        if removed_was_selected || selected_label_missing {
+            self.selected_task_label = self.task_labels.get(self.planner_selection_index).cloned();
+        }
+
+        self.sync_task_planner_state();
+        self.sync_recovery_snapshot();
+        let feedback = if removed_was_selected {
+            if let Some(selected) = self.selected_task_label.as_ref() {
+                format!("Deleted `{removed}` (selected `{selected}`)")
+            } else {
+                format!("Deleted `{removed}` (no selected label)")
+            }
+        } else {
+            format!("Deleted `{removed}`")
+        };
+        self.set_planner_feedback(PlannerFeedbackLevel::Success, feedback);
+    }
+
+    fn select_recent_planner_label(&mut self, index: usize) {
+        let recent = self.planner_recent_labels(PLANNER_RECENT_LABEL_LIMIT);
+        if recent.is_empty() {
+            self.set_planner_feedback(
+                PlannerFeedbackLevel::Warning,
+                "No recent task labels available",
+            );
+            return;
+        }
+        if index >= recent.len() {
+            self.set_planner_feedback(
+                PlannerFeedbackLevel::Warning,
+                format!("Recent quick-pick {} is unavailable", index + 1),
+            );
+            return;
+        }
+
+        let label = recent[index].clone();
+        let Some(existing_index) = task_label_index(&self.task_labels, &label) else {
+            self.set_planner_feedback(
+                PlannerFeedbackLevel::Warning,
+                format!("Recent label `{label}` is no longer available"),
+            );
+            return;
+        };
+        self.planner_selection_index = existing_index;
+        self.selected_task_label = self.task_labels.get(existing_index).cloned();
+        self.sync_task_planner_state();
+        self.sync_recovery_snapshot();
+        self.set_planner_feedback(
+            PlannerFeedbackLevel::Success,
+            format!("Selected recent `{label}`"),
         );
     }
 
@@ -2353,6 +2562,7 @@ impl App {
         self.planner_feedback = None;
         self.planner_input.clear();
         self.planner_input_active = false;
+        self.planner_input_mode = None;
         if let Some(selected) = self.selected_task_label.as_ref()
             && let Some(index) = task_label_index(&self.task_labels, selected)
         {
@@ -5351,6 +5561,113 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char(' ')));
         assert_eq!(app.timer.status, TimerStatus::Running);
+    }
+
+    #[test]
+    fn session_planner_renames_highlighted_label_and_updates_selection() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string(), "Review".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+
+        app.handle_key(key(KeyCode::Char('t')));
+        app.handle_key(key(KeyCode::Char('e')));
+        assert!(app.planner_input_active);
+        assert_eq!(app.planner_input_mode, Some(PlannerInputMode::Rename));
+
+        app.planner_input = "Writing".to_string();
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(
+            app.task_labels,
+            vec!["Writing".to_string(), "Review".to_string()]
+        );
+        assert_eq!(app.selected_task_label.as_deref(), Some("Writing"));
+        assert!(!app.planner_input_active);
+        assert_eq!(app.planner_input_mode, None);
+        assert!(
+            app.planner_feedback
+                .as_ref()
+                .is_some_and(|feedback| feedback.message.contains("Renamed"))
+        );
+    }
+
+    #[test]
+    fn session_planner_delete_selected_label_selects_nearest_remaining() {
+        let mut app = App::default();
+        app.task_labels = vec![
+            "Docs".to_string(),
+            "Review".to_string(),
+            "Planning".to_string(),
+        ];
+        app.selected_task_label = Some("Review".to_string());
+
+        app.handle_key(key(KeyCode::Char('t')));
+        app.planner_selection_index = 1;
+        app.handle_key(key(KeyCode::Char('d')));
+
+        assert_eq!(
+            app.task_labels,
+            vec!["Docs".to_string(), "Planning".to_string()]
+        );
+        assert_eq!(app.selected_task_label.as_deref(), Some("Planning"));
+        assert_eq!(app.planner_selection_index, 1);
+    }
+
+    #[test]
+    fn session_planner_delete_last_label_clears_selection() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+
+        app.handle_key(key(KeyCode::Char('t')));
+        app.handle_key(key(KeyCode::Delete));
+
+        assert!(app.task_labels.is_empty());
+        assert!(app.selected_task_label.is_none());
+        assert_eq!(app.planner_selection_index, 0);
+    }
+
+    #[test]
+    fn session_planner_recent_quick_pick_selects_recent_labels() {
+        let mut app = App::default();
+        app.task_labels = vec![
+            "Docs".to_string(),
+            "Review".to_string(),
+            "Bugfix".to_string(),
+        ];
+        app.selected_task_label = Some("Docs".to_string());
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        app.stats.record_completed_pomodoro_with_task(
+            "2026-04-07",
+            goal,
+            Some("Docs"),
+            25 * 60,
+            None,
+        );
+        app.stats.record_completed_pomodoro_with_task(
+            "2026-04-08",
+            goal,
+            Some("Review"),
+            25 * 60,
+            None,
+        );
+        app.stats.record_completed_pomodoro_with_task(
+            "2026-04-09",
+            goal,
+            Some("Bugfix"),
+            25 * 60,
+            None,
+        );
+
+        app.handle_key(key(KeyCode::Char('t')));
+        app.handle_key(key(KeyCode::Char('r')));
+        assert_eq!(app.selected_task_label.as_deref(), Some("Bugfix"));
+
+        app.handle_key(key(KeyCode::Char('2')));
+        assert_eq!(app.selected_task_label.as_deref(), Some("Review"));
     }
 
     #[test]

@@ -9,8 +9,8 @@ use ratatui::{
 
 use crate::app::{
     App, AppMode, BlocklistProfileInputMode, DailyGoalProgress, HistoryFeedbackLevel,
-    PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, PlannerFeedbackLevel, SetupCheck, SetupCheckLevel,
-    SiteFeedbackLevel, SiteInputMode,
+    PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, PlannerFeedbackLevel, PlannerInputMode, SetupCheck,
+    SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
 };
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
@@ -834,7 +834,7 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
             Constraint::Min(5),    // task labels list
             Constraint::Length(3), // add input
             Constraint::Length(2), // feedback
-            Constraint::Length(3), // hints
+            Constraint::Length(4), // hints
         ])
         .split(outer);
 
@@ -922,14 +922,17 @@ fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
 
 fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
     let input_title = if app.planner_input_active {
-        " Add task label "
+        match app.planner_input_mode {
+            Some(PlannerInputMode::Rename) => " Rename task label ",
+            _ => " Add task label ",
+        }
     } else {
-        " Add task label ([a] to type) "
+        " Task label input ([a] add / [e] rename) "
     };
     let input_text = if app.planner_input_active {
         format!("{}|", app.planner_input)
     } else {
-        "Type a label, then press [Enter] to add and select".to_string()
+        "Use [a] add, [e] rename highlighted, [d/Del] delete highlighted".to_string()
     };
     frame.render_widget(
         Paragraph::new(input_text)
@@ -959,10 +962,31 @@ fn render_session_planner_feedback(frame: &mut Frame, app: &App, area: Rect) {
     }
 }
 
+fn planner_recent_quick_pick_text(app: &App) -> String {
+    let recent = app.planner_recent_labels(5);
+    if recent.is_empty() {
+        return "Recent: none yet".to_string();
+    }
+
+    let mut parts = Vec::new();
+    for (index, label) in recent.iter().enumerate() {
+        if index == 0 {
+            parts.push(format!("[r/1] {label}"));
+        } else {
+            parts.push(format!("[{}] {label}", index + 1));
+        }
+    }
+    format!("Recent: {}", parts.join("  "))
+}
+
 fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
     let hints = if app.planner_input_active {
+        let commit_line = match app.planner_input_mode {
+            Some(PlannerInputMode::Rename) => "Input: rename label, then [Enter]",
+            _ => "Input: type task label, then [Enter]",
+        };
         vec![
-            Line::from("Input: type task label, then [Enter]"),
+            Line::from(commit_line),
             Line::from("Input: [Esc] Cancel"),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "View: [q/Ctrl-C] Quit (Locked)"
@@ -972,8 +996,8 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
         ]
     } else {
         vec![
-            Line::from("Planner: [↑/↓] Move"),
-            Line::from("Planner: [Enter] Select  [a] Add label"),
+            Line::from("Planner: [↑/↓] Move  [Enter] Select  [a] Add  [e] Rename  [d/Del] Delete"),
+            Line::from(planner_recent_quick_pick_text(app)),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "View: [t/Esc] Back  [q/Ctrl-C] Quit (Locked)"
             } else {
@@ -1699,6 +1723,45 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("Session Planner"));
+    }
+
+    #[test]
+    fn session_planner_view_renders_label_management_hints() {
+        let width = 120;
+        let height = 28;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::SessionPlanner;
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Rename"));
+        assert!(text.contains("Delete"));
+        assert!(text.contains("Recent: none yet"));
+    }
+
+    #[test]
+    fn session_planner_view_renders_rename_input_title() {
+        let width = 120;
+        let height = 28;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::SessionPlanner;
+        app.planner_input_active = true;
+        app.planner_input_mode = Some(PlannerInputMode::Rename);
+        app.planner_input = "Docs".to_string();
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Rename task label"));
     }
 
     #[test]
