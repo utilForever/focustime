@@ -83,6 +83,11 @@ pub struct BlocklistProfileConfig {
     pub name: String,
     #[serde(default)]
     pub sites: Vec<String>,
+    /// Sites that are explicitly excluded from blocking.
+    ///
+    /// Effective focus blocking is computed as `sites - allowlist_sites`.
+    #[serde(default)]
+    pub allowlist_sites: Vec<String>,
 }
 
 impl Default for BlocklistProfileConfig {
@@ -90,6 +95,7 @@ impl Default for BlocklistProfileConfig {
         Self {
             name: default_blocklist_profile_name(),
             sites: Vec::new(),
+            allowlist_sites: Vec::new(),
         }
     }
 }
@@ -484,7 +490,7 @@ impl AppConfig {
             .blocklist_profiles
             .iter()
             .find(|profile| profile.name == self.selected_blocklist_profile)
-            .map(|profile| profile.sites.clone())
+            .map(effective_blocked_sites_for_profile)
             .unwrap_or_default();
         self.wakatime = self.wakatime.normalized();
         self
@@ -635,6 +641,7 @@ fn normalize_blocklist_profiles(
         normalized.push(BlocklistProfileConfig {
             name,
             sites: profile.sites.clone(),
+            allowlist_sites: profile.allowlist_sites.clone(),
         });
     }
 
@@ -642,6 +649,7 @@ fn normalize_blocklist_profiles(
         return vec![BlocklistProfileConfig {
             name: default_blocklist_profile_name(),
             sites: legacy_blocked_sites.to_vec(),
+            allowlist_sites: Vec::new(),
         }];
     }
 
@@ -686,6 +694,20 @@ fn make_unique_profile_name(base_name: &str, seen_names: &mut HashSet<String>) -
         }
         suffix += 1;
     }
+}
+
+fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
+    let allowlist: HashSet<String> = profile
+        .allowlist_sites
+        .iter()
+        .map(|site| site.to_ascii_lowercase())
+        .collect();
+    profile
+        .sites
+        .iter()
+        .filter(|site| !allowlist.contains(&site.to_ascii_lowercase()))
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]
@@ -734,10 +756,12 @@ mod tests {
                 BlocklistProfileConfig {
                     name: "Work".to_string(),
                     sites: vec!["example.com".to_string(), "reddit.com".to_string()],
+                    allowlist_sites: vec!["reddit.com".to_string()],
                 },
                 BlocklistProfileConfig {
                     name: "Study".to_string(),
                     sites: vec!["x.com".to_string()],
+                    allowlist_sites: Vec::new(),
                 },
             ],
             selected_blocklist_profile: "Study".to_string(),
@@ -1129,6 +1153,7 @@ language = ""
         );
         assert_eq!(cfg.selected_blocklist_profile, "Default");
         assert_eq!(cfg.blocked_sites, cfg.blocklist_profiles[0].sites);
+        assert!(cfg.blocklist_profiles[0].allowlist_sites.is_empty());
     }
 
     #[test]
@@ -1138,10 +1163,12 @@ language = ""
                 BlocklistProfileConfig {
                     name: "Work".to_string(),
                     sites: vec!["a.com".to_string()],
+                    allowlist_sites: vec!["b.com".to_string()],
                 },
                 BlocklistProfileConfig {
                     name: "work".to_string(),
                     sites: vec!["b.com".to_string()],
+                    allowlist_sites: Vec::new(),
                 },
             ],
             selected_blocklist_profile: "missing".to_string(),
@@ -1152,6 +1179,22 @@ language = ""
         assert_eq!(cfg.blocklist_profiles[0].name, "Work");
         assert_eq!(cfg.blocklist_profiles[1].name, "work (2)");
         assert_eq!(cfg.selected_blocklist_profile, "Work");
+        assert_eq!(cfg.blocked_sites, vec!["a.com".to_string()]);
+    }
+
+    #[test]
+    fn normalize_derives_legacy_blocked_sites_from_effective_blocked_set() {
+        let cfg = AppConfig {
+            blocklist_profiles: vec![BlocklistProfileConfig {
+                name: "Work".to_string(),
+                sites: vec!["a.com".to_string(), "b.com".to_string()],
+                allowlist_sites: vec!["b.com".to_string()],
+            }],
+            selected_blocklist_profile: "Work".to_string(),
+            ..AppConfig::default()
+        }
+        .normalize();
+
         assert_eq!(cfg.blocked_sites, vec!["a.com".to_string()]);
     }
 }
