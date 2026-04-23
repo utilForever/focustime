@@ -242,6 +242,21 @@ mod tests {
     }
 
     #[test]
+    fn compile_exception_dates_ignores_invalid_and_deduplicates() {
+        let dates = compile_exception_dates(&[
+            " 2026-12-25 ".to_string(),
+            "2026-12-25".to_string(),
+            "not-a-date".to_string(),
+            "".to_string(),
+        ]);
+
+        assert_eq!(dates.len(), 1);
+        assert!(
+            dates.contains(&NaiveDate::from_ymd_opt(2026, 12, 25).expect("valid date literal"))
+        );
+    }
+
+    #[test]
     fn active_occurrence_returns_window_when_inside_range() {
         let date = Local::now().date_naive();
         let now = local_datetime(date, 10, 15);

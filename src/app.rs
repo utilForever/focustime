@@ -921,26 +921,8 @@ impl App {
 
     fn profile_edit_schedule_field_value(&self, field_index: usize) -> String {
         match field_index {
-            PROFILE_EDIT_SCHEDULE_WINDOW_INDEX => {
-                if self.recurring_schedule.windows.is_empty() {
-                    "none".to_string()
-                } else {
-                    format!(
-                        "{}/{}",
-                        self.profile_edit_schedule_window.saturating_add(1),
-                        self.recurring_schedule.windows.len()
-                    )
-                }
-            }
-            PROFILE_EDIT_SCHEDULE_DAY_INDEX => {
-                if let Some(window) = self.selected_schedule_window() {
-                    let day_label = self.selected_schedule_day_label();
-                    let days = format_schedule_days_for_display(&window.days);
-                    format!("{day_label} ({days})")
-                } else {
-                    "n/a".to_string()
-                }
-            }
+            PROFILE_EDIT_SCHEDULE_WINDOW_INDEX => self.schedule_window_selector_value(),
+            PROFILE_EDIT_SCHEDULE_DAY_INDEX => self.schedule_day_selector_value(),
             PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX => self
                 .selected_schedule_day_enabled()
                 .map(|enabled| bool_label(enabled).to_string())
@@ -953,36 +935,66 @@ impl App {
                 .selected_schedule_window()
                 .map(|window| window.end.clone())
                 .unwrap_or_else(|| "n/a".to_string()),
-            PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX => {
-                if self.recurring_schedule.windows.is_empty() {
-                    "→ Add window".to_string()
-                } else {
-                    "← Remove · → Add".to_string()
-                }
-            }
-            PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX => {
-                if self.recurring_schedule.exception_dates.is_empty() {
-                    "none".to_string()
-                } else {
-                    format!(
-                        "{}/{}",
-                        self.profile_edit_schedule_exception.saturating_add(1),
-                        self.recurring_schedule.exception_dates.len()
-                    )
-                }
-            }
+            PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX => self.schedule_window_collection_value(),
+            PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX => self.schedule_exception_selector_value(),
             PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX => self
                 .selected_schedule_exception_date()
                 .cloned()
                 .unwrap_or_else(|| "n/a".to_string()),
             PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX => {
-                if self.recurring_schedule.exception_dates.is_empty() {
-                    "→ Add date".to_string()
-                } else {
-                    "← Remove · → Add".to_string()
-                }
+                self.schedule_exception_collection_value()
             }
             _ => String::new(),
+        }
+    }
+
+    fn schedule_window_selector_value(&self) -> String {
+        if self.recurring_schedule.windows.is_empty() {
+            "none".to_string()
+        } else {
+            format!(
+                "{}/{}",
+                self.profile_edit_schedule_window.saturating_add(1),
+                self.recurring_schedule.windows.len()
+            )
+        }
+    }
+
+    fn schedule_day_selector_value(&self) -> String {
+        if let Some(window) = self.selected_schedule_window() {
+            let day_label = self.selected_schedule_day_label();
+            let days = format_schedule_days_for_display(&window.days);
+            format!("{day_label} ({days})")
+        } else {
+            "n/a".to_string()
+        }
+    }
+
+    fn schedule_window_collection_value(&self) -> String {
+        if self.recurring_schedule.windows.is_empty() {
+            "→ Add window".to_string()
+        } else {
+            "← Remove · → Add".to_string()
+        }
+    }
+
+    fn schedule_exception_selector_value(&self) -> String {
+        if self.recurring_schedule.exception_dates.is_empty() {
+            "none".to_string()
+        } else {
+            format!(
+                "{}/{}",
+                self.profile_edit_schedule_exception.saturating_add(1),
+                self.recurring_schedule.exception_dates.len()
+            )
+        }
+    }
+
+    fn schedule_exception_collection_value(&self) -> String {
+        if self.recurring_schedule.exception_dates.is_empty() {
+            "→ Add date".to_string()
+        } else {
+            "← Remove · → Add".to_string()
         }
     }
 
