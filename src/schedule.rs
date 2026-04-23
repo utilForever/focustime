@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chrono::{
     DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, TimeZone, Timelike, Weekday,
 };
@@ -25,6 +27,13 @@ pub fn compile_windows(config_windows: &[RecurringFocusWindowConfig]) -> Vec<Rec
         .collect()
 }
 
+pub fn compile_exception_dates(config_dates: &[String]) -> HashSet<NaiveDate> {
+    config_dates
+        .iter()
+        .filter_map(|value| parse_exception_date(value))
+        .collect()
+}
+
 pub fn occurrence_key(occurrence: &WindowOccurrence) -> String {
     format!(
         "{}-{}",
@@ -36,9 +45,13 @@ pub fn occurrence_key(occurrence: &WindowOccurrence) -> String {
 pub fn active_occurrence(
     now: DateTime<Local>,
     windows: &[RecurringWindow],
+    exception_dates: &HashSet<NaiveDate>,
 ) -> Option<WindowOccurrence> {
     let now_minutes = now.hour() as u16 * 60 + now.minute() as u16;
     let today = now.date_naive();
+    if exception_dates.contains(&today) {
+        return None;
+    }
     let mut selected: Option<WindowOccurrence> = None;
 
     for (window_index, window) in windows.iter().enumerate() {
@@ -77,12 +90,16 @@ pub fn active_occurrence(
 pub fn next_occurrence_after(
     now: DateTime<Local>,
     windows: &[RecurringWindow],
+    exception_dates: &HashSet<NaiveDate>,
 ) -> Option<WindowOccurrence> {
     let mut selected: Option<WindowOccurrence> = None;
     let today = now.date_naive();
 
     for day_offset in 0..=7 {
         let date = today + Duration::days(day_offset);
+        if exception_dates.contains(&date) {
+            continue;
+        }
         for (window_index, window) in windows.iter().enumerate() {
             if !window.days.contains(&date.weekday()) {
                 continue;
@@ -172,6 +189,10 @@ fn parse_time_minutes(raw: &str) -> Option<u16> {
     Some(hour * 60 + minute)
 }
 
+fn parse_exception_date(raw: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d").ok()
+}
+
 fn local_datetime_on(date: NaiveDate, total_minutes: u16) -> Option<DateTime<Local>> {
     let hour = u32::from(total_minutes / 60);
     let minute = u32::from(total_minutes % 60);
@@ -229,7 +250,8 @@ mod tests {
             end: "11:00".to_string(),
         }]);
 
-        let active = active_occurrence(now, &windows).expect("window should be active");
+        let active =
+            active_occurrence(now, &windows, &HashSet::new()).expect("window should be active");
 
         assert_eq!(active.start, local_datetime(date, 10, 0));
         assert_eq!(active.end, local_datetime(date, 11, 0));
@@ -252,9 +274,37 @@ mod tests {
             },
         ]);
 
-        let next = next_occurrence_after(now, &windows).expect("next window should exist");
+        let next = next_occurrence_after(now, &windows, &HashSet::new())
+            .expect("next window should exist");
 
         assert_eq!(next.start, local_datetime(date, 11, 0));
         assert_eq!(next.end, local_datetime(date, 12, 0));
+    }
+
+    #[test]
+    fn active_and_next_occurrences_skip_exception_dates() {
+        let date = Local::now().date_naive();
+        let now = local_datetime(date, 10, 15);
+        let tomorrow = date.succ_opt().expect("tomorrow should be representable");
+        let windows = compile_windows(&[
+            RecurringFocusWindowConfig {
+                days: vec![date.weekday().to_string()],
+                start: "10:00".to_string(),
+                end: "11:00".to_string(),
+            },
+            RecurringFocusWindowConfig {
+                days: vec![tomorrow.weekday().to_string()],
+                start: "09:00".to_string(),
+                end: "10:00".to_string(),
+            },
+        ]);
+        let exception_dates = compile_exception_dates(&[date.format("%Y-%m-%d").to_string()]);
+
+        assert!(active_occurrence(now, &windows, &exception_dates).is_none());
+
+        let next = next_occurrence_after(now, &windows, &exception_dates)
+            .expect("next window should skip exception date");
+        assert_eq!(next.start, local_datetime(tomorrow, 9, 0));
+        assert_eq!(next.end, local_datetime(tomorrow, 10, 0));
     }
 }

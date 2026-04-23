@@ -19,7 +19,7 @@ const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
 const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
 const PROFILE_EDIT_GROUP_GOALS: [usize; 2] = [9, 10];
 const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [11, 12];
-const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 6] = [13, 14, 15, 16, 17, 18];
+const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 9] = [13, 14, 15, 16, 17, 18, 19, 20, 21];
 const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
     ("Timer", &PROFILE_EDIT_GROUP_TIMER),
     ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
@@ -764,7 +764,7 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
         vec![
             Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule"),
             Line::from(
-                "Edit: [↑/↓] Field  [←/→] Change value (schedule window/day/time/add/remove)",
+                "Edit: [↑/↓] Field  [←/→] Change value (schedule window/day/time/exception)",
             ),
             Line::from("Text input: [Type/Backspace] WakaTime project/language"),
             Line::from(if app.strict_mode_enforced_for_focus() {
@@ -810,6 +810,9 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         16 => "Start time",
         17 => "End time",
         18 => "Add/remove",
+        19 => "Exception selector",
+        20 => "Exception date",
+        21 => "Exception add/remove",
         _ => "",
     }
 }
@@ -1763,6 +1766,9 @@ mod tests {
         assert!(text.contains("Start time"));
         assert!(text.contains("End time"));
         assert!(text.contains("Add/remove"));
+        assert!(text.contains("Exception selector"));
+        assert!(text.contains("Exception date"));
+        assert!(text.contains("Exception add/remove"));
     }
 
     #[test]
