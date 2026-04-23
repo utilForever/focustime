@@ -1217,15 +1217,19 @@ impl App {
     fn adjust_schedule_exceptions_collection(&mut self, increase: bool) {
         if increase {
             let mut candidate = self.current_frame_now.date_naive();
+            let mut candidate_value = candidate.format("%Y-%m-%d").to_string();
             while self
                 .recurring_schedule
                 .exception_dates
                 .iter()
-                .any(|value| value == &candidate.format("%Y-%m-%d").to_string())
+                .any(|value| value == &candidate_value)
             {
-                candidate = candidate.succ_opt().unwrap_or(candidate);
+                let Some(next_candidate) = candidate.succ_opt() else {
+                    return;
+                };
+                candidate = next_candidate;
+                candidate_value = candidate.format("%Y-%m-%d").to_string();
             }
-            let candidate_value = candidate.format("%Y-%m-%d").to_string();
             self.recurring_schedule
                 .exception_dates
                 .push(candidate_value.clone());
