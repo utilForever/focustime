@@ -9,25 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **History insights v3 (#143):** added weekly consistency scoring (active days per ISO week), profile effectiveness comparison metrics, and corresponding history/export surfaces.
+### Changed
+
+## [0.5.2] - 2026-04-23
+
+### Added
+
+- **Schedule exception dates and skip-day UI (#158):** added exception-date scheduling support with skip-day controls in schedule workflows.
+- **Allowlist exceptions and blocking remediation UX (#161):** added allowlist exception policy handling and setup remediation guidance for blocking workflows.
+- **History insights v3 (#162):** added weekly consistency scoring (active days per ISO week), profile effectiveness comparison metrics, and corresponding history/export surfaces.
 
 ### Changed
+
+- **Dependency update (#159):** bumped `rand` from `0.8.5` to `0.8.6`.
 
 ## [0.5.1] - 2026-04-22
 
-### Changed
+### Added
 
-- **v0.5.1 release metadata/docs refresh (#156):** bumped crate version to `0.5.1`, updated the README latest-stable-release reference, and advanced changelog comparison links.
+- **Task planner label management and quick picks (#154):** improved session-planner label management flow with quicker task selection.
+- **Per-task history totals and trends (#155):** added per-task focus totals and trend summaries in history insights.
 
 ## [0.5.0] - 2026-04-22
 
 ### Added
 
-- **CLI automation v2 commands (#137):** added non-interactive `--pause`, `--resume`, `--stop`, `--next`, and `--task` commands for scriptable timer/session control.
+- **Session recovery after restart (#147):** added recovery of in-progress timer sessions after app restart.
+- **CLI automation v2 commands (#148):** added non-interactive `--pause`, `--resume`, `--stop`, `--next`, and `--task` commands for scriptable timer/session control.
 
 ### Changed
 
-- **Richer status JSON for automation (#137):** extended `--status --json` with live timer/session state fields from recovery-aware runtime context.
+- **Richer status JSON for automation (#148):** extended `--status --json` with live timer/session state fields from recovery-aware runtime context.
+- **Schedule next-run and active-window guidance (#149):** improved schedule guidance messaging for overdue and active windows.
 
 ## [0.4.2] - 2026-04-20
 
@@ -63,7 +76,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Timer layout and UX polish:** improved timer screen readability and spacing in timer and session-planner views.
-- **v0.4.0 documentation refresh (#127):** updated README demo screenshots to reflect the latest UI.
 
 ## [0.3.2] - 2026-04-16
 
@@ -95,7 +107,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Windows keyboard input handling (#94):** fixed duplicate key processing on Windows and added regression coverage for key filtering behavior.
-- **v0.3.0 visual documentation refresh (#99):** updated README screenshots to reflect current UI and workflows.
 
 ## [0.2.1] - 2026-04-13
 
@@ -129,7 +140,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/utilForever/focustime/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/utilForever/focustime/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/utilForever/focustime/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/utilForever/focustime/compare/v0.4.1...v0.4.2
