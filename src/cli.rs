@@ -1,4 +1,4 @@
-use std::{env, ffi::OsString, path::PathBuf};
+use std::{collections::HashSet, env, ffi::OsString, path::PathBuf};
 
 use serde::Serialize;
 
@@ -645,7 +645,18 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
                 .name
                 .eq_ignore_ascii_case(&config.selected_blocklist_profile)
         })
-        .map(|profile| profile.sites.len())
+        .map(|profile| {
+            let allowlist: HashSet<String> = profile
+                .allowlist_sites
+                .iter()
+                .map(|site| site.to_ascii_lowercase())
+                .collect();
+            profile
+                .sites
+                .iter()
+                .filter(|site| !allowlist.contains(&site.to_ascii_lowercase()))
+                .count()
+        })
         .unwrap_or_default();
     let live = build_live_status_output(config, selected_task_label.clone());
 
@@ -1230,6 +1241,7 @@ mod tests {
             blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
                 name: "Work".to_string(),
                 sites: vec!["youtube.com".to_string(), "reddit.com".to_string()],
+                allowlist_sites: Vec::new(),
             }],
             selected_blocklist_profile: "work".to_string(),
             ..AppConfig::default()
@@ -1239,6 +1251,24 @@ mod tests {
         let output = build_status_output(&config, &stats);
 
         assert_eq!(output.blocked_sites_count, 2);
+    }
+
+    #[test]
+    fn build_status_output_excludes_allowlist_from_blocked_sites_count() {
+        let config = AppConfig {
+            blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+                name: "Work".to_string(),
+                sites: vec!["youtube.com".to_string(), "reddit.com".to_string()],
+                allowlist_sites: vec!["reddit.com".to_string()],
+            }],
+            selected_blocklist_profile: "Work".to_string(),
+            ..AppConfig::default()
+        };
+        let stats = FocusStats::default();
+
+        let output = build_status_output(&config, &stats);
+
+        assert_eq!(output.blocked_sites_count, 1);
     }
 
     #[test]

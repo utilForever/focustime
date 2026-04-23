@@ -178,10 +178,12 @@ break_glass_duration_secs = 300
 [[blocklist_profiles]]
 name = "Work"
 sites = ["youtube.com", "reddit.com"]
+allowlist_sites = ["reddit.com"]
 
 [[blocklist_profiles]]
 name = "Study"
 sites = ["x.com", "news.ycombinator.com"]
+allowlist_sites = []
 
 [custom_profile]
 focus_secs = 1800
@@ -223,6 +225,7 @@ Open the site manager from timer view with **`b`**.
 - `a`: add/import hostnames
 - `e`: edit the selected hostname
 - `d` or `Delete`: remove the selected hostname
+- `m`: toggle between editing blocklist sites and allowlist exceptions
 - `[` / `]`: switch active blocklist profile
 - `n`: create a blocklist profile
 - `r`: rename the active blocklist profile
@@ -240,6 +243,8 @@ Add/import input supports:
 
 Invalid and duplicate entries are reported inline so you can fix them without leaving the view.
 
+Allowlist entries act as explicit exceptions: effective focus blocking is computed as **blocklist sites minus allowlist sites** for the active profile.
+
 ## Setup diagnostics
 
 Open the setup diagnostics screen from timer view with **`d`**.
@@ -251,6 +256,7 @@ The diagnostics screen reports:
 
 - blocking permissions
 - hosts file write capability
+- remediation guidance when hosts permissions are insufficient
 - WakaTime config status (`~/.wakatime.cfg` and `api_key` availability)
 
 ## Phase notifications

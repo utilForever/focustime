@@ -10,7 +10,7 @@ use ratatui::{
 use crate::app::{
     App, AppMode, BlocklistProfileInputMode, DailyGoalProgress, HistoryFeedbackLevel,
     PLANNER_RECENT_LABEL_LIMIT, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, PlannerFeedbackLevel,
-    PlannerInputMode, SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode,
+    PlannerInputMode, SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode, SiteListMode,
 };
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
@@ -416,8 +416,8 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         ])
         .split(outer);
 
-    // Blocking status — derive the message from both the blocker flag and the
-    // current timer phase/status so the copy is accurate in all states.
+    // Blocking status — derive the message from blocker state, timer state, and
+    // known failure/empty-effective-set causes so the copy is explicit.
     let focus_session_active =
         app.timer.phase == TimerPhase::Focus && app.timer.status != TimerStatus::Idle;
     let status_text = if app.blocker.is_blocking {
@@ -435,12 +435,22 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             Style::default().fg(Color::Yellow),
         )
     } else if focus_session_active {
-        // Focus session is running/paused but blocking is not active
-        // (empty site list or a permission error prevented it).
-        Span::styled(
-            "Focus session active — blocking inactive (no sites or permission error)",
-            Style::default().fg(Color::Yellow),
-        )
+        if app.block_error.is_some() {
+            Span::styled(
+                "Focus session active — blocking unavailable (permission/setup issue; open [d] Setup)",
+                Style::default().fg(Color::Yellow),
+            )
+        } else if app.effective_blocked_site_count() == 0 {
+            Span::styled(
+                "Focus session active — blocking inactive (effective blocked set is empty)",
+                Style::default().fg(Color::Yellow),
+            )
+        } else {
+            Span::styled(
+                "Focus session active — blocking unavailable (open [d] Setup)",
+                Style::default().fg(Color::Yellow),
+            )
+        }
     } else {
         Span::styled(
             "Blocking will activate when a focus session starts",
@@ -452,11 +462,14 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         inner[0],
     );
 
+    let site_list_mode = app.site_list_mode();
     let profile_text = format!(
-        "Profile: {} ({}/{})",
+        "Profile: {} ({}/{}) · List: {} · Effective blocks: {}",
         app.active_blocklist_profile_name(),
         app.active_blocklist_profile_position(),
-        app.blocklist_profile_count()
+        app.blocklist_profile_count(),
+        site_list_mode.label(),
+        app.effective_blocked_site_count()
     );
     frame.render_widget(
         Paragraph::new(profile_text)
@@ -474,27 +487,38 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
 
     let input_mode = app.site_input_mode();
     let profile_input_mode = app.blocklist_profile_input_mode();
+    let (list_title_label, empty_text, idle_input_text) = match site_list_mode {
+        SiteListMode::Blocklist => (
+            "Blocklist Sites",
+            "  No blocked sites yet. Press [a] to add one.",
+            "Press [a] to add/import blocked sites or [e] to edit selected",
+        ),
+        SiteListMode::Allowlist => (
+            "Allowlist Exceptions",
+            "  No allowlist exceptions yet. Press [a] to add one.",
+            "Press [a] to add/import allowlist exceptions or [e] to edit selected",
+        ),
+    };
 
     // Site list
     let list_title = format!(
-        " Blocked Sites · {} ({}) ",
+        " {list_title_label} · {} ({}) ",
         app.active_blocklist_profile_name(),
-        app.blocker.sites.len()
+        app.active_policy_site_count()
     );
     let list_block = Block::default()
         .borders(Borders::ALL)
         .title(list_title)
         .style(Style::default().fg(Color::Gray));
 
-    if app.blocker.sites.is_empty() {
-        let empty = Paragraph::new("  No sites blocked yet. Press [a] to add one.")
+    if app.active_policy_sites().is_empty() {
+        let empty = Paragraph::new(empty_text)
             .style(Style::default().fg(Color::DarkGray))
             .block(list_block);
         frame.render_widget(empty, inner[4]);
     } else {
         let items: Vec<ListItem> = app
-            .blocker
-            .sites
+            .active_policy_sites()
             .iter()
             .map(|s| ListItem::new(format!("  {s}")))
             .collect();
@@ -516,8 +540,14 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
 
     // Input area
     let input_title = match input_mode {
-        SiteInputMode::Add => " Add / Import Sites ",
-        SiteInputMode::Edit => " Edit Site ",
+        SiteInputMode::Add => match site_list_mode {
+            SiteListMode::Blocklist => " Add / Import Blocklist Sites ",
+            SiteListMode::Allowlist => " Add / Import Allowlist Sites ",
+        },
+        SiteInputMode::Edit => match site_list_mode {
+            SiteListMode::Blocklist => " Edit Blocklist Site ",
+            SiteListMode::Allowlist => " Edit Allowlist Site ",
+        },
     };
     let input_block = Block::default()
         .borders(Borders::ALL)
@@ -531,7 +561,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
     let input_text = if app.site_input_active {
         format!("{}_", app.site_input)
     } else {
-        "Press [a] to add/import (comma/newline) or [e] to edit selected".to_string()
+        idle_input_text.to_string()
     };
     let input_widget =
         Paragraph::new(input_text)
@@ -559,7 +589,8 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
     let profile_input_text = if app.blocklist_profile_input_active {
         format!("{}_", app.blocklist_profile_input)
     } else {
-        "Use [n] to create, [r] to rename, [x] to delete, [[ ] to switch".to_string()
+        "Use [m] to toggle blocklist/allowlist, [n] create, [r] rename, [x] delete, [[ ] switch"
+            .to_string()
     };
     frame.render_widget(
         Paragraph::new(profile_input_text)
@@ -579,7 +610,11 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         } else {
             " (try running with elevated privileges)"
         };
-        render_centered_error(frame, inner[8], format!("⚠  {err}{privilege_hint}"));
+        render_centered_error(
+            frame,
+            inner[8],
+            format!("⚠  {err}{privilege_hint} · open [d] Setup for remediation"),
+        );
     } else if let Some(err) = app.config_error.as_ref() {
         render_centered_error(frame, inner[8], format!("⚠  {err}"));
     } else if let Some(feedback) = app.site_feedback.as_ref() {
@@ -612,14 +647,20 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         ]
     } else if app.strict_mode_enforced_for_focus() {
         vec![
-            Line::from("Sites: [a] Add  [e] Edit  [d/Del] Remove  [↑/↓] Move"),
+            Line::from(format!(
+                "Mode: [m] Toggle ({})  Sites: [a] Add  [e] Edit  [d/Del] Remove  [↑/↓] Move",
+                site_list_mode.label()
+            )),
             Line::from(
                 "Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [b/Esc] Back  [q] Quit (Locked)",
             ),
         ]
     } else {
         vec![
-            Line::from("Sites: [a] Add  [e] Edit  [d/Del] Remove  [↑/↓] Move"),
+            Line::from(format!(
+                "Mode: [m] Toggle ({})  Sites: [a] Add  [e] Edit  [d/Del] Remove  [↑/↓] Move",
+                site_list_mode.label()
+            )),
             Line::from("Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [b/Esc] Back"),
         ]
     };
@@ -1652,6 +1693,51 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("WRAP-END"));
+    }
+
+    #[test]
+    fn site_manager_status_surfaces_permission_remediation_context() {
+        let width = 120;
+        let height = 30;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::SiteManager;
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.block_error = Some("permission denied".to_string());
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("blocking unavailable (permission/setup issue"));
+    }
+
+    #[test]
+    fn site_manager_renders_allowlist_mode_labels() {
+        let width = 120;
+        let height = 30;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('b'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('m'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Allowlist Exceptions"));
+        assert!(text.contains("Mode: [m] Toggle (Allowlist)"));
     }
 
     #[test]

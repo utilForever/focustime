@@ -187,6 +187,28 @@ pub enum SiteInputMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SiteListMode {
+    Blocklist,
+    Allowlist,
+}
+
+impl SiteListMode {
+    fn toggle(self) -> Self {
+        match self {
+            Self::Blocklist => Self::Allowlist,
+            Self::Allowlist => Self::Blocklist,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Blocklist => "Blocklist",
+            Self::Allowlist => "Allowlist",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlocklistProfileInputMode {
     Create,
     Rename,
@@ -345,6 +367,7 @@ pub struct App {
     pub planner_feedback: Option<PlannerFeedback>,
     active_focus_task_label: Option<String>,
     active_focus_profile: Option<ProfileId>,
+    site_list_mode: SiteListMode,
     /// Index of the highlighted site in the SiteManager list.
     pub selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
@@ -431,10 +454,7 @@ impl App {
             profile_spec.long_break_secs,
             profile_spec.long_break_interval,
         );
-        let mut blocker = SiteBlocker::new();
-        for site in &blocklist_profiles[active_blocklist_profile].sites {
-            blocker.add_site(site.clone());
-        }
+        let blocker = SiteBlocker::new();
         let setup_diagnostics = SetupDiagnostics::collect(&blocker);
         let mut app = Self {
             timer,
@@ -459,6 +479,7 @@ impl App {
             planner_feedback: None,
             active_focus_task_label: None,
             active_focus_profile: None,
+            site_list_mode: SiteListMode::Blocklist,
             selected_site: 0,
             block_error: None,
             setup_diagnostics,
@@ -498,6 +519,7 @@ impl App {
             stats_dirty: false,
             stats_has_unsaved_elapsed: false,
         };
+        app.recompute_blocker_sites_from_active_profile();
         app.restore_in_progress_session();
         app.sync_recovery_snapshot();
         app
@@ -1314,6 +1336,22 @@ impl App {
         }
     }
 
+    pub fn site_list_mode(&self) -> SiteListMode {
+        self.site_list_mode
+    }
+
+    pub fn active_policy_sites(&self) -> &[String] {
+        self.active_profile_sites_for_mode(self.site_list_mode)
+    }
+
+    pub fn active_policy_site_count(&self) -> usize {
+        self.active_policy_sites().len()
+    }
+
+    pub fn effective_blocked_site_count(&self) -> usize {
+        self.blocker.sites.len()
+    }
+
     pub fn blocklist_profile_input_mode(&self) -> Option<BlocklistProfileInputMode> {
         self.blocklist_profile_input_mode
     }
@@ -1450,19 +1488,24 @@ impl App {
         let custom_profile = self.custom_profile.normalized();
         let mut blocklist_profiles = self.blocklist_profiles.clone();
         if blocklist_profiles.is_empty() {
-            blocklist_profiles.push(BlocklistProfileConfig::default());
+            blocklist_profiles.push(BlocklistProfileConfig {
+                name: DEFAULT_BLOCKLIST_PROFILE_NAME.to_string(),
+                sites: self.blocker.sites.clone(),
+                allowlist_sites: Vec::new(),
+            });
         }
         let active_index = self
             .active_blocklist_profile
             .min(blocklist_profiles.len().saturating_sub(1));
-        if let Some(active_profile) = blocklist_profiles.get_mut(active_index) {
-            active_profile.sites = self.blocker.sites.clone();
-        }
         let selected_blocklist_profile = blocklist_profiles
             .get(active_index)
             .or_else(|| blocklist_profiles.first())
             .map(|profile| profile.name.clone())
             .unwrap_or_else(|| DEFAULT_BLOCKLIST_PROFILE_NAME.to_string());
+        let blocked_sites = blocklist_profiles
+            .get(active_index)
+            .map(effective_blocked_sites_for_profile)
+            .unwrap_or_default();
         AppConfig {
             // Keep legacy fields aligned with the editable custom profile so
             // older releases retain user-configured values.
@@ -1470,7 +1513,7 @@ impl App {
             short_break_secs: custom_profile.short_break_secs,
             long_break_secs: custom_profile.long_break_secs,
             long_break_interval: custom_profile.long_break_interval,
-            blocked_sites: self.blocker.sites.clone(),
+            blocked_sites,
             blocklist_profiles,
             selected_blocklist_profile,
             selected_profile: self.selected_profile,
@@ -2196,6 +2239,15 @@ impl App {
         true
     }
 
+    fn toggle_site_list_mode(&mut self) {
+        self.site_list_mode = self.site_list_mode.toggle();
+        self.clamp_selection();
+        self.set_site_feedback(
+            SiteFeedbackLevel::Success,
+            format!("Switched to {} entries", self.site_list_mode.label()),
+        );
+    }
+
     fn handle_key_site_manager(&mut self, key: KeyEvent) {
         if self.blocklist_profile_input_active {
             match key.code {
@@ -2245,12 +2297,17 @@ impl App {
                 self.mode = AppMode::Timer;
             }
             // Navigate down
-            KeyCode::Down | KeyCode::Char('j') if !self.blocker.sites.is_empty() => {
-                self.selected_site = (self.selected_site + 1).min(self.blocker.sites.len() - 1);
+            KeyCode::Down | KeyCode::Char('j') if !self.active_policy_sites().is_empty() => {
+                self.selected_site =
+                    (self.selected_site + 1).min(self.active_policy_sites().len() - 1);
             }
             // Navigate up
             KeyCode::Up | KeyCode::Char('k') => {
                 self.selected_site = self.selected_site.saturating_sub(1);
+            }
+            // Toggle between blocklist and allowlist entries
+            KeyCode::Char('m') => {
+                self.toggle_site_list_mode();
             }
             // Start adding a site
             KeyCode::Char('a') => {
@@ -2298,14 +2355,18 @@ impl App {
                 self.site_input.clear();
             }
             SiteInputMode::Edit => {
-                if self.blocker.sites.is_empty() {
+                if self.active_policy_sites().is_empty() {
                     self.site_input_active = false;
                     self.set_site_feedback(SiteFeedbackLevel::Warning, "No site selected to edit");
                     return;
                 }
                 self.clamp_selection();
                 self.site_edit_index = Some(self.selected_site);
-                self.site_input = self.blocker.sites[self.selected_site].clone();
+                self.site_input = self
+                    .active_policy_sites()
+                    .get(self.selected_site)
+                    .cloned()
+                    .unwrap_or_default();
             }
         }
     }
@@ -2339,12 +2400,23 @@ impl App {
 
     fn commit_site_input(&mut self) {
         let input = self.site_input.clone();
+        let mode = self.site_list_mode;
+        let mut working = SiteBlocker::new();
+        for site in self.active_profile_sites_for_mode(mode).iter().cloned() {
+            working.add_site(site);
+        }
 
         let committed = if let Some(index) = self.site_edit_index {
-            let edit_result = self.blocker.edit_site_from_input(index, &input);
+            let edit_result = working.edit_site_from_input(index, &input);
+            if let Some(target_sites) = self.active_profile_sites_for_mode_mut(mode) {
+                *target_sites = working.sites.clone();
+            }
             self.apply_edit_site_result(edit_result)
         } else {
-            let add_result = self.blocker.add_sites_from_input(&input);
+            let add_result = working.add_sites_from_input(&input);
+            if let Some(target_sites) = self.active_profile_sites_for_mode_mut(mode) {
+                *target_sites = working.sites.clone();
+            }
             self.apply_bulk_add_result(add_result)
         };
 
@@ -2383,13 +2455,13 @@ impl App {
 
         match mode {
             BlocklistProfileInputMode::Create => {
-                self.sync_active_profile_sites_from_blocker();
                 self.blocklist_profiles.push(BlocklistProfileConfig {
                     name: name.clone(),
                     sites: Vec::new(),
+                    allowlist_sites: Vec::new(),
                 });
                 self.active_blocklist_profile = self.blocklist_profiles.len().saturating_sub(1);
-                self.load_active_profile_sites_into_blocker();
+                self.recompute_blocker_sites_from_active_profile();
                 self.clamp_selection();
                 self.cancel_blocklist_profile_input();
                 self.save_config();
@@ -2427,7 +2499,7 @@ impl App {
     fn apply_bulk_add_result(&mut self, result: BulkAddResult) -> bool {
         let committed = !result.added.is_empty();
         if committed {
-            self.selected_site = self.blocker.sites.len().saturating_sub(1);
+            self.selected_site = self.active_policy_site_count().saturating_sub(1);
             self.finalize_site_mutation();
         }
 
@@ -2490,7 +2562,10 @@ impl App {
             EditSiteResult::Duplicate { hostname } => {
                 self.set_site_feedback(
                     SiteFeedbackLevel::Warning,
-                    format!("`{hostname}` is already in the blocklist"),
+                    format!(
+                        "`{hostname}` is already in the {}",
+                        self.site_list_mode.label().to_ascii_lowercase()
+                    ),
                 );
                 false
             }
@@ -2513,16 +2588,28 @@ impl App {
     }
 
     fn remove_selected_site(&mut self) {
-        if self.blocker.sites.is_empty() {
+        if self.active_policy_sites().is_empty() {
             self.set_site_feedback(SiteFeedbackLevel::Warning, "No site selected to delete");
             return;
         }
 
-        if let Some(removed) = self.blocker.remove_site(self.selected_site) {
+        let mode = self.site_list_mode;
+        let selected_site = self.selected_site;
+        let list_name = mode.label().to_ascii_lowercase();
+        let mut working = SiteBlocker::new();
+        for site in self.active_profile_sites_for_mode(mode).iter().cloned() {
+            working.add_site(site);
+        }
+        let removed = working.remove_site(selected_site);
+        if let Some(target_sites) = self.active_profile_sites_for_mode_mut(mode) {
+            *target_sites = working.sites.clone();
+        }
+
+        if let Some(removed) = removed {
             self.finalize_site_mutation();
             self.set_site_feedback(
                 SiteFeedbackLevel::Success,
-                format!("Removed `{removed}` from blocklist"),
+                format!("Removed `{removed}` from {list_name}"),
             );
         } else {
             self.set_site_feedback(SiteFeedbackLevel::Warning, "No site selected to delete");
@@ -2556,9 +2643,8 @@ impl App {
             return;
         }
 
-        self.sync_active_profile_sites_from_blocker();
         self.active_blocklist_profile = next_index;
-        self.load_active_profile_sites_into_blocker();
+        self.recompute_blocker_sites_from_active_profile();
         self.clamp_selection();
         self.save_config();
         self.sync_blocking_after_site_mutation();
@@ -2580,14 +2666,13 @@ impl App {
             return;
         }
 
-        self.sync_active_profile_sites_from_blocker();
         let removed = self
             .blocklist_profiles
             .remove(self.active_blocklist_profile);
         if self.active_blocklist_profile >= self.blocklist_profiles.len() {
             self.active_blocklist_profile = self.blocklist_profiles.len().saturating_sub(1);
         }
-        self.load_active_profile_sites_into_blocker();
+        self.recompute_blocker_sites_from_active_profile();
         self.clamp_selection();
         self.save_config();
         self.sync_blocking_after_site_mutation();
@@ -2622,10 +2707,10 @@ impl App {
     }
 
     fn clamp_selection(&mut self) {
-        if self.blocker.sites.is_empty() {
+        if self.active_policy_sites().is_empty() {
             self.selected_site = 0;
         } else {
-            self.selected_site = self.selected_site.min(self.blocker.sites.len() - 1);
+            self.selected_site = self.selected_site.min(self.active_policy_sites().len() - 1);
         }
     }
 
@@ -2641,22 +2726,36 @@ impl App {
             .min(self.blocklist_profiles.len().saturating_sub(1));
     }
 
-    fn sync_active_profile_sites_from_blocker(&mut self) {
-        self.clamp_blocklist_profile_selection();
-        if let Some(active_profile) = self
-            .blocklist_profiles
-            .get_mut(self.active_blocklist_profile)
-        {
-            active_profile.sites = self.blocker.sites.clone();
-        }
+    fn active_profile_sites_for_mode(&self, mode: SiteListMode) -> &[String] {
+        self.blocklist_profiles
+            .get(self.active_blocklist_profile)
+            .map(|profile| match mode {
+                SiteListMode::Blocklist => &profile.sites,
+                SiteListMode::Allowlist => &profile.allowlist_sites,
+            })
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 
-    fn load_active_profile_sites_into_blocker(&mut self) {
+    fn active_profile_sites_for_mode_mut(
+        &mut self,
+        mode: SiteListMode,
+    ) -> Option<&mut Vec<String>> {
+        self.clamp_blocklist_profile_selection();
+        self.blocklist_profiles
+            .get_mut(self.active_blocklist_profile)
+            .map(|profile| match mode {
+                SiteListMode::Blocklist => &mut profile.sites,
+                SiteListMode::Allowlist => &mut profile.allowlist_sites,
+            })
+    }
+
+    fn recompute_blocker_sites_from_active_profile(&mut self) {
         self.clamp_blocklist_profile_selection();
         self.blocker.sites.clear();
         if let Some(active_profile) = self.blocklist_profiles.get(self.active_blocklist_profile) {
-            for site in &active_profile.sites {
-                self.blocker.add_site(site.clone());
+            for site in effective_blocked_sites_for_profile(active_profile) {
+                self.blocker.add_site(site);
             }
         }
     }
@@ -2741,6 +2840,7 @@ impl App {
     fn open_site_manager(&mut self) {
         self.pending_timer_action = None;
         self.mode = AppMode::SiteManager;
+        self.site_list_mode = SiteListMode::Blocklist;
         self.cancel_site_input();
         self.cancel_blocklist_profile_input();
         self.clamp_blocklist_profile_selection();
@@ -2792,8 +2892,8 @@ impl App {
     }
 
     fn finalize_site_mutation(&mut self) {
+        self.recompute_blocker_sites_from_active_profile();
         self.clamp_selection();
-        self.sync_active_profile_sites_from_blocker();
         self.save_config();
         self.sync_blocking_after_site_mutation();
     }
@@ -3022,7 +3122,7 @@ impl App {
         }
         if self.blocker.sites.is_empty() {
             self.phase_notification = Some(
-                "Break-glass override unavailable: active blocklist profile has no sites."
+                "Break-glass override unavailable: active profile has no effective blocked sites."
                     .to_string(),
             );
             return;
@@ -3051,7 +3151,7 @@ impl App {
         }
         if self.blocker.sites.is_empty() {
             self.phase_notification = Some(
-                "Break-glass override unavailable: active blocklist profile has no sites."
+                "Break-glass override unavailable: active profile has no effective blocked sites."
                     .to_string(),
             );
             return;
@@ -3477,6 +3577,28 @@ fn display_input_value(input: &str) -> String {
     }
 }
 
+fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
+    let allowlist: HashSet<String> = profile
+        .allowlist_sites
+        .iter()
+        .map(|site| site.to_ascii_lowercase())
+        .collect();
+    profile
+        .sites
+        .iter()
+        .filter(|site| !allowlist.contains(&site.to_ascii_lowercase()))
+        .cloned()
+        .collect()
+}
+
+fn permission_remediation_guidance() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "Run focustime from an Administrator terminal, then open [d] Setup and press [r] Refresh."
+    } else {
+        "Run focustime with elevated privileges (e.g. sudo), verify hosts-file permissions, then press [r] Refresh."
+    }
+}
+
 fn current_epoch_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -3500,7 +3622,10 @@ fn blocking_permissions_check(hosts_diagnostics: &HostsFileDiagnostics) -> Setup
             .write_error
             .as_deref()
             .unwrap_or("unknown write error");
-        SetupCheck::warning(format!("Blocked: write permission unavailable ({reason})"))
+        SetupCheck::warning(format!(
+            "Blocked: write permission unavailable ({reason}). {}",
+            permission_remediation_guidance()
+        ))
     }
 }
 
@@ -3514,16 +3639,22 @@ fn hosts_write_capability_check(hosts_diagnostics: &HostsFileDiagnostics) -> Set
         hosts_diagnostics.write_error.as_deref(),
     ) {
         (true, true, _, _) => SetupCheck::ok("Ready: hosts file is readable and writable"),
-        (false, true, Some(read_error), _) => {
-            SetupCheck::warning(format!("Blocked: cannot read hosts file ({read_error})"))
-        }
-        (true, false, _, Some(write_error)) => {
-            SetupCheck::warning(format!("Blocked: cannot write hosts file ({write_error})"))
-        }
-        (false, false, Some(read_error), Some(write_error)) => SetupCheck::warning(format!(
-            "Blocked: read error ({read_error}); write error ({write_error})"
+        (false, true, Some(read_error), _) => SetupCheck::warning(format!(
+            "Blocked: cannot read hosts file ({read_error}). {}",
+            permission_remediation_guidance()
         )),
-        _ => SetupCheck::warning("Blocked: hosts access diagnostics unavailable"),
+        (true, false, _, Some(write_error)) => SetupCheck::warning(format!(
+            "Blocked: cannot write hosts file ({write_error}). {}",
+            permission_remediation_guidance()
+        )),
+        (false, false, Some(read_error), Some(write_error)) => SetupCheck::warning(format!(
+            "Blocked: read error ({read_error}); write error ({write_error}). {}",
+            permission_remediation_guidance()
+        )),
+        _ => SetupCheck::warning(format!(
+            "Blocked: hosts access diagnostics unavailable. {}",
+            permission_remediation_guidance()
+        )),
     }
 }
 
@@ -4679,10 +4810,12 @@ mod tests {
                 BlocklistProfileConfig {
                     name: "Work".to_string(),
                     sites: vec!["a.com".to_string()],
+                    allowlist_sites: Vec::new(),
                 },
                 BlocklistProfileConfig {
                     name: "Study".to_string(),
                     sites: vec!["b.com".to_string(), "c.com".to_string()],
+                    allowlist_sites: Vec::new(),
                 },
             ],
             selected_blocklist_profile: "Work".to_string(),
@@ -4700,6 +4833,90 @@ mod tests {
         assert_eq!(
             app.blocker.sites,
             vec!["b.com".to_string(), "c.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn site_manager_allowlist_mode_clamps_selection_on_profile_switch() {
+        let config = AppConfig {
+            blocklist_profiles: vec![
+                BlocklistProfileConfig {
+                    name: "Study".to_string(),
+                    sites: vec!["study.com".to_string()],
+                    allowlist_sites: vec!["allow-a.com".to_string(), "allow-b.com".to_string()],
+                },
+                BlocklistProfileConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["work.com".to_string(), "news.com".to_string()],
+                    allowlist_sites: vec!["news.com".to_string()],
+                },
+            ],
+            selected_blocklist_profile: "Study".to_string(),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('m')));
+        app.handle_key(key(KeyCode::Down));
+
+        assert_eq!(app.site_list_mode(), SiteListMode::Allowlist);
+        assert_eq!(app.selected_site, 1);
+
+        app.handle_key(key(KeyCode::Char(']')));
+
+        assert_eq!(app.active_blocklist_profile_name(), "Work");
+        assert_eq!(app.site_list_mode(), SiteListMode::Allowlist);
+        assert_eq!(app.active_policy_sites(), vec!["news.com".to_string()]);
+        assert_eq!(app.selected_site, 0);
+        assert_eq!(app.blocker.sites, vec!["work.com".to_string()]);
+    }
+
+    #[test]
+    fn allowlist_excludes_sites_from_effective_blocking() {
+        let config = AppConfig {
+            blocklist_profiles: vec![BlocklistProfileConfig {
+                name: "Work".to_string(),
+                sites: vec!["a.com".to_string(), "b.com".to_string()],
+                allowlist_sites: vec!["b.com".to_string()],
+            }],
+            selected_blocklist_profile: "Work".to_string(),
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+
+        assert_eq!(app.blocker.sites, vec!["a.com".to_string()]);
+    }
+
+    #[test]
+    fn site_manager_allowlist_mode_updates_effective_blocked_sites() {
+        let config = AppConfig {
+            blocklist_profiles: vec![BlocklistProfileConfig {
+                name: "Default".to_string(),
+                sites: vec!["a.com".to_string(), "b.com".to_string()],
+                allowlist_sites: vec!["b.com".to_string()],
+            }],
+            selected_blocklist_profile: "Default".to_string(),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Char('m'))); // switch to allowlist view
+        app.handle_key(key(KeyCode::Char('a')));
+        for c in "a.com".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(
+            app.active_policy_sites(),
+            vec!["b.com".to_string(), "a.com".to_string()]
+        );
+        assert!(app.blocker.sites.is_empty());
+        let persisted = app.persisted_config();
+        assert_eq!(persisted.blocked_sites, Vec::<String>::new());
+        assert_eq!(
+            persisted.blocklist_profiles[0].allowlist_sites,
+            vec!["b.com".to_string(), "a.com".to_string()]
         );
     }
 
