@@ -23,8 +23,8 @@ use crate::schedule::{
 use crate::session_recovery::{self, InProgressSessionSnapshot};
 use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusStats,
-    GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileTotals, SessionStats, TaskTotals, TaskTrend,
-    WeeklyStats, current_day_key,
+    GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileEffectiveness, ProfileTotals, SessionStats,
+    TaskTotals, TaskTrend, WeeklyConsistency, WeeklyStats, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -888,6 +888,15 @@ impl App {
         self.stats.recent_weekly(limit)
     }
 
+    #[allow(dead_code)]
+    pub fn recent_weekly_consistency(&self, limit: usize) -> Vec<WeeklyConsistency> {
+        self.stats.recent_weekly_consistency(limit)
+    }
+
+    pub fn latest_weekly_consistency(&self) -> Option<WeeklyConsistency> {
+        self.stats.latest_weekly_consistency()
+    }
+
     pub fn recent_monthly_stats(&self, limit: usize) -> Vec<MonthlyStats> {
         self.stats.recent_monthly(limit)
     }
@@ -896,8 +905,13 @@ impl App {
         self.stats.latest_monthly_heatmap()
     }
 
+    #[allow(dead_code)]
     pub fn profile_focus_totals(&self) -> Vec<ProfileTotals> {
         self.stats.profile_totals()
+    }
+
+    pub fn profile_effectiveness(&self) -> Vec<ProfileEffectiveness> {
+        self.stats.profile_effectiveness()
     }
 
     pub fn task_focus_totals(&self, limit: usize) -> Vec<TaskTotals> {

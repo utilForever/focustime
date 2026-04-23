@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **History insights v3 (#143):** added weekly consistency scoring (active days per ISO week), profile effectiveness comparison metrics, and corresponding history/export surfaces.
+
 ### Changed
 
 ## [0.5.1] - 2026-04-22

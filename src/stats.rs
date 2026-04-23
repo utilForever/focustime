@@ -17,6 +17,7 @@ use crate::task_labels::{canonical_task_label, normalize_task_label, task_label_
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
 const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
+const EXPORT_SCHEMA_VERSION: u32 = 2;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -69,6 +70,15 @@ impl WeeklyStats {
     pub fn focused_minutes(self) -> u64 {
         self.focused_seconds / 60
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WeeklyConsistency {
+    pub year: i32,
+    pub week: u32,
+    pub week_label: String,
+    pub active_days: u8,
+    pub consistency_score_pct: u8,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -158,6 +168,7 @@ impl ProfileBucket {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProfileTotals {
     pub profile: ProfileBucket,
@@ -166,8 +177,31 @@ pub struct ProfileTotals {
 }
 
 impl ProfileTotals {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn focused_minutes(self) -> u64 {
         self.focused_seconds / 60
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProfileEffectiveness {
+    pub profile: ProfileBucket,
+    pub sessions_completed: u32,
+    pub focused_seconds: u64,
+    pub active_days: u32,
+    pub focus_share_pct: u8,
+}
+
+impl ProfileEffectiveness {
+    pub fn focused_minutes(self) -> u64 {
+        self.focused_seconds / 60
+    }
+
+    pub fn average_focused_minutes_per_session(self) -> u64 {
+        if self.sessions_completed == 0 {
+            return 0;
+        }
+        (self.focused_seconds / u64::from(self.sessions_completed)) / 60
     }
 }
 
@@ -229,6 +263,13 @@ struct TaskTrendAccumulator {
     previous_focused_seconds: u64,
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct ProfileEffectivenessAccumulator {
+    sessions_completed: u32,
+    focused_seconds: u64,
+    active_days: BTreeSet<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BreakGlassOverrideEvent {
     pub timestamp_epoch_secs: u64,
@@ -239,12 +280,15 @@ pub struct BreakGlassOverrideEvent {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 struct StatsExport {
+    schema_version: u32,
     daily: Vec<DailyExportRow>,
     weekly: Vec<WeeklyExportRow>,
     sessions: Vec<SessionExportRow>,
     overrides: Vec<BreakGlassOverrideExportRow>,
     task_totals: Vec<TaskTotalsExportRow>,
     task_trends: Vec<TaskTrendExportRow>,
+    weekly_consistency: Vec<WeeklyConsistencyExportRow>,
+    profile_effectiveness: Vec<ProfileEffectivenessExportRow>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -312,8 +356,29 @@ struct TaskTrendExportRow {
     delta_focused_minutes: i64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct WeeklyConsistencyExportRow {
+    year: i32,
+    week: u32,
+    week_label: String,
+    active_days: u8,
+    consistency_score_pct: u8,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct ProfileEffectivenessExportRow {
+    profile: String,
+    sessions_completed: u32,
+    active_days: u32,
+    focused_seconds: u64,
+    focused_minutes: u64,
+    average_focused_minutes_per_session: u64,
+    focus_share_pct: u8,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct CsvExportRow {
+    schema_version: u32,
     record_type: &'static str,
     date: Option<String>,
     week_label: Option<String>,
@@ -339,6 +404,12 @@ struct CsvExportRow {
     previous_focused_minutes: Option<u64>,
     delta_focused_seconds: Option<i64>,
     delta_focused_minutes: Option<i64>,
+    profile_name: Option<String>,
+    sessions_completed: Option<u32>,
+    active_days: Option<u32>,
+    consistency_score_pct: Option<u8>,
+    average_focused_minutes_per_session: Option<u64>,
+    focus_share_pct: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -605,6 +676,17 @@ impl FocusStats {
         weekly
     }
 
+    pub fn recent_weekly_consistency(&self, limit: usize) -> Vec<WeeklyConsistency> {
+        let mut weekly = self.weekly_consistency_stats();
+        weekly.reverse();
+        weekly.truncate(limit);
+        weekly
+    }
+
+    pub fn latest_weekly_consistency(&self) -> Option<WeeklyConsistency> {
+        self.recent_weekly_consistency(1).into_iter().next()
+    }
+
     pub fn recent_monthly(&self, limit: usize) -> Vec<MonthlyStats> {
         let mut monthly = self.monthly_stats();
         monthly.reverse();
@@ -620,15 +702,11 @@ impl FocusStats {
         self.monthly_heatmap(year, month)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn profile_totals(&self) -> Vec<ProfileTotals> {
         let mut by_profile: BTreeMap<ProfileBucket, ProfileTotals> = BTreeMap::new();
         for session in &self.focus_sessions {
-            let profile = match session.profile {
-                Some(ProfileId::Classic) => ProfileBucket::Classic,
-                Some(ProfileId::DeepWork) => ProfileBucket::DeepWork,
-                Some(ProfileId::Custom) => ProfileBucket::Custom,
-                None => ProfileBucket::Unknown,
-            };
+            let profile = profile_bucket_for(session.profile);
             let entry = by_profile.entry(profile).or_insert(ProfileTotals {
                 profile,
                 pomodoros_completed: 0,
@@ -649,6 +727,49 @@ impl FocusStats {
                 .then_with(|| left.profile.cmp(&right.profile))
         });
         totals
+    }
+
+    pub fn profile_effectiveness(&self) -> Vec<ProfileEffectiveness> {
+        let mut by_profile: BTreeMap<ProfileBucket, ProfileEffectivenessAccumulator> =
+            BTreeMap::new();
+        let mut total_focused_seconds: u64 = 0;
+        for session in &self.focus_sessions {
+            let profile = profile_bucket_for(session.profile);
+            let entry = by_profile.entry(profile).or_default();
+            entry.sessions_completed = entry.sessions_completed.saturating_add(1);
+            entry.focused_seconds = entry
+                .focused_seconds
+                .saturating_add(session.focused_seconds);
+            entry.active_days.insert(session.date.clone());
+            total_focused_seconds = total_focused_seconds.saturating_add(session.focused_seconds);
+        }
+
+        let mut effectiveness: Vec<ProfileEffectiveness> = by_profile
+            .into_iter()
+            .map(|(profile, totals)| ProfileEffectiveness {
+                profile,
+                sessions_completed: totals.sessions_completed,
+                focused_seconds: totals.focused_seconds,
+                active_days: totals.active_days.len() as u32,
+                focus_share_pct: percentage_round_nearest(
+                    totals.focused_seconds,
+                    total_focused_seconds,
+                ),
+            })
+            .collect();
+        effectiveness.sort_by(|left, right| {
+            right
+                .focus_share_pct
+                .cmp(&left.focus_share_pct)
+                .then_with(|| {
+                    right
+                        .average_focused_minutes_per_session()
+                        .cmp(&left.average_focused_minutes_per_session())
+                })
+                .then_with(|| right.sessions_completed.cmp(&left.sessions_completed))
+                .then_with(|| left.profile.cmp(&right.profile))
+        });
+        effectiveness
     }
 
     pub fn task_totals(&self, limit: usize) -> Vec<TaskTotals> {
@@ -819,12 +940,15 @@ impl FocusStats {
 
     fn export_data(&self) -> StatsExport {
         StatsExport {
+            schema_version: EXPORT_SCHEMA_VERSION,
             daily: self.export_daily_rows(),
             weekly: self.export_weekly_rows(),
             sessions: self.export_session_rows(),
             overrides: self.export_break_glass_override_rows(),
             task_totals: self.export_task_totals_rows(),
             task_trends: self.export_task_trend_rows(),
+            weekly_consistency: self.export_weekly_consistency_rows(),
+            profile_effectiveness: self.export_profile_effectiveness_rows(),
         }
     }
 
@@ -937,6 +1061,62 @@ impl FocusStats {
                     delta_focused_seconds,
                     delta_focused_minutes,
                 }
+            })
+            .collect()
+    }
+
+    fn export_weekly_consistency_rows(&self) -> Vec<WeeklyConsistencyExportRow> {
+        self.weekly_consistency_stats()
+            .into_iter()
+            .map(|entry| WeeklyConsistencyExportRow {
+                year: entry.year,
+                week: entry.week,
+                week_label: entry.week_label,
+                active_days: entry.active_days,
+                consistency_score_pct: entry.consistency_score_pct,
+            })
+            .collect()
+    }
+
+    fn export_profile_effectiveness_rows(&self) -> Vec<ProfileEffectivenessExportRow> {
+        self.profile_effectiveness()
+            .into_iter()
+            .map(|entry| ProfileEffectivenessExportRow {
+                profile: entry.profile.label().to_string(),
+                sessions_completed: entry.sessions_completed,
+                active_days: entry.active_days,
+                focused_seconds: entry.focused_seconds,
+                focused_minutes: entry.focused_minutes(),
+                average_focused_minutes_per_session: entry.average_focused_minutes_per_session(),
+                focus_share_pct: entry.focus_share_pct,
+            })
+            .collect()
+    }
+
+    fn weekly_consistency_stats(&self) -> Vec<WeeklyConsistency> {
+        let mut weekly = BTreeMap::new();
+        for (day_key, stats) in &self.daily {
+            if !daily_has_activity(*stats) {
+                continue;
+            }
+            let Ok(day) = chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d") else {
+                continue;
+            };
+            let iso_week = day.iso_week();
+            let active_days = weekly
+                .entry((iso_week.year(), iso_week.week()))
+                .or_insert(0_u8);
+            *active_days = active_days.saturating_add(1).min(7);
+        }
+
+        weekly
+            .into_iter()
+            .map(|((year, week), active_days)| WeeklyConsistency {
+                year,
+                week,
+                week_label: format_week_label(year, week),
+                active_days,
+                consistency_score_pct: consistency_score_from_active_days(active_days),
             })
             .collect()
     }
@@ -1097,6 +1277,43 @@ impl StatsExport {
             .map_err(|e| io::Error::other(format!("csv export finalize failed: {e}")))
     }
 
+    fn csv_row_defaults(record_type: &'static str) -> CsvExportRow {
+        CsvExportRow {
+            schema_version: EXPORT_SCHEMA_VERSION,
+            record_type,
+            date: None,
+            week_label: None,
+            year: None,
+            week: None,
+            pomodoros_completed: 0,
+            focused_seconds: 0,
+            focused_minutes: 0,
+            goal_minutes: None,
+            goal_pomodoros: None,
+            goal_met: None,
+            task_label: None,
+            break_glass_timestamp_epoch_secs: None,
+            break_glass_duration_seconds: None,
+            focus_intention: None,
+            task_note: None,
+            recent_window_start: None,
+            recent_window_end: None,
+            previous_window_start: None,
+            previous_window_end: None,
+            previous_pomodoros_completed: None,
+            previous_focused_seconds: None,
+            previous_focused_minutes: None,
+            delta_focused_seconds: None,
+            delta_focused_minutes: None,
+            profile_name: None,
+            sessions_completed: None,
+            active_days: None,
+            consistency_score_pct: None,
+            average_focused_minutes_per_session: None,
+            focus_share_pct: None,
+        }
+    }
+
     fn csv_rows(&self) -> Vec<CsvExportRow> {
         let mut rows = Vec::with_capacity(
             self.daily.len()
@@ -1104,177 +1321,75 @@ impl StatsExport {
                 + self.sessions.len()
                 + self.overrides.len()
                 + self.task_totals.len()
-                + self.task_trends.len(),
+                + self.task_trends.len()
+                + self.weekly_consistency.len()
+                + self.profile_effectiveness.len(),
         );
 
         for daily in &self.daily {
             rows.push(CsvExportRow {
-                record_type: "daily",
                 date: Some(daily.date.clone()),
-                week_label: None,
-                year: None,
-                week: None,
                 pomodoros_completed: daily.pomodoros_completed,
                 focused_seconds: daily.focused_seconds,
                 focused_minutes: daily.focused_minutes,
                 goal_minutes: daily.goal.map(|goal| goal.minutes),
                 goal_pomodoros: daily.goal.map(|goal| goal.pomodoros),
                 goal_met: daily.goal.map(|_| daily.goal_met),
-                task_label: None,
-                break_glass_timestamp_epoch_secs: None,
-                break_glass_duration_seconds: None,
-                focus_intention: None,
-                task_note: None,
-                recent_window_start: None,
-                recent_window_end: None,
-                previous_window_start: None,
-                previous_window_end: None,
-                previous_pomodoros_completed: None,
-                previous_focused_seconds: None,
-                previous_focused_minutes: None,
-                delta_focused_seconds: None,
-                delta_focused_minutes: None,
+                ..Self::csv_row_defaults("daily")
             });
         }
 
         for weekly in &self.weekly {
             rows.push(CsvExportRow {
-                record_type: "weekly",
-                date: None,
                 week_label: Some(weekly.week_label.clone()),
                 year: Some(weekly.year),
                 week: Some(weekly.week),
                 pomodoros_completed: weekly.pomodoros_completed,
                 focused_seconds: weekly.focused_seconds,
                 focused_minutes: weekly.focused_minutes,
-                goal_minutes: None,
-                goal_pomodoros: None,
-                goal_met: None,
-                task_label: None,
-                break_glass_timestamp_epoch_secs: None,
-                break_glass_duration_seconds: None,
-                focus_intention: None,
-                task_note: None,
-                recent_window_start: None,
-                recent_window_end: None,
-                previous_window_start: None,
-                previous_window_end: None,
-                previous_pomodoros_completed: None,
-                previous_focused_seconds: None,
-                previous_focused_minutes: None,
-                delta_focused_seconds: None,
-                delta_focused_minutes: None,
+                ..Self::csv_row_defaults("weekly")
             });
         }
 
         for session in &self.sessions {
             rows.push(CsvExportRow {
-                record_type: "focus_session",
                 date: Some(session.date.clone()),
-                week_label: None,
-                year: None,
-                week: None,
                 pomodoros_completed: 1,
                 focused_seconds: session.focused_seconds,
                 focused_minutes: session.focused_minutes,
-                goal_minutes: None,
-                goal_pomodoros: None,
-                goal_met: None,
                 task_label: Some(session.task_label.clone()),
-                break_glass_timestamp_epoch_secs: None,
-                break_glass_duration_seconds: None,
                 focus_intention: Some(session.focus_intention.clone()),
                 task_note: Some(session.task_note.clone()),
-                recent_window_start: None,
-                recent_window_end: None,
-                previous_window_start: None,
-                previous_window_end: None,
-                previous_pomodoros_completed: None,
-                previous_focused_seconds: None,
-                previous_focused_minutes: None,
-                delta_focused_seconds: None,
-                delta_focused_minutes: None,
+                ..Self::csv_row_defaults("focus_session")
             });
         }
 
         for override_event in &self.overrides {
             rows.push(CsvExportRow {
-                record_type: "break_glass_override",
                 date: Some(override_event.date.clone()),
-                week_label: None,
-                year: None,
-                week: None,
-                pomodoros_completed: 0,
-                focused_seconds: 0,
-                focused_minutes: 0,
-                goal_minutes: None,
-                goal_pomodoros: None,
-                goal_met: None,
                 task_label: override_event.task_label.clone(),
                 break_glass_timestamp_epoch_secs: Some(override_event.timestamp_epoch_secs),
                 break_glass_duration_seconds: Some(override_event.duration_seconds),
-                focus_intention: None,
-                task_note: None,
-                recent_window_start: None,
-                recent_window_end: None,
-                previous_window_start: None,
-                previous_window_end: None,
-                previous_pomodoros_completed: None,
-                previous_focused_seconds: None,
-                previous_focused_minutes: None,
-                delta_focused_seconds: None,
-                delta_focused_minutes: None,
+                ..Self::csv_row_defaults("break_glass_override")
             });
         }
 
         for task_total in &self.task_totals {
             rows.push(CsvExportRow {
-                record_type: "task_summary",
-                date: None,
-                week_label: None,
-                year: None,
-                week: None,
                 pomodoros_completed: task_total.pomodoros_completed,
                 focused_seconds: task_total.focused_seconds,
                 focused_minutes: task_total.focused_minutes,
-                goal_minutes: None,
-                goal_pomodoros: None,
-                goal_met: None,
                 task_label: Some(task_total.task_label.clone()),
-                break_glass_timestamp_epoch_secs: None,
-                break_glass_duration_seconds: None,
-                focus_intention: None,
-                task_note: None,
-                recent_window_start: None,
-                recent_window_end: None,
-                previous_window_start: None,
-                previous_window_end: None,
-                previous_pomodoros_completed: None,
-                previous_focused_seconds: None,
-                previous_focused_minutes: None,
-                delta_focused_seconds: None,
-                delta_focused_minutes: None,
+                ..Self::csv_row_defaults("task_summary")
             });
         }
 
         for task_trend in &self.task_trends {
             rows.push(CsvExportRow {
-                record_type: "task_trend",
-                date: None,
-                week_label: None,
-                year: None,
-                week: None,
                 pomodoros_completed: task_trend.recent_pomodoros_completed,
                 focused_seconds: task_trend.recent_focused_seconds,
                 focused_minutes: task_trend.recent_focused_minutes,
-                goal_minutes: None,
-                goal_pomodoros: None,
-                goal_met: None,
                 task_label: Some(task_trend.task_label.clone()),
-                break_glass_timestamp_epoch_secs: None,
-                break_glass_duration_seconds: None,
-                focus_intention: None,
-                task_note: None,
                 recent_window_start: Some(task_trend.recent_window_start.clone()),
                 recent_window_end: Some(task_trend.recent_window_end.clone()),
                 previous_window_start: Some(task_trend.previous_window_start.clone()),
@@ -1284,6 +1399,34 @@ impl StatsExport {
                 previous_focused_minutes: Some(task_trend.previous_focused_minutes),
                 delta_focused_seconds: Some(task_trend.delta_focused_seconds),
                 delta_focused_minutes: Some(task_trend.delta_focused_minutes),
+                ..Self::csv_row_defaults("task_trend")
+            });
+        }
+
+        for consistency in &self.weekly_consistency {
+            rows.push(CsvExportRow {
+                week_label: Some(consistency.week_label.clone()),
+                year: Some(consistency.year),
+                week: Some(consistency.week),
+                active_days: Some(u32::from(consistency.active_days)),
+                consistency_score_pct: Some(consistency.consistency_score_pct),
+                ..Self::csv_row_defaults("weekly_consistency")
+            });
+        }
+
+        for profile in &self.profile_effectiveness {
+            rows.push(CsvExportRow {
+                pomodoros_completed: profile.sessions_completed,
+                focused_seconds: profile.focused_seconds,
+                focused_minutes: profile.focused_minutes,
+                profile_name: Some(profile.profile.clone()),
+                sessions_completed: Some(profile.sessions_completed),
+                active_days: Some(profile.active_days),
+                average_focused_minutes_per_session: Some(
+                    profile.average_focused_minutes_per_session,
+                ),
+                focus_share_pct: Some(profile.focus_share_pct),
+                ..Self::csv_row_defaults("profile_effectiveness")
             });
         }
 
@@ -1372,6 +1515,33 @@ fn best_goal_streak(completed_days: &BTreeSet<chrono::NaiveDate>) -> u32 {
     }
 
     best
+}
+
+fn profile_bucket_for(profile: Option<ProfileId>) -> ProfileBucket {
+    match profile {
+        Some(ProfileId::Classic) => ProfileBucket::Classic,
+        Some(ProfileId::DeepWork) => ProfileBucket::DeepWork,
+        Some(ProfileId::Custom) => ProfileBucket::Custom,
+        None => ProfileBucket::Unknown,
+    }
+}
+
+fn daily_has_activity(stats: DailyStats) -> bool {
+    stats.focused_seconds > 0 || stats.pomodoros_completed > 0
+}
+
+fn percentage_round_nearest(part: u64, total: u64) -> u8 {
+    if total == 0 {
+        return 0;
+    }
+    let rounded = (u128::from(part) * 100 + (u128::from(total) / 2)) / u128::from(total);
+    rounded.min(u128::from(u8::MAX)) as u8
+}
+
+fn consistency_score_from_active_days(active_days: u8) -> u8 {
+    let capped_days = active_days.min(7);
+    let rounded = (u32::from(capped_days) * 100 + 3) / 7;
+    rounded.min(u32::from(u8::MAX)) as u8
 }
 
 fn format_week_label(year: i32, week: u32) -> String {
@@ -1816,6 +1986,45 @@ mod tests {
     }
 
     #[test]
+    fn recent_weekly_consistency_scores_active_days() {
+        let mut stats = FocusStats::default();
+        stats.insert_daily_for_tests(
+            "2026-04-06",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 25 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-07",
+            DailyStats {
+                pomodoros_completed: 0,
+                focused_seconds: 15 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-08",
+            DailyStats {
+                pomodoros_completed: 0,
+                focused_seconds: 0,
+                goal: None,
+            },
+        );
+
+        let consistency = stats.recent_weekly_consistency(1);
+        let iso_week = chrono::NaiveDate::from_ymd_opt(2026, 4, 6)
+            .unwrap()
+            .iso_week();
+        assert_eq!(consistency.len(), 1);
+        assert_eq!(consistency[0].year, iso_week.year());
+        assert_eq!(consistency[0].week, iso_week.week());
+        assert_eq!(consistency[0].active_days, 2);
+        assert_eq!(consistency[0].consistency_score_pct, 29);
+    }
+
+    #[test]
     fn persisted_stats_round_trip_preserves_daily_history() {
         let mut original = FocusStats::default();
         let goal = DailyGoalSnapshot {
@@ -2107,6 +2316,75 @@ mod tests {
     }
 
     #[test]
+    fn profile_effectiveness_reports_share_and_average_minutes() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-09",
+            goal,
+            Some("Project A"),
+            50 * 60,
+            Some(ProfileId::DeepWork),
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-10",
+            goal,
+            Some("Project D"),
+            40 * 60,
+            Some(ProfileId::DeepWork),
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-11",
+            goal,
+            Some("Project B"),
+            25 * 60,
+            Some(ProfileId::Classic),
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-12",
+            goal,
+            Some("Project C"),
+            40 * 60,
+            None,
+        );
+
+        let effectiveness = stats.profile_effectiveness();
+        assert_eq!(effectiveness.len(), 3);
+
+        let deep_work = effectiveness
+            .iter()
+            .find(|entry| entry.profile == ProfileBucket::DeepWork)
+            .copied()
+            .unwrap();
+        let classic = effectiveness
+            .iter()
+            .find(|entry| entry.profile == ProfileBucket::Classic)
+            .copied()
+            .unwrap();
+        let unknown = effectiveness
+            .iter()
+            .find(|entry| entry.profile == ProfileBucket::Unknown)
+            .copied()
+            .unwrap();
+
+        assert_eq!(deep_work.sessions_completed, 2);
+        assert_eq!(deep_work.active_days, 2);
+        assert_eq!(deep_work.average_focused_minutes_per_session(), 45);
+        assert_eq!(deep_work.focus_share_pct, 58);
+
+        assert_eq!(classic.sessions_completed, 1);
+        assert_eq!(classic.average_focused_minutes_per_session(), 25);
+        assert_eq!(classic.focus_share_pct, 16);
+
+        assert_eq!(unknown.sessions_completed, 1);
+        assert_eq!(unknown.average_focused_minutes_per_session(), 40);
+        assert_eq!(unknown.focus_share_pct, 26);
+    }
+
+    #[test]
     fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         let mut stats = FocusStats::default();
         let goal = DailyGoalSnapshot {
@@ -2165,18 +2443,23 @@ mod tests {
 
         let json = fs::read_to_string(&exported.json_path).unwrap();
         let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(json_value["schema_version"], EXPORT_SCHEMA_VERSION);
         let daily = json_value["daily"].as_array().unwrap();
         let weekly = json_value["weekly"].as_array().unwrap();
         let sessions = json_value["sessions"].as_array().unwrap();
         let overrides = json_value["overrides"].as_array().unwrap();
         let task_totals = json_value["task_totals"].as_array().unwrap();
         let task_trends = json_value["task_trends"].as_array().unwrap();
+        let weekly_consistency = json_value["weekly_consistency"].as_array().unwrap();
+        let profile_effectiveness = json_value["profile_effectiveness"].as_array().unwrap();
         assert_eq!(daily.len(), 2);
         assert!(!weekly.is_empty());
         assert_eq!(sessions.len(), 1);
         assert_eq!(overrides.len(), 1);
         assert_eq!(task_totals.len(), 1);
         assert_eq!(task_trends.len(), 1);
+        assert!(!weekly_consistency.is_empty());
+        assert_eq!(profile_effectiveness.len(), 1);
         assert!(
             daily
                 .iter()
@@ -2201,19 +2484,35 @@ mod tests {
         );
         assert_eq!(task_trends[0]["previous_window_end"], previous_window_end);
         assert_eq!(task_trends[0]["delta_focused_minutes"], 30);
+        assert!(
+            weekly_consistency
+                .iter()
+                .any(|entry| entry["consistency_score_pct"].as_u64().unwrap_or(0) > 0)
+        );
+        assert_eq!(profile_effectiveness[0]["profile"], "Classic");
+        assert_eq!(
+            profile_effectiveness[0]["average_focused_minutes_per_session"],
+            30
+        );
+        assert_eq!(profile_effectiveness[0]["focus_share_pct"], 100);
 
         let csv = fs::read_to_string(&exported.csv_path).unwrap();
-        assert!(csv.contains("record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes"));
-        assert!(csv.contains(&format!("daily,{labeled_day},,,,1,1800,30,25,1,true,,,,,")));
-        assert!(csv.contains("weekly,,"));
+        assert!(csv.contains("schema_version,record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes,profile_name,sessions_completed,active_days,consistency_score_pct,average_focused_minutes_per_session,focus_share_pct"));
         assert!(csv.contains(&format!(
-            "focus_session,{labeled_day},,,,1,1800,30,,,,Project A,,,Project A,Project A"
+            "2,daily,{labeled_day},,,,1,1800,30,25,1,true,,,,,"
+        )));
+        assert!(csv.contains("2,weekly,,"));
+        assert!(csv.contains(&format!(
+            "2,focus_session,{labeled_day},,,,1,1800,30,,,,Project A,,,Project A,Project A"
         )));
         assert!(csv.contains(&format!(
-            "break_glass_override,{labeled_day},,,,0,0,0,,,,Project A,1711000000,300,,"
+            "2,break_glass_override,{labeled_day},,,,0,0,0,,,,Project A,1711000000,300,,"
         )));
-        assert!(csv.contains("task_summary,,,,,1,1800,30,,,,Project A"));
-        assert!(csv.contains("task_trend,,,,,1,1800,30,,,,Project A"));
+        assert!(csv.contains("2,task_summary,,,,,1,1800,30,,,,Project A"));
+        assert!(csv.contains("2,task_trend,,,,,1,1800,30,,,,Project A"));
+        assert!(csv.contains("2,weekly_consistency,"));
+        assert!(csv.contains("2,profile_effectiveness,,,,,1,1800,30"));
+        assert!(csv.contains("Classic,1,1,,30,100"));
 
         fs::remove_dir_all(export_dir).unwrap();
     }

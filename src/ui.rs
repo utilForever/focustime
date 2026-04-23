@@ -1097,8 +1097,13 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     );
     frame.render_widget(session_summary, inner[0]);
 
-    let goal_summary = Paragraph::new(format_history_goal_streak_line(app))
-        .style(Style::default().fg(Color::DarkGray));
+    let goal_and_consistency_summary = format!(
+        "{}   |   {}",
+        format_history_goal_streak_line(app),
+        format_history_weekly_consistency_line(app)
+    );
+    let goal_summary =
+        Paragraph::new(goal_and_consistency_summary).style(Style::default().fg(Color::DarkGray));
     frame.render_widget(goal_summary, inner[1]);
 
     let history_layout = Layout::default()
@@ -1139,23 +1144,23 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     render_monthly_heatmap_panel(frame, top_sections[1], app);
 
     let profile_items: Vec<ListItem> = app
-        .profile_focus_totals()
+        .profile_effectiveness()
         .into_iter()
-        .map(|stats| {
+        .map(|entry| {
             ListItem::new(format!(
-                "  {:<9}  🍅{}   {}m",
-                stats.profile.label(),
-                stats.pomodoros_completed,
-                stats.focused_minutes()
+                "  {:<9} {:>3}% {:>3}m/🍅",
+                entry.profile.label(),
+                entry.focus_share_pct,
+                entry.average_focused_minutes_per_session()
             ))
         })
         .collect();
     render_history_panel(
         frame,
         top_sections[2],
-        " Profile Totals ",
+        " Profile Effectiveness ",
         profile_items,
-        "  No profile totals yet.",
+        "  No profile effectiveness yet.",
     );
 
     let task_total_items: Vec<ListItem> = app
@@ -1490,6 +1495,16 @@ fn format_history_goal_streak_line(app: &App) -> String {
     }
 }
 
+fn format_history_weekly_consistency_line(app: &App) -> String {
+    match app.latest_weekly_consistency() {
+        Some(consistency) => format!(
+            "Weekly consistency: {}% ({}/7 days)",
+            consistency.consistency_score_pct, consistency.active_days
+        ),
+        None => "Weekly consistency: n/a".to_string(),
+    }
+}
+
 fn format_task_trend_delta(trend: &crate::stats::TaskTrend) -> String {
     let delta_minutes = trend.delta_focused_minutes();
     if delta_minutes > 0 {
@@ -1770,12 +1785,14 @@ mod tests {
             .expect("render should succeed");
 
         let text = terminal_text(&terminal, width, height);
+        let text_lower = text.to_ascii_lowercase();
         assert!(text.contains("Monthly Trend"));
         assert!(text.contains("Heatmap 2026-04"));
-        assert!(text.contains("Profile Totals"));
+        assert!(text_lower.contains("profile effect"));
         assert!(text.contains("Task Totals"));
         assert!(text.contains("Task Trends"));
         assert!(text.contains("Break-glass Audit"));
+        assert!(text_lower.contains("weekly consistency"));
         assert!(text.contains(&format_month_label(2026, 4)));
     }
 

@@ -342,6 +342,8 @@ Override events are recorded for audit visibility in the History view and includ
 - focused minutes for the current app session
 - daily aggregates persisted in `stats.toml` (in the same config directory as `config.toml`)
 - weekly totals derived from daily aggregates in the History view
+- weekly consistency score (`active_days / 7`, rounded to `%`) derived from daily activity
+- profile effectiveness comparison (focus share % and average focused minutes per completed session)
 - per-task totals (pomodoros and focused minutes) derived from labeled focus sessions
 - per-task trend summaries in History (`last 7 days` vs `previous 7 days`)
 - current streak and best streak based on completed daily goals
@@ -362,10 +364,10 @@ From timer view:
 - while the history panel is open, press **`e`** to export `focustime-stats.json` and `focustime-stats.csv` into the current working directory
 - press **`h`** or **`Esc`** to return to timer view
 
-Exports include daily/weekly aggregates, task summaries/trends, and labeled
-focus-session records where task labels were attached. Focus-session rows also
-include `focus_intention` and `task_note` fields (mirroring `task_label`) for
-downstream consumers.
+Exports include daily/weekly aggregates, weekly consistency, profile
+effectiveness, task summaries/trends, and labeled focus-session records where
+task labels were attached. Focus-session rows also include `focus_intention`
+and `task_note` fields (mirroring `task_label`) for downstream consumers.
 
 ## The way the system works
 
