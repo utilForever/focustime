@@ -94,8 +94,9 @@ pub fn next_occurrence_after(
 ) -> Option<WindowOccurrence> {
     let mut selected: Option<WindowOccurrence> = None;
     let today = now.date_naive();
+    let search_days = 7_i64.saturating_mul(exception_dates.len() as i64 + 1);
 
-    for day_offset in 0..=7 {
+    for day_offset in 0..=search_days {
         let date = today + Duration::days(day_offset);
         if exception_dates.contains(&date) {
             continue;
@@ -306,5 +307,25 @@ mod tests {
             .expect("next window should skip exception date");
         assert_eq!(next.start, local_datetime(tomorrow, 9, 0));
         assert_eq!(next.end, local_datetime(tomorrow, 10, 0));
+    }
+
+    #[test]
+    fn next_occurrence_after_skips_weekly_exception_and_returns_following_week() {
+        let date = Local::now().date_naive();
+        let now = local_datetime(date, 12, 15);
+        let next_week = date + Duration::days(7);
+        let following_week = date + Duration::days(14);
+        let windows = compile_windows(&[RecurringFocusWindowConfig {
+            days: vec![date.weekday().to_string()],
+            start: "11:00".to_string(),
+            end: "12:00".to_string(),
+        }]);
+        let exception_dates = compile_exception_dates(&[next_week.format("%Y-%m-%d").to_string()]);
+
+        let next = next_occurrence_after(now, &windows, &exception_dates)
+            .expect("next window should skip the excepted weekly occurrence");
+
+        assert_eq!(next.start, local_datetime(following_week, 11, 0));
+        assert_eq!(next.end, local_datetime(following_week, 12, 0));
     }
 }

@@ -892,6 +892,12 @@ impl App {
     }
 
     pub fn profile_edit_field_value(&self, field_index: usize) -> String {
+        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX)
+            .contains(&field_index)
+        {
+            return self.profile_edit_schedule_field_value(field_index);
+        }
+
         match field_index {
             0 => format_duration_label(self.custom_profile.focus_secs),
             1 => format_duration_label(self.custom_profile.short_break_secs),
@@ -909,6 +915,12 @@ impl App {
             10 => format_daily_goal_pomodoros_label(self.daily_goal.pomodoros),
             PROFILE_EDIT_WAKATIME_PROJECT_INDEX => self.wakatime_metadata.project.clone(),
             PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => self.wakatime_metadata.language.clone(),
+            _ => String::new(),
+        }
+    }
+
+    fn profile_edit_schedule_field_value(&self, field_index: usize) -> String {
+        match field_index {
             PROFILE_EDIT_SCHEDULE_WINDOW_INDEX => {
                 if self.recurring_schedule.windows.is_empty() {
                     "none".to_string()
