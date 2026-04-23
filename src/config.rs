@@ -4,6 +4,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
+use chrono::NaiveDate;
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Persistent application configuration stored as TOML.
@@ -113,6 +114,8 @@ pub struct AutoStartConfig {
 pub struct RecurringScheduleConfig {
     #[serde(default)]
     pub windows: Vec<RecurringFocusWindowConfig>,
+    #[serde(default)]
+    pub exception_dates: Vec<String>,
 }
 
 impl RecurringScheduleConfig {
@@ -131,7 +134,11 @@ impl RecurringScheduleConfig {
                 start_minutes < end_minutes
             })
             .collect();
-        Self { windows }
+        let exception_dates = normalize_schedule_exception_dates(&self.exception_dates);
+        Self {
+            windows,
+            exception_dates,
+        }
     }
 }
 
@@ -594,6 +601,26 @@ fn parse_schedule_time_minutes(value: &str) -> Option<u16> {
     Some(hour * 60 + minute)
 }
 
+fn normalize_schedule_exception_dates(dates: &[String]) -> Vec<String> {
+    let mut normalized = Vec::new();
+    let mut seen = HashSet::new();
+    for date in dates {
+        let Some(parsed) = parse_schedule_exception_date(date) else {
+            continue;
+        };
+        let canonical = parsed.format("%Y-%m-%d").to_string();
+        if seen.insert(canonical.clone()) {
+            normalized.push(canonical);
+        }
+    }
+    normalized.sort();
+    normalized
+}
+
+fn parse_schedule_exception_date(value: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()
+}
+
 fn normalize_blocklist_profiles(
     profiles: &[BlocklistProfileConfig],
     legacy_blocked_sites: &[String],
@@ -735,6 +762,7 @@ mod tests {
                     start: "09:15".to_string(),
                     end: "11:00".to_string(),
                 }],
+                exception_dates: vec!["2026-04-27".to_string(), "2026-05-05".to_string()],
             },
             strict_mode: true,
             break_glass_duration_secs: 7 * 60,
@@ -837,6 +865,7 @@ start = "08:30"
         assert_eq!(window.start, "08:30");
         assert_eq!(window.end, default_schedule_window_end());
         assert_eq!(window.days, default_schedule_window_days());
+        assert!(cfg.recurring_schedule.exception_dates.is_empty());
     }
 
     #[test]
@@ -855,6 +884,7 @@ start = "08:30"
                         end: "09:00".to_string(),
                     },
                 ],
+                exception_dates: Vec::new(),
             },
             ..AppConfig::default()
         }
@@ -863,6 +893,29 @@ start = "08:30"
         assert_eq!(cfg.recurring_schedule.windows.len(), 1);
         assert_eq!(cfg.recurring_schedule.windows[0].start, "09:00");
         assert_eq!(cfg.recurring_schedule.windows[0].end, "11:00");
+    }
+
+    #[test]
+    fn normalize_recurring_schedule_exception_dates_dedupes_and_drops_invalid_entries() {
+        let cfg = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: Vec::new(),
+                exception_dates: vec![
+                    " 2026-12-25 ".to_string(),
+                    "2026-02-30".to_string(),
+                    "2026-01-01".to_string(),
+                    "2026-12-25".to_string(),
+                    "not-a-date".to_string(),
+                ],
+            },
+            ..AppConfig::default()
+        }
+        .normalize();
+
+        assert_eq!(
+            cfg.recurring_schedule.exception_dates,
+            vec!["2026-01-01".to_string(), "2026-12-25".to_string()]
+        );
     }
 
     #[test]

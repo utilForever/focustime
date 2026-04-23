@@ -198,6 +198,7 @@ focus_to_break = false
 break_to_focus = false
 
 [recurring_schedule]
+exception_dates = ["2026-12-25", "2027-01-01"]
 [[recurring_schedule.windows]]
 days = ["mon", "tue", "wed", "thu", "fri"]
 start = "09:00"
@@ -276,6 +277,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 
 - `recurring_schedule.windows[].days` accepts day tokens (`mon`..`sun`, case-insensitive)
 - `recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
+- `recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
 - the timer session overview shows the current/next scheduled window
 
@@ -291,6 +293,9 @@ You can configure notification and auto-start settings directly from the TUI:
   - **Schedule window**: `←/→` changes which window is selected
   - **Schedule day** + **Schedule day enabled**: choose day cursor and toggle it `Off/On`
   - **Schedule start/end**: adjust times in 15-minute steps
+  - **Schedule exception**: `←/→` changes which exception date is selected
+  - **Exception date**: `←/→` moves selected exception date backward/forward by 1 day
+  - **Exception add/remove**: `→` adds a date (starting from today), `←` removes selected date
 
 ## Session recovery
 
