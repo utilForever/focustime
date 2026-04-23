@@ -9,9 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+## [0.5.2] - 2026-04-23
+
+### Added
+
 - **History insights v3 (#143):** added weekly consistency scoring (active days per ISO week), profile effectiveness comparison metrics, and corresponding history/export surfaces.
 
 ### Changed
+
+- **v0.5.2 release metadata/docs refresh (#160):** bumped crate version to `0.5.2`, updated the README latest-stable-release reference, and advanced changelog comparison links.
 
 ## [0.5.1] - 2026-04-22
 
@@ -129,7 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/utilForever/focustime/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/utilForever/focustime/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/utilForever/focustime/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/utilForever/focustime/compare/v0.4.1...v0.4.2
