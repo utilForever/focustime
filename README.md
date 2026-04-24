@@ -125,7 +125,7 @@ cargo run -- --export
 cargo run -- --export=./reports --json
 ```
 
-#### CLI JSON/error contract
+### CLI JSON/error contract
 
 - `--json` success responses are emitted to `stdout` as JSON and exit with code `0`.
 - `--json` failures are emitted to `stdout` as JSON (no mixed human text) and exit with a non-zero code.
