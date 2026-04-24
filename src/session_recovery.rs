@@ -80,13 +80,19 @@ pub struct InProgressSessionSnapshot {
     #[serde(default)]
     pub pomodoros_completed: u32,
     pub selected_task_label: Option<String>,
+    #[serde(default)]
+    pub focus_intention: Option<String>,
+    #[serde(default)]
+    pub task_note: Option<String>,
     pub selected_profile: ProfileId,
 }
 
 impl InProgressSessionSnapshot {
-    pub fn from_timer_state(
+    pub fn from_timer_state_with_metadata(
         timer: &TimerState,
         selected_task_label: Option<String>,
+        focus_intention: Option<String>,
+        task_note: Option<String>,
         selected_profile: ProfileId,
     ) -> Option<Self> {
         if timer.status == TimerStatus::Idle {
@@ -96,6 +102,14 @@ impl InProgressSessionSnapshot {
         let selected_task_label = selected_task_label
             .as_deref()
             .and_then(normalize_task_label)?;
+        let focus_intention = focus_intention
+            .as_deref()
+            .and_then(normalize_metadata_text)
+            .unwrap_or_else(|| selected_task_label.clone());
+        let task_note = task_note
+            .as_deref()
+            .and_then(normalize_metadata_text)
+            .unwrap_or_else(|| selected_task_label.clone());
 
         Some(Self {
             phase: RecoveryTimerPhase::from_timer_phase(timer.phase),
@@ -103,6 +117,8 @@ impl InProgressSessionSnapshot {
             remaining_secs: timer.remaining_secs,
             pomodoros_completed: timer.pomodoros_completed,
             selected_task_label: Some(selected_task_label),
+            focus_intention: Some(focus_intention),
+            task_note: Some(task_note),
             selected_profile,
         })
     }
@@ -121,6 +137,20 @@ impl InProgressSessionSnapshot {
             .and_then(normalize_task_label)
     }
 
+    pub fn normalized_focus_intention(&self) -> Option<String> {
+        self.focus_intention
+            .as_deref()
+            .and_then(normalize_metadata_text)
+            .or_else(|| self.normalized_task_label())
+    }
+
+    pub fn normalized_task_note(&self) -> Option<String> {
+        self.task_note
+            .as_deref()
+            .and_then(normalize_metadata_text)
+            .or_else(|| self.normalized_task_label())
+    }
+
     pub fn validate_for_timer(&self, timer: &TimerState) -> Result<(), String> {
         if !matches!(
             self.status,
@@ -131,6 +161,12 @@ impl InProgressSessionSnapshot {
 
         if self.normalized_task_label().is_none() {
             return Err("saved task label is missing or invalid".to_string());
+        }
+        if self.normalized_focus_intention().is_none() {
+            return Err("saved focus intention is missing or invalid".to_string());
+        }
+        if self.normalized_task_note().is_none() {
+            return Err("saved task note is missing or invalid".to_string());
         }
 
         let phase_duration_secs = phase_duration_secs(timer, self.phase());
@@ -276,6 +312,11 @@ fn phase_duration_secs(timer: &TimerState, phase: TimerPhase) -> u64 {
     }
 }
 
+fn normalize_metadata_text(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -289,6 +330,8 @@ mod tests {
             remaining_secs: 10,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Docs".to_string()),
+            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
         };
 
@@ -304,6 +347,8 @@ mod tests {
             remaining_secs: 0,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Docs".to_string()),
+            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
         };
 
@@ -319,6 +364,8 @@ mod tests {
             remaining_secs: 31,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Docs".to_string()),
+            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
         };
 
@@ -334,6 +381,8 @@ mod tests {
             remaining_secs: 50,
             pomodoros_completed: 0,
             selected_task_label: None,
+            focus_intention: Some("Docs".to_string()),
+            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
         };
 
@@ -349,9 +398,33 @@ mod tests {
             remaining_secs: 90,
             pomodoros_completed: 2,
             selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Docs".to_string()),
+            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::DeepWork,
         };
 
+        assert!(snapshot.validate_for_timer(&timer).is_ok());
+    }
+
+    #[test]
+    fn metadata_defaults_to_task_label_for_legacy_snapshots() {
+        let timer = TimerState::with_profile(60, 30, 90, 4);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 60,
+            pomodoros_completed: 1,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: None,
+            task_note: None,
+            selected_profile: ProfileId::Classic,
+        };
+
+        assert_eq!(
+            snapshot.normalized_focus_intention().as_deref(),
+            Some("Docs")
+        );
+        assert_eq!(snapshot.normalized_task_note().as_deref(), Some("Docs"));
         assert!(snapshot.validate_for_timer(&timer).is_ok());
     }
 }

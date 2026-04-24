@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **CLI v3 core management commands (#172):** added `--goal`, `--strict`, `--schedule`, `--schedule-set`, and `--diagnostics` commands with text/JSON output for automation workflows.
+- **Session metadata v2 persistence (#174):** promoted `focus_intention` and `task_note` to first-class persisted session metadata across recovery, stats storage, and CLI JSON surfaces (defaulting to `task_label` when no dedicated metadata input is provided).
 
 ### Changed
 
