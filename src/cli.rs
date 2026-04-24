@@ -1,9 +1,13 @@
 use std::{collections::HashSet, env, ffi::OsString, path::PathBuf};
 
+use chrono::NaiveDate;
 use serde::Serialize;
 
-use crate::app::App;
-use crate::config::{AppConfig, CustomProfileConfig, ProfileId};
+use crate::app::{App, SetupCheck, SetupCheckLevel, SetupDiagnostics};
+use crate::config::{
+    AppConfig, CustomProfileConfig, DailyGoalConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig,
+};
 use crate::session_recovery;
 use crate::stats::{DailyGoalSnapshot, FocusStats, current_day_key};
 use crate::timer::{
@@ -20,21 +24,33 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --next [--json]
   focustime --task=LABEL [--json]
   focustime --profile [classic|deep-work|custom] [--json]
+  focustime --goal [--json]
+  focustime --goal=MINUTES,POMODOROS [--json]
+  focustime --strict [--json]
+  focustime --strict=on|off [--json]
+  focustime --schedule [--json]
+  focustime --schedule-set=JSON_PAYLOAD [--json]
+  focustime --diagnostics [--json]
   focustime --status [--json]
   focustime --export[=DIR] [--json]
 
 Options:
-  --start    Launch TUI with focus timer already started
-  --pause    Pause a running timer
-  --resume   Resume a paused timer
-  --stop     Stop/reset the current phase
-  --next     Skip to the next phase
-  --task     Select task label (auto-creates unknown labels)
-  --profile  Show current profile, or set it when value is provided
-  --status   Print status summary (includes live timer/session fields)
-  --export   Export stats to current directory or DIR
-  --json     Emit machine-readable JSON output
-  -h, --help Show this help"#;
+  --start         Launch TUI with focus timer already started
+  --pause         Pause a running timer
+  --resume        Resume a paused timer
+  --stop          Stop/reset the current phase
+  --next          Skip to the next phase
+  --task          Select task label (auto-creates unknown labels)
+  --profile       Show current profile, or set it when value is provided
+  --goal          Show current daily goal, or set minutes/pomodoros targets
+  --strict        Show strict mode, or set on/off
+  --schedule      Show recurring schedule
+  --schedule-set  Replace recurring schedule from JSON payload
+  --diagnostics   Show setup diagnostics checks
+  --status        Print status summary (includes live timer/session fields)
+  --export        Export stats to current directory or DIR
+  --json          Emit machine-readable JSON output
+  -h, --help      Show this help"#;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputMode {
@@ -48,10 +64,26 @@ pub enum CommandKind {
     Resume,
     Stop,
     Next,
-    Task { label: String },
-    Profile { profile: Option<ProfileId> },
+    Task {
+        label: String,
+    },
+    Profile {
+        profile: Option<ProfileId>,
+    },
+    Goal {
+        goal: Option<DailyGoalConfig>,
+    },
+    Strict {
+        enabled: Option<bool>,
+    },
+    Schedule {
+        schedule: Option<RecurringScheduleConfig>,
+    },
+    Diagnostics,
     Status,
-    Export { dir: Option<PathBuf> },
+    Export {
+        dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +108,11 @@ enum PrimaryCommand {
     Next,
     Task(String),
     Profile(Option<ProfileId>),
+    Goal(Option<DailyGoalConfig>),
+    Strict(Option<bool>),
+    Schedule,
+    ScheduleSet(RecurringScheduleConfig),
+    Diagnostics,
     Status,
     Export(Option<PathBuf>),
 }
@@ -92,10 +129,17 @@ enum ParsedToken {
     Task(String),
     Status,
     Profile(Option<ProfileId>),
+    Goal(Option<DailyGoalConfig>),
+    Strict(Option<bool>),
+    Schedule,
+    ScheduleSet(RecurringScheduleConfig),
+    Diagnostics,
     Export(Option<PathBuf>),
     UnknownOption(String),
     Positional(String),
 }
+
+type KeyValueParser = fn(&str) -> Result<Option<ParsedToken>, String>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 struct ProfileSpec {
@@ -201,6 +245,40 @@ struct TaskCommandOutput {
     timer: TimerStateOutput,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+struct GoalCommandOutput {
+    updated: bool,
+    configured: bool,
+    minutes_target: u64,
+    pomodoros_target: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+struct StrictCommandOutput {
+    updated: bool,
+    strict_mode: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ScheduleCommandOutput {
+    updated: bool,
+    schedule: RecurringScheduleConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SetupCheckOutput {
+    level: &'static str,
+    message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct DiagnosticsCommandOutput {
+    hosts_file_path: String,
+    blocking_permissions: SetupCheckOutput,
+    hosts_write_capability: SetupCheckOutput,
+    wakatime_config: SetupCheckOutput,
+}
+
 pub fn usage_text() -> &'static str {
     USAGE_TEXT
 }
@@ -244,6 +322,15 @@ fn classify_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), S
     if arg == "--profile" {
         return classify_profile_arg(args, index);
     }
+    if arg == "--goal" {
+        return classify_goal_arg(args, index);
+    }
+    if arg == "--strict" {
+        return classify_strict_arg(args, index);
+    }
+    if arg == "--schedule-set" {
+        return classify_schedule_set_arg(args, index);
+    }
     if arg == "--export" {
         return classify_export_arg(args, index);
     }
@@ -266,6 +353,8 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--stop" => Some(ParsedToken::Stop),
         "--next" => Some(ParsedToken::Next),
         "--status" => Some(ParsedToken::Status),
+        "--schedule" => Some(ParsedToken::Schedule),
+        "--diagnostics" => Some(ParsedToken::Diagnostics),
         _ => None,
     }
 }
@@ -305,26 +394,114 @@ fn classify_export_arg(args: &[String], index: usize) -> Result<(ParsedToken, us
     Ok((ParsedToken::Export(None), 1))
 }
 
+fn classify_goal_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((ParsedToken::Goal(Some(parse_goal_value(next)?)), 2));
+    }
+    Ok((ParsedToken::Goal(None), 1))
+}
+
+fn classify_strict_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((ParsedToken::Strict(Some(parse_strict_value(next)?)), 2));
+    }
+    Ok((ParsedToken::Strict(None), 1))
+}
+
+fn classify_schedule_set_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((ParsedToken::ScheduleSet(parse_schedule_value(next)?), 2));
+    }
+    Err(invalid_usage(
+        "`--schedule-set` requires a JSON payload. Use `--schedule-set='{\"windows\":[...],\"exception_dates\":[...]}'`.",
+    ))
+}
+
 fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--task=") {
-        if value.trim().is_empty() {
-            return Err(invalid_usage("`--task=` requires a task label."));
+    let parsers: [KeyValueParser; 6] = [
+        parse_task_key_value_arg,
+        parse_profile_key_value_arg,
+        parse_goal_key_value_arg,
+        parse_strict_key_value_arg,
+        parse_schedule_set_key_value_arg,
+        parse_export_key_value_arg,
+    ];
+
+    for parser in parsers {
+        if let Some(token) = parser(arg)? {
+            return Ok(Some(token));
         }
+    }
+
+    Ok(None)
+}
+
+fn parse_task_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--task=") {
+        let value = require_nonempty_key_value(value, "`--task=` requires a task label.")?;
         return Ok(Some(ParsedToken::Task(value.to_string())));
     }
+    Ok(None)
+}
+
+fn parse_profile_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--profile=") {
-        if value.trim().is_empty() {
-            return Err(invalid_usage("`--profile=` requires a profile value."));
-        }
+        let value = require_nonempty_key_value(value, "`--profile=` requires a profile value.")?;
         return Ok(Some(ParsedToken::Profile(Some(parse_profile_id(value)?))));
     }
+    Ok(None)
+}
+
+fn parse_goal_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--goal=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--goal=` requires values in `MINUTES,POMODOROS` format.",
+        )?;
+        return Ok(Some(ParsedToken::Goal(Some(parse_goal_value(value)?))));
+    }
+    Ok(None)
+}
+
+fn parse_strict_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--strict=") {
+        let value = require_nonempty_key_value(value, "`--strict=` requires `on` or `off`.")?;
+        return Ok(Some(ParsedToken::Strict(Some(parse_strict_value(value)?))));
+    }
+    Ok(None)
+}
+
+fn parse_schedule_set_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--schedule-set=") {
+        let value =
+            require_nonempty_key_value(value, "`--schedule-set=` requires a JSON payload.")?;
+        return Ok(Some(ParsedToken::ScheduleSet(parse_schedule_value(value)?)));
+    }
+    Ok(None)
+}
+
+fn parse_export_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--export=") {
-        if value.trim().is_empty() {
-            return Err(invalid_usage("`--export=` requires a target directory."));
-        }
+        let value = require_nonempty_key_value(value, "`--export=` requires a target directory.")?;
         return Ok(Some(ParsedToken::Export(Some(PathBuf::from(value)))));
     }
     Ok(None)
+}
+
+fn require_nonempty_key_value<'a>(value: &'a str, message: &str) -> Result<&'a str, String> {
+    if value.trim().is_empty() {
+        return Err(invalid_usage(message));
+    }
+    Ok(value)
 }
 
 fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -356,6 +533,11 @@ fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), Str
             | ParsedToken::Task(_)
             | ParsedToken::Status
             | ParsedToken::Profile(_)
+            | ParsedToken::Goal(_)
+            | ParsedToken::Strict(_)
+            | ParsedToken::Schedule
+            | ParsedToken::ScheduleSet(_)
+            | ParsedToken::Diagnostics
             | ParsedToken::Export(_) => {}
         }
     }
@@ -377,6 +559,19 @@ fn parse_primary_command(tokens: &[ParsedToken]) -> Result<Option<PrimaryCommand
             ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
             ParsedToken::Profile(profile) => {
                 set_primary_command(&mut primary, PrimaryCommand::Profile(*profile))?
+            }
+            ParsedToken::Goal(goal) => {
+                set_primary_command(&mut primary, PrimaryCommand::Goal(*goal))?
+            }
+            ParsedToken::Strict(enabled) => {
+                set_primary_command(&mut primary, PrimaryCommand::Strict(*enabled))?
+            }
+            ParsedToken::Schedule => set_primary_command(&mut primary, PrimaryCommand::Schedule)?,
+            ParsedToken::ScheduleSet(schedule) => {
+                set_primary_command(&mut primary, PrimaryCommand::ScheduleSet(schedule.clone()))?
+            }
+            ParsedToken::Diagnostics => {
+                set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
             }
             ParsedToken::Export(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
@@ -422,6 +617,28 @@ fn finalize_cli_action(
             kind: CommandKind::Profile { profile },
             output,
         })),
+        Some(PrimaryCommand::Goal(goal)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Goal { goal },
+            output,
+        })),
+        Some(PrimaryCommand::Strict(enabled)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Strict { enabled },
+            output,
+        })),
+        Some(PrimaryCommand::Schedule) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Schedule { schedule: None },
+            output,
+        })),
+        Some(PrimaryCommand::ScheduleSet(schedule)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Schedule {
+                schedule: Some(schedule),
+            },
+            output,
+        })),
+        Some(PrimaryCommand::Diagnostics) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Diagnostics,
+            output,
+        })),
         Some(PrimaryCommand::Pause) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Pause,
             output,
@@ -461,6 +678,10 @@ pub fn execute_command(command: CliCommand) -> Result<(), String> {
         CommandKind::Next => execute_next_command(command.output),
         CommandKind::Task { label } => execute_task_command(label, command.output),
         CommandKind::Profile { profile } => execute_profile_command(profile, command.output),
+        CommandKind::Goal { goal } => execute_goal_command(goal, command.output),
+        CommandKind::Strict { enabled } => execute_strict_command(enabled, command.output),
+        CommandKind::Schedule { schedule } => execute_schedule_command(schedule, command.output),
+        CommandKind::Diagnostics => execute_diagnostics_command(command.output),
         CommandKind::Status => execute_status_command(command.output),
         CommandKind::Export { dir } => execute_export_command(dir, command.output),
     }
@@ -545,6 +766,91 @@ fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Re
 
     match output {
         OutputMode::Text => print_profile_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_goal_command(goal: Option<DailyGoalConfig>, output: OutputMode) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(goal) = goal {
+        config.daily_goal = goal;
+        config
+            .save()
+            .map_err(|error| format!("Failed to save daily goal: {error}"))?;
+        updated = true;
+    }
+
+    let payload = GoalCommandOutput {
+        updated,
+        configured: config.daily_goal.minutes > 0 || config.daily_goal.pomodoros > 0,
+        minutes_target: config.daily_goal.minutes,
+        pomodoros_target: config.daily_goal.pomodoros,
+    };
+
+    match output {
+        OutputMode::Text => print_goal_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_strict_command(enabled: Option<bool>, output: OutputMode) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(enabled) = enabled {
+        config.strict_mode = enabled;
+        config
+            .save()
+            .map_err(|error| format!("Failed to save strict mode: {error}"))?;
+        updated = true;
+    }
+
+    let payload = StrictCommandOutput {
+        updated,
+        strict_mode: config.strict_mode,
+    };
+
+    match output {
+        OutputMode::Text => print_strict_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_schedule_command(
+    schedule: Option<RecurringScheduleConfig>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(schedule) = schedule {
+        config.recurring_schedule = schedule.normalized();
+        config
+            .save()
+            .map_err(|error| format!("Failed to save recurring schedule: {error}"))?;
+        updated = true;
+    }
+
+    let payload = ScheduleCommandOutput {
+        updated,
+        schedule: config.recurring_schedule,
+    };
+
+    match output {
+        OutputMode::Text => print_schedule_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_diagnostics_command(output: OutputMode) -> Result<(), String> {
+    let app = App::new();
+    let payload = build_diagnostics_command_output(&app.setup_diagnostics);
+
+    match output {
+        OutputMode::Text => print_diagnostics_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
@@ -815,6 +1121,139 @@ fn parse_profile_id(value: &str) -> Result<ProfileId, String> {
     }
 }
 
+fn parse_goal_value(value: &str) -> Result<DailyGoalConfig, String> {
+    let trimmed = value.trim();
+    let (minutes_raw, pomodoros_raw) = trimmed.split_once(',').ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid goal `{value}`. Use `--goal=MINUTES,POMODOROS` (for example `--goal=120,4`)."
+        ))
+    })?;
+    let minutes = minutes_raw.trim().parse::<u64>().map_err(|_| {
+        invalid_usage(&format!(
+            "Invalid goal minutes in `{value}`. Use a non-negative integer."
+        ))
+    })?;
+    let pomodoros = pomodoros_raw.trim().parse::<u32>().map_err(|_| {
+        invalid_usage(&format!(
+            "Invalid goal pomodoros in `{value}`. Use a non-negative integer."
+        ))
+    })?;
+    Ok(DailyGoalConfig { minutes, pomodoros })
+}
+
+fn parse_strict_value(value: &str) -> Result<bool, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        _ => Err(invalid_usage(&format!(
+            "Invalid strict mode `{value}`. Use `--strict=on` or `--strict=off`."
+        ))),
+    }
+}
+
+fn parse_schedule_value(value: &str) -> Result<RecurringScheduleConfig, String> {
+    let schedule = serde_json::from_str::<RecurringScheduleConfig>(value).map_err(|error| {
+        invalid_usage(&format!(
+            "Invalid schedule JSON payload: {error}. Use `--schedule-set='{{\"windows\":[...],\"exception_dates\":[...]}}'`."
+        ))
+    })?;
+    validate_schedule_value(&schedule)?;
+    Ok(schedule)
+}
+
+fn validate_schedule_value(schedule: &RecurringScheduleConfig) -> Result<(), String> {
+    for (index, window) in schedule.windows.iter().enumerate() {
+        validate_schedule_window(window, index)?;
+    }
+    for (index, date) in schedule.exception_dates.iter().enumerate() {
+        validate_schedule_exception_date(date, index)?;
+    }
+    Ok(())
+}
+
+fn validate_schedule_window(
+    window: &RecurringFocusWindowConfig,
+    index: usize,
+) -> Result<(), String> {
+    if window.days.is_empty() {
+        return Err(invalid_usage(&format!(
+            "Invalid schedule window at index {index}: `days` must include at least one weekday."
+        )));
+    }
+    for day in &window.days {
+        if !is_valid_schedule_weekday(day) {
+            return Err(invalid_usage(&format!(
+                "Invalid schedule window at index {index}: unknown weekday `{day}`."
+            )));
+        }
+    }
+
+    let start_minutes = parse_schedule_minutes(&window.start).ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid schedule window at index {index}: start `{}` must be HH:MM in 24-hour format.",
+            window.start
+        ))
+    })?;
+    let end_minutes = parse_schedule_minutes(&window.end).ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid schedule window at index {index}: end `{}` must be HH:MM in 24-hour format.",
+            window.end
+        ))
+    })?;
+
+    if start_minutes >= end_minutes {
+        return Err(invalid_usage(&format!(
+            "Invalid schedule window at index {index}: start must be earlier than end."
+        )));
+    }
+    Ok(())
+}
+
+fn validate_schedule_exception_date(value: &str, index: usize) -> Result<(), String> {
+    NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").map_err(|_| {
+        invalid_usage(&format!(
+            "Invalid exception date at index {index}: `{value}` must be YYYY-MM-DD."
+        ))
+    })?;
+    Ok(())
+}
+
+fn is_valid_schedule_weekday(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "mon"
+            | "monday"
+            | "tue"
+            | "tues"
+            | "tuesday"
+            | "wed"
+            | "wednesday"
+            | "thu"
+            | "thurs"
+            | "thursday"
+            | "fri"
+            | "friday"
+            | "sat"
+            | "saturday"
+            | "sun"
+            | "sunday"
+    )
+}
+
+fn parse_schedule_minutes(value: &str) -> Option<u16> {
+    let trimmed = value.trim();
+    let (hours, minutes) = trimmed.split_once(':')?;
+    if hours.len() != 2 || minutes.len() != 2 {
+        return None;
+    }
+    let hours = hours.parse::<u16>().ok()?;
+    let minutes = minutes.parse::<u16>().ok()?;
+    if hours > 23 || minutes > 59 {
+        return None;
+    }
+    Some(hours * 60 + minutes)
+}
+
 fn set_primary_command(
     primary: &mut Option<PrimaryCommand>,
     next: PrimaryCommand,
@@ -839,6 +1278,11 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Next => "--next",
         PrimaryCommand::Task(_) => "--task",
         PrimaryCommand::Profile(_) => "--profile",
+        PrimaryCommand::Goal(_) => "--goal",
+        PrimaryCommand::Strict(_) => "--strict",
+        PrimaryCommand::Schedule => "--schedule",
+        PrimaryCommand::ScheduleSet(_) => "--schedule-set",
+        PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Export(_) => "--export",
     }
@@ -947,6 +1391,91 @@ fn print_export_output(payload: &ExportOutput) {
     println!("Exported stats to {}", payload.export_dir.display());
     println!("JSON: {}", payload.json_path.display());
     println!("CSV: {}", payload.csv_path.display());
+}
+
+fn print_goal_command_output(payload: &GoalCommandOutput) {
+    if payload.updated {
+        println!("Daily goal updated.");
+    }
+    if payload.configured {
+        println!(
+            "Daily goal: {} min, {} pomodoros",
+            payload.minutes_target, payload.pomodoros_target
+        );
+    } else {
+        println!("Daily goal: off");
+    }
+}
+
+fn print_strict_command_output(payload: &StrictCommandOutput) {
+    if payload.updated {
+        println!("Strict mode updated.");
+    }
+    println!(
+        "Strict mode: {}",
+        if payload.strict_mode { "on" } else { "off" }
+    );
+}
+
+fn print_schedule_command_output(payload: &ScheduleCommandOutput) {
+    if payload.updated {
+        println!("Recurring schedule updated.");
+    }
+    if payload.schedule.windows.is_empty() {
+        println!("Schedule windows: none");
+    } else {
+        println!("Schedule windows:");
+        for window in &payload.schedule.windows {
+            println!(
+                "  - [{}] {}-{}",
+                window.days.join(","),
+                window.start,
+                window.end
+            );
+        }
+    }
+    if payload.schedule.exception_dates.is_empty() {
+        println!("Exception dates: none");
+    } else {
+        println!(
+            "Exception dates: {}",
+            payload.schedule.exception_dates.join(", ")
+        );
+    }
+}
+
+fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutput) {
+    println!("Hosts file: {}", payload.hosts_file_path);
+    print_diagnostics_check("Blocking permissions", &payload.blocking_permissions);
+    print_diagnostics_check("Hosts write capability", &payload.hosts_write_capability);
+    print_diagnostics_check("WakaTime config", &payload.wakatime_config);
+}
+
+fn print_diagnostics_check(label: &str, check: &SetupCheckOutput) {
+    println!("{label}: {} ({})", check.message, check.level);
+}
+
+fn build_diagnostics_command_output(diagnostics: &SetupDiagnostics) -> DiagnosticsCommandOutput {
+    DiagnosticsCommandOutput {
+        hosts_file_path: diagnostics.hosts_file_path.clone(),
+        blocking_permissions: setup_check_output(&diagnostics.blocking_permissions),
+        hosts_write_capability: setup_check_output(&diagnostics.hosts_write_capability),
+        wakatime_config: setup_check_output(&diagnostics.wakatime_config),
+    }
+}
+
+fn setup_check_output(check: &SetupCheck) -> SetupCheckOutput {
+    SetupCheckOutput {
+        level: setup_check_level_id(check.level),
+        message: check.message.clone(),
+    }
+}
+
+fn setup_check_level_id(level: SetupCheckLevel) -> &'static str {
+    match level {
+        SetupCheckLevel::Ok => "ok",
+        SetupCheckLevel::Warning => "warning",
+    }
 }
 
 fn print_json<T: Serialize>(payload: &T) -> Result<(), String> {
@@ -1110,6 +1639,125 @@ mod tests {
     }
 
     #[test]
+    fn parse_goal_without_value_reads_current_goal() {
+        let parsed = parse(&["--goal"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Goal { goal: None },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_goal_with_equals_sets_goal() {
+        let parsed = parse(&["--goal=120,4"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Goal {
+                    goal: Some(DailyGoalConfig {
+                        minutes: 120,
+                        pomodoros: 4
+                    })
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_goal_with_value_sets_goal() {
+        let parsed = parse(&["--goal", "45,2"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Goal {
+                    goal: Some(DailyGoalConfig {
+                        minutes: 45,
+                        pomodoros: 2
+                    })
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_strict_without_value_reads_current_state() {
+        let parsed = parse(&["--strict"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Strict { enabled: None },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_strict_with_equals_sets_state() {
+        let parsed = parse(&["--strict=on"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Strict {
+                    enabled: Some(true)
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_schedule_reads_current_schedule() {
+        let parsed = parse(&["--schedule"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Schedule { schedule: None },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_schedule_set_accepts_json_payload() {
+        let payload = r#"{"windows":[{"days":["mon","wed"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"]}"#;
+        let parsed =
+            parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Schedule {
+                    schedule: Some(RecurringScheduleConfig {
+                        windows: vec![RecurringFocusWindowConfig {
+                            days: vec!["mon".to_string(), "wed".to_string()],
+                            start: "09:00".to_string(),
+                            end: "11:00".to_string(),
+                        }],
+                        exception_dates: vec!["2026-12-25".to_string()],
+                    }),
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_diagnostics_supports_json_mode() {
+        let parsed = parse(&["--diagnostics", "--json"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Diagnostics,
+                output: OutputMode::Json
+            })
+        );
+    }
+
+    #[test]
     fn parse_export_accepts_optional_directory() {
         let parsed = parse(&["--export", "reports"]).unwrap();
         assert_eq!(
@@ -1174,9 +1822,62 @@ mod tests {
     }
 
     #[test]
+    fn classify_key_value_arg_accepts_goal_equals_value() {
+        let parsed = classify_key_value_arg("--goal=90,3").unwrap();
+        assert_eq!(
+            parsed,
+            Some(ParsedToken::Goal(Some(DailyGoalConfig {
+                minutes: 90,
+                pomodoros: 3
+            })))
+        );
+    }
+
+    #[test]
+    fn classify_key_value_arg_accepts_strict_equals_value() {
+        let parsed = classify_key_value_arg("--strict=off").unwrap();
+        assert_eq!(parsed, Some(ParsedToken::Strict(Some(false))));
+    }
+
+    #[test]
+    fn classify_key_value_arg_accepts_schedule_set_equals_value() {
+        let payload = "--schedule-set={\"windows\":[{\"days\":[\"fri\"],\"start\":\"10:00\",\"end\":\"11:00\"}],\"exception_dates\":[]}";
+        let parsed = classify_key_value_arg(payload).unwrap();
+        assert_eq!(
+            parsed,
+            Some(ParsedToken::ScheduleSet(RecurringScheduleConfig {
+                windows: vec![RecurringFocusWindowConfig {
+                    days: vec!["fri".to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+                exception_dates: Vec::new(),
+            }))
+        );
+    }
+
+    #[test]
     fn classify_key_value_arg_rejects_empty_export_equals_value() {
         let error = classify_key_value_arg("--export=").unwrap_err();
         assert!(error.contains("`--export=` requires a target directory."));
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_goal_equals_value() {
+        let error = classify_key_value_arg("--goal=").unwrap_err();
+        assert!(error.contains("`--goal=` requires values"));
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_strict_equals_value() {
+        let error = classify_key_value_arg("--strict=").unwrap_err();
+        assert!(error.contains("`--strict=` requires `on` or `off`"));
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_schedule_set_equals_value() {
+        let error = classify_key_value_arg("--schedule-set=").unwrap_err();
+        assert!(error.contains("`--schedule-set=` requires a JSON payload."));
     }
 
     #[test]
@@ -1201,6 +1902,40 @@ mod tests {
     fn parse_rejects_task_with_blank_value() {
         let error = parse(&["--task", "   "]).unwrap_err();
         assert!(error.contains("`--task` requires a task label"));
+    }
+
+    #[test]
+    fn parse_rejects_goal_without_two_numbers() {
+        let error = parse(&["--goal=120"]).unwrap_err();
+        assert!(error.contains("Invalid goal"));
+    }
+
+    #[test]
+    fn parse_rejects_strict_with_unknown_value() {
+        let error = parse(&["--strict=enabled"]).unwrap_err();
+        assert!(error.contains("Invalid strict mode"));
+    }
+
+    #[test]
+    fn parse_rejects_schedule_set_without_payload() {
+        let error = parse(&["--schedule-set"]).unwrap_err();
+        assert!(error.contains("`--schedule-set` requires a JSON payload"));
+    }
+
+    #[test]
+    fn parse_rejects_schedule_set_with_invalid_weekday() {
+        let payload = r#"{"windows":[{"days":["nonday"],"start":"09:00","end":"10:00"}],"exception_dates":[]}"#;
+        let error =
+            parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
+        assert!(error.contains("unknown weekday"));
+    }
+
+    #[test]
+    fn parse_rejects_schedule_set_with_invalid_exception_date() {
+        let payload = r#"{"windows":[{"days":["mon"],"start":"09:00","end":"10:00"}],"exception_dates":["2026-99-99"]}"#;
+        let error =
+            parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
+        assert!(error.contains("must be YYYY-MM-DD"));
     }
 
     #[test]
