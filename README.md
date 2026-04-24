@@ -412,7 +412,9 @@ Exports include daily/weekly aggregates, weekly consistency, profile
 effectiveness, task summaries/trends, and labeled focus-session records where
 task labels were attached. Focus-session rows persist and export first-class
 `focus_intention` and `task_note` fields; when dedicated metadata input is not
-provided, both fields default to the selected `task_label`.
+provided, both fields default to the selected `task_label`. Export files expose
+`schema_version` (currently `3`) so downstream consumers can handle versioned
+contracts explicitly.
 
 ## The way the system works
 
