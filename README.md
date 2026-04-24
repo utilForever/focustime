@@ -354,6 +354,7 @@ You can configure notification and auto-start settings directly from the TUI:
 
 - while a focus/break phase is running or paused, the app saves phase, remaining time, task metadata (`task_label`, `focus_intention`, `task_note`), and active profile
 - on startup, valid in-progress state is restored and shown in the timer notice line
+- on startup, blocking is reconciled with recovered timer state: recovered active focus re-applies blocking, while non-recovered startup attempts to remove stale crash-era block entries
 - stale or invalid saved recovery state is ignored safely with a warning notice
 - recovery state is cleared when an in-progress phase ends naturally or when you reset/skip out of the active session
 

@@ -1,3 +1,5 @@
+#[cfg(test)]
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io;
@@ -10,6 +12,23 @@ const HOSTS_FILE: &str = r"C:\Windows\System32\drivers\etc\hosts";
 const HOSTS_FILE: &str = "/etc/hosts";
 const BLOCK_MARKER_START: &str = "# focustime-block-start";
 const BLOCK_MARKER_END: &str = "# focustime-block-end";
+
+#[cfg(test)]
+thread_local! {
+    static TEST_LAST_BLOCKING_ACTION: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn record_test_blocking_action(action: &'static str) {
+    TEST_LAST_BLOCKING_ACTION.with(|slot| {
+        *slot.borrow_mut() = Some(action);
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn take_test_blocking_action() -> Option<&'static str> {
+    TEST_LAST_BLOCKING_ACTION.with(|slot| slot.borrow_mut().take())
+}
 
 pub struct SiteBlocker {
     pub sites: Vec<String>,
@@ -261,6 +280,9 @@ impl SiteBlocker {
     /// Activate blocking by writing entries into the hosts file.
     /// Returns an error if the file is not writable (e.g. needs sudo).
     pub fn block(&mut self) -> io::Result<()> {
+        #[cfg(test)]
+        record_test_blocking_action("block");
+
         if self.sites.is_empty() {
             self.is_blocking = false;
             // Best-effort: strip any stale block section left by a prior run.
@@ -276,6 +298,9 @@ impl SiteBlocker {
     /// Always attempts to strip any existing block section, even after a crash
     /// left entries behind with is_blocking == false.
     pub fn unblock(&mut self) -> io::Result<()> {
+        #[cfg(test)]
+        record_test_blocking_action("unblock");
+
         self.remove_hosts_block()?;
         self.is_blocking = false;
         Ok(())
