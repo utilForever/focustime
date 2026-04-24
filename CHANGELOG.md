@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CLI v3 core management commands (#172):** added `--goal`, `--strict`, `--schedule`, `--schedule-set`, and `--diagnostics` commands with text/JSON output for automation workflows.
+
 ### Changed
 
 ## [0.5.2] - 2026-04-23

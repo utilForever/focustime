@@ -97,6 +97,25 @@ cargo run -- --profile
 cargo run -- --profile deep-work
 cargo run -- --profile --json
 
+# Show or set daily goal targets (minutes,pomodoros)
+cargo run -- --goal
+cargo run -- --goal=120,4
+cargo run -- --goal --json
+
+# Show or set strict mode
+cargo run -- --strict
+cargo run -- --strict=on
+cargo run -- --strict --json
+
+# Show recurring schedule or replace it atomically from JSON
+cargo run -- --schedule
+cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"]}'
+cargo run -- --schedule --json
+
+# Show setup diagnostics checks (including hosts and WakaTime readiness)
+cargo run -- --diagnostics
+cargo run -- --diagnostics --json
+
 # Show status (text or JSON, including live timer/session fields in JSON)
 cargo run -- --status
 cargo run -- --status --json
