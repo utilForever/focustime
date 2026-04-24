@@ -329,6 +329,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - `recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
 - `recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
+- if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved by config order
 - the timer session overview shows the current/next scheduled window
 
 You can configure notification and auto-start settings directly from the TUI:

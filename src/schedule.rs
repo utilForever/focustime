@@ -78,7 +78,7 @@ pub fn active_occurrence(
         };
         let should_replace = selected
             .as_ref()
-            .is_none_or(|existing| candidate.start < existing.start);
+            .is_none_or(|existing| active_candidate_is_higher_priority(&candidate, existing));
         if should_replace {
             selected = Some(candidate);
         }
@@ -94,7 +94,11 @@ pub fn next_occurrence_after(
 ) -> Option<WindowOccurrence> {
     let mut selected: Option<WindowOccurrence> = None;
     let today = now.date_naive();
-    let search_days = 7_i64.saturating_mul(exception_dates.len() as i64 + 1);
+    let future_exception_count = exception_dates
+        .iter()
+        .filter(|date| **date >= today)
+        .count();
+    let search_days = 7_i64.saturating_mul((future_exception_count as i64).saturating_add(1));
 
     for day_offset in 0..=search_days {
         let date = today + Duration::days(day_offset);
@@ -121,7 +125,7 @@ pub fn next_occurrence_after(
             };
             let should_replace = selected
                 .as_ref()
-                .is_none_or(|existing| candidate.start < existing.start);
+                .is_none_or(|existing| next_candidate_is_higher_priority(&candidate, existing));
             if should_replace {
                 selected = Some(candidate);
             }
@@ -192,6 +196,22 @@ fn parse_time_minutes(raw: &str) -> Option<u16> {
 
 fn parse_exception_date(raw: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d").ok()
+}
+
+fn active_candidate_is_higher_priority(
+    candidate: &WindowOccurrence,
+    existing: &WindowOccurrence,
+) -> bool {
+    candidate.start > existing.start
+        || (candidate.start == existing.start && candidate.window_index < existing.window_index)
+}
+
+fn next_candidate_is_higher_priority(
+    candidate: &WindowOccurrence,
+    existing: &WindowOccurrence,
+) -> bool {
+    candidate.start < existing.start
+        || (candidate.start == existing.start && candidate.window_index < existing.window_index)
 }
 
 fn local_datetime_on(date: NaiveDate, total_minutes: u16) -> Option<DateTime<Local>> {
@@ -322,6 +342,81 @@ mod tests {
             .expect("next window should skip exception date");
         assert_eq!(next.start, local_datetime(tomorrow, 9, 0));
         assert_eq!(next.end, local_datetime(tomorrow, 10, 0));
+    }
+
+    #[test]
+    fn active_occurrence_prefers_most_recent_overlap_start() {
+        let date = Local::now().date_naive();
+        let now = local_datetime(date, 10, 45);
+        let windows = compile_windows(&[
+            RecurringFocusWindowConfig {
+                days: vec![date.weekday().to_string()],
+                start: "10:00".to_string(),
+                end: "11:30".to_string(),
+            },
+            RecurringFocusWindowConfig {
+                days: vec![date.weekday().to_string()],
+                start: "10:30".to_string(),
+                end: "12:00".to_string(),
+            },
+        ]);
+
+        let active =
+            active_occurrence(now, &windows, &HashSet::new()).expect("window should be active");
+
+        assert_eq!(active.window_index, 1);
+        assert_eq!(active.start, local_datetime(date, 10, 30));
+        assert_eq!(active.end, local_datetime(date, 12, 0));
+    }
+
+    #[test]
+    fn active_occurrence_tie_on_start_prefers_first_window_index() {
+        let date = Local::now().date_naive();
+        let now = local_datetime(date, 10, 15);
+        let windows = compile_windows(&[
+            RecurringFocusWindowConfig {
+                days: vec![date.weekday().to_string()],
+                start: "10:00".to_string(),
+                end: "11:00".to_string(),
+            },
+            RecurringFocusWindowConfig {
+                days: vec![date.weekday().to_string()],
+                start: "10:00".to_string(),
+                end: "10:30".to_string(),
+            },
+        ]);
+
+        let active =
+            active_occurrence(now, &windows, &HashSet::new()).expect("window should be active");
+
+        assert_eq!(active.window_index, 0);
+        assert_eq!(active.start, local_datetime(date, 10, 0));
+        assert_eq!(active.end, local_datetime(date, 11, 0));
+    }
+
+    #[test]
+    fn next_occurrence_after_tie_on_start_prefers_first_window_index() {
+        let date = Local::now().date_naive();
+        let now = local_datetime(date, 9, 45);
+        let windows = compile_windows(&[
+            RecurringFocusWindowConfig {
+                days: vec![date.weekday().to_string()],
+                start: "10:00".to_string(),
+                end: "11:00".to_string(),
+            },
+            RecurringFocusWindowConfig {
+                days: vec![date.weekday().to_string()],
+                start: "10:00".to_string(),
+                end: "10:30".to_string(),
+            },
+        ]);
+
+        let next = next_occurrence_after(now, &windows, &HashSet::new())
+            .expect("next window should exist for tied start");
+
+        assert_eq!(next.window_index, 0);
+        assert_eq!(next.start, local_datetime(date, 10, 0));
+        assert_eq!(next.end, local_datetime(date, 11, 0));
     }
 
     #[test]
