@@ -527,6 +527,7 @@ impl App {
         app.recompute_blocker_sites_from_active_profile();
         app.restore_in_progress_session();
         app.sync_recovery_snapshot();
+        app.apply_blocking_for_phase();
         app
     }
 
@@ -1402,6 +1403,11 @@ impl App {
             Err(error) => {
                 self.phase_notification =
                     Some(format!("Ignored saved in-progress session: {error}."));
+                if let Err(clear_error) = session_recovery::clear() {
+                    self.config_error = Some(format!(
+                        "session recovery cleanup failed after load error: {clear_error}"
+                    ));
+                }
                 return;
             }
         };
@@ -1483,7 +1489,6 @@ impl App {
         } else {
             None
         };
-        self.apply_blocking_for_phase();
         self.sync_task_planner_state();
         Ok(())
     }
@@ -3742,6 +3747,7 @@ pub(crate) fn should_handle_key(key: &KeyEvent) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::blocker;
     use crate::session_recovery::{
         self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
     };
@@ -6438,6 +6444,7 @@ mod tests {
 
     #[test]
     fn startup_restores_valid_in_progress_snapshot() {
+        let _ = blocker::take_test_blocking_action();
         session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
             TimerPhase::Focus,
             TimerStatus::Running,
@@ -6453,6 +6460,7 @@ mod tests {
         assert_eq!(app.timer.remaining_secs, 42);
         assert_eq!(app.selected_profile, ProfileId::DeepWork);
         assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
+        assert_eq!(blocker::take_test_blocking_action(), Some("block"));
         assert!(
             app.phase_notification
                 .as_deref()
@@ -6506,10 +6514,12 @@ mod tests {
 
     #[test]
     fn startup_reports_recovery_load_error() {
+        let _ = blocker::take_test_blocking_action();
         session_recovery::set_test_load_error("simulated read failure");
 
         let app = App::from_config(AppConfig::default());
 
+        assert_eq!(blocker::take_test_blocking_action(), Some("unblock"));
         assert!(
             app.phase_notification
                 .as_deref()
