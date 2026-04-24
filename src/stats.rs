@@ -17,7 +17,7 @@ use crate::task_labels::{canonical_task_label, normalize_task_label, task_label_
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
 const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
-const EXPORT_SCHEMA_VERSION: u32 = 2;
+const EXPORT_SCHEMA_VERSION: u32 = 3;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -1034,17 +1034,14 @@ impl FocusStats {
     fn export_session_rows(&self) -> Vec<SessionExportRow> {
         self.focus_sessions
             .iter()
-            .map(|session| {
-                let task_label = session.task_label.clone();
-                SessionExportRow {
-                    date: session.date.clone(),
-                    task_label: task_label.clone(),
-                    focus_intention: task_label.clone(),
-                    task_note: task_label,
-                    focused_seconds: session.focused_seconds,
-                    focused_minutes: session.focused_seconds / 60,
-                    profile: session.profile,
-                }
+            .map(|session| SessionExportRow {
+                date: session.date.clone(),
+                task_label: session.task_label.clone(),
+                focus_intention: session.focus_intention.clone(),
+                task_note: session.task_note.clone(),
+                focused_seconds: session.focused_seconds,
+                focused_minutes: session.focused_seconds / 60,
+                profile: session.profile,
             })
             .collect()
     }
@@ -2166,6 +2163,36 @@ mod tests {
     }
 
     #[test]
+    fn session_export_preserves_persisted_metadata_fields() {
+        let mut stats = FocusStats::default();
+        let goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        stats.record_focus_elapsed("2026-04-09", 30 * 60, goal);
+        stats.record_completed_pomodoro_with_metadata(
+            "2026-04-09",
+            goal,
+            FocusSessionMetadata {
+                task_label: Some("Project A"),
+                focus_intention: Some("Write release notes"),
+                task_note: Some("Capture blockers for follow-up"),
+            },
+            30 * 60,
+            Some(ProfileId::Classic),
+        );
+
+        let export = stats.export_data();
+        assert_eq!(export.sessions.len(), 1);
+        assert_eq!(export.sessions[0].task_label, "Project A");
+        assert_eq!(export.sessions[0].focus_intention, "Write release notes");
+        assert_eq!(
+            export.sessions[0].task_note,
+            "Capture blockers for follow-up"
+        );
+    }
+
+    #[test]
     fn invalid_toml_returns_parse_error() {
         assert!(FocusStats::try_from_toml("this is not valid toml").is_err());
     }
@@ -2569,19 +2596,19 @@ mod tests {
         let csv = fs::read_to_string(&exported.csv_path).unwrap();
         assert!(csv.contains("schema_version,record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes,profile_name,sessions_completed,active_days,consistency_score_pct,average_focused_minutes_per_session,focus_share_pct"));
         assert!(csv.contains(&format!(
-            "2,daily,{labeled_day},,,,1,1800,30,25,1,true,,,,,"
+            "3,daily,{labeled_day},,,,1,1800,30,25,1,true,,,,,"
         )));
-        assert!(csv.contains("2,weekly,,"));
+        assert!(csv.contains("3,weekly,,"));
         assert!(csv.contains(&format!(
-            "2,focus_session,{labeled_day},,,,1,1800,30,,,,Project A,,,Project A,Project A"
+            "3,focus_session,{labeled_day},,,,1,1800,30,,,,Project A,,,Project A,Project A"
         )));
         assert!(csv.contains(&format!(
-            "2,break_glass_override,{labeled_day},,,,0,0,0,,,,Project A,1711000000,300,,"
+            "3,break_glass_override,{labeled_day},,,,0,0,0,,,,Project A,1711000000,300,,"
         )));
-        assert!(csv.contains("2,task_summary,,,,,1,1800,30,,,,Project A"));
-        assert!(csv.contains("2,task_trend,,,,,1,1800,30,,,,Project A"));
-        assert!(csv.contains("2,weekly_consistency,"));
-        assert!(csv.contains("2,profile_effectiveness,,,,,1,1800,30"));
+        assert!(csv.contains("3,task_summary,,,,,1,1800,30,,,,Project A"));
+        assert!(csv.contains("3,task_trend,,,,,1,1800,30,,,,Project A"));
+        assert!(csv.contains("3,weekly_consistency,"));
+        assert!(csv.contains("3,profile_effectiveness,,,,,1,1800,30"));
         assert!(csv.contains("Classic,1,1,,30,100"));
 
         fs::remove_dir_all(export_dir).unwrap();
