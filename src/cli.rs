@@ -139,6 +139,8 @@ enum ParsedToken {
     Positional(String),
 }
 
+type KeyValueParser = fn(&str) -> Result<Option<ParsedToken>, String>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 struct ProfileSpec {
     focus_secs: u64,
@@ -425,45 +427,81 @@ fn classify_schedule_set_arg(
 }
 
 fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--task=") {
-        if value.trim().is_empty() {
-            return Err(invalid_usage("`--task=` requires a task label."));
+    let parsers: [KeyValueParser; 6] = [
+        parse_task_key_value_arg,
+        parse_profile_key_value_arg,
+        parse_goal_key_value_arg,
+        parse_strict_key_value_arg,
+        parse_schedule_set_key_value_arg,
+        parse_export_key_value_arg,
+    ];
+
+    for parser in parsers {
+        if let Some(token) = parser(arg)? {
+            return Ok(Some(token));
         }
+    }
+
+    Ok(None)
+}
+
+fn parse_task_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--task=") {
+        let value = require_nonempty_key_value(value, "`--task=` requires a task label.")?;
         return Ok(Some(ParsedToken::Task(value.to_string())));
     }
+    Ok(None)
+}
+
+fn parse_profile_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--profile=") {
-        if value.trim().is_empty() {
-            return Err(invalid_usage("`--profile=` requires a profile value."));
-        }
+        let value = require_nonempty_key_value(value, "`--profile=` requires a profile value.")?;
         return Ok(Some(ParsedToken::Profile(Some(parse_profile_id(value)?))));
     }
+    Ok(None)
+}
+
+fn parse_goal_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--goal=") {
-        if value.trim().is_empty() {
-            return Err(invalid_usage(
-                "`--goal=` requires values in `MINUTES,POMODOROS` format.",
-            ));
-        }
+        let value = require_nonempty_key_value(
+            value,
+            "`--goal=` requires values in `MINUTES,POMODOROS` format.",
+        )?;
         return Ok(Some(ParsedToken::Goal(Some(parse_goal_value(value)?))));
     }
+    Ok(None)
+}
+
+fn parse_strict_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--strict=") {
-        if value.trim().is_empty() {
-            return Err(invalid_usage("`--strict=` requires `on` or `off`."));
-        }
+        let value = require_nonempty_key_value(value, "`--strict=` requires `on` or `off`.")?;
         return Ok(Some(ParsedToken::Strict(Some(parse_strict_value(value)?))));
     }
+    Ok(None)
+}
+
+fn parse_schedule_set_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--schedule-set=") {
-        if value.trim().is_empty() {
-            return Err(invalid_usage("`--schedule-set=` requires a JSON payload."));
-        }
+        let value =
+            require_nonempty_key_value(value, "`--schedule-set=` requires a JSON payload.")?;
         return Ok(Some(ParsedToken::ScheduleSet(parse_schedule_value(value)?)));
     }
+    Ok(None)
+}
+
+fn parse_export_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--export=") {
-        if value.trim().is_empty() {
-            return Err(invalid_usage("`--export=` requires a target directory."));
-        }
+        let value = require_nonempty_key_value(value, "`--export=` requires a target directory.")?;
         return Ok(Some(ParsedToken::Export(Some(PathBuf::from(value)))));
     }
     Ok(None)
+}
+
+fn require_nonempty_key_value<'a>(value: &'a str, message: &str) -> Result<&'a str, String> {
+    if value.trim().is_empty() {
+        return Err(invalid_usage(message));
+    }
+    Ok(value)
 }
 
 fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
