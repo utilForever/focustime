@@ -236,6 +236,8 @@ struct LiveStatusOutput {
     pomodoros_completed: u32,
     selected_profile: ProfileView,
     selected_task_label: Option<String>,
+    focus_intention: Option<String>,
+    task_note: Option<String>,
     strict_mode_enforced: bool,
 }
 
@@ -244,6 +246,8 @@ struct StatusOutput {
     day: String,
     selected_profile: ProfileView,
     selected_task_label: Option<String>,
+    focus_intention: Option<String>,
+    task_note: Option<String>,
     selected_blocklist_profile: String,
     blocked_sites_count: usize,
     strict_mode: bool,
@@ -268,6 +272,8 @@ struct TimerStateOutput {
     pomodoros_completed: u32,
     selected_profile: ProfileView,
     selected_task_label: Option<String>,
+    focus_intention: Option<String>,
+    task_note: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1016,6 +1022,8 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
     let profile = app.selected_profile_id();
     let (focus_secs, short_break_secs, long_break_secs, long_break_interval) =
         app.profile_values(profile);
+    let (selected_task_label, focus_intention, task_note) =
+        mirror_metadata_from_task_label(app.selected_task_label_for_cli());
 
     TimerStateOutput {
         phase: timer_phase_id(phase),
@@ -1030,7 +1038,9 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
             long_break_secs,
             long_break_interval,
         },
-        selected_task_label: app.selected_task_label_for_cli(),
+        selected_task_label,
+        focus_intention,
+        task_note,
     }
 }
 
@@ -1039,6 +1049,8 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let today = stats.daily_for(&day);
     let session = stats.session();
     let (_, selected_task_label) = stats.task_planner_state();
+    let (selected_task_label, focus_intention, task_note) =
+        mirror_metadata_from_task_label(selected_task_label);
     let goal_snapshot = DailyGoalSnapshot {
         minutes: config.daily_goal.minutes,
         pomodoros: config.daily_goal.pomodoros,
@@ -1070,6 +1082,8 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
         day,
         selected_profile: profile_view(config.selected_profile, &config.effective_custom_profile()),
         selected_task_label,
+        focus_intention,
+        task_note,
         selected_blocklist_profile: config.selected_blocklist_profile.clone(),
         blocked_sites_count: active_sites_count,
         strict_mode: config.strict_mode,
@@ -1096,6 +1110,8 @@ fn build_live_status_output(
     fallback_task_label: Option<String>,
 ) -> LiveStatusOutput {
     let custom = config.effective_custom_profile();
+    let (fallback_task_label, fallback_focus_intention, fallback_task_note) =
+        mirror_metadata_from_task_label(fallback_task_label);
     match session_recovery::load() {
         Ok(Some(snapshot)) => {
             let phase = snapshot.phase();
@@ -1110,6 +1126,8 @@ fn build_live_status_output(
                 pomodoros_completed: snapshot.pomodoros_completed,
                 selected_profile: profile_view(snapshot.selected_profile, &custom),
                 selected_task_label: snapshot.normalized_task_label(),
+                focus_intention: snapshot.normalized_focus_intention(),
+                task_note: snapshot.normalized_task_note(),
                 strict_mode_enforced: config.strict_mode
                     && phase == TimerPhase::Focus
                     && status != TimerStatus::Idle,
@@ -1126,7 +1144,9 @@ fn build_live_status_output(
                 remaining_secs: selected_profile.focus_secs,
                 pomodoros_completed: 0,
                 selected_profile,
-                selected_task_label: fallback_task_label,
+                selected_task_label: fallback_task_label.clone(),
+                focus_intention: fallback_focus_intention.clone(),
+                task_note: fallback_task_note.clone(),
                 strict_mode_enforced: false,
             }
         }
@@ -1142,10 +1162,23 @@ fn build_live_status_output(
                 pomodoros_completed: 0,
                 selected_profile,
                 selected_task_label: fallback_task_label,
+                focus_intention: fallback_focus_intention,
+                task_note: fallback_task_note,
                 strict_mode_enforced: false,
             }
         }
     }
+}
+
+fn mirror_metadata_from_task_label(
+    task_label: Option<String>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let task_label = task_label
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let focus_intention = task_label.clone();
+    let task_note = task_label.clone();
+    (task_label, focus_intention, task_note)
 }
 
 fn profile_view(profile: ProfileId, custom: &CustomProfileConfig) -> ProfileView {
@@ -1428,6 +1461,14 @@ fn print_status_output(payload: &StatusOutput) {
         payload.selected_task_label.as_deref().unwrap_or("none")
     );
     println!(
+        "Focus intention: {}",
+        payload.focus_intention.as_deref().unwrap_or("none")
+    );
+    println!(
+        "Task note: {}",
+        payload.task_note.as_deref().unwrap_or("none")
+    );
+    println!(
         "Blocklist profile: {} ({} sites)",
         payload.selected_blocklist_profile, payload.blocked_sites_count
     );
@@ -1464,6 +1505,14 @@ fn print_status_output(payload: &StatusOutput) {
         format_duration(payload.live.remaining_secs),
         payload.live.state_source
     );
+    println!(
+        "Live focus intention: {}",
+        payload.live.focus_intention.as_deref().unwrap_or("none")
+    );
+    println!(
+        "Live task note: {}",
+        payload.live.task_note.as_deref().unwrap_or("none")
+    );
     if let Some(error) = payload.live.recovery_error.as_deref() {
         println!("Live timer warning: {error}");
     }
@@ -1480,6 +1529,14 @@ fn print_timer_state_output(timer: &TimerStateOutput) {
     println!(
         "Task label: {}",
         timer.selected_task_label.as_deref().unwrap_or("none")
+    );
+    println!(
+        "Focus intention: {}",
+        timer.focus_intention.as_deref().unwrap_or("none")
+    );
+    println!(
+        "Task note: {}",
+        timer.task_note.as_deref().unwrap_or("none")
     );
     println!(
         "Profile: {} ({})",
@@ -2140,6 +2197,8 @@ mod tests {
             remaining_secs: 42,
             pomodoros_completed: 3,
             selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Write docs".to_string()),
+            task_note: Some("API section".to_string()),
             selected_profile: ProfileId::DeepWork,
         }));
         let config = AppConfig::default();
@@ -2154,6 +2213,8 @@ mod tests {
         assert_eq!(output.live.remaining_secs, 42);
         assert_eq!(output.live.pomodoros_completed, 3);
         assert_eq!(output.live.selected_task_label.as_deref(), Some("Docs"));
+        assert_eq!(output.live.focus_intention.as_deref(), Some("Write docs"));
+        assert_eq!(output.live.task_note.as_deref(), Some("API section"));
         assert_eq!(output.live.selected_profile.id, "deep-work");
         assert!(output.live.recovery_error.is_none());
     }

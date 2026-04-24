@@ -351,7 +351,7 @@ You can configure notification and auto-start settings directly from the TUI:
 
 `focustime` persists in-progress timer sessions so restart/crash recovery can resume where you left off.
 
-- while a focus/break phase is running or paused, the app saves phase, remaining time, selected task label, and active profile
+- while a focus/break phase is running or paused, the app saves phase, remaining time, task metadata (`task_label`, `focus_intention`, `task_note`), and active profile
 - on startup, valid in-progress state is restored and shown in the timer notice line
 - stale or invalid saved recovery state is ignored safely with a warning notice
 - recovery state is cleared when an in-progress phase ends naturally or when you reset/skip out of the active session
@@ -410,8 +410,9 @@ From timer view:
 
 Exports include daily/weekly aggregates, weekly consistency, profile
 effectiveness, task summaries/trends, and labeled focus-session records where
-task labels were attached. Focus-session rows also include `focus_intention`
-and `task_note` fields (mirroring `task_label`) for downstream consumers.
+task labels were attached. Focus-session rows persist and export first-class
+`focus_intention` and `task_note` fields; when dedicated metadata input is not
+provided, both fields default to the selected `task_label`.
 
 ## The way the system works
 

@@ -144,9 +144,20 @@ pub struct ExportedStatsFiles {
 pub struct FocusSessionRecord {
     pub date: String,
     pub task_label: String,
+    #[serde(default)]
+    pub focus_intention: String,
+    #[serde(default)]
+    pub task_note: String,
     pub focused_seconds: u64,
     #[serde(default)]
     pub profile: Option<ProfileId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FocusSessionMetadata<'a> {
+    pub task_label: Option<&'a str>,
+    pub focus_intention: Option<&'a str>,
+    pub task_note: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -470,9 +481,15 @@ impl FocusStats {
         let mut focus_sessions = Vec::new();
         for session in persisted.focus_sessions {
             if let Some(task_label) = normalize_task_label(&session.task_label) {
+                let focus_intention = normalize_session_metadata_text(&session.focus_intention)
+                    .unwrap_or_else(|| task_label.clone());
+                let task_note = normalize_session_metadata_text(&session.task_note)
+                    .unwrap_or_else(|| task_label.clone());
                 focus_sessions.push(FocusSessionRecord {
                     date: session.date.trim().to_string(),
                     task_label,
+                    focus_intention,
+                    task_note,
                     focused_seconds: session.focused_seconds,
                     profile: session.profile,
                 });
@@ -551,19 +568,50 @@ impl FocusStats {
         focused_seconds: u64,
         profile: Option<ProfileId>,
     ) {
+        self.record_completed_pomodoro_with_metadata(
+            day_key,
+            goal,
+            FocusSessionMetadata {
+                task_label,
+                focus_intention: task_label,
+                task_note: task_label,
+            },
+            focused_seconds,
+            profile,
+        );
+    }
+
+    pub fn record_completed_pomodoro_with_metadata(
+        &mut self,
+        day_key: &str,
+        goal: DailyGoalSnapshot,
+        metadata: FocusSessionMetadata<'_>,
+        focused_seconds: u64,
+        profile: Option<ProfileId>,
+    ) {
         self.session.pomodoros_completed = self.session.pomodoros_completed.saturating_add(1);
         let daily = self.daily.entry(day_key.to_string()).or_default();
         daily.pomodoros_completed = daily.pomodoros_completed.saturating_add(1);
         daily.goal = Some(goal);
 
-        if let Some(task_label) = task_label.and_then(normalize_task_label) {
+        if let Some(task_label) = metadata.task_label.and_then(normalize_task_label) {
             if task_label_index(&self.task_labels, &task_label).is_none() {
                 self.task_labels.push(task_label.clone());
             }
             self.selected_task_label = Some(task_label.clone());
+            let focus_intention = metadata
+                .focus_intention
+                .and_then(normalize_session_metadata_text)
+                .unwrap_or_else(|| task_label.clone());
+            let task_note = metadata
+                .task_note
+                .and_then(normalize_session_metadata_text)
+                .unwrap_or_else(|| task_label.clone());
             self.focus_sessions.push(FocusSessionRecord {
                 date: day_key.to_string(),
                 task_label,
+                focus_intention,
+                task_note,
                 focused_seconds,
                 profile,
             });
@@ -1463,6 +1511,11 @@ fn normalize_task_planner_state(
     (normalized_labels, normalized_selected)
 }
 
+fn normalize_session_metadata_text(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
 pub fn current_day_key() -> String {
     chrono::Local::now()
         .date_naive()
@@ -2093,6 +2146,23 @@ mod tests {
         assert_eq!(profile_totals[0].profile, ProfileBucket::DeepWork);
         assert_eq!(profile_totals[0].pomodoros_completed, 1);
         assert_eq!(profile_totals[0].focused_minutes(), 25);
+    }
+
+    #[test]
+    fn legacy_focus_sessions_default_metadata_from_task_label() {
+        let legacy_toml = r#"
+            [[focus_sessions]]
+            date = "2026-04-09"
+            task_label = "Project A"
+            focused_seconds = 1500
+        "#;
+        let restored = FocusStats::try_from_toml(legacy_toml).unwrap();
+
+        let export = restored.export_data();
+        assert_eq!(export.sessions.len(), 1);
+        assert_eq!(export.sessions[0].task_label, "Project A");
+        assert_eq!(export.sessions[0].focus_intention, "Project A");
+        assert_eq!(export.sessions[0].task_note, "Project A");
     }
 
     #[test]

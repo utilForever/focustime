@@ -72,7 +72,11 @@ fn status_json_success_emits_payload_on_stdout() {
 
     let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
     assert!(payload.get("day").is_some());
+    assert!(payload.get("focus_intention").is_some());
+    assert!(payload.get("task_note").is_some());
     assert!(payload.get("live").is_some());
+    assert!(payload["live"].get("focus_intention").is_some());
+    assert!(payload["live"].get("task_note").is_some());
 }
 
 #[test]

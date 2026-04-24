@@ -22,9 +22,10 @@ use crate::schedule::{
 };
 use crate::session_recovery::{self, InProgressSessionSnapshot};
 use crate::stats::{
-    BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusStats,
-    GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileEffectiveness, ProfileTotals, SessionStats,
-    TaskTotals, TaskTrend, WeeklyConsistency, WeeklyStats, current_day_key,
+    BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles,
+    FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats,
+    ProfileEffectiveness, ProfileTotals, SessionStats, TaskTotals, TaskTrend, WeeklyConsistency,
+    WeeklyStats, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -366,6 +367,8 @@ pub struct App {
     pub planner_input_mode: Option<PlannerInputMode>,
     pub planner_feedback: Option<PlannerFeedback>,
     active_focus_task_label: Option<String>,
+    active_focus_intention: Option<String>,
+    active_focus_task_note: Option<String>,
     active_focus_profile: Option<ProfileId>,
     site_list_mode: SiteListMode,
     /// Index of the highlighted site in the SiteManager list.
@@ -478,6 +481,8 @@ impl App {
             planner_input_mode: None,
             planner_feedback: None,
             active_focus_task_label: None,
+            active_focus_intention: None,
+            active_focus_task_note: None,
             active_focus_profile: None,
             site_list_mode: SiteListMode::Blocklist,
             selected_site: 0,
@@ -566,6 +571,8 @@ impl App {
         if self.should_record_completed_focus_session(completed_phase, is_catchup) {
             self.record_completed_focus_session(completed_focus_secs);
             self.active_focus_task_label = None;
+            self.active_focus_intention = None;
+            self.active_focus_task_note = None;
             self.active_focus_profile = None;
         }
 
@@ -579,6 +586,8 @@ impl App {
 
         if self.timer.phase != TimerPhase::Focus {
             self.active_focus_task_label = None;
+            self.active_focus_intention = None;
+            self.active_focus_task_note = None;
             self.active_focus_profile = None;
             self.break_glass_expires_at = None;
         }
@@ -601,6 +610,8 @@ impl App {
         self.timer.status = TimerStatus::Running;
         if self.timer.phase == TimerPhase::Focus {
             self.active_focus_task_label = self.selected_task_label.clone();
+            self.active_focus_intention = self.selected_task_label.clone();
+            self.active_focus_task_note = self.selected_task_label.clone();
             self.active_focus_profile = Some(self.selected_profile);
         }
         false
@@ -1457,6 +1468,16 @@ impl App {
         } else {
             None
         };
+        self.active_focus_intention = if self.timer.phase == TimerPhase::Focus {
+            snapshot.normalized_focus_intention()
+        } else {
+            None
+        };
+        self.active_focus_task_note = if self.timer.phase == TimerPhase::Focus {
+            snapshot.normalized_task_note()
+        } else {
+            None
+        };
         self.active_focus_profile = if self.timer.phase == TimerPhase::Focus {
             Some(self.selected_profile)
         } else {
@@ -1475,10 +1496,26 @@ impl App {
         } else {
             self.selected_task_label.clone()
         };
+        let recovery_focus_intention = if self.focus_session_active_for_current_state() {
+            self.active_focus_intention
+                .clone()
+                .or_else(|| recovery_task_label.clone())
+        } else {
+            recovery_task_label.clone()
+        };
+        let recovery_task_note = if self.focus_session_active_for_current_state() {
+            self.active_focus_task_note
+                .clone()
+                .or_else(|| recovery_task_label.clone())
+        } else {
+            recovery_task_label.clone()
+        };
 
-        let snapshot = InProgressSessionSnapshot::from_timer_state(
+        let snapshot = InProgressSessionSnapshot::from_timer_state_with_metadata(
             &self.timer,
             recovery_task_label,
+            recovery_focus_intention,
+            recovery_task_note,
             self.selected_profile,
         );
 
@@ -1957,6 +1994,8 @@ impl App {
             .is_some_and(|active| active.eq_ignore_ascii_case(&current_label))
         {
             self.active_focus_task_label = Some(label.clone());
+            self.active_focus_intention = Some(label.clone());
+            self.active_focus_task_note = Some(label.clone());
         }
 
         self.sync_task_planner_state();
@@ -2243,6 +2282,8 @@ impl App {
             profile_spec.long_break_interval,
         );
         self.active_focus_task_label = None;
+        self.active_focus_intention = None;
+        self.active_focus_task_note = None;
         self.active_focus_profile = None;
         self.selected_profile = profile;
         self.profile_selection_index = profile_index(profile);
@@ -2840,10 +2881,14 @@ impl App {
         let is_focus_active = self.focus_session_active_for_current_state();
         if !was_focus_active && is_focus_active {
             self.active_focus_task_label = self.selected_task_label.clone();
+            self.active_focus_intention = self.selected_task_label.clone();
+            self.active_focus_task_note = self.selected_task_label.clone();
             self.active_focus_profile = Some(self.selected_profile);
             self.schedule_armed_occurrence_key = None;
         } else if was_focus_active && !is_focus_active {
             self.active_focus_task_label = None;
+            self.active_focus_intention = None;
+            self.active_focus_task_note = None;
             self.active_focus_profile = None;
             self.break_glass_expires_at = None;
         }
@@ -3001,11 +3046,23 @@ impl App {
     fn record_completed_focus_session(&mut self, focused_seconds: u64) {
         let day_key = current_day_key();
         let goal = self.current_goal_snapshot();
-        if self.active_focus_task_label.is_some() {
-            self.stats.record_completed_pomodoro_with_task(
+        if let Some(active_task_label) = self.active_focus_task_label.clone() {
+            let focus_intention = self
+                .active_focus_intention
+                .clone()
+                .unwrap_or_else(|| active_task_label.clone());
+            let task_note = self
+                .active_focus_task_note
+                .clone()
+                .unwrap_or_else(|| active_task_label.clone());
+            self.stats.record_completed_pomodoro_with_metadata(
                 &day_key,
                 goal,
-                self.active_focus_task_label.as_deref(),
+                FocusSessionMetadata {
+                    task_label: Some(active_task_label.as_str()),
+                    focus_intention: Some(focus_intention.as_str()),
+                    task_note: Some(task_note.as_str()),
+                },
                 focused_seconds,
                 self.active_focus_profile,
             );
@@ -3730,12 +3787,15 @@ mod tests {
         task_label: Option<&str>,
         selected_profile: ProfileId,
     ) -> InProgressSessionSnapshot {
+        let metadata_value = task_label.map(str::to_string);
         InProgressSessionSnapshot {
             phase: RecoveryTimerPhase::from_timer_phase(phase),
             status: RecoveryTimerStatus::from_timer_status(status),
             remaining_secs,
             pomodoros_completed: 0,
-            selected_task_label: task_label.map(str::to_string),
+            selected_task_label: metadata_value.clone(),
+            focus_intention: metadata_value.clone(),
+            task_note: metadata_value,
             selected_profile,
         }
     }
@@ -6329,6 +6389,8 @@ mod tests {
             remaining_secs: 1,
             pomodoros_completed: 3,
             selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Docs".to_string()),
+            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
         }));
 
@@ -6404,6 +6466,8 @@ mod tests {
 
         let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
         assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task A"));
+        assert_eq!(snapshot.focus_intention.as_deref(), Some("Task A"));
+        assert_eq!(snapshot.task_note.as_deref(), Some("Task A"));
     }
 
     #[test]
@@ -6425,6 +6489,8 @@ mod tests {
 
         let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
         assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task B"));
+        assert_eq!(snapshot.focus_intention.as_deref(), Some("Task B"));
+        assert_eq!(snapshot.task_note.as_deref(), Some("Task B"));
         assert_eq!(snapshot.phase, RecoveryTimerPhase::ShortBreak);
         assert_eq!(snapshot.status, RecoveryTimerStatus::Running);
     }
