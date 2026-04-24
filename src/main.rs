@@ -28,7 +28,10 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 
 use app::App;
 use app::should_handle_key;
-use cli::{CliAction, execute_command, parse_args, usage_text};
+use cli::{
+    CliAction, OutputMode, emit_cli_error, execute_command, parse_args_with_contract,
+    runtime_error, usage_text,
+};
 
 /// RAII guard that restores the terminal on drop, ensuring cleanup on any exit path.
 struct TerminalGuard {
@@ -82,11 +85,13 @@ impl Drop for TerminalGuard {
 }
 
 fn main() -> io::Result<()> {
-    let cli_action = match parse_args(std::env::args_os().skip(1)) {
+    let cli_action = match parse_args_with_contract(std::env::args_os().skip(1)) {
         Ok(action) => action,
         Err(error) => {
-            eprintln!("{error}");
-            process::exit(2);
+            if let Err(render_error) = emit_cli_error(&error) {
+                eprintln!("{render_error}");
+            }
+            process::exit(error.exit_code());
         }
     };
 
@@ -97,16 +102,23 @@ fn main() -> io::Result<()> {
             return Ok(());
         }
         CliAction::RunCommand(command) => {
+            let output_mode = command.output;
             if let Err(error) = execute_command(command) {
-                eprintln!("{error}");
-                process::exit(1);
+                let cli_error = runtime_error(output_mode, error);
+                if let Err(render_error) = emit_cli_error(&cli_error) {
+                    eprintln!("{render_error}");
+                }
+                process::exit(cli_error.exit_code());
             }
             return Ok(());
         }
         CliAction::RunTui { start_immediately } => {
             if start_immediately && let Err(error) = app.start_focus_for_cli() {
-                eprintln!("{error}");
-                process::exit(1);
+                let cli_error = runtime_error(OutputMode::Text, error);
+                if let Err(render_error) = emit_cli_error(&cli_error) {
+                    eprintln!("{render_error}");
+                }
+                process::exit(cli_error.exit_code());
             }
         }
     }

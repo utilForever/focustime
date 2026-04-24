@@ -125,6 +125,31 @@ cargo run -- --export
 cargo run -- --export=./reports --json
 ```
 
+#### CLI JSON/error contract
+
+- `--json` success responses are emitted to `stdout` as JSON and exit with code `0`.
+- `--json` failures are emitted to `stdout` as JSON (no mixed human text) and exit with a non-zero code.
+- Text-mode failures are emitted to `stderr` for interactive readability.
+
+Exit codes:
+
+- `0`: success
+- `1`: runtime/command failure
+- `2`: argument/usage failure
+
+JSON failure shape:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "kind": "usage",
+    "exit_code": 2,
+    "message": "Unknown option `--unknown`.\n\nUsage:\n..."
+  }
+}
+```
+
 When no CLI command is provided, `focustime` keeps the default interactive TUI mode.
 
 > Site blocking updates your OS hosts file and may require elevated privileges

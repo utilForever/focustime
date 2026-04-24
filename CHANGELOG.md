@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **CLI JSON/error contract and exit-code consistency (#173):** centralized CLI error handling, added machine-readable JSON error envelopes for `--json` failures, and standardized exit-code mapping (`0` success, `1` runtime failure, `2` usage failure).
+
 ## [0.5.2] - 2026-04-23
 
 ### Added

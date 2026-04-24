@@ -58,6 +58,45 @@ pub enum OutputMode {
     Json,
 }
 
+const EXIT_CODE_RUNTIME_ERROR: i32 = 1;
+const EXIT_CODE_USAGE_ERROR: i32 = 2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CliErrorKind {
+    Usage,
+    Runtime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CliError {
+    kind: CliErrorKind,
+    output: OutputMode,
+    message: String,
+}
+
+impl CliError {
+    pub fn exit_code(&self) -> i32 {
+        match self.kind {
+            CliErrorKind::Usage => EXIT_CODE_USAGE_ERROR,
+            CliErrorKind::Runtime => EXIT_CODE_RUNTIME_ERROR,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct CliErrorEnvelope {
+    ok: bool,
+    error: CliErrorPayload,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct CliErrorPayload {
+    kind: CliErrorKind,
+    exit_code: i32,
+    message: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandKind {
     Pause,
@@ -283,21 +322,82 @@ pub fn usage_text() -> &'static str {
     USAGE_TEXT
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn parse_args<I>(args: I) -> Result<CliAction, String>
 where
     I: IntoIterator<Item = OsString>,
 {
-    let args: Vec<String> = args
+    parse_args_with_contract(args).map_err(|error| error.message)
+}
+
+pub fn parse_args_with_contract<I>(args: I) -> Result<CliAction, CliError>
+where
+    I: IntoIterator<Item = OsString>,
+{
+    let raw_args: Vec<OsString> = args.into_iter().collect();
+    let output_hint = infer_output_mode_from_os_args(&raw_args);
+    let args: Vec<String> = raw_args
         .into_iter()
         .map(|arg| {
-            arg.into_string()
-                .map_err(|_| invalid_usage("Arguments must be valid UTF-8."))
+            arg.into_string().map_err(|_| {
+                usage_error(output_hint, invalid_usage("Arguments must be valid UTF-8."))
+            })
         })
         .collect::<Result<_, _>>()?;
-    let tokens = classify_args(&args)?;
-    let (show_help, output) = parse_global_tokens(&tokens)?;
-    let primary = parse_primary_command(&tokens)?;
-    finalize_cli_action(show_help, output, primary)
+    let tokens = classify_args(&args).map_err(|message| usage_error(output_hint, message))?;
+    let (show_help, output) =
+        parse_global_tokens(&tokens).map_err(|message| usage_error(output_hint, message))?;
+    let primary = parse_primary_command(&tokens).map_err(|message| usage_error(output, message))?;
+    finalize_cli_action(show_help, output, primary).map_err(|message| usage_error(output, message))
+}
+
+pub fn runtime_error(output: OutputMode, message: String) -> CliError {
+    CliError {
+        kind: CliErrorKind::Runtime,
+        output,
+        message,
+    }
+}
+
+pub fn emit_cli_error(error: &CliError) -> Result<(), String> {
+    match error.output {
+        OutputMode::Text => {
+            eprintln!("{}", error.message);
+            Ok(())
+        }
+        OutputMode::Json => print_json(&CliErrorEnvelope {
+            ok: false,
+            error: CliErrorPayload {
+                kind: error.kind,
+                exit_code: error.exit_code(),
+                message: error.message.clone(),
+            },
+        }),
+    }
+}
+
+fn usage_error(output: OutputMode, message: String) -> CliError {
+    CliError {
+        kind: CliErrorKind::Usage,
+        output,
+        message,
+    }
+}
+
+fn infer_output_mode_from_os_args(args: &[OsString]) -> OutputMode {
+    let parsed_args: Vec<String> = args
+        .iter()
+        .filter_map(|arg| arg.to_str().map(ToString::to_string))
+        .collect();
+    infer_output_mode_from_args(&parsed_args)
+}
+
+fn infer_output_mode_from_args(args: &[String]) -> OutputMode {
+    if args.iter().any(|arg| arg == "--json") {
+        OutputMode::Json
+    } else {
+        OutputMode::Text
+    }
 }
 
 fn classify_args(args: &[String]) -> Result<Vec<ParsedToken>, String> {
@@ -1512,6 +1612,10 @@ mod tests {
         parse_args(values.iter().map(OsString::from))
     }
 
+    fn parse_with_contract(values: &[&str]) -> Result<CliAction, CliError> {
+        parse_args_with_contract(values.iter().map(OsString::from))
+    }
+
     #[test]
     fn parse_without_arguments_runs_default_tui() {
         let parsed = parse(&[]).unwrap();
@@ -1960,6 +2064,28 @@ mod tests {
     fn parse_rejects_json_with_start() {
         let error = parse(&["--start", "--json"]).unwrap_err();
         assert!(error.contains("not supported with `--start`"));
+    }
+
+    #[test]
+    fn parse_with_contract_marks_json_usage_errors() {
+        let error = parse_with_contract(&["--status", "--unknown", "--json"]).unwrap_err();
+        assert_eq!(error.kind, CliErrorKind::Usage);
+        assert_eq!(error.output, OutputMode::Json);
+        assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+        assert!(error.message.contains("Unknown option"));
+    }
+
+    #[test]
+    fn parse_with_contract_detects_json_on_early_parse_failures() {
+        let error = parse_with_contract(&["--schedule-set", "--json"]).unwrap_err();
+        assert_eq!(error.kind, CliErrorKind::Usage);
+        assert_eq!(error.output, OutputMode::Json);
+        assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+        assert!(
+            error
+                .message
+                .contains("`--schedule-set` requires a JSON payload")
+        );
     }
 
     #[cfg(unix)]
