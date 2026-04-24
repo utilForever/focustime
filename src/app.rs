@@ -5513,6 +5513,85 @@ mod tests {
     }
 
     #[test]
+    fn recurring_schedule_triggers_overlapping_window_when_new_window_starts() {
+        let first_tick = local_datetime_today(10, 15);
+        let overlap_window_tick = local_datetime_today(10, 35);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![
+                    crate::config::RecurringFocusWindowConfig {
+                        days: vec![weekday_token(first_tick.weekday()).to_string()],
+                        start: "10:00".to_string(),
+                        end: "11:00".to_string(),
+                    },
+                    crate::config::RecurringFocusWindowConfig {
+                        days: vec![weekday_token(first_tick.weekday()).to_string()],
+                        start: "10:30".to_string(),
+                        end: "11:30".to_string(),
+                    },
+                ],
+                ..RecurringScheduleConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+
+        app.sync_recurring_schedule(first_tick);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+
+        app.timer.status = TimerStatus::Idle;
+        app.sync_recurring_schedule(overlap_window_tick);
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("Scheduled window started. Focus auto-started.")
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_does_not_retrigger_within_same_overlapping_occurrence() {
+        let first_tick = local_datetime_today(10, 15);
+        let overlap_window_tick = local_datetime_today(10, 35);
+        let same_overlap_occurrence_tick = local_datetime_today(10, 40);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![
+                    crate::config::RecurringFocusWindowConfig {
+                        days: vec![weekday_token(first_tick.weekday()).to_string()],
+                        start: "10:00".to_string(),
+                        end: "11:00".to_string(),
+                    },
+                    crate::config::RecurringFocusWindowConfig {
+                        days: vec![weekday_token(first_tick.weekday()).to_string()],
+                        start: "10:30".to_string(),
+                        end: "11:30".to_string(),
+                    },
+                ],
+                ..RecurringScheduleConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+
+        app.sync_recurring_schedule(first_tick);
+        app.timer.status = TimerStatus::Idle;
+        app.sync_recurring_schedule(overlap_window_tick);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+
+        app.timer.status = TimerStatus::Idle;
+        app.sync_recurring_schedule(same_overlap_occurrence_tick);
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+    }
+
+    #[test]
     fn strict_mode_blocks_skip_during_active_focus() {
         let config = AppConfig {
             strict_mode: true,
