@@ -1725,16 +1725,17 @@ fn apply_site_delete_command(
 ) -> Result<SiteDeleteCommandOutput, String> {
     ensure_blocklist_profiles(config);
     let index = selected_blocklist_profile_index(config);
-    let sites = active_profile_sites(config, index, target).to_vec();
-    let delete_index = sites
-        .iter()
-        .position(|value| value.eq_ignore_ascii_case(site.trim()))
-        .ok_or_else(|| format!("Site `{site}` was not found in {}.", target.id()))?;
+    let site = site.trim();
 
     let mut working = SiteBlocker::new();
-    for site in sites {
-        working.add_site(site);
+    for current in active_profile_sites(config, index, target) {
+        working.add_site(current.clone());
     }
+    let delete_index = working
+        .sites
+        .iter()
+        .position(|value| value.eq_ignore_ascii_case(site))
+        .ok_or_else(|| format!("Site `{site}` was not found in {}.", target.id()))?;
     let removed = working
         .remove_site(delete_index)
         .ok_or_else(|| format!("Site `{site}` was not found in {}.", target.id()))?;
@@ -3666,6 +3667,36 @@ mod tests {
             vec!["a.com".to_string(), "b.com".to_string()]
         );
         assert_eq!(payload.effective_blocked_sites_count, 2);
+    }
+
+    #[test]
+    fn apply_site_delete_command_handles_duplicate_case_entries() {
+        let mut config = AppConfig {
+            blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+                name: "Default".to_string(),
+                sites: vec![
+                    "example.com".to_string(),
+                    "Example.com".to_string(),
+                    "other.com".to_string(),
+                ],
+                allowlist_sites: Vec::new(),
+            }],
+            selected_blocklist_profile: "Default".to_string(),
+            ..AppConfig::default()
+        };
+
+        let payload =
+            apply_site_delete_command(&mut config, SiteListTarget::Blocklist, " EXAMPLE.COM ")
+                .unwrap();
+
+        assert!(payload.updated);
+        assert_eq!(payload.removed, "example.com");
+        assert_eq!(
+            config.blocklist_profiles[0].sites,
+            vec!["other.com".to_string()]
+        );
+        assert_eq!(config.blocked_sites, vec!["other.com".to_string()]);
+        assert_eq!(payload.effective_blocked_sites_count, 1);
     }
 
     #[test]
