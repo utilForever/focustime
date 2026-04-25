@@ -180,3 +180,20 @@ fn text_parse_errors_still_use_stderr() {
     assert!(stdout_text(&output).trim().is_empty());
     assert!(stderr_text(&output).contains("Unknown option"));
 }
+
+#[test]
+fn blocking_preview_json_emits_payload_on_stdout() {
+    let env = TestEnv::new("blocking-preview-json");
+    let output = env.run(&["--blocking-preview", "--json"]);
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(stderr_text(&output).trim().is_empty());
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert!(payload.get("hosts_file_path").is_some());
+    assert!(payload.get("action").is_some());
+    assert!(payload.get("would_change").is_some());
+    assert!(payload.get("effective_blocked_sites_count").is_some());
+    assert!(payload.get("effective_blocked_sites").is_some());
+    assert!(payload.get("section").is_some());
+}

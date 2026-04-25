@@ -97,6 +97,37 @@ pub enum EditSiteResult {
     MissingSelection,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockingIntent {
+    Block,
+    Unblock,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockingPreviewAction {
+    Block,
+    Unblock,
+    NoChange,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockingPreview {
+    pub hosts_file_path: String,
+    pub action: BlockingPreviewAction,
+    pub effective_blocked_sites: Vec<String>,
+    pub would_change: bool,
+    pub current_section: Option<String>,
+    pub next_section: Option<String>,
+}
+
+impl BlockingPreview {
+    pub fn section_for_display(&self) -> Option<&str> {
+        self.next_section
+            .as_deref()
+            .or(self.current_section.as_deref())
+    }
+}
+
 impl SiteBlocker {
     pub fn new() -> Self {
         Self {
@@ -277,6 +308,11 @@ impl SiteBlocker {
         hosts_file_diagnostics_for(Path::new(HOSTS_FILE))
     }
 
+    pub fn preview_hosts_update(&self, intent: BlockingIntent) -> io::Result<BlockingPreview> {
+        let original = fs::read_to_string(HOSTS_FILE)?;
+        Ok(self.preview_from_content(HOSTS_FILE, &original, intent))
+    }
+
     /// Activate blocking by writing entries into the hosts file.
     /// Returns an error if the file is not writable (e.g. needs sudo).
     pub fn block(&mut self) -> io::Result<()> {
@@ -313,24 +349,7 @@ impl SiteBlocker {
 
     fn apply_hosts_block(&self) -> io::Result<()> {
         let original = fs::read_to_string(HOSTS_FILE)?;
-        // Detect the original line ending style so we don't convert CRLF → LF
-        // on Windows hosts files.
-        let nl = line_ending_for(&original);
-        let mut content = Self::strip_block_section(&original);
-
-        // Only insert a separator newline when the content doesn't already end
-        // with one, so repeated focus/break cycles don't accumulate blank lines.
-        if !content.ends_with(nl) && !content.is_empty() {
-            content.push_str(nl);
-        }
-        content.push_str(BLOCK_MARKER_START);
-        content.push_str(nl);
-        for site in &self.sites {
-            append_site_entries(&mut content, site, nl);
-        }
-        content.push_str(BLOCK_MARKER_END);
-        content.push_str(nl);
-
+        let content = self.build_blocked_hosts_content(&original);
         atomic_write_hosts(&content)?;
         flush_dns_cache();
         Ok(())
@@ -389,6 +408,105 @@ impl SiteBlocker {
         }
 
         result
+    }
+
+    fn preview_from_content(
+        &self,
+        hosts_file_path: &str,
+        original: &str,
+        intent: BlockingIntent,
+    ) -> BlockingPreview {
+        let nl = line_ending_for(original);
+        let current_section = Self::extract_block_section(original);
+        let next_section = match intent {
+            BlockingIntent::Block if !self.sites.is_empty() => Some(self.render_block_section(nl)),
+            BlockingIntent::Block | BlockingIntent::Unblock => None,
+        };
+        let next_content = match next_section.as_deref() {
+            Some(section) => Self::build_hosts_content_with_section(original, section, nl),
+            None => Self::strip_block_section(original),
+        };
+        let would_change = next_content != original;
+        let action = if !would_change {
+            BlockingPreviewAction::NoChange
+        } else if next_section.is_some() {
+            BlockingPreviewAction::Block
+        } else {
+            BlockingPreviewAction::Unblock
+        };
+        let effective_blocked_sites = if next_section.is_some() {
+            self.sites.clone()
+        } else {
+            Vec::new()
+        };
+
+        BlockingPreview {
+            hosts_file_path: hosts_file_path.to_string(),
+            action,
+            effective_blocked_sites,
+            would_change,
+            current_section,
+            next_section,
+        }
+    }
+
+    fn build_blocked_hosts_content(&self, original: &str) -> String {
+        let nl = line_ending_for(original);
+        let section = self.render_block_section(nl);
+        Self::build_hosts_content_with_section(original, &section, nl)
+    }
+
+    fn build_hosts_content_with_section(original: &str, section: &str, nl: &str) -> String {
+        let mut content = Self::strip_block_section(original);
+
+        // Only insert a separator newline when the content doesn't already end
+        // with one, so repeated focus/break cycles don't accumulate blank lines.
+        if !content.ends_with(nl) && !content.is_empty() {
+            content.push_str(nl);
+        }
+        content.push_str(section);
+        content
+    }
+
+    fn render_block_section(&self, nl: &str) -> String {
+        let mut section = String::new();
+        section.push_str(BLOCK_MARKER_START);
+        section.push_str(nl);
+        for site in &self.sites {
+            append_site_entries(&mut section, site, nl);
+        }
+        section.push_str(BLOCK_MARKER_END);
+        section.push_str(nl);
+        section
+    }
+
+    fn extract_block_section(content: &str) -> Option<String> {
+        let nl = line_ending_for(content);
+        let mut in_block = false;
+        let mut section = String::new();
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if !in_block {
+                if trimmed == BLOCK_MARKER_START {
+                    in_block = true;
+                    section.push_str(BLOCK_MARKER_START);
+                    section.push_str(nl);
+                }
+                continue;
+            }
+
+            if trimmed == BLOCK_MARKER_END {
+                section.push_str(BLOCK_MARKER_END);
+                section.push_str(nl);
+                return Some(section);
+            }
+
+            section.push_str(line);
+            section.push_str(nl);
+        }
+
+        None
     }
 }
 
@@ -768,5 +886,60 @@ mod tests {
             assert!(diagnostics.can_write());
             assert!(diagnostics.write_error.is_none());
         }
+    }
+
+    #[test]
+    fn preview_block_reports_next_section_and_change() {
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("example.com".to_string());
+        let original = "127.0.0.1 localhost\n";
+
+        let preview = blocker.preview_from_content("hosts", original, BlockingIntent::Block);
+
+        assert_eq!(preview.action, BlockingPreviewAction::Block);
+        assert!(preview.would_change);
+        assert_eq!(preview.current_section, None);
+        assert_eq!(preview.effective_blocked_sites, vec!["example.com"]);
+        let section = preview
+            .next_section
+            .as_deref()
+            .expect("block preview should include next section");
+        assert!(section.contains("# focustime-block-start"));
+        assert!(section.contains("127.0.0.1 example.com"));
+        assert!(section.contains("::1 www.example.com"));
+        assert_eq!(preview.section_for_display(), Some(section));
+    }
+
+    #[test]
+    fn preview_unblock_reports_current_section_and_change() {
+        let blocker = SiteBlocker::new();
+        let original = "127.0.0.1 localhost\n# focustime-block-start\n127.0.0.1 example.com\n# focustime-block-end\n";
+
+        let preview = blocker.preview_from_content("hosts", original, BlockingIntent::Unblock);
+
+        assert_eq!(preview.action, BlockingPreviewAction::Unblock);
+        assert!(preview.would_change);
+        assert!(preview.next_section.is_none());
+        let section = preview
+            .current_section
+            .as_deref()
+            .expect("unblock preview should include current section");
+        assert!(section.contains("# focustime-block-start"));
+        assert!(section.contains("# focustime-block-end"));
+        assert_eq!(preview.section_for_display(), Some(section));
+    }
+
+    #[test]
+    fn preview_block_no_change_when_hosts_already_match() {
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("example.com".to_string());
+        let original = blocker.build_blocked_hosts_content("127.0.0.1 localhost\n");
+
+        let preview = blocker.preview_from_content("hosts", &original, BlockingIntent::Block);
+
+        assert_eq!(preview.action, BlockingPreviewAction::NoChange);
+        assert!(!preview.would_change);
+        assert!(preview.next_section.is_some());
+        assert!(preview.current_section.is_some());
     }
 }

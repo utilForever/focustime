@@ -12,7 +12,7 @@ use chrono::NaiveDate;
 use serde::Serialize;
 
 use crate::app::{App, SetupCheck, SetupCheckLevel, SetupDiagnostics};
-use crate::blocker::{EditSiteResult, InvalidSiteInput, SiteBlocker};
+use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
     AppConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig, ProfileId,
     RecurringFocusWindowConfig, RecurringScheduleConfig,
@@ -52,6 +52,7 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --blocklist-site-delete=HOSTNAME [--json]
   focustime --allowlist-site-delete=HOSTNAME [--json]
   focustime --diagnostics [--json]
+  focustime --blocking-preview [--json]
   focustime --status [--watch[=SECONDS]] [--json]
   focustime --export[=DIR] [--json]
 
@@ -80,6 +81,7 @@ Options:
   --blocklist-site-delete     Delete blocklist hostname in active profile
   --allowlist-site-delete     Delete allowlist hostname in active profile
   --diagnostics   Show setup diagnostics checks
+  --blocking-preview  Preview focustime hosts-section changes without writing
   --status        Print status summary (includes live timer/session fields)
   --watch         Stream periodic status updates (status command only; default 1s)
   --export        Export stats to current directory or DIR
@@ -154,6 +156,7 @@ pub enum CommandKind {
         schedule: Option<RecurringScheduleConfig>,
     },
     Diagnostics,
+    BlockingPreview,
     Status {
         watch_interval_secs: Option<u64>,
     },
@@ -196,6 +199,7 @@ enum PrimaryCommand {
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
     Diagnostics,
+    BlockingPreview,
     Status,
     Export(Option<PathBuf>),
     BlocklistProfile(Option<String>),
@@ -230,6 +234,7 @@ enum ParsedToken {
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
     Diagnostics,
+    BlockingPreview,
     Export(Option<PathBuf>),
     BlocklistProfile(Option<String>),
     BlocklistProfileCreate(String),
@@ -430,6 +435,16 @@ struct DiagnosticsCommandOutput {
     blocking_permissions: SetupCheckOutput,
     hosts_write_capability: SetupCheckOutput,
     wakatime_config: SetupCheckOutput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct BlockingPreviewCommandOutput {
+    hosts_file_path: String,
+    action: &'static str,
+    would_change: bool,
+    effective_blocked_sites_count: usize,
+    effective_blocked_sites: Vec<String>,
+    section: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -670,6 +685,7 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--status" => Some(ParsedToken::Status),
         "--schedule" => Some(ParsedToken::Schedule),
         "--diagnostics" => Some(ParsedToken::Diagnostics),
+        "--blocking-preview" => Some(ParsedToken::BlockingPreview),
         "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
         "--blocklist-sites" => Some(ParsedToken::BlocklistSites),
         "--allowlist-sites" => Some(ParsedToken::AllowlistSites),
@@ -1128,6 +1144,7 @@ fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), Str
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
             | ParsedToken::Diagnostics
+            | ParsedToken::BlockingPreview
             | ParsedToken::Export(_)
             | ParsedToken::BlocklistProfile(_)
             | ParsedToken::BlocklistProfileCreate(_)
@@ -1175,6 +1192,9 @@ fn parse_primary_command(tokens: &[ParsedToken]) -> Result<Option<PrimaryCommand
             }
             ParsedToken::Diagnostics => {
                 set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
+            }
+            ParsedToken::BlockingPreview => {
+                set_primary_command(&mut primary, PrimaryCommand::BlockingPreview)?
             }
             ParsedToken::Export(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
@@ -1290,6 +1310,10 @@ fn finalize_cli_action(
         })),
         Some(PrimaryCommand::Diagnostics) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Diagnostics,
+            output,
+        })),
+        Some(PrimaryCommand::BlockingPreview) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlockingPreview,
             output,
         })),
         Some(PrimaryCommand::Pause) => Ok(CliAction::RunCommand(CliCommand {
@@ -1423,6 +1447,7 @@ pub fn execute_command(cli_command: CliCommand) -> Result<(), String> {
             execute_schedule_command(schedule, cli_command.output)
         }
         CommandKind::Diagnostics => execute_diagnostics_command(cli_command.output),
+        CommandKind::BlockingPreview => execute_blocking_preview_command(cli_command.output),
         CommandKind::Status {
             watch_interval_secs,
         } => execute_status_command(cli_command.output, watch_interval_secs),
@@ -2049,6 +2074,18 @@ fn execute_diagnostics_command(output: OutputMode) -> Result<(), String> {
     Ok(())
 }
 
+fn execute_blocking_preview_command(output: OutputMode) -> Result<(), String> {
+    let app = App::new();
+    let preview = app.blocking_preview_for_cli()?;
+    let payload = build_blocking_preview_command_output(&preview);
+
+    match output {
+        OutputMode::Text => print_blocking_preview_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
 fn execute_status_command(
     output: OutputMode,
     watch_interval_secs: Option<u64>,
@@ -2554,6 +2591,7 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
         PrimaryCommand::Diagnostics => "--diagnostics",
+        PrimaryCommand::BlockingPreview => "--blocking-preview",
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Export(_) => "--export",
         PrimaryCommand::BlocklistProfile(_) => "--blocklist-profile",
@@ -2894,6 +2932,46 @@ fn build_diagnostics_command_output(diagnostics: &SetupDiagnostics) -> Diagnosti
         blocking_permissions: setup_check_output(&diagnostics.blocking_permissions),
         hosts_write_capability: setup_check_output(&diagnostics.hosts_write_capability),
         wakatime_config: setup_check_output(&diagnostics.wakatime_config),
+    }
+}
+
+fn print_blocking_preview_command_output(payload: &BlockingPreviewCommandOutput) {
+    println!("Hosts file: {}", payload.hosts_file_path);
+    println!(
+        "Preview action: {} (changes: {})",
+        payload.action,
+        if payload.would_change { "yes" } else { "no" }
+    );
+    println!(
+        "Effective blocked sites: {}",
+        payload.effective_blocked_sites_count
+    );
+    if !payload.effective_blocked_sites.is_empty() {
+        println!("Sites: {}", payload.effective_blocked_sites.join(", "));
+    }
+    if let Some(section) = payload.section.as_deref() {
+        println!("Section preview:");
+        print!("{section}");
+    } else {
+        println!("Section preview: none");
+    }
+}
+
+fn build_blocking_preview_command_output(
+    preview: &crate::blocker::BlockingPreview,
+) -> BlockingPreviewCommandOutput {
+    let action = match preview.action {
+        BlockingPreviewAction::Block => "block",
+        BlockingPreviewAction::Unblock => "unblock",
+        BlockingPreviewAction::NoChange => "no_change",
+    };
+    BlockingPreviewCommandOutput {
+        hosts_file_path: preview.hosts_file_path.clone(),
+        action,
+        would_change: preview.would_change,
+        effective_blocked_sites_count: preview.effective_blocked_sites.len(),
+        effective_blocked_sites: preview.effective_blocked_sites.clone(),
+        section: preview.section_for_display().map(ToString::to_string),
     }
 }
 
@@ -3295,6 +3373,18 @@ mod tests {
             parsed,
             CliAction::RunCommand(CliCommand {
                 kind: CommandKind::Diagnostics,
+                output: OutputMode::Json
+            })
+        );
+    }
+
+    #[test]
+    fn parse_blocking_preview_supports_json_mode() {
+        let parsed = parse(&["--blocking-preview", "--json"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlockingPreview,
                 output: OutputMode::Json
             })
         );

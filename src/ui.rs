@@ -12,6 +12,7 @@ use crate::app::{
     PLANNER_RECENT_LABEL_LIMIT, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, PlannerFeedbackLevel,
     PlannerInputMode, SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode, SiteListMode,
 };
+use crate::blocker::BlockingPreviewAction;
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
 
@@ -1375,7 +1376,8 @@ fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             Constraint::Length(2), // blocking permissions
             Constraint::Length(2), // hosts write capability
             Constraint::Length(2), // wakatime config status
-            Constraint::Min(0),    // spacer
+            Constraint::Length(1), // preview summary
+            Constraint::Min(0),    // preview section
             Constraint::Length(2), // key hints
         ])
         .split(outer);
@@ -1406,8 +1408,59 @@ fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         &app.setup_diagnostics.wakatime_config,
     );
 
+    let (preview_summary, preview_style) = if let Some(error) = app.blocking_preview.error.as_ref()
+    {
+        (
+            format!("Preview unavailable: {error}"),
+            Style::default().fg(Color::Yellow),
+        )
+    } else {
+        let action = match app.blocking_preview.action {
+            BlockingPreviewAction::Block => "block",
+            BlockingPreviewAction::Unblock => "unblock",
+            BlockingPreviewAction::NoChange => "no-change",
+        };
+        (
+            format!(
+                "Preview action: {action} · changes: {} · effective blocked sites: {}",
+                if app.blocking_preview.would_change {
+                    "yes"
+                } else {
+                    "no"
+                },
+                app.blocking_preview.effective_blocked_sites_count
+            ),
+            Style::default().fg(Color::DarkGray),
+        )
+    };
+    frame.render_widget(
+        Paragraph::new(preview_summary)
+            .alignment(Alignment::Left)
+            .style(preview_style),
+        inner[5],
+    );
+
+    let preview_section_text = if app.blocking_preview.error.is_some() {
+        "Preview section unavailable due to hosts-file access error.".to_string()
+    } else if let Some(section) = app.blocking_preview.section.as_ref() {
+        section.clone()
+    } else {
+        "No focustime block section changes are required for the current state.".to_string()
+    };
+    frame.render_widget(
+        Paragraph::new(preview_section_text)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Blocking preview (focustime section) "),
+            )
+            .style(Style::default().fg(Color::Gray))
+            .wrap(Wrap { trim: false }),
+        inner[6],
+    );
+
     let hints = Paragraph::new(vec![
-        Line::from("Diagnostics: [r] Refresh"),
+        Line::from("Diagnostics: [r] Refresh checks + preview"),
         Line::from(if app.strict_mode_enforced_for_focus() {
             "View: [d/Esc] Back  [q/Ctrl-C] Quit (Locked)"
         } else {
@@ -1416,7 +1469,7 @@ fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
     ])
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints, inner[6]);
+    frame.render_widget(hints, inner[7]);
 }
 
 fn render_setup_check(frame: &mut Frame, area: Rect, label: &str, check: &SetupCheck) {
@@ -1708,6 +1761,33 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("WRAP-END"));
+    }
+
+    #[test]
+    fn setup_diagnostics_view_renders_blocking_preview_section() {
+        let width = 100;
+        let height = 40;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.mode = AppMode::SetupDiagnostics;
+        app.blocking_preview.action = BlockingPreviewAction::Block;
+        app.blocking_preview.would_change = true;
+        app.blocking_preview.effective_blocked_sites_count = 2;
+        app.blocking_preview.section = Some(
+            "# focustime-block-start\n127.0.0.1 example.com\n# focustime-block-end\n".to_string(),
+        );
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Preview action: block"));
+        assert!(
+            text.contains("# focustime-block-start"),
+            "rendered diagnostics text:\n{text}"
+        );
     }
 
     #[test]
