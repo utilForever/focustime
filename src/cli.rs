@@ -235,6 +235,7 @@ enum ParsedToken {
 }
 
 type KeyValueParser = fn(&str) -> Result<Option<ParsedToken>, String>;
+type ValueArgParser = fn(&[String], usize) -> Result<(ParsedToken, usize), String>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -584,50 +585,8 @@ fn classify_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), S
     if let Some(token) = classify_simple_flag(arg) {
         return Ok((token, 1));
     }
-    if arg == "--task" {
-        return classify_task_arg(args, index);
-    }
-    if arg == "--profile" {
-        return classify_profile_arg(args, index);
-    }
-    if arg == "--goal" {
-        return classify_goal_arg(args, index);
-    }
-    if arg == "--strict" {
-        return classify_strict_arg(args, index);
-    }
-    if arg == "--schedule-set" {
-        return classify_schedule_set_arg(args, index);
-    }
-    if arg == "--export" {
-        return classify_export_arg(args, index);
-    }
-    if arg == "--blocklist-profile" {
-        return classify_blocklist_profile_arg(args, index);
-    }
-    if arg == "--blocklist-profile-create" {
-        return classify_blocklist_profile_create_arg(args, index);
-    }
-    if arg == "--blocklist-profile-rename" {
-        return classify_blocklist_profile_rename_arg(args, index);
-    }
-    if arg == "--blocklist-site-add" {
-        return classify_blocklist_site_add_arg(args, index);
-    }
-    if arg == "--allowlist-site-add" {
-        return classify_allowlist_site_add_arg(args, index);
-    }
-    if arg == "--blocklist-site-edit" {
-        return classify_blocklist_site_edit_arg(args, index);
-    }
-    if arg == "--allowlist-site-edit" {
-        return classify_allowlist_site_edit_arg(args, index);
-    }
-    if arg == "--blocklist-site-delete" {
-        return classify_blocklist_site_delete_arg(args, index);
-    }
-    if arg == "--allowlist-site-delete" {
-        return classify_allowlist_site_delete_arg(args, index);
+    if let Some(result) = classify_value_arg(args, index, arg)? {
+        return Ok(result);
     }
     if let Some(token) = classify_key_value_arg(arg)? {
         return Ok((token, 1));
@@ -636,6 +595,50 @@ fn classify_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), S
         return Ok((ParsedToken::UnknownOption(arg.clone()), 1));
     }
     Ok((ParsedToken::Positional(arg.clone()), 1))
+}
+
+fn classify_value_arg(
+    args: &[String],
+    index: usize,
+    arg: &str,
+) -> Result<Option<(ParsedToken, usize)>, String> {
+    let parsers: [(&str, ValueArgParser); 15] = [
+        ("--task", classify_task_arg),
+        ("--profile", classify_profile_arg),
+        ("--goal", classify_goal_arg),
+        ("--strict", classify_strict_arg),
+        ("--schedule-set", classify_schedule_set_arg),
+        ("--export", classify_export_arg),
+        ("--blocklist-profile", classify_blocklist_profile_arg),
+        (
+            "--blocklist-profile-create",
+            classify_blocklist_profile_create_arg,
+        ),
+        (
+            "--blocklist-profile-rename",
+            classify_blocklist_profile_rename_arg,
+        ),
+        ("--blocklist-site-add", classify_blocklist_site_add_arg),
+        ("--allowlist-site-add", classify_allowlist_site_add_arg),
+        ("--blocklist-site-edit", classify_blocklist_site_edit_arg),
+        ("--allowlist-site-edit", classify_allowlist_site_edit_arg),
+        (
+            "--blocklist-site-delete",
+            classify_blocklist_site_delete_arg,
+        ),
+        (
+            "--allowlist-site-delete",
+            classify_allowlist_site_delete_arg,
+        ),
+    ];
+
+    for (flag, parser) in parsers {
+        if arg == flag {
+            return parser(args, index).map(Some);
+        }
+    }
+
+    Ok(None)
 }
 
 fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
