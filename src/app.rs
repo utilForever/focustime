@@ -8,7 +8,8 @@ use chrono::{DateTime, Local, NaiveDate};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::blocker::{
-    BulkAddResult, EditSiteResult, HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
+    BlockingIntent, BlockingPreview, BlockingPreviewAction, BulkAddResult, EditSiteResult,
+    HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
 };
 use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
@@ -343,6 +344,27 @@ impl SetupDiagnostics {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockingPreviewSnapshot {
+    pub action: BlockingPreviewAction,
+    pub would_change: bool,
+    pub effective_blocked_sites_count: usize,
+    pub section: Option<String>,
+    pub error: Option<String>,
+}
+
+impl Default for BlockingPreviewSnapshot {
+    fn default() -> Self {
+        Self {
+            action: BlockingPreviewAction::NoChange,
+            would_change: false,
+            effective_blocked_sites_count: 0,
+            section: None,
+            error: None,
+        }
+    }
+}
+
 pub struct App {
     pub timer: TimerState,
     pub should_quit: bool,
@@ -376,6 +398,7 @@ pub struct App {
     /// Last error from a block/unblock operation (e.g. permission denied).
     pub block_error: Option<String>,
     pub setup_diagnostics: SetupDiagnostics,
+    pub blocking_preview: BlockingPreviewSnapshot,
     /// Last error from persisting timer/site configuration.
     pub config_error: Option<String>,
     /// Last error from persisting focus stats.
@@ -488,6 +511,7 @@ impl App {
             selected_site: 0,
             block_error: None,
             setup_diagnostics,
+            blocking_preview: BlockingPreviewSnapshot::default(),
             config_error: None,
             stats_error,
             history_feedback: None,
@@ -528,6 +552,7 @@ impl App {
         app.restore_in_progress_session();
         app.sync_recovery_snapshot();
         app.apply_blocking_for_phase();
+        app.refresh_setup_diagnostics();
         app
     }
 
@@ -705,6 +730,11 @@ impl App {
         }
         self.update_timer_and_sync(TimerState::next_phase);
         Ok(())
+    }
+
+    pub fn blocking_preview_for_cli(&self) -> Result<BlockingPreview, String> {
+        self.compute_blocking_preview()
+            .map_err(|error| format!("Failed to generate blocking preview: {error}"))
     }
 
     pub fn select_task_label_for_cli(&mut self, label: &str) -> Result<bool, String> {
@@ -3184,6 +3214,32 @@ impl App {
 
     fn refresh_setup_diagnostics(&mut self) {
         self.setup_diagnostics = SetupDiagnostics::collect(&self.blocker);
+        self.refresh_blocking_preview();
+    }
+
+    fn refresh_blocking_preview(&mut self) {
+        self.blocking_preview = match self.compute_blocking_preview() {
+            Ok(preview) => BlockingPreviewSnapshot {
+                action: preview.action,
+                would_change: preview.would_change,
+                effective_blocked_sites_count: preview.effective_blocked_sites.len(),
+                section: preview.section_for_display().map(ToString::to_string),
+                error: None,
+            },
+            Err(error) => BlockingPreviewSnapshot {
+                error: Some(error.to_string()),
+                ..BlockingPreviewSnapshot::default()
+            },
+        };
+    }
+
+    fn compute_blocking_preview(&self) -> std::io::Result<BlockingPreview> {
+        let intent = if self.should_block_for_current_state() {
+            BlockingIntent::Block
+        } else {
+            BlockingIntent::Unblock
+        };
+        self.blocker.preview_hosts_update(intent)
     }
 
     fn rebuild_notifier(&mut self) {

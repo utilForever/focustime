@@ -131,6 +131,10 @@ cargo run -- --schedule --json
 cargo run -- --diagnostics
 cargo run -- --diagnostics --json
 
+# Preview focustime-managed hosts-file changes without writing
+cargo run -- --blocking-preview
+cargo run -- --blocking-preview --json
+
 # Show status (text or JSON, including live timer/session fields in JSON)
 cargo run -- --status
 cargo run -- --status --json
@@ -320,6 +324,7 @@ The diagnostics screen reports:
 
 - blocking permissions
 - hosts file write capability
+- blocking preview summary and focustime-managed hosts section
 - remediation guidance when hosts permissions are insufficient
 - WakaTime config status (`~/.wakatime.cfg` and `api_key` availability)
 
