@@ -1,9 +1,10 @@
 use std::{
     fs,
     path::PathBuf,
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
     sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use serde_json::Value;
@@ -39,6 +40,26 @@ impl TestEnv {
         command
             .output()
             .expect("failed to run focustime integration command")
+    }
+
+    fn run_watch(&self, args: &[&str], runtime: Duration) -> Output {
+        let mut command = Command::new(focustime_bin_path());
+        command.args(args);
+        command.current_dir(&self.root);
+        command.env("APPDATA", &self.root);
+        command.env("XDG_CONFIG_HOME", &self.root);
+        command.env("HOME", &self.root);
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+
+        let mut child = command
+            .spawn()
+            .expect("failed to spawn focustime integration command");
+        thread::sleep(runtime);
+        let _ = child.kill();
+        child
+            .wait_with_output()
+            .expect("failed to collect watch command output")
     }
 }
 
@@ -77,6 +98,37 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload.get("live").is_some());
     assert!(payload["live"].get("focus_intention").is_some());
     assert!(payload["live"].get("task_note").is_some());
+}
+
+#[test]
+fn status_watch_json_streams_multiple_snapshots() {
+    let env = TestEnv::new("status-watch-json");
+    let output = env.run_watch(
+        &["--status", "--watch=1", "--json"],
+        Duration::from_millis(2400),
+    );
+
+    assert!(stderr_text(&output).trim().is_empty());
+
+    let stdout = stdout_text(&output);
+    let lines: Vec<&str> = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert!(
+        lines.len() >= 2,
+        "expected at least two JSON snapshots, got {} lines: {:?}",
+        lines.len(),
+        lines
+    );
+
+    for line in lines {
+        let payload: Value =
+            serde_json::from_str(line).expect("snapshot line should be valid JSON");
+        assert!(payload.get("day").is_some());
+        assert!(payload.get("live").is_some());
+    }
 }
 
 #[test]
