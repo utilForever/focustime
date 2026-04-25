@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-04-26
+
 ### Added
 
 - **CLI blocklist profile/site parity commands (#178):** added non-interactive commands for blocklist profile selection/CRUD and blocklist/allowlist site listing and mutation workflows, including text/JSON automation outputs.
@@ -153,7 +155,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/utilForever/focustime/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/utilForever/focustime/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/utilForever/focustime/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/utilForever/focustime/compare/v0.5.0...v0.5.1
