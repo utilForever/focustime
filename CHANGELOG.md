@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CLI blocklist profile/site parity commands (#178):** added non-interactive commands for blocklist profile selection/CRUD and blocklist/allowlist site listing and mutation workflows, including text/JSON automation outputs.
+
 ## [0.6.0] - 2026-04-25
 
 ### Added

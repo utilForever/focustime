@@ -4,9 +4,10 @@ use chrono::NaiveDate;
 use serde::Serialize;
 
 use crate::app::{App, SetupCheck, SetupCheckLevel, SetupDiagnostics};
+use crate::blocker::{EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
-    AppConfig, CustomProfileConfig, DailyGoalConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig,
+    AppConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig,
 };
 use crate::session_recovery;
 use crate::stats::{DailyGoalSnapshot, FocusStats, current_day_key};
@@ -30,6 +31,18 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
   focustime --schedule-set=JSON_PAYLOAD [--json]
+  focustime --blocklist-profile [PROFILE_NAME] [--json]
+  focustime --blocklist-profile-create=PROFILE_NAME [--json]
+  focustime --blocklist-profile-rename=PROFILE_NAME [--json]
+  focustime --blocklist-profile-delete [--json]
+  focustime --blocklist-sites [--json]
+  focustime --allowlist-sites [--json]
+  focustime --blocklist-site-add=HOSTNAMES [--json]
+  focustime --allowlist-site-add=HOSTNAMES [--json]
+  focustime --blocklist-site-edit=OLD=NEW [--json]
+  focustime --allowlist-site-edit=OLD=NEW [--json]
+  focustime --blocklist-site-delete=HOSTNAME [--json]
+  focustime --allowlist-site-delete=HOSTNAME [--json]
   focustime --diagnostics [--json]
   focustime --status [--json]
   focustime --export[=DIR] [--json]
@@ -46,6 +59,18 @@ Options:
   --strict        Show strict mode, or set on/off
   --schedule      Show recurring schedule
   --schedule-set  Replace recurring schedule from JSON payload
+  --blocklist-profile         Show active blocklist profile, or set active profile
+  --blocklist-profile-create  Create a blocklist profile and select it
+  --blocklist-profile-rename  Rename the active blocklist profile
+  --blocklist-profile-delete  Delete the active blocklist profile
+  --blocklist-sites           List blocklist sites in active profile
+  --allowlist-sites           List allowlist sites in active profile
+  --blocklist-site-add        Add/import blocklist hostnames in active profile
+  --allowlist-site-add        Add/import allowlist hostnames in active profile
+  --blocklist-site-edit       Replace blocklist hostname using OLD=NEW
+  --allowlist-site-edit       Replace allowlist hostname using OLD=NEW
+  --blocklist-site-delete     Delete blocklist hostname in active profile
+  --allowlist-site-delete     Delete allowlist hostname in active profile
   --diagnostics   Show setup diagnostics checks
   --status        Print status summary (includes live timer/session fields)
   --export        Export stats to current directory or DIR
@@ -123,6 +148,13 @@ pub enum CommandKind {
     Export {
         dir: Option<PathBuf>,
     },
+    BlocklistProfile {
+        command: BlocklistProfileCommandKind,
+    },
+    BlocklistSites {
+        target: SiteListTarget,
+        command: BlocklistSiteCommandKind,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,6 +186,18 @@ enum PrimaryCommand {
     Diagnostics,
     Status,
     Export(Option<PathBuf>),
+    BlocklistProfile(Option<String>),
+    BlocklistProfileCreate(String),
+    BlocklistProfileRename(String),
+    BlocklistProfileDelete,
+    BlocklistSites,
+    AllowlistSites,
+    BlocklistSiteAdd(String),
+    AllowlistSiteAdd(String),
+    BlocklistSiteEdit(SiteEditValue),
+    AllowlistSiteEdit(SiteEditValue),
+    BlocklistSiteDelete(String),
+    AllowlistSiteDelete(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -174,11 +218,61 @@ enum ParsedToken {
     ScheduleSet(RecurringScheduleConfig),
     Diagnostics,
     Export(Option<PathBuf>),
+    BlocklistProfile(Option<String>),
+    BlocklistProfileCreate(String),
+    BlocklistProfileRename(String),
+    BlocklistProfileDelete,
+    BlocklistSites,
+    AllowlistSites,
+    BlocklistSiteAdd(String),
+    AllowlistSiteAdd(String),
+    BlocklistSiteEdit(SiteEditValue),
+    AllowlistSiteEdit(SiteEditValue),
+    BlocklistSiteDelete(String),
+    AllowlistSiteDelete(String),
     UnknownOption(String),
     Positional(String),
 }
 
 type KeyValueParser = fn(&str) -> Result<Option<ParsedToken>, String>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SiteListTarget {
+    Blocklist,
+    Allowlist,
+}
+
+impl SiteListTarget {
+    fn id(self) -> &'static str {
+        match self {
+            Self::Blocklist => "blocklist",
+            Self::Allowlist => "allowlist",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SiteEditValue {
+    previous: String,
+    next: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlocklistProfileCommandKind {
+    Select { profile: Option<String> },
+    Create { name: String },
+    Rename { name: String },
+    Delete,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlocklistSiteCommandKind {
+    List,
+    Add { input: String },
+    Edit { value: SiteEditValue },
+    Delete { site: String },
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 struct ProfileSpec {
@@ -324,6 +418,74 @@ struct DiagnosticsCommandOutput {
     wakatime_config: SetupCheckOutput,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct BlocklistProfileSummaryOutput {
+    name: String,
+    active: bool,
+    blocklist_sites_count: usize,
+    allowlist_sites_count: usize,
+    effective_blocked_sites_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct BlocklistProfileCommandOutput {
+    action: &'static str,
+    updated: bool,
+    selected_blocklist_profile: String,
+    profiles: Vec<BlocklistProfileSummaryOutput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SiteListCommandOutput {
+    action: &'static str,
+    profile: String,
+    target: SiteListTarget,
+    sites: Vec<String>,
+    effective_blocked_sites_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct InvalidSiteEntryOutput {
+    input: String,
+    reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SiteAddCommandOutput {
+    action: &'static str,
+    updated: bool,
+    profile: String,
+    target: SiteListTarget,
+    added: Vec<String>,
+    duplicates: Vec<String>,
+    invalid: Vec<InvalidSiteEntryOutput>,
+    sites: Vec<String>,
+    effective_blocked_sites_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SiteEditCommandOutput {
+    action: &'static str,
+    updated: bool,
+    profile: String,
+    target: SiteListTarget,
+    previous: String,
+    current: String,
+    sites: Vec<String>,
+    effective_blocked_sites_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SiteDeleteCommandOutput {
+    action: &'static str,
+    updated: bool,
+    profile: String,
+    target: SiteListTarget,
+    removed: String,
+    sites: Vec<String>,
+    effective_blocked_sites_count: usize,
+}
+
 pub fn usage_text() -> &'static str {
     USAGE_TEXT
 }
@@ -440,6 +602,33 @@ fn classify_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), S
     if arg == "--export" {
         return classify_export_arg(args, index);
     }
+    if arg == "--blocklist-profile" {
+        return classify_blocklist_profile_arg(args, index);
+    }
+    if arg == "--blocklist-profile-create" {
+        return classify_blocklist_profile_create_arg(args, index);
+    }
+    if arg == "--blocklist-profile-rename" {
+        return classify_blocklist_profile_rename_arg(args, index);
+    }
+    if arg == "--blocklist-site-add" {
+        return classify_blocklist_site_add_arg(args, index);
+    }
+    if arg == "--allowlist-site-add" {
+        return classify_allowlist_site_add_arg(args, index);
+    }
+    if arg == "--blocklist-site-edit" {
+        return classify_blocklist_site_edit_arg(args, index);
+    }
+    if arg == "--allowlist-site-edit" {
+        return classify_allowlist_site_edit_arg(args, index);
+    }
+    if arg == "--blocklist-site-delete" {
+        return classify_blocklist_site_delete_arg(args, index);
+    }
+    if arg == "--allowlist-site-delete" {
+        return classify_allowlist_site_delete_arg(args, index);
+    }
     if let Some(token) = classify_key_value_arg(arg)? {
         return Ok((token, 1));
     }
@@ -461,6 +650,9 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--status" => Some(ParsedToken::Status),
         "--schedule" => Some(ParsedToken::Schedule),
         "--diagnostics" => Some(ParsedToken::Diagnostics),
+        "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
+        "--blocklist-sites" => Some(ParsedToken::BlocklistSites),
+        "--allowlist-sites" => Some(ParsedToken::AllowlistSites),
         _ => None,
     }
 }
@@ -500,6 +692,157 @@ fn classify_export_arg(args: &[String], index: usize) -> Result<(ParsedToken, us
     Ok((ParsedToken::Export(None), 1))
 }
 
+fn classify_blocklist_profile_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        if next.trim().is_empty() {
+            return Err(invalid_usage(
+                "`--blocklist-profile` requires a profile name when a value is provided.",
+            ));
+        }
+        return Ok((ParsedToken::BlocklistProfile(Some(next.clone())), 2));
+    }
+    Ok((ParsedToken::BlocklistProfile(None), 1))
+}
+
+fn classify_blocklist_profile_create_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--blocklist-profile-create` requires a profile name.",
+        )?;
+        return Ok((ParsedToken::BlocklistProfileCreate(value.to_string()), 2));
+    }
+    Err(invalid_usage(
+        "`--blocklist-profile-create` requires a profile name. Use `--blocklist-profile-create=NAME` or `--blocklist-profile-create NAME`.",
+    ))
+}
+
+fn classify_blocklist_profile_rename_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--blocklist-profile-rename` requires a profile name.",
+        )?;
+        return Ok((ParsedToken::BlocklistProfileRename(value.to_string()), 2));
+    }
+    Err(invalid_usage(
+        "`--blocklist-profile-rename` requires a profile name. Use `--blocklist-profile-rename=NAME` or `--blocklist-profile-rename NAME`.",
+    ))
+}
+
+fn classify_blocklist_site_add_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value =
+            require_nonempty_key_value(next, "`--blocklist-site-add` requires hostnames input.")?;
+        return Ok((ParsedToken::BlocklistSiteAdd(value.to_string()), 2));
+    }
+    Err(invalid_usage(
+        "`--blocklist-site-add` requires hostnames input. Use `--blocklist-site-add=HOSTNAMES` or `--blocklist-site-add HOSTNAMES`.",
+    ))
+}
+
+fn classify_allowlist_site_add_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value =
+            require_nonempty_key_value(next, "`--allowlist-site-add` requires hostnames input.")?;
+        return Ok((ParsedToken::AllowlistSiteAdd(value.to_string()), 2));
+    }
+    Err(invalid_usage(
+        "`--allowlist-site-add` requires hostnames input. Use `--allowlist-site-add=HOSTNAMES` or `--allowlist-site-add HOSTNAMES`.",
+    ))
+}
+
+fn classify_blocklist_site_edit_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((
+            ParsedToken::BlocklistSiteEdit(parse_site_edit_value(next)?),
+            2,
+        ));
+    }
+    Err(invalid_usage(
+        "`--blocklist-site-edit` requires `OLD=NEW`. Use `--blocklist-site-edit=OLD=NEW` or `--blocklist-site-edit OLD=NEW`.",
+    ))
+}
+
+fn classify_allowlist_site_edit_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((
+            ParsedToken::AllowlistSiteEdit(parse_site_edit_value(next)?),
+            2,
+        ));
+    }
+    Err(invalid_usage(
+        "`--allowlist-site-edit` requires `OLD=NEW`. Use `--allowlist-site-edit=OLD=NEW` or `--allowlist-site-edit OLD=NEW`.",
+    ))
+}
+
+fn classify_blocklist_site_delete_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value =
+            require_nonempty_key_value(next, "`--blocklist-site-delete` requires a hostname.")?;
+        return Ok((ParsedToken::BlocklistSiteDelete(value.to_string()), 2));
+    }
+    Err(invalid_usage(
+        "`--blocklist-site-delete` requires a hostname. Use `--blocklist-site-delete=HOSTNAME` or `--blocklist-site-delete HOSTNAME`.",
+    ))
+}
+
+fn classify_allowlist_site_delete_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value =
+            require_nonempty_key_value(next, "`--allowlist-site-delete` requires a hostname.")?;
+        return Ok((ParsedToken::AllowlistSiteDelete(value.to_string()), 2));
+    }
+    Err(invalid_usage(
+        "`--allowlist-site-delete` requires a hostname. Use `--allowlist-site-delete=HOSTNAME` or `--allowlist-site-delete HOSTNAME`.",
+    ))
+}
+
 fn classify_goal_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
     if let Some(next) = args.get(index + 1)
         && !next.starts_with('-')
@@ -533,13 +876,20 @@ fn classify_schedule_set_arg(
 }
 
 fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 6] = [
+    let parsers: [KeyValueParser; 13] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_goal_key_value_arg,
         parse_strict_key_value_arg,
         parse_schedule_set_key_value_arg,
         parse_export_key_value_arg,
+        parse_blocklist_profile_key_value_arg,
+        parse_blocklist_profile_create_key_value_arg,
+        parse_blocklist_profile_rename_key_value_arg,
+        parse_blocklist_site_add_key_value_arg,
+        parse_allowlist_site_add_key_value_arg,
+        parse_blocklist_site_edit_key_value_arg,
+        parse_allowlist_site_edit_key_value_arg,
     ];
 
     for parser in parsers {
@@ -603,6 +953,83 @@ fn parse_export_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> 
     Ok(None)
 }
 
+fn parse_blocklist_profile_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--blocklist-profile=") {
+        let value =
+            require_nonempty_key_value(value, "`--blocklist-profile=` requires a profile name.")?;
+        return Ok(Some(ParsedToken::BlocklistProfile(Some(value.to_string()))));
+    }
+    Ok(None)
+}
+
+fn parse_blocklist_profile_create_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--blocklist-profile-create=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--blocklist-profile-create=` requires a profile name.",
+        )?;
+        return Ok(Some(ParsedToken::BlocklistProfileCreate(value.to_string())));
+    }
+    Ok(None)
+}
+
+fn parse_blocklist_profile_rename_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--blocklist-profile-rename=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--blocklist-profile-rename=` requires a profile name.",
+        )?;
+        return Ok(Some(ParsedToken::BlocklistProfileRename(value.to_string())));
+    }
+    Ok(None)
+}
+
+fn parse_blocklist_site_add_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--blocklist-site-add=") {
+        let value =
+            require_nonempty_key_value(value, "`--blocklist-site-add=` requires hostnames input.")?;
+        return Ok(Some(ParsedToken::BlocklistSiteAdd(value.to_string())));
+    }
+    Ok(None)
+}
+
+fn parse_allowlist_site_add_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--allowlist-site-add=") {
+        let value =
+            require_nonempty_key_value(value, "`--allowlist-site-add=` requires hostnames input.")?;
+        return Ok(Some(ParsedToken::AllowlistSiteAdd(value.to_string())));
+    }
+    Ok(None)
+}
+
+fn parse_blocklist_site_edit_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--blocklist-site-edit=") {
+        return Ok(Some(ParsedToken::BlocklistSiteEdit(parse_site_edit_value(
+            value,
+        )?)));
+    }
+    if let Some(value) = arg.strip_prefix("--blocklist-site-delete=") {
+        let value =
+            require_nonempty_key_value(value, "`--blocklist-site-delete=` requires a hostname.")?;
+        return Ok(Some(ParsedToken::BlocklistSiteDelete(value.to_string())));
+    }
+    Ok(None)
+}
+
+fn parse_allowlist_site_edit_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--allowlist-site-edit=") {
+        return Ok(Some(ParsedToken::AllowlistSiteEdit(parse_site_edit_value(
+            value,
+        )?)));
+    }
+    if let Some(value) = arg.strip_prefix("--allowlist-site-delete=") {
+        let value =
+            require_nonempty_key_value(value, "`--allowlist-site-delete=` requires a hostname.")?;
+        return Ok(Some(ParsedToken::AllowlistSiteDelete(value.to_string())));
+    }
+    Ok(None)
+}
+
 fn require_nonempty_key_value<'a>(value: &'a str, message: &str) -> Result<&'a str, String> {
     if value.trim().is_empty() {
         return Err(invalid_usage(message));
@@ -644,7 +1071,19 @@ fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), Str
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
             | ParsedToken::Diagnostics
-            | ParsedToken::Export(_) => {}
+            | ParsedToken::Export(_)
+            | ParsedToken::BlocklistProfile(_)
+            | ParsedToken::BlocklistProfileCreate(_)
+            | ParsedToken::BlocklistProfileRename(_)
+            | ParsedToken::BlocklistProfileDelete
+            | ParsedToken::BlocklistSites
+            | ParsedToken::AllowlistSites
+            | ParsedToken::BlocklistSiteAdd(_)
+            | ParsedToken::AllowlistSiteAdd(_)
+            | ParsedToken::BlocklistSiteEdit(_)
+            | ParsedToken::AllowlistSiteEdit(_)
+            | ParsedToken::BlocklistSiteDelete(_)
+            | ParsedToken::AllowlistSiteDelete(_) => {}
         }
     }
     Ok((show_help, output))
@@ -682,6 +1121,51 @@ fn parse_primary_command(tokens: &[ParsedToken]) -> Result<Option<PrimaryCommand
             ParsedToken::Export(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
             }
+            ParsedToken::BlocklistProfile(profile) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistProfile(profile.clone()),
+            )?,
+            ParsedToken::BlocklistProfileCreate(name) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistProfileCreate(name.clone()),
+            )?,
+            ParsedToken::BlocklistProfileRename(name) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistProfileRename(name.clone()),
+            )?,
+            ParsedToken::BlocklistProfileDelete => {
+                set_primary_command(&mut primary, PrimaryCommand::BlocklistProfileDelete)?
+            }
+            ParsedToken::BlocklistSites => {
+                set_primary_command(&mut primary, PrimaryCommand::BlocklistSites)?
+            }
+            ParsedToken::AllowlistSites => {
+                set_primary_command(&mut primary, PrimaryCommand::AllowlistSites)?
+            }
+            ParsedToken::BlocklistSiteAdd(input) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistSiteAdd(input.clone()),
+            )?,
+            ParsedToken::AllowlistSiteAdd(input) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::AllowlistSiteAdd(input.clone()),
+            )?,
+            ParsedToken::BlocklistSiteEdit(value) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistSiteEdit(value.clone()),
+            )?,
+            ParsedToken::AllowlistSiteEdit(value) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::AllowlistSiteEdit(value.clone()),
+            )?,
+            ParsedToken::BlocklistSiteDelete(site) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistSiteDelete(site.clone()),
+            )?,
+            ParsedToken::AllowlistSiteDelete(site) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::AllowlistSiteDelete(site.clone()),
+            )?,
             ParsedToken::Help
             | ParsedToken::Json
             | ParsedToken::UnknownOption(_)
@@ -773,23 +1257,115 @@ fn finalize_cli_action(
             kind: CommandKind::Export { dir },
             output,
         })),
+        Some(PrimaryCommand::BlocklistProfile(profile)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistProfile {
+                command: BlocklistProfileCommandKind::Select { profile },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistProfileCreate(name)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistProfile {
+                    command: BlocklistProfileCommandKind::Create { name },
+                },
+                output,
+            }))
+        }
+        Some(PrimaryCommand::BlocklistProfileRename(name)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistProfile {
+                    command: BlocklistProfileCommandKind::Rename { name },
+                },
+                output,
+            }))
+        }
+        Some(PrimaryCommand::BlocklistProfileDelete) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistProfile {
+                command: BlocklistProfileCommandKind::Delete,
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistSites) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Blocklist,
+                command: BlocklistSiteCommandKind::List,
+            },
+            output,
+        })),
+        Some(PrimaryCommand::AllowlistSites) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Allowlist,
+                command: BlocklistSiteCommandKind::List,
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistSiteAdd(input)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Blocklist,
+                command: BlocklistSiteCommandKind::Add { input },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::AllowlistSiteAdd(input)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Allowlist,
+                command: BlocklistSiteCommandKind::Add { input },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistSiteEdit(value)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Blocklist,
+                command: BlocklistSiteCommandKind::Edit { value },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::AllowlistSiteEdit(value)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Allowlist,
+                command: BlocklistSiteCommandKind::Edit { value },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistSiteDelete(site)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Blocklist,
+                command: BlocklistSiteCommandKind::Delete { site },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::AllowlistSiteDelete(site)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Allowlist,
+                command: BlocklistSiteCommandKind::Delete { site },
+            },
+            output,
+        })),
     }
 }
 
-pub fn execute_command(command: CliCommand) -> Result<(), String> {
-    match command.kind {
-        CommandKind::Pause => execute_pause_command(command.output),
-        CommandKind::Resume => execute_resume_command(command.output),
-        CommandKind::Stop => execute_stop_command(command.output),
-        CommandKind::Next => execute_next_command(command.output),
-        CommandKind::Task { label } => execute_task_command(label, command.output),
-        CommandKind::Profile { profile } => execute_profile_command(profile, command.output),
-        CommandKind::Goal { goal } => execute_goal_command(goal, command.output),
-        CommandKind::Strict { enabled } => execute_strict_command(enabled, command.output),
-        CommandKind::Schedule { schedule } => execute_schedule_command(schedule, command.output),
-        CommandKind::Diagnostics => execute_diagnostics_command(command.output),
-        CommandKind::Status => execute_status_command(command.output),
-        CommandKind::Export { dir } => execute_export_command(dir, command.output),
+pub fn execute_command(cli_command: CliCommand) -> Result<(), String> {
+    match cli_command.kind {
+        CommandKind::Pause => execute_pause_command(cli_command.output),
+        CommandKind::Resume => execute_resume_command(cli_command.output),
+        CommandKind::Stop => execute_stop_command(cli_command.output),
+        CommandKind::Next => execute_next_command(cli_command.output),
+        CommandKind::Task { label } => execute_task_command(label, cli_command.output),
+        CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
+        CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
+        CommandKind::Strict { enabled } => execute_strict_command(enabled, cli_command.output),
+        CommandKind::Schedule { schedule } => {
+            execute_schedule_command(schedule, cli_command.output)
+        }
+        CommandKind::Diagnostics => execute_diagnostics_command(cli_command.output),
+        CommandKind::Status => execute_status_command(cli_command.output),
+        CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
+        CommandKind::BlocklistProfile { command } => {
+            execute_blocklist_profile_command(command, cli_command.output)
+        }
+        CommandKind::BlocklistSites { target, command } => {
+            execute_blocklist_sites_command(target, command, cli_command.output)
+        }
     }
 }
 
@@ -845,6 +1421,424 @@ fn execute_task_command(label: String, output: OutputMode) -> Result<(), String>
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
+}
+
+fn execute_blocklist_profile_command(
+    command: BlocklistProfileCommandKind,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let payload = apply_blocklist_profile_command(&mut config, command)?;
+    if payload.updated {
+        config
+            .save()
+            .map_err(|error| format!("Failed to save blocklist profile settings: {error}"))?;
+    }
+
+    match output {
+        OutputMode::Text => print_blocklist_profile_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_blocklist_sites_command(
+    target: SiteListTarget,
+    command: BlocklistSiteCommandKind,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    match command {
+        BlocklistSiteCommandKind::List => {
+            let payload = build_site_list_command_output(&config, target, "site-list");
+            match output {
+                OutputMode::Text => print_site_list_command_output(&payload),
+                OutputMode::Json => print_json(&payload)?,
+            }
+        }
+        BlocklistSiteCommandKind::Add { input } => {
+            let payload = apply_site_add_command(&mut config, target, &input)?;
+            if payload.updated {
+                config
+                    .save()
+                    .map_err(|error| format!("Failed to save site changes: {error}"))?;
+            }
+            match output {
+                OutputMode::Text => print_site_add_command_output(&payload),
+                OutputMode::Json => print_json(&payload)?,
+            }
+        }
+        BlocklistSiteCommandKind::Edit { value } => {
+            let payload = apply_site_edit_command(&mut config, target, &value)?;
+            if payload.updated {
+                config
+                    .save()
+                    .map_err(|error| format!("Failed to save site changes: {error}"))?;
+            }
+            match output {
+                OutputMode::Text => print_site_edit_command_output(&payload),
+                OutputMode::Json => print_json(&payload)?,
+            }
+        }
+        BlocklistSiteCommandKind::Delete { site } => {
+            let payload = apply_site_delete_command(&mut config, target, &site)?;
+            if payload.updated {
+                config
+                    .save()
+                    .map_err(|error| format!("Failed to save site changes: {error}"))?;
+            }
+            match output {
+                OutputMode::Text => print_site_delete_command_output(&payload),
+                OutputMode::Json => print_json(&payload)?,
+            }
+        }
+    }
+    Ok(())
+}
+
+fn apply_blocklist_profile_command(
+    config: &mut AppConfig,
+    command: BlocklistProfileCommandKind,
+) -> Result<BlocklistProfileCommandOutput, String> {
+    ensure_blocklist_profiles(config);
+
+    let mut updated = false;
+    let action = match command {
+        BlocklistProfileCommandKind::Select { profile } => {
+            if let Some(profile) = profile {
+                let index = blocklist_profile_index_by_name(&config.blocklist_profiles, &profile)
+                    .ok_or_else(|| format!("Unknown blocklist profile `{profile}`."))?;
+                let selected = config.blocklist_profiles[index].name.clone();
+                if !config
+                    .selected_blocklist_profile
+                    .eq_ignore_ascii_case(&selected)
+                {
+                    config.selected_blocklist_profile = selected;
+                    updated = true;
+                }
+            }
+            "blocklist-profile"
+        }
+        BlocklistProfileCommandKind::Create { name } => {
+            let name = name.trim().to_string();
+            if name.is_empty() {
+                return Err("Profile name cannot be empty.".to_string());
+            }
+            if blocklist_profile_index_by_name(&config.blocklist_profiles, &name).is_some() {
+                return Err(format!("Profile `{name}` already exists."));
+            }
+            config.blocklist_profiles.push(BlocklistProfileConfig {
+                name: name.clone(),
+                sites: Vec::new(),
+                allowlist_sites: Vec::new(),
+            });
+            config.selected_blocklist_profile = name;
+            updated = true;
+            "blocklist-profile-create"
+        }
+        BlocklistProfileCommandKind::Rename { name } => {
+            let index = selected_blocklist_profile_index(config);
+            let current_name = config.blocklist_profiles[index].name.clone();
+            let name = name.trim().to_string();
+            if name.is_empty() {
+                return Err("Profile name cannot be empty.".to_string());
+            }
+            if current_name == name {
+                "blocklist-profile-rename"
+            } else {
+                let duplicate = config.blocklist_profiles.iter().enumerate().any(
+                    |(candidate_index, profile)| {
+                        candidate_index != index && profile.name.eq_ignore_ascii_case(&name)
+                    },
+                );
+                if duplicate {
+                    return Err(format!("Profile `{name}` already exists."));
+                }
+                config.blocklist_profiles[index].name = name.clone();
+                config.selected_blocklist_profile = name;
+                updated = true;
+                "blocklist-profile-rename"
+            }
+        }
+        BlocklistProfileCommandKind::Delete => {
+            if config.blocklist_profiles.len() <= 1 {
+                return Err("At least one blocklist profile is required.".to_string());
+            }
+            let index = selected_blocklist_profile_index(config);
+            config.blocklist_profiles.remove(index);
+            let next_index = index.min(config.blocklist_profiles.len().saturating_sub(1));
+            config.selected_blocklist_profile = config.blocklist_profiles[next_index].name.clone();
+            updated = true;
+            "blocklist-profile-delete"
+        }
+    };
+
+    if updated {
+        sync_legacy_blocked_sites(config);
+    }
+    Ok(build_blocklist_profile_command_output(
+        config, action, updated,
+    ))
+}
+
+fn apply_site_add_command(
+    config: &mut AppConfig,
+    target: SiteListTarget,
+    input: &str,
+) -> Result<SiteAddCommandOutput, String> {
+    ensure_blocklist_profiles(config);
+    let index = selected_blocklist_profile_index(config);
+    let mut working = SiteBlocker::new();
+    let existing_sites = active_profile_sites(config, index, target).to_vec();
+    for site in existing_sites {
+        working.add_site(site);
+    }
+    let result = working.add_sites_from_input(input);
+    let updated = !result.added.is_empty();
+    *active_profile_sites_mut(config, index, target) = working.sites.clone();
+    if updated {
+        sync_legacy_blocked_sites(config);
+    }
+
+    let active_profile = &config.blocklist_profiles[index];
+    Ok(SiteAddCommandOutput {
+        action: "site-add",
+        updated,
+        profile: active_profile.name.clone(),
+        target,
+        added: result.added,
+        duplicates: result.duplicates,
+        invalid: invalid_site_entries_output(&result.invalid),
+        sites: active_profile_sites(config, index, target).to_vec(),
+        effective_blocked_sites_count: effective_blocked_sites_for_profile(active_profile).len(),
+    })
+}
+
+fn apply_site_edit_command(
+    config: &mut AppConfig,
+    target: SiteListTarget,
+    value: &SiteEditValue,
+) -> Result<SiteEditCommandOutput, String> {
+    ensure_blocklist_profiles(config);
+    let index = selected_blocklist_profile_index(config);
+    let sites = active_profile_sites(config, index, target).to_vec();
+    let edit_index = sites
+        .iter()
+        .position(|site| site.eq_ignore_ascii_case(value.previous.trim()))
+        .ok_or_else(|| {
+            format!(
+                "Site `{}` was not found in {}.",
+                value.previous,
+                target.id()
+            )
+        })?;
+
+    let mut working = SiteBlocker::new();
+    for site in sites {
+        working.add_site(site);
+    }
+    let result = working.edit_site_from_input(edit_index, &value.next);
+    match result {
+        EditSiteResult::Updated { old, new } => {
+            *active_profile_sites_mut(config, index, target) = working.sites.clone();
+            sync_legacy_blocked_sites(config);
+            let active_profile = &config.blocklist_profiles[index];
+            Ok(SiteEditCommandOutput {
+                action: "site-edit",
+                updated: true,
+                profile: active_profile.name.clone(),
+                target,
+                previous: old,
+                current: new,
+                sites: active_profile_sites(config, index, target).to_vec(),
+                effective_blocked_sites_count: effective_blocked_sites_for_profile(active_profile)
+                    .len(),
+            })
+        }
+        EditSiteResult::Unchanged { hostname } => {
+            let active_profile = &config.blocklist_profiles[index];
+            Ok(SiteEditCommandOutput {
+                action: "site-edit",
+                updated: false,
+                profile: active_profile.name.clone(),
+                target,
+                previous: hostname.clone(),
+                current: hostname,
+                sites: active_profile_sites(config, index, target).to_vec(),
+                effective_blocked_sites_count: effective_blocked_sites_for_profile(active_profile)
+                    .len(),
+            })
+        }
+        EditSiteResult::Duplicate { hostname } => {
+            Err(format!("`{hostname}` already exists in {}.", target.id()))
+        }
+        EditSiteResult::Invalid(invalid) => Err(format!(
+            "Invalid hostname `{}` ({})",
+            display_input_value(&invalid.input),
+            invalid.reason.message()
+        )),
+        EditSiteResult::MissingSelection => Err("No site selected to edit.".to_string()),
+    }
+}
+
+fn apply_site_delete_command(
+    config: &mut AppConfig,
+    target: SiteListTarget,
+    site: &str,
+) -> Result<SiteDeleteCommandOutput, String> {
+    ensure_blocklist_profiles(config);
+    let index = selected_blocklist_profile_index(config);
+    let sites = active_profile_sites(config, index, target).to_vec();
+    let delete_index = sites
+        .iter()
+        .position(|value| value.eq_ignore_ascii_case(site.trim()))
+        .ok_or_else(|| format!("Site `{site}` was not found in {}.", target.id()))?;
+
+    let mut working = SiteBlocker::new();
+    for site in sites {
+        working.add_site(site);
+    }
+    let removed = working
+        .remove_site(delete_index)
+        .ok_or_else(|| format!("Site `{site}` was not found in {}.", target.id()))?;
+    *active_profile_sites_mut(config, index, target) = working.sites.clone();
+    sync_legacy_blocked_sites(config);
+
+    let active_profile = &config.blocklist_profiles[index];
+    Ok(SiteDeleteCommandOutput {
+        action: "site-delete",
+        updated: true,
+        profile: active_profile.name.clone(),
+        target,
+        removed,
+        sites: active_profile_sites(config, index, target).to_vec(),
+        effective_blocked_sites_count: effective_blocked_sites_for_profile(active_profile).len(),
+    })
+}
+
+fn ensure_blocklist_profiles(config: &mut AppConfig) {
+    if config.blocklist_profiles.is_empty() {
+        config
+            .blocklist_profiles
+            .push(BlocklistProfileConfig::default());
+        config.selected_blocklist_profile = config.blocklist_profiles[0].name.clone();
+    }
+}
+
+fn blocklist_profile_index_by_name(
+    profiles: &[BlocklistProfileConfig],
+    name: &str,
+) -> Option<usize> {
+    profiles
+        .iter()
+        .position(|profile| profile.name.eq_ignore_ascii_case(name.trim()))
+}
+
+fn selected_blocklist_profile_index(config: &AppConfig) -> usize {
+    blocklist_profile_index_by_name(
+        &config.blocklist_profiles,
+        &config.selected_blocklist_profile,
+    )
+    .unwrap_or(0)
+}
+
+fn active_profile_sites(
+    config: &AppConfig,
+    profile_index: usize,
+    target: SiteListTarget,
+) -> &[String] {
+    match target {
+        SiteListTarget::Blocklist => &config.blocklist_profiles[profile_index].sites,
+        SiteListTarget::Allowlist => &config.blocklist_profiles[profile_index].allowlist_sites,
+    }
+}
+
+fn active_profile_sites_mut(
+    config: &mut AppConfig,
+    profile_index: usize,
+    target: SiteListTarget,
+) -> &mut Vec<String> {
+    match target {
+        SiteListTarget::Blocklist => &mut config.blocklist_profiles[profile_index].sites,
+        SiteListTarget::Allowlist => &mut config.blocklist_profiles[profile_index].allowlist_sites,
+    }
+}
+
+fn sync_legacy_blocked_sites(config: &mut AppConfig) {
+    ensure_blocklist_profiles(config);
+    let index = selected_blocklist_profile_index(config);
+    config.selected_blocklist_profile = config.blocklist_profiles[index].name.clone();
+    config.blocked_sites = effective_blocked_sites_for_profile(&config.blocklist_profiles[index]);
+}
+
+fn build_blocklist_profile_command_output(
+    config: &AppConfig,
+    action: &'static str,
+    updated: bool,
+) -> BlocklistProfileCommandOutput {
+    let selected_name = config
+        .blocklist_profiles
+        .get(selected_blocklist_profile_index(config))
+        .map(|profile| profile.name.clone())
+        .unwrap_or_else(|| config.selected_blocklist_profile.clone());
+    let profiles = config
+        .blocklist_profiles
+        .iter()
+        .map(|profile| BlocklistProfileSummaryOutput {
+            name: profile.name.clone(),
+            active: profile.name.eq_ignore_ascii_case(&selected_name),
+            blocklist_sites_count: profile.sites.len(),
+            allowlist_sites_count: profile.allowlist_sites.len(),
+            effective_blocked_sites_count: effective_blocked_sites_for_profile(profile).len(),
+        })
+        .collect();
+
+    BlocklistProfileCommandOutput {
+        action,
+        updated,
+        selected_blocklist_profile: selected_name,
+        profiles,
+    }
+}
+
+fn build_site_list_command_output(
+    config: &AppConfig,
+    target: SiteListTarget,
+    action: &'static str,
+) -> SiteListCommandOutput {
+    if config.blocklist_profiles.is_empty() {
+        let fallback = if config.selected_blocklist_profile.trim().is_empty() {
+            "Default".to_string()
+        } else {
+            config.selected_blocklist_profile.clone()
+        };
+        return SiteListCommandOutput {
+            action,
+            profile: fallback,
+            target,
+            sites: Vec::new(),
+            effective_blocked_sites_count: 0,
+        };
+    }
+    let index = selected_blocklist_profile_index(config);
+    let profile = &config.blocklist_profiles[index];
+    SiteListCommandOutput {
+        action,
+        profile: profile.name.clone(),
+        target,
+        sites: active_profile_sites(config, index, target).to_vec(),
+        effective_blocked_sites_count: effective_blocked_sites_for_profile(profile).len(),
+    }
+}
+
+fn invalid_site_entries_output(values: &[InvalidSiteInput]) -> Vec<InvalidSiteEntryOutput> {
+    values
+        .iter()
+        .map(|invalid| InvalidSiteEntryOutput {
+            input: invalid.input.clone(),
+            reason: invalid.reason.message().to_string(),
+        })
+        .collect()
 }
 
 fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Result<(), String> {
@@ -1063,18 +2057,7 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
                 .name
                 .eq_ignore_ascii_case(&config.selected_blocklist_profile)
         })
-        .map(|profile| {
-            let allowlist: HashSet<String> = profile
-                .allowlist_sites
-                .iter()
-                .map(|site| site.to_ascii_lowercase())
-                .collect();
-            profile
-                .sites
-                .iter()
-                .filter(|site| !allowlist.contains(&site.to_ascii_lowercase()))
-                .count()
-        })
+        .map(|profile| effective_blocked_sites_for_profile(profile).len())
         .unwrap_or_default();
     let live = build_live_status_output(config, selected_task_label.clone());
 
@@ -1284,6 +2267,26 @@ fn parse_strict_value(value: &str) -> Result<bool, String> {
     }
 }
 
+fn parse_site_edit_value(value: &str) -> Result<SiteEditValue, String> {
+    let trimmed = value.trim();
+    let (previous, next) = trimmed.split_once('=').ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid site edit `{value}`. Use `OLD=NEW` (for example `--blocklist-site-edit=old.com=new.com`)."
+        ))
+    })?;
+    let previous = previous.trim();
+    let next = next.trim();
+    if previous.is_empty() || next.is_empty() {
+        return Err(invalid_usage(
+            "Site edit values must include both `OLD` and `NEW` hostnames.",
+        ));
+    }
+    Ok(SiteEditValue {
+        previous: previous.to_string(),
+        next: next.to_string(),
+    })
+}
+
 fn parse_schedule_value(value: &str) -> Result<RecurringScheduleConfig, String> {
     let schedule = serde_json::from_str::<RecurringScheduleConfig>(value).map_err(|error| {
         invalid_usage(&format!(
@@ -1418,6 +2421,18 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Export(_) => "--export",
+        PrimaryCommand::BlocklistProfile(_) => "--blocklist-profile",
+        PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
+        PrimaryCommand::BlocklistProfileRename(_) => "--blocklist-profile-rename",
+        PrimaryCommand::BlocklistProfileDelete => "--blocklist-profile-delete",
+        PrimaryCommand::BlocklistSites => "--blocklist-sites",
+        PrimaryCommand::AllowlistSites => "--allowlist-sites",
+        PrimaryCommand::BlocklistSiteAdd(_) => "--blocklist-site-add",
+        PrimaryCommand::AllowlistSiteAdd(_) => "--allowlist-site-add",
+        PrimaryCommand::BlocklistSiteEdit(_) => "--blocklist-site-edit",
+        PrimaryCommand::AllowlistSiteEdit(_) => "--allowlist-site-edit",
+        PrimaryCommand::BlocklistSiteDelete(_) => "--blocklist-site-delete",
+        PrimaryCommand::AllowlistSiteDelete(_) => "--allowlist-site-delete",
     }
 }
 
@@ -1448,6 +2463,132 @@ fn print_profile_output(payload: &ProfileOutput) {
             profile.long_break_interval
         );
     }
+}
+
+fn print_blocklist_profile_command_output(payload: &BlocklistProfileCommandOutput) {
+    if payload.updated {
+        println!("Blocklist profile updated.");
+    }
+    println!(
+        "Selected blocklist profile: {}",
+        payload.selected_blocklist_profile
+    );
+    if payload.profiles.is_empty() {
+        println!("Profiles: none");
+        return;
+    }
+    println!("Profiles:");
+    for profile in &payload.profiles {
+        let marker = if profile.active { "*" } else { " " };
+        println!(
+            "  {marker} {} (blocklist {}, allowlist {}, effective {})",
+            profile.name,
+            profile.blocklist_sites_count,
+            profile.allowlist_sites_count,
+            profile.effective_blocked_sites_count
+        );
+    }
+}
+
+fn print_site_list_command_output(payload: &SiteListCommandOutput) {
+    println!(
+        "Active profile `{}` {} entries: {}",
+        payload.profile,
+        payload.target.id(),
+        payload.sites.len()
+    );
+    for site in &payload.sites {
+        println!("  - {site}");
+    }
+    println!(
+        "Effective blocked sites: {}",
+        payload.effective_blocked_sites_count
+    );
+}
+
+fn print_site_add_command_output(payload: &SiteAddCommandOutput) {
+    if payload.updated {
+        println!(
+            "Added {} hostname(s) to {} in profile `{}`.",
+            payload.added.len(),
+            payload.target.id(),
+            payload.profile
+        );
+    } else {
+        println!(
+            "No {} hostnames were added in profile `{}`.",
+            payload.target.id(),
+            payload.profile
+        );
+    }
+    if !payload.duplicates.is_empty() {
+        println!("Skipped duplicates: {}", payload.duplicates.join(", "));
+    }
+    if !payload.invalid.is_empty() {
+        println!("Rejected invalid hostnames:");
+        for invalid in &payload.invalid {
+            println!(
+                "  - {} ({})",
+                display_input_value(&invalid.input),
+                invalid.reason
+            );
+        }
+    }
+    println!(
+        "{} entries now: {}",
+        payload.target.id(),
+        payload.sites.join(", ")
+    );
+    println!(
+        "Effective blocked sites: {}",
+        payload.effective_blocked_sites_count
+    );
+}
+
+fn print_site_edit_command_output(payload: &SiteEditCommandOutput) {
+    if payload.updated {
+        println!(
+            "Updated {} hostname in profile `{}`: {} -> {}",
+            payload.target.id(),
+            payload.profile,
+            payload.previous,
+            payload.current
+        );
+    } else {
+        println!(
+            "No change for {} hostname `{}` in profile `{}`.",
+            payload.target.id(),
+            payload.current,
+            payload.profile
+        );
+    }
+    println!(
+        "{} entries now: {}",
+        payload.target.id(),
+        payload.sites.join(", ")
+    );
+    println!(
+        "Effective blocked sites: {}",
+        payload.effective_blocked_sites_count
+    );
+}
+
+fn print_site_delete_command_output(payload: &SiteDeleteCommandOutput) {
+    println!(
+        "Deleted {} hostname `{}` from profile `{}`.",
+        payload.target.id(),
+        payload.removed,
+        payload.profile
+    );
+    println!(
+        "{} entries now: {}",
+        payload.target.id(),
+        payload.sites.join(", ")
+    );
+    println!(
+        "Effective blocked sites: {}",
+        payload.effective_blocked_sites_count
+    );
 }
 
 fn print_status_output(payload: &StatusOutput) {
@@ -1650,6 +2791,29 @@ fn format_duration(secs: u64) -> String {
         (m, 0) => format!("{m}m"),
         (m, s) => format!("{m}m {s}s"),
     }
+}
+
+fn display_input_value(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        "<empty>".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
+    let allowlist: HashSet<String> = profile
+        .allowlist_sites
+        .iter()
+        .map(|site| site.to_ascii_lowercase())
+        .collect();
+    profile
+        .sites
+        .iter()
+        .filter(|site| !allowlist.contains(&site.to_ascii_lowercase()))
+        .cloned()
+        .collect()
 }
 
 fn invalid_usage(message: &str) -> String {
@@ -1947,6 +3111,73 @@ mod tests {
     }
 
     #[test]
+    fn parse_blocklist_profile_without_value_reads_current_profile() {
+        let parsed = parse(&["--blocklist-profile"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistProfile {
+                    command: BlocklistProfileCommandKind::Select { profile: None }
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_blocklist_profile_with_value_selects_profile() {
+        let parsed = parse(&["--blocklist-profile", "Work"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistProfile {
+                    command: BlocklistProfileCommandKind::Select {
+                        profile: Some("Work".to_string())
+                    }
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_blocklist_site_add_with_equals() {
+        let parsed = parse(&["--blocklist-site-add=github.com,news.ycombinator.com"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistSites {
+                    target: SiteListTarget::Blocklist,
+                    command: BlocklistSiteCommandKind::Add {
+                        input: "github.com,news.ycombinator.com".to_string()
+                    }
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_allowlist_site_edit_with_equals() {
+        let parsed = parse(&["--allowlist-site-edit=old.com=new.com"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistSites {
+                    target: SiteListTarget::Allowlist,
+                    command: BlocklistSiteCommandKind::Edit {
+                        value: SiteEditValue {
+                            previous: "old.com".to_string(),
+                            next: "new.com".to_string()
+                        }
+                    }
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
     fn classify_key_value_arg_accepts_profile_equals_value() {
         let parsed = classify_key_value_arg("--profile=deep-work").unwrap();
         assert_eq!(
@@ -2084,6 +3315,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_blocklist_profile_create_without_value() {
+        let error = parse(&["--blocklist-profile-create"]).unwrap_err();
+        assert!(error.contains("`--blocklist-profile-create` requires a profile name"));
+    }
+
+    #[test]
+    fn parse_rejects_blocklist_site_edit_without_old_new_separator() {
+        let error = parse(&["--blocklist-site-edit=example.com"]).unwrap_err();
+        assert!(error.contains("Invalid site edit"));
+    }
+
+    #[test]
     fn parse_rejects_schedule_set_with_invalid_weekday() {
         let payload = r#"{"windows":[{"days":["nonday"],"start":"09:00","end":"10:00"}],"exception_dates":[]}"#;
         let error =
@@ -2151,6 +3394,66 @@ mod tests {
         let invalid = OsString::from_vec(vec![0x66, 0x6f, 0x80]);
         let error = parse_args(vec![invalid]).unwrap_err();
         assert!(error.contains("Arguments must be valid UTF-8."));
+    }
+
+    #[test]
+    fn apply_blocklist_profile_select_updates_selection_case_insensitively() {
+        let mut config = AppConfig {
+            blocklist_profiles: vec![
+                crate::config::BlocklistProfileConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["a.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+                crate::config::BlocklistProfileConfig {
+                    name: "Study".to_string(),
+                    sites: vec!["study.com".to_string(), "news.com".to_string()],
+                    allowlist_sites: vec!["news.com".to_string()],
+                },
+            ],
+            selected_blocklist_profile: "work".to_string(),
+            ..AppConfig::default()
+        }
+        .normalized();
+
+        let payload = apply_blocklist_profile_command(
+            &mut config,
+            BlocklistProfileCommandKind::Select {
+                profile: Some("STUDY".to_string()),
+            },
+        )
+        .unwrap();
+
+        assert!(payload.updated);
+        assert_eq!(payload.selected_blocklist_profile, "Study");
+        assert_eq!(config.selected_blocklist_profile, "Study");
+        assert_eq!(config.blocked_sites, vec!["study.com".to_string()]);
+    }
+
+    #[test]
+    fn apply_allowlist_site_add_updates_effective_blocking() {
+        let mut config = AppConfig {
+            blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+                name: "Default".to_string(),
+                sites: vec!["a.com".to_string(), "b.com".to_string()],
+                allowlist_sites: vec!["b.com".to_string()],
+            }],
+            selected_blocklist_profile: "Default".to_string(),
+            ..AppConfig::default()
+        }
+        .normalized();
+
+        let payload =
+            apply_site_add_command(&mut config, SiteListTarget::Allowlist, "a.com").unwrap();
+
+        assert!(payload.updated);
+        assert_eq!(payload.target, SiteListTarget::Allowlist);
+        assert_eq!(
+            config.blocklist_profiles[0].allowlist_sites,
+            vec!["b.com".to_string(), "a.com".to_string()]
+        );
+        assert!(config.blocked_sites.is_empty());
+        assert_eq!(payload.effective_blocked_sites_count, 0);
     }
 
     #[test]
