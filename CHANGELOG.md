@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-25
+
 ### Added
 
 - **CLI v3 core management commands (#172):** added `--goal`, `--strict`, `--schedule`, `--schedule-set`, and `--diagnostics` commands with text/JSON output for automation workflows.
@@ -147,7 +149,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/utilForever/focustime/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/utilForever/focustime/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/utilForever/focustime/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/utilForever/focustime/compare/v0.4.2...v0.5.0
