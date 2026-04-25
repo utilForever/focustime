@@ -879,7 +879,7 @@ fn classify_schedule_set_arg(
 }
 
 fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 13] = [
+    let parsers: [KeyValueParser; 15] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_goal_key_value_arg,
@@ -893,6 +893,8 @@ fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
         parse_allowlist_site_add_key_value_arg,
         parse_blocklist_site_edit_key_value_arg,
         parse_allowlist_site_edit_key_value_arg,
+        parse_blocklist_site_delete_key_value_arg,
+        parse_allowlist_site_delete_key_value_arg,
     ];
 
     for parser in parsers {
@@ -1011,11 +1013,6 @@ fn parse_blocklist_site_edit_key_value_arg(arg: &str) -> Result<Option<ParsedTok
             value,
         )?)));
     }
-    if let Some(value) = arg.strip_prefix("--blocklist-site-delete=") {
-        let value =
-            require_nonempty_key_value(value, "`--blocklist-site-delete=` requires a hostname.")?;
-        return Ok(Some(ParsedToken::BlocklistSiteDelete(value.to_string())));
-    }
     Ok(None)
 }
 
@@ -1025,6 +1022,19 @@ fn parse_allowlist_site_edit_key_value_arg(arg: &str) -> Result<Option<ParsedTok
             value,
         )?)));
     }
+    Ok(None)
+}
+
+fn parse_blocklist_site_delete_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--blocklist-site-delete=") {
+        let value =
+            require_nonempty_key_value(value, "`--blocklist-site-delete=` requires a hostname.")?;
+        return Ok(Some(ParsedToken::BlocklistSiteDelete(value.to_string())));
+    }
+    Ok(None)
+}
+
+fn parse_allowlist_site_delete_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--allowlist-site-delete=") {
         let value =
             require_nonempty_key_value(value, "`--allowlist-site-delete=` requires a hostname.")?;
@@ -3168,6 +3178,36 @@ mod tests {
     }
 
     #[test]
+    fn parse_blocklist_profile_rename_with_equals() {
+        let parsed = parse(&["--blocklist-profile-rename=Deep Work"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistProfile {
+                    command: BlocklistProfileCommandKind::Rename {
+                        name: "Deep Work".to_string()
+                    }
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_blocklist_profile_delete_runs_command() {
+        let parsed = parse(&["--blocklist-profile-delete"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistProfile {
+                    command: BlocklistProfileCommandKind::Delete
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
     fn parse_blocklist_site_add_with_equals() {
         let parsed = parse(&["--blocklist-site-add=github.com,news.ycombinator.com"]).unwrap();
         assert_eq!(
@@ -3177,6 +3217,23 @@ mod tests {
                     target: SiteListTarget::Blocklist,
                     command: BlocklistSiteCommandKind::Add {
                         input: "github.com,news.ycombinator.com".to_string()
+                    }
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_allowlist_site_delete_with_equals() {
+        let parsed = parse(&["--allowlist-site-delete=reddit.com"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistSites {
+                    target: SiteListTarget::Allowlist,
+                    command: BlocklistSiteCommandKind::Delete {
+                        site: "reddit.com".to_string()
                     }
                 },
                 output: OutputMode::Text
@@ -3458,6 +3515,72 @@ mod tests {
     }
 
     #[test]
+    fn apply_blocklist_profile_rename_updates_selection_and_name() {
+        let mut config = AppConfig {
+            blocklist_profiles: vec![
+                crate::config::BlocklistProfileConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["a.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+                crate::config::BlocklistProfileConfig {
+                    name: "Study".to_string(),
+                    sites: vec!["study.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+            ],
+            selected_blocklist_profile: "Work".to_string(),
+            ..AppConfig::default()
+        }
+        .normalized();
+
+        let payload = apply_blocklist_profile_command(
+            &mut config,
+            BlocklistProfileCommandKind::Rename {
+                name: "Deep Work".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert!(payload.updated);
+        assert_eq!(payload.selected_blocklist_profile, "Deep Work");
+        assert_eq!(config.selected_blocklist_profile, "Deep Work");
+        assert_eq!(config.blocklist_profiles[0].name, "Deep Work");
+        assert_eq!(config.blocked_sites, vec!["a.com".to_string()]);
+    }
+
+    #[test]
+    fn apply_blocklist_profile_delete_switches_selection() {
+        let mut config = AppConfig {
+            blocklist_profiles: vec![
+                crate::config::BlocklistProfileConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["a.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+                crate::config::BlocklistProfileConfig {
+                    name: "Study".to_string(),
+                    sites: vec!["study.com".to_string(), "news.com".to_string()],
+                    allowlist_sites: vec!["news.com".to_string()],
+                },
+            ],
+            selected_blocklist_profile: "Work".to_string(),
+            ..AppConfig::default()
+        }
+        .normalized();
+
+        let payload =
+            apply_blocklist_profile_command(&mut config, BlocklistProfileCommandKind::Delete)
+                .unwrap();
+
+        assert!(payload.updated);
+        assert_eq!(payload.selected_blocklist_profile, "Study");
+        assert_eq!(config.selected_blocklist_profile, "Study");
+        assert_eq!(config.blocklist_profiles.len(), 1);
+        assert_eq!(config.blocked_sites, vec!["study.com".to_string()]);
+    }
+
+    #[test]
     fn apply_allowlist_site_add_updates_effective_blocking() {
         let mut config = AppConfig {
             blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
@@ -3481,6 +3604,68 @@ mod tests {
         );
         assert!(config.blocked_sites.is_empty());
         assert_eq!(payload.effective_blocked_sites_count, 0);
+    }
+
+    #[test]
+    fn apply_site_edit_command_updates_blocklist_sites() {
+        let mut config = AppConfig {
+            blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+                name: "Default".to_string(),
+                sites: vec!["a.com".to_string(), "b.com".to_string()],
+                allowlist_sites: Vec::new(),
+            }],
+            selected_blocklist_profile: "Default".to_string(),
+            ..AppConfig::default()
+        }
+        .normalized();
+
+        let payload = apply_site_edit_command(
+            &mut config,
+            SiteListTarget::Blocklist,
+            &SiteEditValue {
+                previous: "a.com".to_string(),
+                next: "news.ycombinator.com".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert!(payload.updated);
+        assert_eq!(payload.previous, "a.com");
+        assert_eq!(payload.current, "news.ycombinator.com");
+        assert_eq!(
+            config.blocklist_profiles[0].sites,
+            vec!["news.ycombinator.com".to_string(), "b.com".to_string()]
+        );
+        assert_eq!(
+            config.blocked_sites,
+            vec!["news.ycombinator.com".to_string(), "b.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn apply_site_delete_command_updates_allowlist_and_effective_blocking() {
+        let mut config = AppConfig {
+            blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+                name: "Default".to_string(),
+                sites: vec!["a.com".to_string(), "b.com".to_string()],
+                allowlist_sites: vec!["b.com".to_string()],
+            }],
+            selected_blocklist_profile: "Default".to_string(),
+            ..AppConfig::default()
+        }
+        .normalized();
+
+        let payload =
+            apply_site_delete_command(&mut config, SiteListTarget::Allowlist, "b.com").unwrap();
+
+        assert!(payload.updated);
+        assert_eq!(payload.removed, "b.com");
+        assert!(config.blocklist_profiles[0].allowlist_sites.is_empty());
+        assert_eq!(
+            config.blocked_sites,
+            vec!["a.com".to_string(), "b.com".to_string()]
+        );
+        assert_eq!(payload.effective_blocked_sites_count, 2);
     }
 
     #[test]
