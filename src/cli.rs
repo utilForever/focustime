@@ -1658,10 +1658,16 @@ fn apply_site_edit_command(
 ) -> Result<SiteEditCommandOutput, String> {
     ensure_blocklist_profiles(config);
     let index = selected_blocklist_profile_index(config);
-    let sites = active_profile_sites(config, index, target).to_vec();
-    let edit_index = sites
+    let previous = value.previous.trim();
+
+    let mut working = SiteBlocker::new();
+    for site in active_profile_sites(config, index, target) {
+        working.add_site(site.clone());
+    }
+    let edit_index = working
+        .sites
         .iter()
-        .position(|site| site.eq_ignore_ascii_case(value.previous.trim()))
+        .position(|site| site.eq_ignore_ascii_case(previous))
         .ok_or_else(|| {
             format!(
                 "Site `{}` was not found in {}.",
@@ -1669,11 +1675,6 @@ fn apply_site_edit_command(
                 target.id()
             )
         })?;
-
-    let mut working = SiteBlocker::new();
-    for site in sites {
-        working.add_site(site);
-    }
     let result = working.edit_site_from_input(edit_index, &value.next);
     match result {
         EditSiteResult::Updated { old, new } => {
@@ -3640,6 +3641,45 @@ mod tests {
         assert_eq!(
             config.blocked_sites,
             vec!["news.ycombinator.com".to_string(), "b.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn apply_site_edit_command_handles_duplicate_case_entries() {
+        let mut config = AppConfig {
+            blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+                name: "Default".to_string(),
+                sites: vec![
+                    "A.com".to_string(),
+                    "a.com".to_string(),
+                    "b.com".to_string(),
+                ],
+                allowlist_sites: Vec::new(),
+            }],
+            selected_blocklist_profile: "Default".to_string(),
+            ..AppConfig::default()
+        };
+
+        let payload = apply_site_edit_command(
+            &mut config,
+            SiteListTarget::Blocklist,
+            &SiteEditValue {
+                previous: "a.com".to_string(),
+                next: "news.com".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert!(payload.updated);
+        assert_eq!(payload.previous, "a.com");
+        assert_eq!(payload.current, "news.com");
+        assert_eq!(
+            config.blocklist_profiles[0].sites,
+            vec!["news.com".to_string(), "b.com".to_string()]
+        );
+        assert_eq!(
+            config.blocked_sites,
+            vec!["news.com".to_string(), "b.com".to_string()]
         );
     }
 
