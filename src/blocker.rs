@@ -417,7 +417,7 @@ impl SiteBlocker {
         intent: BlockingIntent,
     ) -> BlockingPreview {
         let nl = line_ending_for(original);
-        let current_section = Self::extract_block_section(original);
+        let current_section = Self::extract_block_sections(original);
         let next_section = match intent {
             BlockingIntent::Block if !self.sites.is_empty() => Some(self.render_block_section(nl)),
             BlockingIntent::Block | BlockingIntent::Unblock => None,
@@ -480,16 +480,18 @@ impl SiteBlocker {
         section
     }
 
-    fn extract_block_section(content: &str) -> Option<String> {
+    fn extract_block_sections(content: &str) -> Option<String> {
         let nl = line_ending_for(content);
         let mut in_block = false;
         let mut section = String::new();
+        let mut sections = Vec::new();
 
         for line in content.lines() {
             let trimmed = line.trim();
             if !in_block {
                 if trimmed == BLOCK_MARKER_START {
                     in_block = true;
+                    section.clear();
                     section.push_str(BLOCK_MARKER_START);
                     section.push_str(nl);
                 }
@@ -499,14 +501,20 @@ impl SiteBlocker {
             if trimmed == BLOCK_MARKER_END {
                 section.push_str(BLOCK_MARKER_END);
                 section.push_str(nl);
-                return Some(section);
+                sections.push(std::mem::take(&mut section));
+                in_block = false;
+                continue;
             }
 
             section.push_str(line);
             section.push_str(nl);
         }
 
-        None
+        if sections.is_empty() {
+            None
+        } else {
+            Some(sections.concat())
+        }
     }
 }
 
@@ -927,6 +935,30 @@ mod tests {
         assert!(section.contains("# focustime-block-start"));
         assert!(section.contains("# focustime-block-end"));
         assert_eq!(preview.section_for_display(), Some(section));
+    }
+
+    #[test]
+    fn preview_unblock_reports_all_existing_sections() {
+        let blocker = SiteBlocker::new();
+        let original = concat!(
+            "127.0.0.1 localhost\n",
+            "# focustime-block-start\n",
+            "127.0.0.1 example.com\n",
+            "# focustime-block-end\n",
+            "# focustime-block-start\n",
+            "127.0.0.1 github.com\n",
+            "# focustime-block-end\n",
+        );
+
+        let preview = blocker.preview_from_content("hosts", original, BlockingIntent::Unblock);
+        let section = preview
+            .current_section
+            .as_deref()
+            .expect("unblock preview should include all current sections");
+
+        assert_eq!(section.matches("# focustime-block-start").count(), 2);
+        assert!(section.contains("127.0.0.1 example.com"));
+        assert!(section.contains("127.0.0.1 github.com"));
     }
 
     #[test]
