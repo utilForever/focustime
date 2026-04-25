@@ -107,6 +107,21 @@ cargo run -- --strict
 cargo run -- --strict=on
 cargo run -- --strict --json
 
+# Manage blocklist profiles (active profile + CRUD)
+cargo run -- --blocklist-profile
+cargo run -- --blocklist-profile Work
+cargo run -- --blocklist-profile-create Study
+cargo run -- --blocklist-profile-rename "Deep Work"
+cargo run -- --blocklist-profile-delete --json
+
+# Manage blocklist/allowlist sites for the active blocklist profile
+cargo run -- --blocklist-sites
+cargo run -- --allowlist-sites --json
+cargo run -- --blocklist-site-add="youtube.com, reddit.com"
+cargo run -- --allowlist-site-add "reddit.com"
+cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
+cargo run -- --allowlist-site-delete reddit.com
+
 # Show recurring schedule or replace it atomically from JSON
 cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"]}'
