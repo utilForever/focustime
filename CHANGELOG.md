@@ -11,20 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **CLI blocklist profile/site parity commands (#178):** added non-interactive commands for blocklist profile selection/CRUD and blocklist/allowlist site listing and mutation workflows, including text/JSON automation outputs.
+- **CLI blocklist profile/site parity commands (#208):** added non-interactive commands for blocklist profile selection/CRUD and blocklist/allowlist site listing and mutation workflows, including text/JSON automation outputs.
+- **CLI status watch mode (#209):** added `--status --watch[=SECONDS]` with streaming text and NDJSON status snapshots for automation monitoring.
+- **Blocking preview mode (#211):** added read-only hosts-file preview flows (`--blocking-preview`) for CLI and setup diagnostics, including merged-block-section preview correctness.
 
 ## [0.6.0] - 2026-04-25
 
 ### Added
 
-- **CLI v3 core management commands (#172):** added `--goal`, `--strict`, `--schedule`, `--schedule-set`, and `--diagnostics` commands with text/JSON output for automation workflows.
-- **Session metadata v2 persistence (#174):** promoted `focus_intention` and `task_note` to first-class persisted session metadata across recovery, stats storage, and CLI JSON surfaces (defaulting to `task_label` when no dedicated metadata input is provided).
+- **CLI v3 core management commands (#198):** added `--goal`, `--strict`, `--schedule`, `--schedule-set`, and `--diagnostics` commands with text/JSON output for automation workflows.
+- **Session metadata v2 persistence (#200):** promoted `focus_intention` and `task_note` to first-class persisted session metadata across recovery, stats storage, and CLI JSON surfaces (defaulting to `task_label` when no dedicated metadata input is provided).
 
 ### Changed
 
-- **CLI JSON/error contract and exit-code consistency (#173):** centralized CLI error handling, added machine-readable JSON error envelopes for `--json` failures, and standardized exit-code mapping (`0` success, `1` runtime failure, `2` usage failure).
-- **Export schema v3 compatibility (#175):** bumped stats export schema to `v3`, exported focus-session `focus_intention`/`task_note` from persisted metadata, and preserved backward compatibility for legacy stats entries by defaulting missing metadata to `task_label`.
-- **Schedule reliability hardening (#176):** made overlapping recurring-window activation deterministic (most recently started active window wins, stable same-start tie handling), tightened next-occurrence scanning around exception-date edge cases, and added regression coverage for schedule trigger consistency.
+- **CLI JSON/error contract and exit-code consistency (#199):** centralized CLI error handling, added machine-readable JSON error envelopes for `--json` failures, and standardized exit-code mapping (`0` success, `1` runtime failure, `2` usage failure).
+- **Export schema v3 compatibility (#201):** bumped stats export schema to `v3`, exported focus-session `focus_intention`/`task_note` from persisted metadata, and preserved backward compatibility for legacy stats entries by defaulting missing metadata to `task_label`.
+- **Schedule reliability hardening (#202):** made overlapping recurring-window activation deterministic (most recently started active window wins, stable same-start tie handling), tightened next-occurrence scanning around exception-date edge cases, and added regression coverage for schedule trigger consistency.
+- **Startup blocking/recovery reconciliation hardening (#205):** improved startup reconciliation of focus blocking with recovered timer state to avoid stale or inconsistent blocking state after restart.
 
 ## [0.5.2] - 2026-04-23
 
