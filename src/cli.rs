@@ -1,4 +1,12 @@
-use std::{collections::HashSet, env, ffi::OsString, path::PathBuf};
+use std::{
+    collections::HashSet,
+    env,
+    ffi::OsString,
+    io::{self, Write},
+    path::PathBuf,
+    thread,
+    time::Duration,
+};
 
 use chrono::NaiveDate;
 use serde::Serialize;
@@ -44,7 +52,7 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --blocklist-site-delete=HOSTNAME [--json]
   focustime --allowlist-site-delete=HOSTNAME [--json]
   focustime --diagnostics [--json]
-  focustime --status [--json]
+  focustime --status [--watch[=SECONDS]] [--json]
   focustime --export[=DIR] [--json]
 
 Options:
@@ -73,6 +81,7 @@ Options:
   --allowlist-site-delete     Delete allowlist hostname in active profile
   --diagnostics   Show setup diagnostics checks
   --status        Print status summary (includes live timer/session fields)
+  --watch         Stream periodic status updates (status command only; default 1s)
   --export        Export stats to current directory or DIR
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
@@ -85,6 +94,7 @@ pub enum OutputMode {
 
 const EXIT_CODE_RUNTIME_ERROR: i32 = 1;
 const EXIT_CODE_USAGE_ERROR: i32 = 2;
+const DEFAULT_WATCH_INTERVAL_SECS: u64 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -144,7 +154,9 @@ pub enum CommandKind {
         schedule: Option<RecurringScheduleConfig>,
     },
     Diagnostics,
-    Status,
+    Status {
+        watch_interval_secs: Option<u64>,
+    },
     Export {
         dir: Option<PathBuf>,
     },
@@ -211,6 +223,7 @@ enum ParsedToken {
     Next,
     Task(String),
     Status,
+    Watch(Option<u64>),
     Profile(Option<ProfileId>),
     Goal(Option<DailyGoalConfig>),
     Strict(Option<bool>),
@@ -517,7 +530,10 @@ where
     let (show_help, output) =
         parse_global_tokens(&tokens).map_err(|message| usage_error(output_hint, message))?;
     let primary = parse_primary_command(&tokens).map_err(|message| usage_error(output, message))?;
-    finalize_cli_action(show_help, output, primary).map_err(|message| usage_error(output, message))
+    let watch_interval_secs =
+        parse_watch_interval_option(&tokens).map_err(|message| usage_error(output, message))?;
+    finalize_cli_action(show_help, output, primary, watch_interval_secs)
+        .map_err(|message| usage_error(output, message))
 }
 
 pub fn runtime_error(output: OutputMode, message: String) -> CliError {
@@ -602,12 +618,13 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 15] = [
+    let parsers: [(&str, ValueArgParser); 16] = [
         ("--task", classify_task_arg),
         ("--profile", classify_profile_arg),
         ("--goal", classify_goal_arg),
         ("--strict", classify_strict_arg),
         ("--schedule-set", classify_schedule_set_arg),
+        ("--watch", classify_watch_arg),
         ("--export", classify_export_arg),
         ("--blocklist-profile", classify_blocklist_profile_arg),
         (
@@ -693,6 +710,18 @@ fn classify_export_arg(args: &[String], index: usize) -> Result<(ParsedToken, us
         return Ok((ParsedToken::Export(Some(PathBuf::from(next))), 2));
     }
     Ok((ParsedToken::Export(None), 1))
+}
+
+fn classify_watch_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((
+            ParsedToken::Watch(Some(parse_watch_interval_secs(next)?)),
+            2,
+        ));
+    }
+    Ok((ParsedToken::Watch(None), 1))
 }
 
 fn classify_blocklist_profile_arg(
@@ -879,12 +908,13 @@ fn classify_schedule_set_arg(
 }
 
 fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 15] = [
+    let parsers: [KeyValueParser; 16] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_goal_key_value_arg,
         parse_strict_key_value_arg,
         parse_schedule_set_key_value_arg,
+        parse_watch_key_value_arg,
         parse_export_key_value_arg,
         parse_blocklist_profile_key_value_arg,
         parse_blocklist_profile_create_key_value_arg,
@@ -954,6 +984,19 @@ fn parse_export_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> 
     if let Some(value) = arg.strip_prefix("--export=") {
         let value = require_nonempty_key_value(value, "`--export=` requires a target directory.")?;
         return Ok(Some(ParsedToken::Export(Some(PathBuf::from(value)))));
+    }
+    Ok(None)
+}
+
+fn parse_watch_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--watch=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--watch=` requires a positive whole number of seconds.",
+        )?;
+        return Ok(Some(ParsedToken::Watch(Some(parse_watch_interval_secs(
+            value,
+        )?))));
     }
     Ok(None)
 }
@@ -1078,6 +1121,7 @@ fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), Str
             | ParsedToken::Next
             | ParsedToken::Task(_)
             | ParsedToken::Status
+            | ParsedToken::Watch(_)
             | ParsedToken::Profile(_)
             | ParsedToken::Goal(_)
             | ParsedToken::Strict(_)
@@ -1115,6 +1159,7 @@ fn parse_primary_command(tokens: &[ParsedToken]) -> Result<Option<PrimaryCommand
                 set_primary_command(&mut primary, PrimaryCommand::Task(label.clone()))?
             }
             ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
+            ParsedToken::Watch(_) => {}
             ParsedToken::Profile(profile) => {
                 set_primary_command(&mut primary, PrimaryCommand::Profile(*profile))?
             }
@@ -1192,9 +1237,14 @@ fn finalize_cli_action(
     show_help: bool,
     output: OutputMode,
     primary: Option<PrimaryCommand>,
+    watch_interval_secs: Option<u64>,
 ) -> Result<CliAction, String> {
     if show_help {
         return Ok(CliAction::ShowHelp);
+    }
+
+    if watch_interval_secs.is_some() && !matches!(primary, Some(PrimaryCommand::Status)) {
+        return Err(invalid_usage("`--watch` is only valid with `--status`."));
     }
 
     match primary {
@@ -1263,7 +1313,9 @@ fn finalize_cli_action(
             output,
         })),
         Some(PrimaryCommand::Status) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Status,
+            kind: CommandKind::Status {
+                watch_interval_secs,
+            },
             output,
         })),
         Some(PrimaryCommand::Export(dir)) => Ok(CliAction::RunCommand(CliCommand {
@@ -1371,7 +1423,9 @@ pub fn execute_command(cli_command: CliCommand) -> Result<(), String> {
             execute_schedule_command(schedule, cli_command.output)
         }
         CommandKind::Diagnostics => execute_diagnostics_command(cli_command.output),
-        CommandKind::Status => execute_status_command(cli_command.output),
+        CommandKind::Status {
+            watch_interval_secs,
+        } => execute_status_command(cli_command.output, watch_interval_secs),
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
@@ -1995,14 +2049,56 @@ fn execute_diagnostics_command(output: OutputMode) -> Result<(), String> {
     Ok(())
 }
 
-fn execute_status_command(output: OutputMode) -> Result<(), String> {
+fn execute_status_command(
+    output: OutputMode,
+    watch_interval_secs: Option<u64>,
+) -> Result<(), String> {
+    if let Some(interval_secs) = watch_interval_secs {
+        return execute_status_watch_command(output, interval_secs);
+    }
+
+    let payload = load_status_output()?;
+    emit_status_output(&payload, output, false)
+}
+
+fn execute_status_watch_command(output: OutputMode, interval_secs: u64) -> Result<(), String> {
+    if interval_secs == 0 {
+        return Err("`--watch` interval must be greater than 0 seconds.".to_string());
+    }
+
+    loop {
+        let payload = load_status_output()?;
+        emit_status_output(&payload, output, true)?;
+        flush_stdout()?;
+        thread::sleep(Duration::from_secs(interval_secs));
+    }
+}
+
+fn load_status_output() -> Result<StatusOutput, String> {
     let config = AppConfig::load().normalized();
     let stats = FocusStats::load().map_err(|error| format!("Failed to load stats: {error}"))?;
-    let payload = build_status_output(&config, &stats);
+    Ok(build_status_output(&config, &stats))
+}
 
+fn emit_status_output(
+    payload: &StatusOutput,
+    output: OutputMode,
+    watch_mode: bool,
+) -> Result<(), String> {
     match output {
-        OutputMode::Text => print_status_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
+        OutputMode::Text => {
+            print_status_output(payload);
+            if watch_mode {
+                println!();
+            }
+        }
+        OutputMode::Json => {
+            if watch_mode {
+                print_json_compact(payload)?;
+            } else {
+                print_json(payload)?;
+            }
+        }
     }
     Ok(())
 }
@@ -2822,6 +2918,19 @@ fn print_json<T: Serialize>(payload: &T) -> Result<(), String> {
     Ok(())
 }
 
+fn print_json_compact<T: Serialize>(payload: &T) -> Result<(), String> {
+    let json = serde_json::to_string(payload)
+        .map_err(|error| format!("Failed to encode JSON output: {error}"))?;
+    println!("{json}");
+    Ok(())
+}
+
+fn flush_stdout() -> Result<(), String> {
+    io::stdout()
+        .flush()
+        .map_err(|error| format!("Failed to flush stdout: {error}"))
+}
+
 fn format_duration(secs: u64) -> String {
     let minutes = secs / 60;
     let seconds = secs % 60;
@@ -2857,6 +2966,32 @@ fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<
 
 fn invalid_usage(message: &str) -> String {
     format!("{message}\n\n{USAGE_TEXT}")
+}
+
+fn parse_watch_interval_option(tokens: &[ParsedToken]) -> Result<Option<u64>, String> {
+    let mut interval: Option<u64> = None;
+    for token in tokens {
+        if let ParsedToken::Watch(value) = token {
+            if interval.is_some() {
+                return Err(invalid_usage("`--watch` can only be specified once."));
+            }
+            interval = Some(value.unwrap_or(DEFAULT_WATCH_INTERVAL_SECS));
+        }
+    }
+    Ok(interval)
+}
+
+fn parse_watch_interval_secs(value: &str) -> Result<u64, String> {
+    let trimmed = value.trim();
+    let secs = trimmed
+        .parse::<u64>()
+        .map_err(|_| invalid_usage("`--watch` requires a positive whole number of seconds."))?;
+    if secs == 0 {
+        return Err(invalid_usage(
+            "`--watch` requires a positive whole number of seconds.",
+        ));
+    }
+    Ok(secs)
 }
 
 #[cfg(test)]
@@ -2904,8 +3039,52 @@ mod tests {
         assert_eq!(
             parsed,
             CliAction::RunCommand(CliCommand {
-                kind: CommandKind::Status,
+                kind: CommandKind::Status {
+                    watch_interval_secs: None
+                },
                 output: OutputMode::Json
+            })
+        );
+    }
+
+    #[test]
+    fn parse_status_watch_without_interval_uses_default_cadence() {
+        let parsed = parse(&["--status", "--watch"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Status {
+                    watch_interval_secs: Some(DEFAULT_WATCH_INTERVAL_SECS)
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_status_watch_with_equals_interval() {
+        let parsed = parse(&["--status", "--watch=3"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Status {
+                    watch_interval_secs: Some(3)
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_status_watch_with_space_interval() {
+        let parsed = parse(&["--status", "--watch", "2"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Status {
+                    watch_interval_secs: Some(2)
+                },
+                output: OutputMode::Text
             })
         );
     }
@@ -3450,6 +3629,36 @@ mod tests {
     fn parse_rejects_json_with_start() {
         let error = parse(&["--start", "--json"]).unwrap_err();
         assert!(error.contains("not supported with `--start`"));
+    }
+
+    #[test]
+    fn parse_rejects_watch_without_status() {
+        let error = parse(&["--watch"]).unwrap_err();
+        assert!(error.contains("`--watch` is only valid with `--status`"));
+    }
+
+    #[test]
+    fn parse_rejects_watch_with_non_status_command() {
+        let error = parse(&["--export", "--watch"]).unwrap_err();
+        assert!(error.contains("`--watch` is only valid with `--status`"));
+    }
+
+    #[test]
+    fn parse_rejects_watch_with_zero_seconds() {
+        let error = parse(&["--status", "--watch=0"]).unwrap_err();
+        assert!(error.contains("positive whole number of seconds"));
+    }
+
+    #[test]
+    fn parse_rejects_watch_with_non_numeric_seconds() {
+        let error = parse(&["--status", "--watch=abc"]).unwrap_err();
+        assert!(error.contains("positive whole number of seconds"));
+    }
+
+    #[test]
+    fn parse_rejects_duplicate_watch_flags() {
+        let error = parse(&["--status", "--watch", "--watch=2"]).unwrap_err();
+        assert!(error.contains("can only be specified once"));
     }
 
     #[test]

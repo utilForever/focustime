@@ -135,6 +135,10 @@ cargo run -- --diagnostics --json
 cargo run -- --status
 cargo run -- --status --json
 
+# Watch status continuously (default 1s cadence, optional seconds override)
+cargo run -- --status --watch
+cargo run -- --status --watch=2 --json
+
 # Export stats to current directory or a target directory
 cargo run -- --export
 cargo run -- --export=./reports --json
@@ -144,6 +148,7 @@ cargo run -- --export=./reports --json
 
 - `--json` success responses are emitted to `stdout` as JSON and exit with code `0`.
 - `--json` failures are emitted to `stdout` as JSON (no mixed human text) and exit with a non-zero code.
+- `--status --watch --json` emits newline-delimited compact JSON snapshots continuously until interrupted.
 - Text-mode failures are emitted to `stderr` for interactive readability.
 
 Exit codes:
