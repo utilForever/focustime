@@ -1502,75 +1502,17 @@ fn apply_blocklist_profile_command(
 ) -> Result<BlocklistProfileCommandOutput, String> {
     ensure_blocklist_profiles(config);
 
-    let mut updated = false;
-    let action = match command {
+    let (action, updated) = match command {
         BlocklistProfileCommandKind::Select { profile } => {
-            if let Some(profile) = profile {
-                let index = blocklist_profile_index_by_name(&config.blocklist_profiles, &profile)
-                    .ok_or_else(|| format!("Unknown blocklist profile `{profile}`."))?;
-                let selected = config.blocklist_profiles[index].name.clone();
-                if !config
-                    .selected_blocklist_profile
-                    .eq_ignore_ascii_case(&selected)
-                {
-                    config.selected_blocklist_profile = selected;
-                    updated = true;
-                }
-            }
-            "blocklist-profile"
+            handle_select_blocklist_profile(config, profile)?
         }
         BlocklistProfileCommandKind::Create { name } => {
-            let name = name.trim().to_string();
-            if name.is_empty() {
-                return Err("Profile name cannot be empty.".to_string());
-            }
-            if blocklist_profile_index_by_name(&config.blocklist_profiles, &name).is_some() {
-                return Err(format!("Profile `{name}` already exists."));
-            }
-            config.blocklist_profiles.push(BlocklistProfileConfig {
-                name: name.clone(),
-                sites: Vec::new(),
-                allowlist_sites: Vec::new(),
-            });
-            config.selected_blocklist_profile = name;
-            updated = true;
-            "blocklist-profile-create"
+            handle_create_blocklist_profile(config, name)?
         }
         BlocklistProfileCommandKind::Rename { name } => {
-            let index = selected_blocklist_profile_index(config);
-            let current_name = config.blocklist_profiles[index].name.clone();
-            let name = name.trim().to_string();
-            if name.is_empty() {
-                return Err("Profile name cannot be empty.".to_string());
-            }
-            if current_name == name {
-                "blocklist-profile-rename"
-            } else {
-                let duplicate = config.blocklist_profiles.iter().enumerate().any(
-                    |(candidate_index, profile)| {
-                        candidate_index != index && profile.name.eq_ignore_ascii_case(&name)
-                    },
-                );
-                if duplicate {
-                    return Err(format!("Profile `{name}` already exists."));
-                }
-                config.blocklist_profiles[index].name = name.clone();
-                config.selected_blocklist_profile = name;
-                updated = true;
-                "blocklist-profile-rename"
-            }
+            handle_rename_blocklist_profile(config, name)?
         }
-        BlocklistProfileCommandKind::Delete => {
-            if config.blocklist_profiles.len() <= 1 {
-                return Err("At least one blocklist profile is required.".to_string());
-            }
-            let index = selected_blocklist_profile_index(config);
-            config.blocklist_profiles.remove(index);
-            let next_index = index.min(config.blocklist_profiles.len().saturating_sub(1));
-            config.selected_blocklist_profile = config.blocklist_profiles[next_index].name.clone();
-            updated = true;
-            "blocklist-profile-delete"
-        }
+        BlocklistProfileCommandKind::Delete => handle_delete_blocklist_profile(config)?,
     };
 
     if updated {
@@ -1579,6 +1521,88 @@ fn apply_blocklist_profile_command(
     Ok(build_blocklist_profile_command_output(
         config, action, updated,
     ))
+}
+
+fn handle_select_blocklist_profile(
+    config: &mut AppConfig,
+    profile: Option<String>,
+) -> Result<(&'static str, bool), String> {
+    let mut updated = false;
+    if let Some(profile) = profile {
+        let index = blocklist_profile_index_by_name(&config.blocklist_profiles, &profile)
+            .ok_or_else(|| format!("Unknown blocklist profile `{profile}`."))?;
+        let selected = config.blocklist_profiles[index].name.clone();
+        if !config
+            .selected_blocklist_profile
+            .eq_ignore_ascii_case(&selected)
+        {
+            config.selected_blocklist_profile = selected;
+            updated = true;
+        }
+    }
+    Ok(("blocklist-profile", updated))
+}
+
+fn handle_create_blocklist_profile(
+    config: &mut AppConfig,
+    name: String,
+) -> Result<(&'static str, bool), String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Profile name cannot be empty.".to_string());
+    }
+    if blocklist_profile_index_by_name(&config.blocklist_profiles, &name).is_some() {
+        return Err(format!("Profile `{name}` already exists."));
+    }
+    config.blocklist_profiles.push(BlocklistProfileConfig {
+        name: name.clone(),
+        sites: Vec::new(),
+        allowlist_sites: Vec::new(),
+    });
+    config.selected_blocklist_profile = name;
+    Ok(("blocklist-profile-create", true))
+}
+
+fn handle_rename_blocklist_profile(
+    config: &mut AppConfig,
+    name: String,
+) -> Result<(&'static str, bool), String> {
+    let index = selected_blocklist_profile_index(config);
+    let current_name = config.blocklist_profiles[index].name.clone();
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Profile name cannot be empty.".to_string());
+    }
+    if current_name == name {
+        return Ok(("blocklist-profile-rename", false));
+    }
+
+    let duplicate =
+        config
+            .blocklist_profiles
+            .iter()
+            .enumerate()
+            .any(|(candidate_index, profile)| {
+                candidate_index != index && profile.name.eq_ignore_ascii_case(&name)
+            });
+    if duplicate {
+        return Err(format!("Profile `{name}` already exists."));
+    }
+
+    config.blocklist_profiles[index].name = name.clone();
+    config.selected_blocklist_profile = name;
+    Ok(("blocklist-profile-rename", true))
+}
+
+fn handle_delete_blocklist_profile(config: &mut AppConfig) -> Result<(&'static str, bool), String> {
+    if config.blocklist_profiles.len() <= 1 {
+        return Err("At least one blocklist profile is required.".to_string());
+    }
+    let index = selected_blocklist_profile_index(config);
+    config.blocklist_profiles.remove(index);
+    let next_index = index.min(config.blocklist_profiles.len().saturating_sub(1));
+    config.selected_blocklist_profile = config.blocklist_profiles[next_index].name.clone();
+    Ok(("blocklist-profile-delete", true))
 }
 
 fn apply_site_add_command(
