@@ -351,13 +351,13 @@ fn render_timer_hints(frame: &mut Frame, app: &App, area: Rect) {
 
 fn timer_primary_hint(app: &App) -> &'static str {
     if app.break_glass_confirmation_pending() {
-        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [u] Confirm unblock"
+        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [z] Delay 10m  [u] Confirm unblock"
     } else if app.strict_reset_confirmation_pending() {
-        "⌨  Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)  [u] Unblock"
+        "⌨  Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)  [z] Delay 10m  [u] Unblock"
     } else if app.strict_mode_enforced_for_focus() {
-        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)  [u] Unblock"
+        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)  [z] Delay 10m  [u] Unblock"
     } else {
-        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [u] Unblock"
+        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [z] Delay 10m  [u] Unblock"
     }
 }
 
@@ -1672,6 +1672,12 @@ mod tests {
     fn timer_primary_hint_includes_break_glass_shortcut() {
         let app = App::default();
         assert!(timer_primary_hint(&app).contains("[u] Unblock"));
+    }
+
+    #[test]
+    fn timer_primary_hint_includes_schedule_delay_shortcut() {
+        let app = App::default();
+        assert!(timer_primary_hint(&app).contains("[z] Delay 10m"));
     }
 
     #[test]
