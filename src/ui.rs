@@ -1663,8 +1663,10 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Datelike, Duration, NaiveDate};
     use ratatui::{Terminal, backend::TestBackend};
 
+    use crate::stats::current_day_key;
     use crate::wakatime::WakatimeTracker;
 
     fn terminal_text(terminal: &Terminal<TestBackend>, width: u16, height: u16) -> String {
@@ -1695,6 +1697,113 @@ mod tests {
     fn timer_primary_hint_includes_break_glass_shortcut() {
         let app = App::default();
         assert!(timer_primary_hint(&app).contains("[u] Unblock"));
+    }
+
+    #[test]
+    fn goal_streak_lines_show_off_when_all_goals_disabled() {
+        let app = App::default();
+
+        assert_eq!(
+            format_timer_goal_streak_line(&app),
+            "Goals: Off (set via [p] -> [e])   Streaks: Off"
+        );
+        assert_eq!(
+            format_history_goal_streak_line(&app),
+            "Goals: Off   Streaks: Off"
+        );
+    }
+
+    #[test]
+    fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
+        let mut app = App::default();
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('p'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('e'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[2];
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Right,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[3];
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Right,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[4];
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Right,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[5];
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Right,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        let today = current_day_key();
+        let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse as a date");
+        let weekly_day = (-6..=6)
+            .filter(|offset| *offset != 0)
+            .map(|offset| today_date + Duration::days(i64::from(offset)))
+            .find(|candidate| candidate.iso_week() == today_date.iso_week())
+            .expect("there should be at least one nearby day in the current ISO week");
+        let monthly_day = (-31..=31)
+            .filter(|offset| *offset != 0)
+            .map(|offset| today_date + Duration::days(i64::from(offset)))
+            .find(|candidate| {
+                candidate.year() == today_date.year()
+                    && candidate.month() == today_date.month()
+                    && candidate.iso_week() != today_date.iso_week()
+            })
+            .expect("there should be at least one nearby day in the current month");
+
+        app.insert_daily_stats_for_tests(
+            &today,
+            crate::stats::DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 5 * 60,
+                goal: None,
+            },
+        );
+        app.insert_daily_stats_for_tests(
+            &weekly_day.format("%Y-%m-%d").to_string(),
+            crate::stats::DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 5 * 60,
+                goal: None,
+            },
+        );
+        app.insert_daily_stats_for_tests(
+            &monthly_day.format("%Y-%m-%d").to_string(),
+            crate::stats::DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 5 * 60,
+                goal: None,
+            },
+        );
+
+        let streak = app.goal_streak();
+        let expected = format!(
+            "Goals: {} · {} · {}   Streaks: {}d current · {}d best",
+            format_goal_period_progress("D", app.today_goal_progress()),
+            format_goal_period_progress("W", app.current_week_goal_progress()),
+            format_goal_period_progress("M", app.current_month_goal_progress()),
+            streak.current,
+            streak.best
+        );
+
+        assert_eq!(format_timer_goal_streak_line(&app), expected);
+        assert_eq!(format_history_goal_streak_line(&app), expected);
     }
 
     #[test]
