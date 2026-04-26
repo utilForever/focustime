@@ -45,10 +45,14 @@ impl DailyGoalSnapshot {
         self.minutes > 0 || self.pomodoros > 0
     }
 
-    pub fn is_met_by(self, stats: DailyStats) -> bool {
+    pub fn is_met_by_totals(self, focused_minutes: u64, pomodoros_completed: u32) -> bool {
         self.has_any_target()
-            && (self.minutes == 0 || stats.focused_minutes() >= self.minutes)
-            && (self.pomodoros == 0 || stats.pomodoros_completed >= self.pomodoros)
+            && (self.minutes == 0 || focused_minutes >= self.minutes)
+            && (self.pomodoros == 0 || pomodoros_completed >= self.pomodoros)
+    }
+
+    pub fn is_met_by(self, stats: DailyStats) -> bool {
+        self.is_met_by_totals(stats.focused_minutes(), stats.pomodoros_completed)
     }
 }
 
@@ -663,6 +667,50 @@ impl FocusStats {
 
     pub fn daily_for(&self, day_key: &str) -> DailyStats {
         self.daily.get(day_key).copied().unwrap_or_default()
+    }
+
+    pub fn weekly_for_day(&self, day: chrono::NaiveDate) -> WeeklyStats {
+        let week = day.iso_week();
+        let mut totals = WeeklyStats {
+            year: week.year(),
+            week: week.week(),
+            ..WeeklyStats::default()
+        };
+        for (day_key, stats) in &self.daily {
+            let Ok(candidate) = chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d") else {
+                continue;
+            };
+            let candidate_week = candidate.iso_week();
+            if candidate_week.year() != totals.year || candidate_week.week() != totals.week {
+                continue;
+            }
+            totals.pomodoros_completed = totals
+                .pomodoros_completed
+                .saturating_add(stats.pomodoros_completed);
+            totals.focused_seconds = totals.focused_seconds.saturating_add(stats.focused_seconds);
+        }
+        totals
+    }
+
+    pub fn monthly_for_day(&self, day: chrono::NaiveDate) -> MonthlyStats {
+        let mut totals = MonthlyStats {
+            year: day.year(),
+            month: day.month(),
+            ..MonthlyStats::default()
+        };
+        for (day_key, stats) in &self.daily {
+            let Ok(candidate) = chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d") else {
+                continue;
+            };
+            if candidate.year() != totals.year || candidate.month() != totals.month {
+                continue;
+            }
+            totals.pomodoros_completed = totals
+                .pomodoros_completed
+                .saturating_add(stats.pomodoros_completed);
+            totals.focused_seconds = totals.focused_seconds.saturating_add(stats.focused_seconds);
+        }
+        totals
     }
 
     pub fn task_planner_state(&self) -> (Vec<String>, Option<String>) {
@@ -1995,6 +2043,44 @@ mod tests {
     }
 
     #[test]
+    fn weekly_for_day_aggregates_selected_iso_week_only() {
+        let mut stats = FocusStats::default();
+        stats.insert_daily_for_tests(
+            "2026-04-06",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 30 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-08",
+            DailyStats {
+                pomodoros_completed: 2,
+                focused_seconds: 45 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-14",
+            DailyStats {
+                pomodoros_completed: 3,
+                focused_seconds: 90 * 60,
+                goal: None,
+            },
+        );
+
+        let week = stats.weekly_for_day(chrono::NaiveDate::from_ymd_opt(2026, 4, 7).unwrap());
+        let iso_week = chrono::NaiveDate::from_ymd_opt(2026, 4, 7)
+            .unwrap()
+            .iso_week();
+        assert_eq!(week.year, iso_week.year());
+        assert_eq!(week.week, iso_week.week());
+        assert_eq!(week.pomodoros_completed, 3);
+        assert_eq!(week.focused_minutes(), 75);
+    }
+
+    #[test]
     fn recent_weekly_is_sorted_newest_first_across_iso_year_boundaries() {
         let mut stats = FocusStats::default();
         stats.insert_daily_for_tests(
@@ -2316,6 +2402,41 @@ mod tests {
     }
 
     #[test]
+    fn monthly_for_day_aggregates_selected_calendar_month_only() {
+        let mut stats = FocusStats::default();
+        stats.insert_daily_for_tests(
+            "2026-04-06",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 30 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-04-08",
+            DailyStats {
+                pomodoros_completed: 2,
+                focused_seconds: 45 * 60,
+                goal: None,
+            },
+        );
+        stats.insert_daily_for_tests(
+            "2026-05-01",
+            DailyStats {
+                pomodoros_completed: 4,
+                focused_seconds: 120 * 60,
+                goal: None,
+            },
+        );
+
+        let month = stats.monthly_for_day(chrono::NaiveDate::from_ymd_opt(2026, 4, 10).unwrap());
+        assert_eq!(month.year, 2026);
+        assert_eq!(month.month, 4);
+        assert_eq!(month.pomodoros_completed, 3);
+        assert_eq!(month.focused_minutes(), 75);
+    }
+
+    #[test]
     fn latest_monthly_heatmap_uses_latest_recorded_month_data() {
         let mut stats = FocusStats::default();
         stats.insert_daily_for_tests(
@@ -2490,11 +2611,12 @@ mod tests {
         };
         let today = chrono::Local::now().date_naive();
         let labeled_day = today.format("%Y-%m-%d").to_string();
-        let other_day = today
-            .checked_sub_signed(chrono::Duration::days(2))
-            .unwrap()
-            .format("%Y-%m-%d")
-            .to_string();
+        let other_day_date = [today.pred_opt(), today.succ_opt()]
+            .into_iter()
+            .flatten()
+            .find(|candidate| candidate.iso_week() == today.iso_week())
+            .unwrap_or(today);
+        let other_day = other_day_date.format("%Y-%m-%d").to_string();
         let recent_window_start = today
             .checked_sub_signed(chrono::Duration::days(6))
             .unwrap()

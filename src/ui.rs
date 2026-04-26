@@ -18,10 +18,10 @@ use crate::wakatime::WakatimeRuntimeState;
 
 const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
 const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
-const PROFILE_EDIT_GROUP_GOALS: [usize; 2] = [9, 10];
-const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [11, 12];
+const PROFILE_EDIT_GROUP_GOALS: [usize; 6] = [9, 10, 11, 12, 13, 14];
+const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [15, 16];
 const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 15] =
-    [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27];
+    [17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31];
 const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
     ("Timer", &PROFILE_EDIT_GROUP_TIMER),
     ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
@@ -843,25 +843,29 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         6 => "Auto-start break",
         7 => "Auto-start focus",
         8 => "Strict focus mode",
-        9 => "Goal minutes",
-        10 => "Goal pomodoros",
-        11 => "WakaTime project",
-        12 => "WakaTime language",
-        13 => "Window selector",
-        14 => "Day selector",
-        15 => "Day enabled",
-        16 => "Start time",
-        17 => "End time",
-        18 => "Add/remove",
-        19 => "Exception selector",
-        20 => "Exception date",
-        21 => "Exception add/remove",
-        22 => "One-time selector",
-        23 => "One-time date",
-        24 => "One-time start",
-        25 => "One-time end",
-        26 => "One-time add/remove",
-        27 => "Conflict inspector",
+        9 => "Daily goal minutes",
+        10 => "Daily goal pomodoros",
+        11 => "Weekly goal minutes",
+        12 => "Weekly goal pomodoros",
+        13 => "Monthly goal minutes",
+        14 => "Monthly goal pomodoros",
+        15 => "WakaTime project",
+        16 => "WakaTime language",
+        17 => "Window selector",
+        18 => "Day selector",
+        19 => "Day enabled",
+        20 => "Start time",
+        21 => "End time",
+        22 => "Add/remove",
+        23 => "Exception selector",
+        24 => "Exception date",
+        25 => "Exception add/remove",
+        26 => "One-time selector",
+        27 => "One-time date",
+        28 => "One-time start",
+        29 => "One-time end",
+        30 => "One-time add/remove",
+        31 => "Conflict inspector",
         _ => "",
     }
 }
@@ -1509,7 +1513,11 @@ fn format_goal_progress_line(progress: DailyGoalProgress) -> String {
         progress.minutes.target,
         "m",
     );
-    format!("Goal: {pomodoros}   {minutes}")
+    format!("{pomodoros}   {minutes}")
+}
+
+fn format_goal_period_progress(period: &str, progress: DailyGoalProgress) -> String {
+    format!("{period} {}", format_goal_progress_line(progress))
 }
 
 fn format_goal_metric_progress(
@@ -1526,32 +1534,46 @@ fn format_goal_metric_progress(
 }
 
 fn format_timer_goal_streak_line(app: &App) -> String {
-    let goal_progress = app.today_goal_progress();
+    let daily_goal_progress = app.today_goal_progress();
+    let weekly_goal_progress = app.current_week_goal_progress();
+    let monthly_goal_progress = app.current_month_goal_progress();
     let streak = app.goal_streak();
-    if goal_progress.has_any_target() {
+    if daily_goal_progress.has_any_target()
+        || weekly_goal_progress.has_any_target()
+        || monthly_goal_progress.has_any_target()
+    {
         format!(
-            "{}   Streaks: {}d current · {}d best",
-            format_goal_progress_line(goal_progress),
+            "Goals: {} · {} · {}   Streaks: {}d current · {}d best",
+            format_goal_period_progress("D", daily_goal_progress),
+            format_goal_period_progress("W", weekly_goal_progress),
+            format_goal_period_progress("M", monthly_goal_progress),
             streak.current,
             streak.best
         )
     } else {
-        "Goal: Off (set via [p] -> [e])   Streaks: Off".to_string()
+        "Goals: Off (set via [p] -> [e])   Streaks: Off".to_string()
     }
 }
 
 fn format_history_goal_streak_line(app: &App) -> String {
-    let goal_progress = app.today_goal_progress();
+    let daily_goal_progress = app.today_goal_progress();
+    let weekly_goal_progress = app.current_week_goal_progress();
+    let monthly_goal_progress = app.current_month_goal_progress();
     let streak = app.goal_streak();
-    if goal_progress.has_any_target() {
+    if daily_goal_progress.has_any_target()
+        || weekly_goal_progress.has_any_target()
+        || monthly_goal_progress.has_any_target()
+    {
         format!(
-            "{}   Streaks: {}d current · {}d best",
-            format_goal_progress_line(goal_progress),
+            "Goals: {} · {} · {}   Streaks: {}d current · {}d best",
+            format_goal_period_progress("D", daily_goal_progress),
+            format_goal_period_progress("W", weekly_goal_progress),
+            format_goal_period_progress("M", monthly_goal_progress),
             streak.current,
             streak.best
         )
     } else {
-        "Daily goal: Off   Streaks: Off".to_string()
+        "Goals: Off   Streaks: Off".to_string()
     }
 }
 

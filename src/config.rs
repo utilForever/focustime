@@ -72,6 +72,16 @@ pub struct AppConfig {
     /// A value of `0` disables the corresponding goal.
     #[serde(default)]
     pub daily_goal: DailyGoalConfig,
+    /// Weekly goal settings for focus minutes and completed pomodoros.
+    ///
+    /// A value of `0` disables the corresponding goal.
+    #[serde(default)]
+    pub weekly_goal: WeeklyGoalConfig,
+    /// Monthly goal settings for focus minutes and completed pomodoros.
+    ///
+    /// A value of `0` disables the corresponding goal.
+    #[serde(default)]
+    pub monthly_goal: MonthlyGoalConfig,
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
     pub wakatime: WakatimeMetadataConfig,
@@ -234,6 +244,26 @@ pub struct DailyGoalConfig {
     #[serde(default)]
     pub minutes: u64,
     /// Target completed pomodoros for the current day.
+    #[serde(default)]
+    pub pomodoros: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct WeeklyGoalConfig {
+    /// Target focused minutes for the current week.
+    #[serde(default)]
+    pub minutes: u64,
+    /// Target completed pomodoros for the current week.
+    #[serde(default)]
+    pub pomodoros: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct MonthlyGoalConfig {
+    /// Target focused minutes for the current month.
+    #[serde(default)]
+    pub minutes: u64,
+    /// Target completed pomodoros for the current month.
     #[serde(default)]
     pub pomodoros: u32,
 }
@@ -433,6 +463,8 @@ impl Default for AppConfig {
             strict_mode: false,
             break_glass_duration_secs: default_break_glass_duration_secs(),
             daily_goal: DailyGoalConfig::default(),
+            weekly_goal: WeeklyGoalConfig::default(),
+            monthly_goal: MonthlyGoalConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
         }
     }
@@ -795,6 +827,8 @@ mod tests {
             default_break_glass_duration_secs()
         );
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
+        assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
+        assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
         assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }
 
@@ -853,6 +887,14 @@ mod tests {
                 minutes: 180,
                 pomodoros: 6,
             },
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 600,
+                pomodoros: 20,
+            },
+            monthly_goal: MonthlyGoalConfig {
+                minutes: 2400,
+                pomodoros: 80,
+            },
             wakatime: WakatimeMetadataConfig {
                 project: "Team Focus".to_string(),
                 language: "Focus Session".to_string(),
@@ -881,6 +923,8 @@ mod tests {
             original.break_glass_duration_secs
         );
         assert_eq!(parsed.daily_goal, original.daily_goal);
+        assert_eq!(parsed.weekly_goal, original.weekly_goal);
+        assert_eq!(parsed.monthly_goal, original.monthly_goal);
         assert_eq!(parsed.wakatime, original.wakatime);
     }
 
@@ -906,6 +950,8 @@ mod tests {
             default_break_glass_duration_secs()
         );
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
+        assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
+        assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
         assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }
 
@@ -1104,6 +1150,8 @@ blocked_sites = ["reddit.com", "youtube.com"]
             RecurringScheduleConfig::default()
         );
         assert_eq!(parsed.daily_goal, DailyGoalConfig::default());
+        assert_eq!(parsed.weekly_goal, WeeklyGoalConfig::default());
+        assert_eq!(parsed.monthly_goal, MonthlyGoalConfig::default());
         assert_eq!(parsed.wakatime, WakatimeMetadataConfig::default());
     }
 
@@ -1146,6 +1194,8 @@ long_break_interval = 3
             strict_mode: false,
             break_glass_duration_secs: default_break_glass_duration_secs(),
             daily_goal: DailyGoalConfig::default(),
+            weekly_goal: WeeklyGoalConfig::default(),
+            monthly_goal: MonthlyGoalConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
         };
         let custom = cfg.effective_custom_profile();
@@ -1198,6 +1248,8 @@ long_break_interval = 3
             default_break_glass_duration_secs()
         );
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
+        assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
+        assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
         assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }
 

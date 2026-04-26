@@ -102,6 +102,16 @@ cargo run -- --goal
 cargo run -- --goal=120,4
 cargo run -- --goal --json
 
+# Show or set weekly goal targets (minutes,pomodoros)
+cargo run -- --goal-weekly
+cargo run -- --goal-weekly=600,20
+cargo run -- --goal-weekly --json
+
+# Show or set monthly goal targets (minutes,pomodoros)
+cargo run -- --goal-monthly
+cargo run -- --goal-monthly=2400,80
+cargo run -- --goal-monthly --json
+
 # Show or set strict mode
 cargo run -- --strict
 cargo run -- --strict=on
@@ -282,6 +292,14 @@ end = "16:00"
 minutes = 120
 pomodoros = 4
 
+[weekly_goal]
+minutes = 600
+pomodoros = 20
+
+[monthly_goal]
+minutes = 2400
+pomodoros = 80
+
 [wakatime]
 project = "focustime"
 language = "Pomodoro"
@@ -370,7 +388,7 @@ You can configure notification and auto-start settings directly from the TUI:
 - open profile manager with `p`
 - press `e` to open the editor
 - the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **WakaTime**, **Schedule**) to keep settings easier to scan
-- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily goal (minutes)**, **Daily goal (pomodoros)**, **WakaTime project/language**, or the **Schedule** fields
+- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily/Weekly/Monthly goal (minutes)**, **Daily/Weekly/Monthly goal (pomodoros)**, **WakaTime project/language**, or the **Schedule** fields
 - use `←/→` to adjust values (or toggle `Off`/`On` for boolean fields), use `Type/Backspace` for WakaTime text fields, then `Enter` to save
 - schedule editing is in-app:
   - **Schedule add/remove**: `→` adds a window, `←` removes selected window
@@ -432,8 +450,8 @@ Override events are recorded for audit visibility in the History view and includ
 - per-task trend summaries in History (`last 7 days` vs `previous 7 days`)
 - current streak and best streak based on completed daily goals
 
-If a daily goal is configured, timer and history views also show live progress for
-both:
+If daily, weekly, or monthly goals are configured, timer and history views also
+show live progress for each period:
 
 - target focused minutes
 - target completed pomodoros

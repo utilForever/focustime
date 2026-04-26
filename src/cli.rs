@@ -14,8 +14,9 @@ use serde::Serialize;
 use crate::app::{App, SetupCheck, SetupCheckLevel, SetupDiagnostics};
 use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
-    AppConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
+    AppConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig,
     OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
+    WeeklyGoalConfig,
 };
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
@@ -36,6 +37,10 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --profile [classic|deep-work|custom] [--json]
   focustime --goal [--json]
   focustime --goal=MINUTES,POMODOROS [--json]
+  focustime --goal-weekly [--json]
+  focustime --goal-weekly=MINUTES,POMODOROS [--json]
+  focustime --goal-monthly [--json]
+  focustime --goal-monthly=MINUTES,POMODOROS [--json]
   focustime --strict [--json]
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
@@ -66,6 +71,8 @@ Options:
   --task          Select task label (auto-creates unknown labels)
   --profile       Show current profile, or set it when value is provided
   --goal          Show current daily goal, or set minutes/pomodoros targets
+  --goal-weekly   Show current weekly goal, or set minutes/pomodoros targets
+  --goal-monthly  Show current monthly goal, or set minutes/pomodoros targets
   --strict        Show strict mode, or set on/off
   --schedule      Show recurring schedule with overlap/conflict inspection
   --schedule-set  Replace schedule (recurring + one-time) from JSON payload
@@ -150,6 +157,12 @@ pub enum CommandKind {
     Goal {
         goal: Option<DailyGoalConfig>,
     },
+    GoalWeekly {
+        goal: Option<WeeklyGoalConfig>,
+    },
+    GoalMonthly {
+        goal: Option<MonthlyGoalConfig>,
+    },
     Strict {
         enabled: Option<bool>,
     },
@@ -196,6 +209,8 @@ enum PrimaryCommand {
     Task(String),
     Profile(Option<ProfileId>),
     Goal(Option<DailyGoalConfig>),
+    GoalWeekly(Option<WeeklyGoalConfig>),
+    GoalMonthly(Option<MonthlyGoalConfig>),
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
@@ -231,6 +246,8 @@ enum ParsedToken {
     Watch(Option<u64>),
     Profile(Option<ProfileId>),
     Goal(Option<DailyGoalConfig>),
+    GoalWeekly(Option<WeeklyGoalConfig>),
+    GoalMonthly(Option<MonthlyGoalConfig>),
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
@@ -366,6 +383,8 @@ struct StatusOutput {
     blocked_sites_count: usize,
     strict_mode: bool,
     goal: GoalOutput,
+    weekly_goal: GoalOutput,
+    monthly_goal: GoalOutput,
     session: SessionOutput,
     today: TodayOutput,
     live: LiveStatusOutput,
@@ -641,10 +660,12 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 16] = [
+    let parsers: [(&str, ValueArgParser); 18] = [
         ("--task", classify_task_arg),
         ("--profile", classify_profile_arg),
         ("--goal", classify_goal_arg),
+        ("--goal-weekly", classify_goal_weekly_arg),
+        ("--goal-monthly", classify_goal_monthly_arg),
         ("--strict", classify_strict_arg),
         ("--schedule-set", classify_schedule_set_arg),
         ("--watch", classify_watch_arg),
@@ -908,6 +929,33 @@ fn classify_goal_arg(args: &[String], index: usize) -> Result<(ParsedToken, usiz
     Ok((ParsedToken::Goal(None), 1))
 }
 
+fn classify_goal_weekly_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((
+            ParsedToken::GoalWeekly(Some(parse_weekly_goal_value(next)?)),
+            2,
+        ));
+    }
+    Ok((ParsedToken::GoalWeekly(None), 1))
+}
+
+fn classify_goal_monthly_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((
+            ParsedToken::GoalMonthly(Some(parse_monthly_goal_value(next)?)),
+            2,
+        ));
+    }
+    Ok((ParsedToken::GoalMonthly(None), 1))
+}
+
 fn classify_strict_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
     if let Some(next) = args.get(index + 1)
         && !next.starts_with('-')
@@ -932,10 +980,12 @@ fn classify_schedule_set_arg(
 }
 
 fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 16] = [
+    let parsers: [KeyValueParser; 18] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_goal_key_value_arg,
+        parse_goal_weekly_key_value_arg,
+        parse_goal_monthly_key_value_arg,
         parse_strict_key_value_arg,
         parse_schedule_set_key_value_arg,
         parse_watch_key_value_arg,
@@ -983,6 +1033,32 @@ fn parse_goal_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
             "`--goal=` requires values in `MINUTES,POMODOROS` format.",
         )?;
         return Ok(Some(ParsedToken::Goal(Some(parse_goal_value(value)?))));
+    }
+    Ok(None)
+}
+
+fn parse_goal_weekly_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--goal-weekly=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--goal-weekly=` requires values in `MINUTES,POMODOROS` format.",
+        )?;
+        return Ok(Some(ParsedToken::GoalWeekly(Some(
+            parse_weekly_goal_value(value)?,
+        ))));
+    }
+    Ok(None)
+}
+
+fn parse_goal_monthly_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--goal-monthly=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--goal-monthly=` requires values in `MINUTES,POMODOROS` format.",
+        )?;
+        return Ok(Some(ParsedToken::GoalMonthly(Some(
+            parse_monthly_goal_value(value)?,
+        ))));
     }
     Ok(None)
 }
@@ -1148,6 +1224,8 @@ fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), Str
             | ParsedToken::Watch(_)
             | ParsedToken::Profile(_)
             | ParsedToken::Goal(_)
+            | ParsedToken::GoalWeekly(_)
+            | ParsedToken::GoalMonthly(_)
             | ParsedToken::Strict(_)
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
@@ -1190,6 +1268,12 @@ fn parse_primary_command(tokens: &[ParsedToken]) -> Result<Option<PrimaryCommand
             }
             ParsedToken::Goal(goal) => {
                 set_primary_command(&mut primary, PrimaryCommand::Goal(*goal))?
+            }
+            ParsedToken::GoalWeekly(goal) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalWeekly(*goal))?
+            }
+            ParsedToken::GoalMonthly(goal) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalMonthly(*goal))?
             }
             ParsedToken::Strict(enabled) => {
                 set_primary_command(&mut primary, PrimaryCommand::Strict(*enabled))?
@@ -1300,6 +1384,14 @@ fn finalize_cli_action(
         })),
         Some(PrimaryCommand::Goal(goal)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Goal { goal },
+            output,
+        })),
+        Some(PrimaryCommand::GoalWeekly(goal)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalWeekly { goal },
+            output,
+        })),
+        Some(PrimaryCommand::GoalMonthly(goal)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalMonthly { goal },
             output,
         })),
         Some(PrimaryCommand::Strict(enabled)) => Ok(CliAction::RunCommand(CliCommand {
@@ -1450,6 +1542,8 @@ pub fn execute_command(cli_command: CliCommand) -> Result<(), String> {
         CommandKind::Task { label } => execute_task_command(label, cli_command.output),
         CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
         CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
+        CommandKind::GoalWeekly { goal } => execute_weekly_goal_command(goal, cli_command.output),
+        CommandKind::GoalMonthly { goal } => execute_monthly_goal_command(goal, cli_command.output),
         CommandKind::Strict { enabled } => execute_strict_command(enabled, cli_command.output),
         CommandKind::Schedule { schedule } => {
             execute_schedule_command(schedule, cli_command.output)
@@ -2016,7 +2110,63 @@ fn execute_goal_command(goal: Option<DailyGoalConfig>, output: OutputMode) -> Re
     };
 
     match output {
-        OutputMode::Text => print_goal_command_output(&payload),
+        OutputMode::Text => print_goal_command_output("Daily", &payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_weekly_goal_command(
+    goal: Option<WeeklyGoalConfig>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(goal) = goal {
+        config.weekly_goal = goal;
+        config
+            .save()
+            .map_err(|error| format!("Failed to save weekly goal: {error}"))?;
+        updated = true;
+    }
+
+    let payload = GoalCommandOutput {
+        updated,
+        configured: config.weekly_goal.minutes > 0 || config.weekly_goal.pomodoros > 0,
+        minutes_target: config.weekly_goal.minutes,
+        pomodoros_target: config.weekly_goal.pomodoros,
+    };
+
+    match output {
+        OutputMode::Text => print_goal_command_output("Weekly", &payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_monthly_goal_command(
+    goal: Option<MonthlyGoalConfig>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(goal) = goal {
+        config.monthly_goal = goal;
+        config
+            .save()
+            .map_err(|error| format!("Failed to save monthly goal: {error}"))?;
+        updated = true;
+    }
+
+    let payload = GoalCommandOutput {
+        updated,
+        configured: config.monthly_goal.minutes > 0 || config.monthly_goal.pomodoros > 0,
+        minutes_target: config.monthly_goal.minutes,
+        pomodoros_target: config.monthly_goal.pomodoros,
+    };
+
+    match output {
+        OutputMode::Text => print_goal_command_output("Monthly", &payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
@@ -2222,7 +2372,11 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
 
 fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let day = current_day_key();
+    let day_date = NaiveDate::parse_from_str(&day, "%Y-%m-%d")
+        .expect("current_day_key should always be a valid ISO date");
     let today = stats.daily_for(&day);
+    let week = stats.weekly_for_day(day_date);
+    let month = stats.monthly_for_day(day_date);
     let session = stats.session();
     let (_, selected_task_label) = stats.task_planner_state();
     let (selected_task_label, focus_intention, task_note) =
@@ -2230,6 +2384,14 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let goal_snapshot = DailyGoalSnapshot {
         minutes: config.daily_goal.minutes,
         pomodoros: config.daily_goal.pomodoros,
+    };
+    let weekly_goal_snapshot = DailyGoalSnapshot {
+        minutes: config.weekly_goal.minutes,
+        pomodoros: config.weekly_goal.pomodoros,
+    };
+    let monthly_goal_snapshot = DailyGoalSnapshot {
+        minutes: config.monthly_goal.minutes,
+        pomodoros: config.monthly_goal.pomodoros,
     };
     let active_sites_count = config
         .blocklist_profiles
@@ -2257,6 +2419,20 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
             minutes_target: goal_snapshot.minutes,
             pomodoros_target: goal_snapshot.pomodoros,
             met: goal_snapshot.is_met_by(today),
+        },
+        weekly_goal: GoalOutput {
+            configured: weekly_goal_snapshot.has_any_target(),
+            minutes_target: weekly_goal_snapshot.minutes,
+            pomodoros_target: weekly_goal_snapshot.pomodoros,
+            met: weekly_goal_snapshot
+                .is_met_by_totals(week.focused_minutes(), week.pomodoros_completed),
+        },
+        monthly_goal: GoalOutput {
+            configured: monthly_goal_snapshot.has_any_target(),
+            minutes_target: monthly_goal_snapshot.minutes,
+            pomodoros_target: monthly_goal_snapshot.pomodoros,
+            met: monthly_goal_snapshot
+                .is_met_by_totals(month.focused_minutes(), month.pomodoros_completed),
         },
         session: SessionOutput {
             focused_minutes: session.focused_minutes(),
@@ -2420,23 +2596,38 @@ fn parse_profile_id(value: &str) -> Result<ProfileId, String> {
 }
 
 fn parse_goal_value(value: &str) -> Result<DailyGoalConfig, String> {
+    let (minutes, pomodoros) = parse_goal_components(value, "--goal")?;
+    Ok(DailyGoalConfig { minutes, pomodoros })
+}
+
+fn parse_weekly_goal_value(value: &str) -> Result<WeeklyGoalConfig, String> {
+    let (minutes, pomodoros) = parse_goal_components(value, "--goal-weekly")?;
+    Ok(WeeklyGoalConfig { minutes, pomodoros })
+}
+
+fn parse_monthly_goal_value(value: &str) -> Result<MonthlyGoalConfig, String> {
+    let (minutes, pomodoros) = parse_goal_components(value, "--goal-monthly")?;
+    Ok(MonthlyGoalConfig { minutes, pomodoros })
+}
+
+fn parse_goal_components(value: &str, flag: &str) -> Result<(u64, u32), String> {
     let trimmed = value.trim();
     let (minutes_raw, pomodoros_raw) = trimmed.split_once(',').ok_or_else(|| {
         invalid_usage(&format!(
-            "Invalid goal `{value}`. Use `--goal=MINUTES,POMODOROS` (for example `--goal=120,4`)."
+            "Invalid goal `{value}`. Use `{flag}=MINUTES,POMODOROS` (for example `{flag}=120,4`)."
         ))
     })?;
     let minutes = minutes_raw.trim().parse::<u64>().map_err(|_| {
         invalid_usage(&format!(
-            "Invalid goal minutes in `{value}`. Use a non-negative integer."
+            "Invalid goal minutes in `{value}` for `{flag}`. Use a non-negative integer."
         ))
     })?;
     let pomodoros = pomodoros_raw.trim().parse::<u32>().map_err(|_| {
         invalid_usage(&format!(
-            "Invalid goal pomodoros in `{value}`. Use a non-negative integer."
+            "Invalid goal pomodoros in `{value}` for `{flag}`. Use a non-negative integer."
         ))
     })?;
-    Ok(DailyGoalConfig { minutes, pomodoros })
+    Ok((minutes, pomodoros))
 }
 
 fn parse_strict_value(value: &str) -> Result<bool, String> {
@@ -2633,6 +2824,8 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Task(_) => "--task",
         PrimaryCommand::Profile(_) => "--profile",
         PrimaryCommand::Goal(_) => "--goal",
+        PrimaryCommand::GoalWeekly(_) => "--goal-weekly",
+        PrimaryCommand::GoalMonthly(_) => "--goal-monthly",
         PrimaryCommand::Strict(_) => "--strict",
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
@@ -2840,20 +3033,9 @@ fn print_status_output(payload: &StatusOutput) {
         "Today: {} focused minutes, {} pomodoros",
         payload.today.focused_minutes, payload.today.pomodoros_completed
     );
-    if payload.goal.configured {
-        println!(
-            "Goal: {} min, {} pomodoros ({})",
-            payload.goal.minutes_target,
-            payload.goal.pomodoros_target,
-            if payload.goal.met {
-                "met"
-            } else {
-                "in progress"
-            }
-        );
-    } else {
-        println!("Goal: off");
-    }
+    print_status_goal_line("Daily goal", &payload.goal);
+    print_status_goal_line("Weekly goal", &payload.weekly_goal);
+    print_status_goal_line("Monthly goal", &payload.monthly_goal);
     println!(
         "Session: {} focused minutes, {} pomodoros",
         payload.session.focused_minutes, payload.session.pomodoros_completed
@@ -2875,6 +3057,19 @@ fn print_status_output(payload: &StatusOutput) {
     );
     if let Some(error) = payload.live.recovery_error.as_deref() {
         println!("Live timer warning: {error}");
+    }
+}
+
+fn print_status_goal_line(label: &str, goal: &GoalOutput) {
+    if goal.configured {
+        println!(
+            "{label}: {} min, {} pomodoros ({})",
+            goal.minutes_target,
+            goal.pomodoros_target,
+            if goal.met { "met" } else { "in progress" }
+        );
+    } else {
+        println!("{label}: off");
     }
 }
 
@@ -2910,17 +3105,17 @@ fn print_export_output(payload: &ExportOutput) {
     println!("CSV: {}", payload.csv_path.display());
 }
 
-fn print_goal_command_output(payload: &GoalCommandOutput) {
+fn print_goal_command_output(label: &str, payload: &GoalCommandOutput) {
     if payload.updated {
-        println!("Daily goal updated.");
+        println!("{label} goal updated.");
     }
     if payload.configured {
         println!(
-            "Daily goal: {} min, {} pomodoros",
+            "{label} goal: {} min, {} pomodoros",
             payload.minutes_target, payload.pomodoros_target
         );
     } else {
-        println!("Daily goal: off");
+        println!("{label} goal: off");
     }
 }
 
@@ -3384,6 +3579,52 @@ mod tests {
     }
 
     #[test]
+    fn parse_weekly_goal_without_value_reads_current_goal() {
+        let parsed = parse(&["--goal-weekly"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::GoalWeekly { goal: None },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_weekly_goal_with_equals_sets_goal() {
+        let parsed = parse(&["--goal-weekly=420,14"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::GoalWeekly {
+                    goal: Some(WeeklyGoalConfig {
+                        minutes: 420,
+                        pomodoros: 14
+                    })
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_monthly_goal_with_value_sets_goal() {
+        let parsed = parse(&["--goal-monthly", "1800,60"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::GoalMonthly {
+                    goal: Some(MonthlyGoalConfig {
+                        minutes: 1800,
+                        pomodoros: 60
+                    })
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
     fn parse_strict_without_value_reads_current_state() {
         let parsed = parse(&["--strict"]).unwrap();
         assert_eq!(
@@ -3726,6 +3967,30 @@ mod tests {
     }
 
     #[test]
+    fn classify_key_value_arg_accepts_weekly_goal_equals_value() {
+        let parsed = classify_key_value_arg("--goal-weekly=420,14").unwrap();
+        assert_eq!(
+            parsed,
+            Some(ParsedToken::GoalWeekly(Some(WeeklyGoalConfig {
+                minutes: 420,
+                pomodoros: 14
+            })))
+        );
+    }
+
+    #[test]
+    fn classify_key_value_arg_accepts_monthly_goal_equals_value() {
+        let parsed = classify_key_value_arg("--goal-monthly=1800,60").unwrap();
+        assert_eq!(
+            parsed,
+            Some(ParsedToken::GoalMonthly(Some(MonthlyGoalConfig {
+                minutes: 1800,
+                pomodoros: 60
+            })))
+        );
+    }
+
+    #[test]
     fn classify_key_value_arg_accepts_strict_equals_value() {
         let parsed = classify_key_value_arg("--strict=off").unwrap();
         assert_eq!(parsed, Some(ParsedToken::Strict(Some(false))));
@@ -3759,6 +4024,18 @@ mod tests {
     fn classify_key_value_arg_rejects_empty_goal_equals_value() {
         let error = classify_key_value_arg("--goal=").unwrap_err();
         assert!(error.contains("`--goal=` requires values"));
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_weekly_goal_equals_value() {
+        let error = classify_key_value_arg("--goal-weekly=").unwrap_err();
+        assert!(error.contains("`--goal-weekly=` requires values"));
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_monthly_goal_equals_value() {
+        let error = classify_key_value_arg("--goal-monthly=").unwrap_err();
+        assert!(error.contains("`--goal-monthly=` requires values"));
     }
 
     #[test]
@@ -3800,6 +4077,18 @@ mod tests {
     #[test]
     fn parse_rejects_goal_without_two_numbers() {
         let error = parse(&["--goal=120"]).unwrap_err();
+        assert!(error.contains("Invalid goal"));
+    }
+
+    #[test]
+    fn parse_rejects_weekly_goal_without_two_numbers() {
+        let error = parse(&["--goal-weekly=120"]).unwrap_err();
+        assert!(error.contains("Invalid goal"));
+    }
+
+    #[test]
+    fn parse_rejects_monthly_goal_without_two_numbers() {
+        let error = parse(&["--goal-monthly=120"]).unwrap_err();
         assert!(error.contains("Invalid goal"));
     }
 
@@ -4226,6 +4515,43 @@ mod tests {
         let output = build_status_output(&config, &stats);
 
         assert_eq!(output.blocked_sites_count, 1);
+    }
+
+    #[test]
+    fn build_status_output_reports_daily_weekly_monthly_goal_state() {
+        let mut stats = FocusStats::default();
+        let today = current_day_key();
+        let daily_snapshot = DailyGoalSnapshot {
+            minutes: 30,
+            pomodoros: 1,
+        };
+        stats.record_focus_elapsed(&today, 30 * 60, daily_snapshot);
+        stats.record_completed_pomodoro(&today, daily_snapshot);
+
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 30,
+                pomodoros: 1,
+            },
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 30,
+                pomodoros: 1,
+            },
+            monthly_goal: MonthlyGoalConfig {
+                minutes: 30,
+                pomodoros: 1,
+            },
+            ..AppConfig::default()
+        };
+
+        let output = build_status_output(&config, &stats);
+
+        assert!(output.goal.configured);
+        assert!(output.goal.met);
+        assert!(output.weekly_goal.configured);
+        assert!(output.weekly_goal.met);
+        assert!(output.monthly_goal.configured);
+        assert!(output.monthly_goal.met);
     }
 
     #[test]

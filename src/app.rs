@@ -13,8 +13,8 @@ use crate::blocker::{
 };
 use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
-    NotificationConfig, OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, WakatimeMetadataConfig,
+    MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, WakatimeMetadataConfig, WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -39,7 +39,7 @@ use crate::wakatime::{WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeT
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 28] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 32] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -49,8 +49,12 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 28] = [
     "Auto-start break",
     "Auto-start focus",
     "Strict focus mode",
-    "Goal minutes",
-    "Goal pomodoros",
+    "Daily goal minutes",
+    "Daily goal pomodoros",
+    "Weekly goal minutes",
+    "Weekly goal pomodoros",
+    "Monthly goal minutes",
+    "Monthly goal pomodoros",
     "WakaTime project",
     "WakaTime language",
     "Schedule window",
@@ -69,23 +73,29 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 28] = [
     "One-time add/remove",
     "Schedule conflicts",
 ];
-const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = 11;
-const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = 12;
-const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 13;
-const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 14;
-const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 15;
-const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 16;
-const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 17;
-const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 18;
-const PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX: usize = 19;
-const PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX: usize = 20;
-const PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX: usize = 21;
-const PROFILE_EDIT_ONE_TIME_WINDOW_INDEX: usize = 22;
-const PROFILE_EDIT_ONE_TIME_DATE_INDEX: usize = 23;
-const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 24;
-const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 25;
-const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 26;
-const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 27;
+const PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX: usize = 9;
+const PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX: usize = 10;
+const PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX: usize = 11;
+const PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX: usize = 12;
+const PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX: usize = 13;
+const PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX: usize = 14;
+const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = 15;
+const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = 16;
+const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 17;
+const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 18;
+const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 19;
+const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 20;
+const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 21;
+const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 22;
+const PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX: usize = 23;
+const PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX: usize = 24;
+const PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX: usize = 25;
+const PROFILE_EDIT_ONE_TIME_WINDOW_INDEX: usize = 26;
+const PROFILE_EDIT_ONE_TIME_DATE_INDEX: usize = 27;
+const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 28;
+const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 29;
+const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 30;
+const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 31;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
@@ -176,6 +186,8 @@ struct ProfileEditSnapshot {
     recurring_schedule: RecurringScheduleConfig,
     strict_mode: bool,
     daily_goal: DailyGoalConfig,
+    weekly_goal: WeeklyGoalConfig,
+    monthly_goal: MonthlyGoalConfig,
     wakatime_metadata: WakatimeMetadataConfig,
 }
 
@@ -447,6 +459,8 @@ pub struct App {
     break_glass_duration_secs: u64,
     break_glass_expires_at: Option<Instant>,
     daily_goal: DailyGoalConfig,
+    weekly_goal: WeeklyGoalConfig,
+    monthly_goal: MonthlyGoalConfig,
     wakatime_metadata: WakatimeMetadataConfig,
     pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
@@ -481,6 +495,8 @@ impl App {
         let strict_mode = config.strict_mode;
         let break_glass_duration_secs = config.break_glass_duration_secs;
         let daily_goal = config.daily_goal;
+        let weekly_goal = config.weekly_goal;
+        let monthly_goal = config.monthly_goal;
         let wakatime_metadata = config.wakatime;
         let blocklist_profiles = config.blocklist_profiles.clone();
         let active_blocklist_profile =
@@ -566,6 +582,8 @@ impl App {
             break_glass_duration_secs,
             break_glass_expires_at: None,
             daily_goal,
+            weekly_goal,
+            monthly_goal,
             wakatime_metadata,
             pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
@@ -939,6 +957,28 @@ impl App {
         self.daily_goal_progress_for(self.today_stats())
     }
 
+    pub fn current_week_goal_progress(&self) -> DailyGoalProgress {
+        let today = Local::now().date_naive();
+        let week = self.stats.weekly_for_day(today);
+        goal_progress_for_totals(
+            week.focused_minutes(),
+            week.pomodoros_completed,
+            self.weekly_goal.minutes,
+            self.weekly_goal.pomodoros,
+        )
+    }
+
+    pub fn current_month_goal_progress(&self) -> DailyGoalProgress {
+        let today = Local::now().date_naive();
+        let month = self.stats.monthly_for_day(today);
+        goal_progress_for_totals(
+            month.focused_minutes(),
+            month.pomodoros_completed,
+            self.monthly_goal.minutes,
+            self.monthly_goal.pomodoros,
+        )
+    }
+
     pub fn goal_streak(&self) -> GoalStreak {
         self.goal_streak_for_day_key(&current_day_key())
     }
@@ -956,13 +996,12 @@ impl App {
     }
 
     pub fn daily_goal_progress_for(&self, stats: DailyStats) -> DailyGoalProgress {
-        DailyGoalProgress {
-            minutes: goal_progress(stats.focused_minutes(), self.daily_goal.minutes),
-            pomodoros: goal_progress(
-                u64::from(stats.pomodoros_completed),
-                u64::from(self.daily_goal.pomodoros),
-            ),
-        }
+        goal_progress_for_totals(
+            stats.focused_minutes(),
+            stats.pomodoros_completed,
+            self.daily_goal.minutes,
+            self.daily_goal.pomodoros,
+        )
     }
 
     pub fn recent_daily_stats(&self, limit: usize) -> Vec<(String, DailyStats)> {
@@ -1033,8 +1072,24 @@ impl App {
             6 => bool_label(self.auto_start.focus_to_break).to_string(),
             7 => bool_label(self.auto_start.break_to_focus).to_string(),
             8 => bool_label(self.strict_mode).to_string(),
-            9 => format_daily_goal_minutes_label(self.daily_goal.minutes),
-            10 => format_daily_goal_pomodoros_label(self.daily_goal.pomodoros),
+            PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX => {
+                format_daily_goal_minutes_label(self.daily_goal.minutes)
+            }
+            PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX => {
+                format_daily_goal_pomodoros_label(self.daily_goal.pomodoros)
+            }
+            PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX => {
+                format_daily_goal_minutes_label(self.weekly_goal.minutes)
+            }
+            PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX => {
+                format_daily_goal_pomodoros_label(self.weekly_goal.pomodoros)
+            }
+            PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX => {
+                format_daily_goal_minutes_label(self.monthly_goal.minutes)
+            }
+            PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX => {
+                format_daily_goal_pomodoros_label(self.monthly_goal.pomodoros)
+            }
             PROFILE_EDIT_WAKATIME_PROJECT_INDEX => self.wakatime_metadata.project.clone(),
             PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => self.wakatime_metadata.language.clone(),
             _ => String::new(),
@@ -1890,6 +1945,8 @@ impl App {
             strict_mode: self.strict_mode,
             break_glass_duration_secs: self.break_glass_duration_secs,
             daily_goal: self.daily_goal,
+            weekly_goal: self.weekly_goal,
+            monthly_goal: self.monthly_goal,
             wakatime: self.wakatime_metadata.clone(),
         }
     }
@@ -2459,6 +2516,8 @@ impl App {
             recurring_schedule: self.recurring_schedule.clone(),
             strict_mode: self.strict_mode,
             daily_goal: self.daily_goal,
+            weekly_goal: self.weekly_goal,
+            monthly_goal: self.monthly_goal,
             wakatime_metadata: self.wakatime_metadata.clone(),
         });
         self.profile_edit_active = true;
@@ -2478,6 +2537,8 @@ impl App {
             self.recurring_schedule = snapshot.recurring_schedule;
             self.strict_mode = snapshot.strict_mode;
             self.daily_goal = snapshot.daily_goal;
+            self.weekly_goal = snapshot.weekly_goal;
+            self.monthly_goal = snapshot.monthly_goal;
             self.wakatime_metadata = snapshot.wakatime_metadata;
             self.sync_wakatime_metadata_to_tracker();
             self.rebuild_notifier();
@@ -2504,6 +2565,14 @@ impl App {
             .profile_edit_snapshot
             .as_ref()
             .is_some_and(|snapshot| snapshot.daily_goal != self.daily_goal);
+        let weekly_goal_changed = self
+            .profile_edit_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.weekly_goal != self.weekly_goal);
+        let monthly_goal_changed = self
+            .profile_edit_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.monthly_goal != self.monthly_goal);
         self.custom_profile = self.custom_profile.normalized();
         self.recurring_schedule = normalized_schedule;
         self.wakatime_metadata = self.wakatime_metadata.normalized();
@@ -2529,7 +2598,7 @@ impl App {
             self.current_frame_now = now;
             self.sync_recurring_schedule(now);
         }
-        if daily_goal_changed {
+        if daily_goal_changed || weekly_goal_changed || monthly_goal_changed {
             self.sync_today_goal_snapshot();
         }
         self.profile_edit_active = false;
@@ -2577,11 +2646,23 @@ impl App {
                 }
                 self.strict_mode = increase;
             }
-            9 => {
+            PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX => {
                 adjust_daily_goal_minutes(&mut self.daily_goal.minutes, increase);
             }
-            10 => {
+            PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX => {
                 adjust_daily_goal_pomodoros(&mut self.daily_goal.pomodoros, increase);
+            }
+            PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX => {
+                adjust_daily_goal_minutes(&mut self.weekly_goal.minutes, increase);
+            }
+            PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX => {
+                adjust_daily_goal_pomodoros(&mut self.weekly_goal.pomodoros, increase);
+            }
+            PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX => {
+                adjust_daily_goal_minutes(&mut self.monthly_goal.minutes, increase);
+            }
+            PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX => {
+                adjust_daily_goal_pomodoros(&mut self.monthly_goal.pomodoros, increase);
             }
             PROFILE_EDIT_SCHEDULE_WINDOW_INDEX => {
                 self.cycle_schedule_window(increase);
@@ -4070,6 +4151,18 @@ fn goal_progress(completed: u64, target: u64) -> GoalProgress {
     }
 }
 
+fn goal_progress_for_totals(
+    focused_minutes: u64,
+    pomodoros_completed: u32,
+    target_minutes: u64,
+    target_pomodoros: u32,
+) -> DailyGoalProgress {
+    DailyGoalProgress {
+        minutes: goal_progress(focused_minutes, target_minutes),
+        pomodoros: goal_progress(u64::from(pomodoros_completed), u64::from(target_pomodoros)),
+    }
+}
+
 fn ceil_duration_secs(duration: Duration) -> u64 {
     let secs = duration.as_secs();
     if duration.subsec_nanos() > 0 {
@@ -4285,6 +4378,8 @@ mod tests {
         assert_eq!(app.recurring_schedule, RecurringScheduleConfig::default());
         assert!(!app.strict_mode);
         assert_eq!(app.daily_goal, DailyGoalConfig::default());
+        assert_eq!(app.weekly_goal, WeeklyGoalConfig::default());
+        assert_eq!(app.monthly_goal, MonthlyGoalConfig::default());
     }
 
     #[test]
@@ -4310,6 +4405,8 @@ mod tests {
             strict_mode: false,
             break_glass_duration_secs: 5 * 60,
             daily_goal: DailyGoalConfig::default(),
+            weekly_goal: WeeklyGoalConfig::default(),
+            monthly_goal: MonthlyGoalConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
         };
         let app = App::from_config(config);
@@ -4607,8 +4704,12 @@ mod tests {
         assert_eq!(app.profile_edit_field_value(8), "Off");
         assert_eq!(app.profile_edit_field_value(9), "Off");
         assert_eq!(app.profile_edit_field_value(10), "Off");
-        assert_eq!(app.profile_edit_field_value(11), "focustime");
-        assert_eq!(app.profile_edit_field_value(12), "Pomodoro");
+        assert_eq!(app.profile_edit_field_value(11), "Off");
+        assert_eq!(app.profile_edit_field_value(12), "Off");
+        assert_eq!(app.profile_edit_field_value(13), "Off");
+        assert_eq!(app.profile_edit_field_value(14), "Off");
+        assert_eq!(app.profile_edit_field_value(15), "focustime");
+        assert_eq!(app.profile_edit_field_value(16), "Pomodoro");
     }
 
     #[test]
@@ -4851,7 +4952,7 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('p')));
         app.handle_key(key(KeyCode::Char('e')));
-        for _ in 0..11 {
+        for _ in 0..PROFILE_EDIT_WAKATIME_PROJECT_INDEX {
             app.handle_key(key(KeyCode::Down));
         }
         app.handle_key(key(KeyCode::Backspace));
@@ -4895,7 +4996,7 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('p')));
         app.handle_key(key(KeyCode::Char('e')));
-        for _ in 0..11 {
+        for _ in 0..PROFILE_EDIT_WAKATIME_PROJECT_INDEX {
             app.handle_key(key(KeyCode::Down));
         }
         app.handle_key(key(KeyCode::Backspace));
@@ -4986,6 +5087,44 @@ mod tests {
         assert_eq!(progress.pomodoros.completed, 1);
         assert_eq!(progress.pomodoros.target, 4);
         assert!((progress.pomodoros.ratio - 0.25).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn weekly_and_monthly_goal_progress_use_current_period_totals() {
+        let config = AppConfig {
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 100,
+                pomodoros: 3,
+            },
+            monthly_goal: MonthlyGoalConfig {
+                minutes: 90,
+                pomodoros: 3,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let day_key = current_day_key();
+        app.stats
+            .record_focus_elapsed(&day_key, 120 * 60, app.current_goal_snapshot());
+        app.stats
+            .record_completed_pomodoro(&day_key, app.current_goal_snapshot());
+
+        let weekly = app.current_week_goal_progress();
+        let monthly = app.current_month_goal_progress();
+
+        assert_eq!(weekly.minutes.completed, 120);
+        assert_eq!(weekly.minutes.target, 100);
+        assert!((weekly.minutes.ratio - 1.0).abs() < f64::EPSILON);
+        assert_eq!(weekly.pomodoros.completed, 1);
+        assert_eq!(weekly.pomodoros.target, 3);
+        assert!((weekly.pomodoros.ratio - (1.0 / 3.0)).abs() < f64::EPSILON);
+
+        assert_eq!(monthly.minutes.completed, 120);
+        assert_eq!(monthly.minutes.target, 90);
+        assert!((monthly.minutes.ratio - 1.0).abs() < f64::EPSILON);
+        assert_eq!(monthly.pomodoros.completed, 1);
+        assert_eq!(monthly.pomodoros.target, 3);
+        assert!((monthly.pomodoros.ratio - (1.0 / 3.0)).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -6472,6 +6611,8 @@ mod tests {
             recurring_schedule: app.recurring_schedule.clone(),
             strict_mode: app.strict_mode,
             daily_goal: app.daily_goal,
+            weekly_goal: app.weekly_goal,
+            monthly_goal: app.monthly_goal,
             wakatime_metadata: app.wakatime_metadata.clone(),
         });
         app.custom_profile.focus_secs = app.custom_profile.focus_secs.saturating_add(60);
@@ -6514,6 +6655,8 @@ mod tests {
             recurring_schedule: app.recurring_schedule.clone(),
             strict_mode: app.strict_mode,
             daily_goal: app.daily_goal,
+            weekly_goal: app.weekly_goal,
+            monthly_goal: app.monthly_goal,
             wakatime_metadata: app.wakatime_metadata.clone(),
         });
 
