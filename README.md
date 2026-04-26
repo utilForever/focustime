@@ -122,7 +122,7 @@ cargo run -- --allowlist-site-add "reddit.com"
 cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
 cargo run -- --allowlist-site-delete reddit.com
 
-# Show schedule or replace recurring + one-time windows atomically from JSON
+# Show schedule (including overlap/conflict inspection) or replace recurring + one-time windows atomically from JSON
 cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"16:00"}]}'
 cargo run -- --schedule --json
@@ -362,6 +362,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - while a schedule window is active and focus is not already running, press `z` to delay the scheduled start by 10 minutes
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
+- `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
 - the timer session overview shows the current/next scheduled window
 
 You can configure notification and auto-start settings directly from the TUI:
@@ -383,6 +384,7 @@ You can configure notification and auto-start settings directly from the TUI:
   - **One-time date**: `←/→` moves selected one-time window date backward/forward by 1 day
   - **One-time start/end**: adjust one-time window times in 15-minute steps
   - **One-time add/remove**: `→` adds a one-time window (starting from today), `←` removes selected window
+  - **Conflict inspector**: read-only summary of detected schedule overlaps/conflicts
 
 ## Session recovery
 

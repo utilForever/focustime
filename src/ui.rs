@@ -20,8 +20,8 @@ const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
 const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
 const PROFILE_EDIT_GROUP_GOALS: [usize; 2] = [9, 10];
 const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [11, 12];
-const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 14] =
-    [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26];
+const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 15] =
+    [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27];
 const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
     ("Timer", &PROFILE_EDIT_GROUP_TIMER),
     ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
@@ -807,7 +807,7 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
         vec![
             Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule"),
             Line::from(
-                "Edit: [↑/↓] Field  [←/→] Change value (schedule recurring + one-time windows)",
+                "Edit: [↑/↓] Field  [←/→] Change value (schedule recurring + one-time windows; inspector is read-only)",
             ),
             Line::from("Text input: [Type/Backspace] WakaTime project/language"),
             Line::from(if app.strict_mode_enforced_for_focus() {
@@ -861,6 +861,7 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         24 => "One-time start",
         25 => "One-time end",
         26 => "One-time add/remove",
+        27 => "Conflict inspector",
         _ => "",
     }
 }
@@ -1969,6 +1970,7 @@ mod tests {
         assert!(text.contains("One-time start"));
         assert!(text.contains("One-time end"));
         assert!(text.contains("One-time add/remove"));
+        assert!(text.contains("Conflict inspector"));
     }
 
     #[test]
