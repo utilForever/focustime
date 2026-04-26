@@ -93,86 +93,13 @@ pub fn inspect_schedule_conflicts(
     recurring_exception_dates: &HashSet<NaiveDate>,
 ) -> Vec<ScheduleConflict> {
     let mut conflicts = Vec::new();
-
-    for (first_index, first) in recurring_windows.iter().enumerate() {
-        for (second_index, second) in recurring_windows.iter().enumerate().skip(first_index + 1) {
-            let Some((overlap_start, overlap_end)) = overlap_minutes(
-                first.start_minutes,
-                first.end_minutes,
-                second.start_minutes,
-                second.end_minutes,
-            ) else {
-                continue;
-            };
-            for day in shared_weekdays(first, second) {
-                conflicts.push(ScheduleConflict {
-                    first_kind: WindowOccurrenceKind::Recurring,
-                    first_window_index: first_index,
-                    second_kind: WindowOccurrenceKind::Recurring,
-                    second_window_index: second_index,
-                    context: ScheduleConflictContext::Weekday(day),
-                    overlap_start_minutes: overlap_start,
-                    overlap_end_minutes: overlap_end,
-                });
-            }
-        }
-    }
-
-    for (first_index, first) in one_time_windows.iter().enumerate() {
-        for (second_index, second) in one_time_windows.iter().enumerate().skip(first_index + 1) {
-            if first.date != second.date {
-                continue;
-            }
-            let Some((overlap_start, overlap_end)) = overlap_minutes(
-                first.start_minutes,
-                first.end_minutes,
-                second.start_minutes,
-                second.end_minutes,
-            ) else {
-                continue;
-            };
-            conflicts.push(ScheduleConflict {
-                first_kind: WindowOccurrenceKind::OneTime,
-                first_window_index: first_index,
-                second_kind: WindowOccurrenceKind::OneTime,
-                second_window_index: second_index,
-                context: ScheduleConflictContext::Date(first.date),
-                overlap_start_minutes: overlap_start,
-                overlap_end_minutes: overlap_end,
-            });
-        }
-    }
-
-    for (recurring_index, recurring_window) in recurring_windows.iter().enumerate() {
-        for (one_time_index, one_time_window) in one_time_windows.iter().enumerate() {
-            if recurring_exception_dates.contains(&one_time_window.date) {
-                continue;
-            }
-            if !recurring_window
-                .days
-                .contains(&one_time_window.date.weekday())
-            {
-                continue;
-            }
-            let Some((overlap_start, overlap_end)) = overlap_minutes(
-                recurring_window.start_minutes,
-                recurring_window.end_minutes,
-                one_time_window.start_minutes,
-                one_time_window.end_minutes,
-            ) else {
-                continue;
-            };
-            conflicts.push(ScheduleConflict {
-                first_kind: WindowOccurrenceKind::Recurring,
-                first_window_index: recurring_index,
-                second_kind: WindowOccurrenceKind::OneTime,
-                second_window_index: one_time_index,
-                context: ScheduleConflictContext::Date(one_time_window.date),
-                overlap_start_minutes: overlap_start,
-                overlap_end_minutes: overlap_end,
-            });
-        }
-    }
+    conflicts.extend(find_recurring_conflicts(recurring_windows));
+    conflicts.extend(find_one_time_conflicts(one_time_windows));
+    conflicts.extend(find_recurring_one_time_conflicts(
+        recurring_windows,
+        one_time_windows,
+        recurring_exception_dates,
+    ));
 
     conflicts.sort_by_key(conflict_sort_key);
     conflicts
@@ -599,6 +526,102 @@ fn format_minutes(total_minutes: u16) -> String {
     format!("{hours:02}:{minutes:02}")
 }
 
+fn find_recurring_conflicts(recurring_windows: &[RecurringWindow]) -> Vec<ScheduleConflict> {
+    let mut conflicts = Vec::new();
+    for (first_index, first) in recurring_windows.iter().enumerate() {
+        for (second_index, second) in recurring_windows.iter().enumerate().skip(first_index + 1) {
+            let Some((overlap_start, overlap_end)) = overlap_minutes(
+                first.start_minutes,
+                first.end_minutes,
+                second.start_minutes,
+                second.end_minutes,
+            ) else {
+                continue;
+            };
+            for day in shared_weekdays(first, second) {
+                conflicts.push(ScheduleConflict {
+                    first_kind: WindowOccurrenceKind::Recurring,
+                    first_window_index: first_index,
+                    second_kind: WindowOccurrenceKind::Recurring,
+                    second_window_index: second_index,
+                    context: ScheduleConflictContext::Weekday(day),
+                    overlap_start_minutes: overlap_start,
+                    overlap_end_minutes: overlap_end,
+                });
+            }
+        }
+    }
+    conflicts
+}
+
+fn find_one_time_conflicts(one_time_windows: &[OneTimeWindow]) -> Vec<ScheduleConflict> {
+    let mut conflicts = Vec::new();
+    for (first_index, first) in one_time_windows.iter().enumerate() {
+        for (second_index, second) in one_time_windows.iter().enumerate().skip(first_index + 1) {
+            if first.date != second.date {
+                continue;
+            }
+            let Some((overlap_start, overlap_end)) = overlap_minutes(
+                first.start_minutes,
+                first.end_minutes,
+                second.start_minutes,
+                second.end_minutes,
+            ) else {
+                continue;
+            };
+            conflicts.push(ScheduleConflict {
+                first_kind: WindowOccurrenceKind::OneTime,
+                first_window_index: first_index,
+                second_kind: WindowOccurrenceKind::OneTime,
+                second_window_index: second_index,
+                context: ScheduleConflictContext::Date(first.date),
+                overlap_start_minutes: overlap_start,
+                overlap_end_minutes: overlap_end,
+            });
+        }
+    }
+    conflicts
+}
+
+fn find_recurring_one_time_conflicts(
+    recurring_windows: &[RecurringWindow],
+    one_time_windows: &[OneTimeWindow],
+    recurring_exception_dates: &HashSet<NaiveDate>,
+) -> Vec<ScheduleConflict> {
+    let mut conflicts = Vec::new();
+    for (recurring_index, recurring_window) in recurring_windows.iter().enumerate() {
+        for (one_time_index, one_time_window) in one_time_windows.iter().enumerate() {
+            if recurring_exception_dates.contains(&one_time_window.date) {
+                continue;
+            }
+            if !recurring_window
+                .days
+                .contains(&one_time_window.date.weekday())
+            {
+                continue;
+            }
+            let Some((overlap_start, overlap_end)) = overlap_minutes(
+                recurring_window.start_minutes,
+                recurring_window.end_minutes,
+                one_time_window.start_minutes,
+                one_time_window.end_minutes,
+            ) else {
+                continue;
+            };
+            conflicts.push(ScheduleConflict {
+                first_kind: WindowOccurrenceKind::Recurring,
+                first_window_index: recurring_index,
+                second_kind: WindowOccurrenceKind::OneTime,
+                second_window_index: one_time_index,
+                context: ScheduleConflictContext::Date(one_time_window.date),
+                overlap_start_minutes: overlap_start,
+                overlap_end_minutes: overlap_end,
+            });
+        }
+    }
+    conflicts
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -932,6 +955,34 @@ mod tests {
         assert_eq!(conflicts[0].second_kind, WindowOccurrenceKind::Recurring);
         assert_eq!(conflicts[0].overlap_start_minutes, 10 * 60 + 30);
         assert_eq!(conflicts[0].overlap_end_minutes, 11 * 60);
+    }
+
+    #[test]
+    fn inspect_schedule_conflicts_detects_one_time_overlap_on_same_date() {
+        let date = Local::now().date_naive();
+        let schedule = RecurringScheduleConfig {
+            one_time_windows: vec![
+                OneTimeFocusWindowConfig {
+                    date: date.format("%Y-%m-%d").to_string(),
+                    start: "14:00".to_string(),
+                    end: "16:00".to_string(),
+                },
+                OneTimeFocusWindowConfig {
+                    date: date.format("%Y-%m-%d").to_string(),
+                    start: "15:30".to_string(),
+                    end: "17:00".to_string(),
+                },
+            ],
+            ..RecurringScheduleConfig::default()
+        };
+
+        let conflicts = inspect_schedule_conflicts_from_config(&schedule);
+
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].first_kind, WindowOccurrenceKind::OneTime);
+        assert_eq!(conflicts[0].second_kind, WindowOccurrenceKind::OneTime);
+        assert_eq!(conflicts[0].overlap_start_minutes, 15 * 60 + 30);
+        assert_eq!(conflicts[0].overlap_end_minutes, 16 * 60);
     }
 
     #[test]
