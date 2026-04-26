@@ -13,13 +13,15 @@ use crate::blocker::{
 };
 use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
-    NotificationConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
-    WakatimeMetadataConfig,
+    NotificationConfig, OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, WakatimeMetadataConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
-    RecurringWindow, WindowOccurrence, active_occurrence, compile_exception_dates, compile_windows,
-    next_occurrence_after, occurrence_key,
+    OneTimeWindow, RecurringWindow, WindowOccurrence, active_occurrence,
+    active_one_time_occurrence, compile_exception_dates, compile_one_time_windows, compile_windows,
+    next_occurrence_after, next_one_time_occurrence_after, occurrence_key, pick_active_occurrence,
+    pick_next_occurrence,
 };
 use crate::session_recovery::{self, InProgressSessionSnapshot};
 use crate::stats::{
@@ -37,7 +39,7 @@ use crate::wakatime::{WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeT
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 22] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 27] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -60,6 +62,11 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 22] = [
     "Schedule exception",
     "Exception date",
     "Exception add/remove",
+    "One-time window",
+    "One-time date",
+    "One-time start",
+    "One-time end",
+    "One-time add/remove",
 ];
 const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = 11;
 const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = 12;
@@ -72,6 +79,11 @@ const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 18;
 const PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX: usize = 19;
 const PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX: usize = 20;
 const PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX: usize = 21;
+const PROFILE_EDIT_ONE_TIME_WINDOW_INDEX: usize = 22;
+const PROFILE_EDIT_ONE_TIME_DATE_INDEX: usize = 23;
+const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 24;
+const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 25;
+const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 26;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
@@ -414,12 +426,14 @@ pub struct App {
     profile_edit_schedule_window: usize,
     profile_edit_schedule_day: usize,
     profile_edit_schedule_exception: usize,
+    profile_edit_one_time_window: usize,
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
     recurring_schedule: RecurringScheduleConfig,
     recurring_windows: Vec<RecurringWindow>,
     recurring_exception_dates: HashSet<NaiveDate>,
+    one_time_windows: Vec<OneTimeWindow>,
     schedule_armed_occurrence_key: Option<String>,
     last_schedule_occurrence_key: Option<String>,
     current_frame_now: DateTime<Local>,
@@ -457,6 +471,7 @@ impl App {
         let recurring_windows = compile_windows(&recurring_schedule.windows);
         let recurring_exception_dates =
             compile_exception_dates(&recurring_schedule.exception_dates);
+        let one_time_windows = compile_one_time_windows(&recurring_schedule.one_time_windows);
         let strict_mode = config.strict_mode;
         let break_glass_duration_secs = config.break_glass_duration_secs;
         let daily_goal = config.daily_goal;
@@ -528,12 +543,14 @@ impl App {
             profile_edit_schedule_window: 0,
             profile_edit_schedule_day: 0,
             profile_edit_schedule_exception: 0,
+            profile_edit_one_time_window: 0,
             profile_edit_snapshot: None,
             notification_settings,
             auto_start,
             recurring_schedule,
             recurring_windows,
             recurring_exception_dates,
+            one_time_windows,
             schedule_armed_occurrence_key: None,
             last_schedule_occurrence_key: None,
             current_frame_now: Local::now(),
@@ -832,19 +849,29 @@ impl App {
 
     fn schedule_display_state_at(&self, now: DateTime<Local>) -> ScheduleDisplayState {
         let today = now.date_naive();
+        let recurring_active = active_occurrence(
+            now,
+            &self.recurring_windows,
+            &self.recurring_exception_dates,
+        );
+        let one_time_active = active_one_time_occurrence(now, &self.one_time_windows);
+        let recurring_next = next_occurrence_after(
+            now,
+            &self.recurring_windows,
+            &self.recurring_exception_dates,
+        );
+        let one_time_next = next_one_time_occurrence_after(now, &self.one_time_windows);
+        let has_one_time_window_today = self
+            .one_time_windows
+            .iter()
+            .any(|window| window.date == today);
         ScheduleDisplayState {
-            has_schedule_windows: !self.recurring_windows.is_empty(),
-            active_window: active_occurrence(
-                now,
-                &self.recurring_windows,
-                &self.recurring_exception_dates,
-            ),
-            next_window: next_occurrence_after(
-                now,
-                &self.recurring_windows,
-                &self.recurring_exception_dates,
-            ),
-            is_exception_today: self.recurring_exception_dates.contains(&today),
+            has_schedule_windows: !(self.recurring_windows.is_empty()
+                && self.one_time_windows.is_empty()),
+            active_window: pick_active_occurrence(recurring_active, one_time_active),
+            next_window: pick_next_occurrence(recurring_next, one_time_next),
+            is_exception_today: self.recurring_exception_dates.contains(&today)
+                && !has_one_time_window_today,
             is_armed: self.schedule_armed_occurrence_key.is_some(),
             has_selected_task: self.selected_task_label.is_some(),
             timer_phase: self.timer.phase,
@@ -970,7 +997,7 @@ impl App {
     }
 
     pub fn profile_edit_field_value(&self, field_index: usize) -> String {
-        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX)
+        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX)
             .contains(&field_index)
         {
             return self.profile_edit_schedule_field_value(field_index);
@@ -1022,6 +1049,20 @@ impl App {
             PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX => {
                 self.schedule_exception_collection_value()
             }
+            PROFILE_EDIT_ONE_TIME_WINDOW_INDEX => self.one_time_window_selector_value(),
+            PROFILE_EDIT_ONE_TIME_DATE_INDEX => self
+                .selected_one_time_window()
+                .map(|window| window.date.clone())
+                .unwrap_or_else(|| "n/a".to_string()),
+            PROFILE_EDIT_ONE_TIME_START_INDEX => self
+                .selected_one_time_window()
+                .map(|window| window.start.clone())
+                .unwrap_or_else(|| "n/a".to_string()),
+            PROFILE_EDIT_ONE_TIME_END_INDEX => self
+                .selected_one_time_window()
+                .map(|window| window.end.clone())
+                .unwrap_or_else(|| "n/a".to_string()),
+            PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX => self.one_time_window_collection_value(),
             _ => String::new(),
         }
     }
@@ -1076,6 +1117,26 @@ impl App {
         }
     }
 
+    fn one_time_window_selector_value(&self) -> String {
+        if self.recurring_schedule.one_time_windows.is_empty() {
+            "none".to_string()
+        } else {
+            format!(
+                "{}/{}",
+                self.profile_edit_one_time_window.saturating_add(1),
+                self.recurring_schedule.one_time_windows.len()
+            )
+        }
+    }
+
+    fn one_time_window_collection_value(&self) -> String {
+        if self.recurring_schedule.one_time_windows.is_empty() {
+            "→ Add window".to_string()
+        } else {
+            "← Remove · → Add".to_string()
+        }
+    }
+
     fn selected_schedule_window(&self) -> Option<&RecurringFocusWindowConfig> {
         self.recurring_schedule
             .windows
@@ -1092,6 +1153,18 @@ impl App {
         self.recurring_schedule
             .exception_dates
             .get(self.profile_edit_schedule_exception)
+    }
+
+    fn selected_one_time_window(&self) -> Option<&OneTimeFocusWindowConfig> {
+        self.recurring_schedule
+            .one_time_windows
+            .get(self.profile_edit_one_time_window)
+    }
+
+    fn selected_one_time_window_mut(&mut self) -> Option<&mut OneTimeFocusWindowConfig> {
+        self.recurring_schedule
+            .one_time_windows
+            .get_mut(self.profile_edit_one_time_window)
     }
 
     fn selected_schedule_day_token(&self) -> &'static str {
@@ -1137,6 +1210,16 @@ impl App {
                     .saturating_sub(1),
             );
         }
+        if self.recurring_schedule.one_time_windows.is_empty() {
+            self.profile_edit_one_time_window = 0;
+        } else {
+            self.profile_edit_one_time_window = self.profile_edit_one_time_window.min(
+                self.recurring_schedule
+                    .one_time_windows
+                    .len()
+                    .saturating_sub(1),
+            );
+        }
     }
 
     fn cycle_schedule_window(&mut self, increase: bool) {
@@ -1177,6 +1260,20 @@ impl App {
         } else {
             self.profile_edit_schedule_exception =
                 self.profile_edit_schedule_exception.saturating_sub(1);
+        }
+    }
+
+    fn cycle_one_time_window(&mut self, increase: bool) {
+        if self.recurring_schedule.one_time_windows.is_empty() {
+            return;
+        }
+        let total = self.recurring_schedule.one_time_windows.len();
+        if increase {
+            self.profile_edit_one_time_window = (self.profile_edit_one_time_window + 1) % total;
+        } else if self.profile_edit_one_time_window == 0 {
+            self.profile_edit_one_time_window = total - 1;
+        } else {
+            self.profile_edit_one_time_window = self.profile_edit_one_time_window.saturating_sub(1);
         }
     }
 
@@ -1274,6 +1371,99 @@ impl App {
         }
     }
 
+    fn adjust_selected_one_time_date(&mut self, increase: bool) {
+        let Some(current_window) = self.selected_one_time_window().cloned() else {
+            return;
+        };
+        let Some(current_date) = parse_schedule_exception_date(&current_window.date) else {
+            return;
+        };
+        let next_date = if increase {
+            current_date.succ_opt().unwrap_or(current_date)
+        } else {
+            current_date.pred_opt().unwrap_or(current_date)
+        };
+        let updated = OneTimeFocusWindowConfig {
+            date: next_date.format("%Y-%m-%d").to_string(),
+            start: current_window.start,
+            end: current_window.end,
+        };
+        if let Some(target) = self
+            .recurring_schedule
+            .one_time_windows
+            .get_mut(self.profile_edit_one_time_window)
+        {
+            *target = updated.clone();
+        }
+        sort_one_time_windows(&mut self.recurring_schedule.one_time_windows);
+        if let Some(position) =
+            self.recurring_schedule
+                .one_time_windows
+                .iter()
+                .position(|candidate| {
+                    candidate.date == updated.date
+                        && candidate.start == updated.start
+                        && candidate.end == updated.end
+                })
+        {
+            self.profile_edit_one_time_window = position;
+        }
+    }
+
+    fn adjust_selected_one_time_time(&mut self, is_start: bool, increase: bool) {
+        let updated = {
+            let Some(window) = self.selected_one_time_window_mut() else {
+                return;
+            };
+
+            let mut start = parse_hhmm_minutes(&window.start).unwrap_or(9 * 60);
+            let mut end = parse_hhmm_minutes(&window.end).unwrap_or(10 * 60);
+            if end <= start {
+                end = start.saturating_add(1).min(23 * 60 + 59);
+            }
+
+            if is_start {
+                if increase {
+                    start = start
+                        .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                        .min(end.saturating_sub(1));
+                } else {
+                    start = start.saturating_sub(SCHEDULE_TIME_STEP_MINUTES);
+                }
+            } else if increase {
+                end = end
+                    .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                    .min(23 * 60 + 59)
+                    .max(start.saturating_add(1));
+            } else {
+                end = end
+                    .saturating_sub(SCHEDULE_TIME_STEP_MINUTES)
+                    .max(start.saturating_add(1));
+            }
+
+            let updated = OneTimeFocusWindowConfig {
+                date: window.date.clone(),
+                start: format_hhmm(start),
+                end: format_hhmm(end),
+            };
+            *window = updated.clone();
+            updated
+        };
+        sort_one_time_windows(&mut self.recurring_schedule.one_time_windows);
+        if let Some(position) =
+            self.recurring_schedule
+                .one_time_windows
+                .iter()
+                .position(|candidate| {
+                    candidate.date == updated.date
+                        && candidate.start == updated.start
+                        && candidate.end == updated.end
+                })
+        {
+            self.profile_edit_one_time_window = position;
+        }
+    }
+
     fn adjust_schedule_windows_collection(&mut self, increase: bool) {
         if increase {
             self.recurring_schedule
@@ -1327,6 +1517,60 @@ impl App {
         self.recurring_schedule
             .exception_dates
             .remove(self.profile_edit_schedule_exception);
+        self.clamp_profile_edit_schedule_selection();
+    }
+
+    fn adjust_one_time_windows_collection(&mut self, increase: bool) {
+        if increase {
+            let default_window = OneTimeFocusWindowConfig::default();
+            let mut candidate_date = self.current_frame_now.date_naive();
+            let mut added = OneTimeFocusWindowConfig {
+                date: candidate_date.format("%Y-%m-%d").to_string(),
+                start: default_window.start.clone(),
+                end: default_window.end.clone(),
+            };
+            while self
+                .recurring_schedule
+                .one_time_windows
+                .iter()
+                .any(|candidate| {
+                    candidate.date == added.date
+                        && candidate.start == added.start
+                        && candidate.end == added.end
+                })
+            {
+                let Some(next_date) = candidate_date.succ_opt() else {
+                    return;
+                };
+                candidate_date = next_date;
+                added.date = candidate_date.format("%Y-%m-%d").to_string();
+            }
+            self.recurring_schedule.one_time_windows.push(added.clone());
+            sort_one_time_windows(&mut self.recurring_schedule.one_time_windows);
+            self.profile_edit_one_time_window = self
+                .recurring_schedule
+                .one_time_windows
+                .iter()
+                .position(|candidate| {
+                    candidate.date == added.date
+                        && candidate.start == added.start
+                        && candidate.end == added.end
+                })
+                .unwrap_or_else(|| {
+                    self.recurring_schedule
+                        .one_time_windows
+                        .len()
+                        .saturating_sub(1)
+                });
+            return;
+        }
+
+        if self.recurring_schedule.one_time_windows.is_empty() {
+            return;
+        }
+        self.recurring_schedule
+            .one_time_windows
+            .remove(self.profile_edit_one_time_window);
         self.clamp_profile_edit_schedule_selection();
     }
 
@@ -2143,6 +2387,7 @@ impl App {
         self.profile_edit_schedule_window = 0;
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
+        self.profile_edit_one_time_window = 0;
         self.clamp_profile_edit_schedule_selection();
     }
 
@@ -2164,6 +2409,7 @@ impl App {
         self.profile_edit_schedule_window = 0;
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
+        self.profile_edit_one_time_window = 0;
         self.clamp_profile_edit_schedule_selection();
     }
 
@@ -2211,6 +2457,7 @@ impl App {
         self.profile_edit_schedule_window = 0;
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
+        self.profile_edit_one_time_window = 0;
         self.clamp_profile_edit_schedule_selection();
         self.profile_edit_snapshot = None;
     }
@@ -2283,6 +2530,21 @@ impl App {
             PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX => {
                 self.adjust_schedule_exceptions_collection(increase);
             }
+            PROFILE_EDIT_ONE_TIME_WINDOW_INDEX => {
+                self.cycle_one_time_window(increase);
+            }
+            PROFILE_EDIT_ONE_TIME_DATE_INDEX => {
+                self.adjust_selected_one_time_date(increase);
+            }
+            PROFILE_EDIT_ONE_TIME_START_INDEX => {
+                self.adjust_selected_one_time_time(true, increase);
+            }
+            PROFILE_EDIT_ONE_TIME_END_INDEX => {
+                self.adjust_selected_one_time_time(false, increase);
+            }
+            PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX => {
+                self.adjust_one_time_windows_collection(increase);
+            }
             PROFILE_EDIT_WAKATIME_PROJECT_INDEX | PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => {}
             _ => {}
         }
@@ -2300,6 +2562,7 @@ impl App {
         self.recurring_windows = compile_windows(&self.recurring_schedule.windows);
         self.recurring_exception_dates =
             compile_exception_dates(&self.recurring_schedule.exception_dates);
+        self.one_time_windows = compile_one_time_windows(&self.recurring_schedule.one_time_windows);
     }
 
     fn apply_profile(&mut self, profile: ProfileId) -> bool {
@@ -2948,6 +3211,7 @@ impl App {
         self.profile_edit_schedule_window = 0;
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
+        self.profile_edit_one_time_window = 0;
         self.profile_edit_snapshot = None;
         self.profile_selection_index = profile_index(self.selected_profile);
         self.clamp_profile_selection();
@@ -3343,21 +3607,19 @@ impl App {
     }
 
     fn sync_recurring_schedule(&mut self, now: DateTime<Local>) {
-        if self.recurring_windows.is_empty() {
+        if self.recurring_windows.is_empty() && self.one_time_windows.is_empty() {
             self.schedule_armed_occurrence_key = None;
             return;
         }
 
-        if self.recurring_exception_dates.contains(&now.date_naive()) {
-            self.schedule_armed_occurrence_key = None;
-            return;
-        }
-
-        let Some(active_window) = active_occurrence(
+        let recurring_active = active_occurrence(
             now,
             &self.recurring_windows,
             &self.recurring_exception_dates,
-        ) else {
+        );
+        let one_time_active = active_one_time_occurrence(now, &self.one_time_windows);
+
+        let Some(active_window) = pick_active_occurrence(recurring_active, one_time_active) else {
             self.schedule_armed_occurrence_key = None;
             return;
         };
@@ -3525,6 +3787,15 @@ fn sort_schedule_exception_dates(dates: &mut Vec<String>) {
     *dates = sorted.into_iter().collect();
 }
 
+fn sort_one_time_windows(windows: &mut [OneTimeFocusWindowConfig]) {
+    windows.sort_by(|left, right| {
+        left.date
+            .cmp(&right.date)
+            .then(left.start.cmp(&right.start))
+            .then(left.end.cmp(&right.end))
+    });
+}
+
 fn format_schedule_days_for_display(days: &[String]) -> String {
     let mut labels = Vec::new();
     for (index, token) in SCHEDULE_DAY_TOKENS.iter().enumerate() {
@@ -3576,16 +3847,16 @@ fn schedule_status_text_from_state(state: &ScheduleDisplayState) -> String {
         return "⚙  Schedule status: off".to_string();
     }
 
-    if state.is_exception_today {
-        return "⚙  Schedule status: skipped today (exception date)".to_string();
-    }
-
     if state.active_window.is_some() {
         return schedule_active_window_status_text(state);
     }
 
     if state.is_armed {
         return schedule_armed_status_text(state.has_selected_task);
+    }
+
+    if state.is_exception_today {
+        return "⚙  Schedule status: skipped today (exception date)".to_string();
     }
 
     "⚙  Schedule status: ready for next window".to_string()
@@ -4347,6 +4618,35 @@ mod tests {
         assert_eq!(
             persisted.recurring_schedule.exception_dates,
             vec![expected_date]
+        );
+    }
+
+    #[test]
+    fn editing_one_time_schedule_fields_updates_and_persists_settings() {
+        let mut app = App::default();
+        app.current_frame_now = local_datetime_today(10, 15);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.profile_edit_field = PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX;
+        app.handle_key(key(KeyCode::Right)); // add one-time window for today
+        app.profile_edit_field = PROFILE_EDIT_ONE_TIME_DATE_INDEX;
+        app.handle_key(key(KeyCode::Right)); // move to tomorrow
+        app.profile_edit_field = PROFILE_EDIT_ONE_TIME_START_INDEX;
+        app.handle_key(key(KeyCode::Right)); // 09:00 -> 09:15
+        app.profile_edit_field = PROFILE_EDIT_ONE_TIME_END_INDEX;
+        app.handle_key(key(KeyCode::Right)); // 10:00 -> 10:15
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.recurring_schedule.one_time_windows.len(), 1);
+        let window = &app.recurring_schedule.one_time_windows[0];
+        assert_eq!(window.start, "09:15");
+        assert_eq!(window.end, "10:15");
+
+        let persisted = app.persisted_config();
+        assert_eq!(
+            persisted.recurring_schedule.one_time_windows,
+            app.recurring_schedule.one_time_windows
         );
     }
 
@@ -5220,6 +5520,32 @@ mod tests {
     }
 
     #[test]
+    fn one_time_schedule_next_window_text_shows_upcoming_window_for_today() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                one_time_windows: vec![OneTimeFocusWindowConfig {
+                    date: now.date_naive().format("%Y-%m-%d").to_string(),
+                    start: "11:00".to_string(),
+                    end: "12:00".to_string(),
+                }],
+                ..RecurringScheduleConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+
+        assert_eq!(
+            app.recurring_schedule_texts_at(now).0,
+            "🗓  Next schedule: today 11:00-12:00"
+        );
+        assert_eq!(
+            app.recurring_schedule_texts_at(now).1,
+            "⚙  Schedule status: ready for next window"
+        );
+    }
+
+    #[test]
     fn recurring_schedule_next_window_text_shows_active_window_then_next_window() {
         let now = local_datetime_today(10, 15);
         let config = AppConfig {
@@ -5415,6 +5741,7 @@ mod tests {
                     },
                 ],
                 exception_dates: vec![today.format("%Y-%m-%d").to_string()],
+                ..RecurringScheduleConfig::default()
             },
             ..AppConfig::default()
         };
@@ -5442,6 +5769,7 @@ mod tests {
                     end: "11:00".to_string(),
                 }],
                 exception_dates: vec![today.format("%Y-%m-%d").to_string()],
+                ..RecurringScheduleConfig::default()
             },
             ..AppConfig::default()
         };
@@ -5455,6 +5783,40 @@ mod tests {
         assert_eq!(app.timer.status, TimerStatus::Idle);
         assert!(app.schedule_armed_occurrence_key.is_none());
         assert!(app.phase_notification.is_none());
+    }
+
+    #[test]
+    fn one_time_schedule_triggers_on_recurring_exception_date() {
+        let now = local_datetime_today(10, 15);
+        let today = now.date_naive();
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(today.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+                exception_dates: vec![today.format("%Y-%m-%d").to_string()],
+                one_time_windows: vec![OneTimeFocusWindowConfig {
+                    date: today.format("%Y-%m-%d").to_string(),
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+
+        app.sync_recurring_schedule(now);
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("Scheduled window started. Focus auto-started.")
+        );
     }
 
     #[test]

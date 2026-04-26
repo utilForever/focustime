@@ -4,7 +4,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use chrono::NaiveDate;
+use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Persistent application configuration stored as TOML.
@@ -122,6 +122,8 @@ pub struct RecurringScheduleConfig {
     pub windows: Vec<RecurringFocusWindowConfig>,
     #[serde(default)]
     pub exception_dates: Vec<String>,
+    #[serde(default)]
+    pub one_time_windows: Vec<OneTimeFocusWindowConfig>,
 }
 
 impl RecurringScheduleConfig {
@@ -141,9 +143,27 @@ impl RecurringScheduleConfig {
             })
             .collect();
         let exception_dates = normalize_schedule_exception_dates(&self.exception_dates);
+        let one_time_windows = self
+            .one_time_windows
+            .iter()
+            .map(OneTimeFocusWindowConfig::normalized)
+            .filter(|window| {
+                if parse_schedule_exception_date(&window.date).is_none() {
+                    return false;
+                }
+                let Some(start_minutes) = parse_schedule_time_minutes(&window.start) else {
+                    return false;
+                };
+                let Some(end_minutes) = parse_schedule_time_minutes(&window.end) else {
+                    return false;
+                };
+                start_minutes < end_minutes
+            })
+            .collect();
         Self {
             windows,
             exception_dates,
+            one_time_windows,
         }
     }
 }
@@ -172,6 +192,36 @@ impl Default for RecurringFocusWindowConfig {
     fn default() -> Self {
         Self {
             days: default_schedule_window_days(),
+            start: default_schedule_window_start(),
+            end: default_schedule_window_end(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OneTimeFocusWindowConfig {
+    #[serde(default)]
+    pub date: String,
+    #[serde(default = "default_schedule_window_start")]
+    pub start: String,
+    #[serde(default = "default_schedule_window_end")]
+    pub end: String,
+}
+
+impl OneTimeFocusWindowConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            date: self.date.trim().to_string(),
+            start: self.start.trim().to_string(),
+            end: self.end.trim().to_string(),
+        }
+    }
+}
+
+impl Default for OneTimeFocusWindowConfig {
+    fn default() -> Self {
+        Self {
+            date: default_one_time_schedule_date(),
             start: default_schedule_window_start(),
             end: default_schedule_window_end(),
         }
@@ -257,6 +307,10 @@ fn default_schedule_window_start() -> String {
 
 fn default_schedule_window_end() -> String {
     "10:00".to_string()
+}
+
+fn default_one_time_schedule_date() -> String {
+    Local::now().date_naive().format("%Y-%m-%d").to_string()
 }
 
 fn default_blocklist_profile_name() -> String {
@@ -787,6 +841,11 @@ mod tests {
                     end: "11:00".to_string(),
                 }],
                 exception_dates: vec!["2026-04-27".to_string(), "2026-05-05".to_string()],
+                one_time_windows: vec![OneTimeFocusWindowConfig {
+                    date: "2026-05-10".to_string(),
+                    start: "14:00".to_string(),
+                    end: "15:00".to_string(),
+                }],
             },
             strict_mode: true,
             break_glass_duration_secs: 7 * 60,
@@ -890,6 +949,37 @@ start = "08:30"
         assert_eq!(window.end, default_schedule_window_end());
         assert_eq!(window.days, default_schedule_window_days());
         assert!(cfg.recurring_schedule.exception_dates.is_empty());
+        assert!(cfg.recurring_schedule.one_time_windows.is_empty());
+    }
+
+    #[test]
+    fn partial_one_time_schedule_window_uses_defaults_for_missing_fields() {
+        let partial = r#"
+[recurring_schedule]
+[[recurring_schedule.one_time_windows]]
+date = "2026-04-27"
+"#;
+        let cfg: AppConfig = toml::from_str(partial).unwrap();
+
+        assert_eq!(cfg.recurring_schedule.one_time_windows.len(), 1);
+        let window = &cfg.recurring_schedule.one_time_windows[0];
+        assert_eq!(window.date, "2026-04-27");
+        assert_eq!(window.start, default_schedule_window_start());
+        assert_eq!(window.end, default_schedule_window_end());
+    }
+
+    #[test]
+    fn normalize_drops_one_time_window_without_date_in_config() {
+        let partial = r#"
+[recurring_schedule]
+[[recurring_schedule.one_time_windows]]
+start = "09:00"
+end = "10:00"
+"#;
+        let cfg: AppConfig = toml::from_str(partial).unwrap();
+        let normalized = cfg.normalize();
+
+        assert!(normalized.recurring_schedule.one_time_windows.is_empty());
     }
 
     #[test]
@@ -909,6 +999,7 @@ start = "08:30"
                     },
                 ],
                 exception_dates: Vec::new(),
+                one_time_windows: Vec::new(),
             },
             ..AppConfig::default()
         }
@@ -931,6 +1022,7 @@ start = "08:30"
                     "2026-12-25".to_string(),
                     "not-a-date".to_string(),
                 ],
+                one_time_windows: Vec::new(),
             },
             ..AppConfig::default()
         }
@@ -940,6 +1032,53 @@ start = "08:30"
             cfg.recurring_schedule.exception_dates,
             vec!["2026-01-01".to_string(), "2026-12-25".to_string()]
         );
+    }
+
+    #[test]
+    fn normalize_drops_one_time_windows_with_invalid_entries() {
+        let cfg = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: Vec::new(),
+                exception_dates: Vec::new(),
+                one_time_windows: vec![
+                    OneTimeFocusWindowConfig {
+                        date: "2026-04-27".to_string(),
+                        start: "10:00".to_string(),
+                        end: "11:00".to_string(),
+                    },
+                    OneTimeFocusWindowConfig {
+                        date: "not-a-date".to_string(),
+                        start: "10:00".to_string(),
+                        end: "11:00".to_string(),
+                    },
+                    OneTimeFocusWindowConfig {
+                        date: "2026-04-28".to_string(),
+                        start: "12:00".to_string(),
+                        end: "11:00".to_string(),
+                    },
+                    OneTimeFocusWindowConfig {
+                        date: "2026-04-29".to_string(),
+                        start: "25:00".to_string(),
+                        end: "26:00".to_string(),
+                    },
+                    OneTimeFocusWindowConfig {
+                        date: String::new(),
+                        start: "09:00".to_string(),
+                        end: "10:00".to_string(),
+                    },
+                ],
+            },
+            ..AppConfig::default()
+        }
+        .normalize();
+
+        assert_eq!(cfg.recurring_schedule.one_time_windows.len(), 1);
+        assert_eq!(
+            cfg.recurring_schedule.one_time_windows[0].date,
+            "2026-04-27"
+        );
+        assert_eq!(cfg.recurring_schedule.one_time_windows[0].start, "10:00");
+        assert_eq!(cfg.recurring_schedule.one_time_windows[0].end, "11:00");
     }
 
     #[test]
