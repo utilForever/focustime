@@ -17,6 +17,7 @@ use crate::config::{
     AppConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
     OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
 };
+use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
 use crate::stats::{DailyGoalSnapshot, FocusStats, current_day_key};
 use crate::timer::{
@@ -66,7 +67,7 @@ Options:
   --profile       Show current profile, or set it when value is provided
   --goal          Show current daily goal, or set minutes/pomodoros targets
   --strict        Show strict mode, or set on/off
-  --schedule      Show recurring schedule
+  --schedule      Show recurring schedule with overlap/conflict inspection
   --schedule-set  Replace schedule (recurring + one-time) from JSON payload
   --blocklist-profile         Show active blocklist profile, or set active profile
   --blocklist-profile-create  Create a blocklist profile and select it
@@ -421,6 +422,13 @@ struct StrictCommandOutput {
 struct ScheduleCommandOutput {
     updated: bool,
     schedule: RecurringScheduleConfig,
+    inspection: ScheduleInspectionOutput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ScheduleInspectionOutput {
+    conflict_count: usize,
+    conflicts: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -2051,9 +2059,11 @@ fn execute_schedule_command(
         updated = true;
     }
 
+    let inspection = build_schedule_inspection_output(&config.recurring_schedule);
     let payload = ScheduleCommandOutput {
         updated,
         schedule: config.recurring_schedule,
+        inspection,
     };
 
     match output {
@@ -2957,6 +2967,30 @@ fn print_schedule_command_output(payload: &ScheduleCommandOutput) {
             println!("  - {} {}-{}", window.date, window.start, window.end);
         }
     }
+    if payload.inspection.conflicts.is_empty() {
+        println!("Schedule conflicts: none");
+    } else {
+        println!(
+            "Schedule conflicts: {} detected",
+            payload.inspection.conflict_count
+        );
+        for conflict in &payload.inspection.conflicts {
+            println!("  - {conflict}");
+        }
+    }
+}
+
+fn build_schedule_inspection_output(
+    schedule: &RecurringScheduleConfig,
+) -> ScheduleInspectionOutput {
+    let conflicts = inspect_schedule_conflicts_from_config(schedule)
+        .into_iter()
+        .map(|conflict| format_schedule_conflict(&conflict))
+        .collect::<Vec<_>>();
+    ScheduleInspectionOutput {
+        conflict_count: conflicts.len(),
+        conflicts,
+    }
 }
 
 fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutput) {
@@ -3433,6 +3467,48 @@ mod tests {
                 output: OutputMode::Text
             })
         );
+    }
+
+    #[test]
+    fn schedule_inspection_output_reports_detected_conflicts() {
+        let schedule = RecurringScheduleConfig {
+            windows: vec![
+                RecurringFocusWindowConfig {
+                    days: vec!["mon".to_string()],
+                    start: "09:00".to_string(),
+                    end: "11:00".to_string(),
+                },
+                RecurringFocusWindowConfig {
+                    days: vec!["mon".to_string()],
+                    start: "10:30".to_string(),
+                    end: "12:00".to_string(),
+                },
+            ],
+            ..RecurringScheduleConfig::default()
+        };
+
+        let output = build_schedule_inspection_output(&schedule);
+
+        assert_eq!(output.conflict_count, 1);
+        assert_eq!(output.conflicts.len(), 1);
+        assert!(output.conflicts[0].contains("recurring #1 overlaps recurring #2"));
+    }
+
+    #[test]
+    fn schedule_inspection_output_reports_no_conflicts() {
+        let schedule = RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["mon".to_string()],
+                start: "09:00".to_string(),
+                end: "10:00".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        };
+
+        let output = build_schedule_inspection_output(&schedule);
+
+        assert_eq!(output.conflict_count, 0);
+        assert!(output.conflicts.is_empty());
     }
 
     #[test]

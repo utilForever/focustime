@@ -20,8 +20,8 @@ use crate::notifications::PhaseNotifier;
 use crate::schedule::{
     OneTimeWindow, RecurringWindow, WindowOccurrence, active_occurrence,
     active_one_time_occurrence, compile_exception_dates, compile_one_time_windows, compile_windows,
-    next_occurrence_after, next_one_time_occurrence_after, occurrence_key, pick_active_occurrence,
-    pick_next_occurrence,
+    format_schedule_conflict, inspect_schedule_conflicts_from_config, next_occurrence_after,
+    next_one_time_occurrence_after, occurrence_key, pick_active_occurrence, pick_next_occurrence,
 };
 use crate::session_recovery::{self, InProgressSessionSnapshot};
 use crate::stats::{
@@ -39,7 +39,7 @@ use crate::wakatime::{WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeT
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 27] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 28] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -67,6 +67,7 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 27] = [
     "One-time start",
     "One-time end",
     "One-time add/remove",
+    "Schedule conflicts",
 ];
 const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = 11;
 const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = 12;
@@ -84,6 +85,7 @@ const PROFILE_EDIT_ONE_TIME_DATE_INDEX: usize = 23;
 const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 24;
 const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 25;
 const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 26;
+const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 27;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
@@ -1012,7 +1014,7 @@ impl App {
     }
 
     pub fn profile_edit_field_value(&self, field_index: usize) -> String {
-        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX)
+        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX)
             .contains(&field_index)
         {
             return self.profile_edit_schedule_field_value(field_index);
@@ -1078,8 +1080,25 @@ impl App {
                 .map(|window| window.end.clone())
                 .unwrap_or_else(|| "n/a".to_string()),
             PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX => self.one_time_window_collection_value(),
+            PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX => self.schedule_conflict_summary_value(),
             _ => String::new(),
         }
+    }
+
+    fn schedule_conflict_messages(&self) -> Vec<String> {
+        inspect_schedule_conflicts_from_config(&self.recurring_schedule)
+            .into_iter()
+            .map(|conflict| format_schedule_conflict(&conflict))
+            .collect()
+    }
+
+    fn schedule_conflict_summary_value(&self) -> String {
+        let conflicts = self.schedule_conflict_messages();
+        if conflicts.is_empty() {
+            return "none detected".to_string();
+        }
+
+        format!("{} detected · {}", conflicts.len(), conflicts[0])
     }
 
     fn schedule_window_selector_value(&self) -> String {
@@ -5837,6 +5856,34 @@ mod tests {
             app.recurring_schedule_texts_at(now).1,
             "⚙  Schedule status: ready for next window"
         );
+    }
+
+    #[test]
+    fn profile_edit_schedule_conflict_summary_reports_overlap() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![
+                    crate::config::RecurringFocusWindowConfig {
+                        days: vec![weekday_token(now.weekday()).to_string()],
+                        start: "09:00".to_string(),
+                        end: "11:00".to_string(),
+                    },
+                    crate::config::RecurringFocusWindowConfig {
+                        days: vec![weekday_token(now.weekday()).to_string()],
+                        start: "10:30".to_string(),
+                        end: "12:00".to_string(),
+                    },
+                ],
+                ..RecurringScheduleConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let app = App::from_config(config);
+
+        let summary = app.profile_edit_field_value(PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX);
+        assert!(summary.contains("1 detected"));
+        assert!(summary.contains("recurring #1 overlaps recurring #2"));
     }
 
     #[test]
