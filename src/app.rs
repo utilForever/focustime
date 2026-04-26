@@ -4912,6 +4912,38 @@ mod tests {
     }
 
     #[test]
+    fn editing_weekly_and_monthly_goal_fields_updates_and_persists_settings() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX;
+        app.handle_key(key(KeyCode::Right)); // weekly minutes -> 5m
+        app.handle_key(key(KeyCode::Right)); // weekly minutes -> 10m
+        app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX;
+        app.handle_key(key(KeyCode::Right)); // weekly pomodoros -> 1
+        app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX;
+        app.handle_key(key(KeyCode::Right)); // monthly minutes -> 5m
+        app.handle_key(key(KeyCode::Right)); // monthly minutes -> 10m
+        app.handle_key(key(KeyCode::Right)); // monthly minutes -> 15m
+        app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX;
+        app.handle_key(key(KeyCode::Right)); // monthly pomodoros -> 1
+        app.handle_key(key(KeyCode::Right)); // monthly pomodoros -> 2
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.weekly_goal.minutes, 10);
+        assert_eq!(app.weekly_goal.pomodoros, 1);
+        assert_eq!(app.monthly_goal.minutes, 15);
+        assert_eq!(app.monthly_goal.pomodoros, 2);
+
+        let persisted = app.persisted_config();
+        assert_eq!(persisted.weekly_goal.minutes, 10);
+        assert_eq!(persisted.weekly_goal.pomodoros, 1);
+        assert_eq!(persisted.monthly_goal.minutes, 15);
+        assert_eq!(persisted.monthly_goal.pomodoros, 2);
+    }
+
+    #[test]
     fn cancelling_profile_edit_restores_recurring_schedule_settings() {
         let original_schedule = RecurringScheduleConfig {
             windows: vec![RecurringFocusWindowConfig {
@@ -5036,6 +5068,39 @@ mod tests {
 
         assert_eq!(app.daily_goal.minutes, 25);
         assert_eq!(app.daily_goal.pomodoros, 3);
+    }
+
+    #[test]
+    fn cancelling_profile_edit_restores_weekly_and_monthly_goal_settings() {
+        let config = AppConfig {
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 120,
+                pomodoros: 4,
+            },
+            monthly_goal: MonthlyGoalConfig {
+                minutes: 600,
+                pomodoros: 20,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX;
+        app.handle_key(key(KeyCode::Right)); // weekly minutes -> 125m
+        app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX;
+        app.handle_key(key(KeyCode::Right)); // weekly pomodoros -> 5
+        app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX;
+        app.handle_key(key(KeyCode::Left)); // monthly minutes -> 595m
+        app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX;
+        app.handle_key(key(KeyCode::Left)); // monthly pomodoros -> 19
+        app.handle_key(key(KeyCode::Esc)); // cancel
+
+        assert_eq!(app.weekly_goal.minutes, 120);
+        assert_eq!(app.weekly_goal.pomodoros, 4);
+        assert_eq!(app.monthly_goal.minutes, 600);
+        assert_eq!(app.monthly_goal.pomodoros, 20);
     }
 
     #[test]
