@@ -91,6 +91,7 @@ pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
 const SCHEDULE_TIME_STEP_MINUTES: u16 = 15;
 const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const SCHEDULE_DAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const SCHEDULE_DELAY_SECS: u64 = 10 * 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
@@ -189,6 +190,7 @@ struct ScheduleDisplayState {
     next_window: Option<WindowOccurrence>,
     is_exception_today: bool,
     is_armed: bool,
+    delayed_until: Option<DateTime<Local>>,
     has_selected_task: bool,
     timer_phase: TimerPhase,
     timer_status: TimerStatus,
@@ -435,6 +437,8 @@ pub struct App {
     recurring_exception_dates: HashSet<NaiveDate>,
     one_time_windows: Vec<OneTimeWindow>,
     schedule_armed_occurrence_key: Option<String>,
+    schedule_delayed_occurrence_key: Option<String>,
+    schedule_delay_until: Option<DateTime<Local>>,
     last_schedule_occurrence_key: Option<String>,
     current_frame_now: DateTime<Local>,
     pub strict_mode: bool,
@@ -552,6 +556,8 @@ impl App {
             recurring_exception_dates,
             one_time_windows,
             schedule_armed_occurrence_key: None,
+            schedule_delayed_occurrence_key: None,
+            schedule_delay_until: None,
             last_schedule_occurrence_key: None,
             current_frame_now: Local::now(),
             strict_mode,
@@ -849,12 +855,7 @@ impl App {
 
     fn schedule_display_state_at(&self, now: DateTime<Local>) -> ScheduleDisplayState {
         let today = now.date_naive();
-        let recurring_active = active_occurrence(
-            now,
-            &self.recurring_windows,
-            &self.recurring_exception_dates,
-        );
-        let one_time_active = active_one_time_occurrence(now, &self.one_time_windows);
+        let active_window = self.active_schedule_occurrence_at(now);
         let recurring_next = next_occurrence_after(
             now,
             &self.recurring_windows,
@@ -865,18 +866,32 @@ impl App {
             .one_time_windows
             .iter()
             .any(|window| window.date == today);
+        let delayed_until = active_window.as_ref().and_then(|occurrence| {
+            self.schedule_delay_until_for_occurrence_key(&occurrence_key(occurrence), now)
+        });
         ScheduleDisplayState {
             has_schedule_windows: !(self.recurring_windows.is_empty()
                 && self.one_time_windows.is_empty()),
-            active_window: pick_active_occurrence(recurring_active, one_time_active),
+            active_window,
             next_window: pick_next_occurrence(recurring_next, one_time_next),
             is_exception_today: self.recurring_exception_dates.contains(&today)
                 && !has_one_time_window_today,
             is_armed: self.schedule_armed_occurrence_key.is_some(),
+            delayed_until,
             has_selected_task: self.selected_task_label.is_some(),
             timer_phase: self.timer.phase,
             timer_status: self.timer.status,
         }
+    }
+
+    fn active_schedule_occurrence_at(&self, now: DateTime<Local>) -> Option<WindowOccurrence> {
+        let recurring_active = active_occurrence(
+            now,
+            &self.recurring_windows,
+            &self.recurring_exception_dates,
+        );
+        let one_time_active = active_one_time_occurrence(now, &self.one_time_windows);
+        pick_active_occurrence(recurring_active, one_time_active)
     }
 
     pub fn current_task_label(&self) -> Option<&str> {
@@ -1742,6 +1757,8 @@ impl App {
         self.pending_timer_action = None;
         self.break_glass_expires_at = None;
         self.schedule_armed_occurrence_key = None;
+        self.schedule_delayed_occurrence_key = None;
+        self.schedule_delay_until = None;
         self.last_schedule_occurrence_key = None;
         self.active_focus_task_label = if self.timer.phase == TimerPhase::Focus {
             self.selected_task_label.clone()
@@ -2006,8 +2023,51 @@ impl App {
             KeyCode::Char('u') => {
                 self.handle_break_glass_key();
             }
+            // Delay scheduled start for the current active window
+            KeyCode::Char('z') => {
+                self.delay_active_schedule_start();
+            }
             _ => {}
         }
+    }
+
+    fn delay_active_schedule_start(&mut self) {
+        if self.focus_session_active_for_current_state() {
+            self.phase_notification = Some(
+                "Schedule delay is unavailable while a focus session is already active."
+                    .to_string(),
+            );
+            return;
+        }
+
+        let now = self.current_frame_now;
+        let Some(active_window) = self.active_schedule_occurrence_at(now) else {
+            self.phase_notification = Some("No active schedule window to delay.".to_string());
+            return;
+        };
+        let active_occurrence_key = occurrence_key(&active_window);
+        let delayed_from = match (
+            self.schedule_delayed_occurrence_key.as_deref(),
+            self.schedule_delay_until,
+        ) {
+            (Some(existing_key), Some(existing_until))
+                if existing_key == active_occurrence_key && existing_until > now =>
+            {
+                existing_until
+            }
+            _ => now,
+        };
+        let delayed_until = delayed_from + chrono::Duration::seconds(SCHEDULE_DELAY_SECS as i64);
+
+        self.schedule_armed_occurrence_key = None;
+        self.schedule_delayed_occurrence_key = Some(active_occurrence_key);
+        self.schedule_delay_until = Some(delayed_until);
+        self.last_schedule_occurrence_key = None;
+        self.phase_notification = Some(format!(
+            "Scheduled start delayed for {} (until {}).",
+            format_duration_label(SCHEDULE_DELAY_SECS),
+            delayed_until.format("%H:%M")
+        ));
     }
 
     fn handle_key_stats_history(&mut self, key: KeyEvent) {
@@ -2444,6 +2504,7 @@ impl App {
         self.rebuild_recurring_schedule_runtime();
         if schedule_changed {
             self.schedule_armed_occurrence_key = None;
+            self.clear_schedule_delay_state();
             self.last_schedule_occurrence_key = None;
             let now = Local::now();
             self.current_frame_now = now;
@@ -3183,6 +3244,7 @@ impl App {
             self.active_focus_task_note = self.selected_task_label.clone();
             self.active_focus_profile = Some(self.selected_profile);
             self.schedule_armed_occurrence_key = None;
+            self.clear_schedule_delay_state();
         } else if was_focus_active && !is_focus_active {
             self.active_focus_task_label = None;
             self.active_focus_intention = None;
@@ -3609,28 +3671,65 @@ impl App {
     fn sync_recurring_schedule(&mut self, now: DateTime<Local>) {
         if self.recurring_windows.is_empty() && self.one_time_windows.is_empty() {
             self.schedule_armed_occurrence_key = None;
+            self.clear_schedule_delay_state();
             return;
         }
 
-        let recurring_active = active_occurrence(
-            now,
-            &self.recurring_windows,
-            &self.recurring_exception_dates,
-        );
-        let one_time_active = active_one_time_occurrence(now, &self.one_time_windows);
-
-        let Some(active_window) = pick_active_occurrence(recurring_active, one_time_active) else {
+        let Some(active_window) = self.active_schedule_occurrence_at(now) else {
             self.schedule_armed_occurrence_key = None;
+            self.clear_schedule_delay_state();
             return;
         };
 
         let active_occurrence_key = occurrence_key(&active_window);
+        if self.sync_schedule_delay_state_for_occurrence(&active_occurrence_key, now) {
+            self.schedule_armed_occurrence_key = None;
+            return;
+        }
         if self.last_schedule_occurrence_key.as_deref() != Some(active_occurrence_key.as_str()) {
             self.last_schedule_occurrence_key = Some(active_occurrence_key.clone());
             self.handle_schedule_window_start(&active_occurrence_key);
         } else if self.focus_session_active_for_current_state() {
             self.schedule_armed_occurrence_key = None;
         }
+    }
+
+    fn schedule_delay_until_for_occurrence_key(
+        &self,
+        occurrence_key: &str,
+        now: DateTime<Local>,
+    ) -> Option<DateTime<Local>> {
+        match (
+            self.schedule_delayed_occurrence_key.as_deref(),
+            self.schedule_delay_until,
+        ) {
+            (Some(delayed_key), Some(delayed_until))
+                if delayed_key == occurrence_key && delayed_until > now =>
+            {
+                Some(delayed_until)
+            }
+            _ => None,
+        }
+    }
+
+    fn clear_schedule_delay_state(&mut self) {
+        self.schedule_delayed_occurrence_key = None;
+        self.schedule_delay_until = None;
+    }
+
+    fn sync_schedule_delay_state_for_occurrence(
+        &mut self,
+        active_occurrence_key: &str,
+        now: DateTime<Local>,
+    ) -> bool {
+        if self
+            .schedule_delay_until_for_occurrence_key(active_occurrence_key, now)
+            .is_some()
+        {
+            return true;
+        }
+        self.clear_schedule_delay_state();
+        false
     }
 
     fn handle_schedule_window_start(&mut self, active_occurrence_key: &str) {
@@ -3666,10 +3765,11 @@ impl App {
 
     fn schedule_arm_notification(&self) -> String {
         if self.selected_task_label.is_none() {
-            "Scheduled window started. Select a task label with [t], then press [Space] to start focus."
+            "Scheduled window started. Select a task label with [t], then press [Space] to start focus or [z] to delay 10m."
                 .to_string()
         } else {
-            "Scheduled window started. Press [Space] to start focus.".to_string()
+            "Scheduled window started. Press [Space] to start focus or [z] to delay 10m."
+                .to_string()
         }
     }
 
@@ -3847,6 +3947,10 @@ fn schedule_status_text_from_state(state: &ScheduleDisplayState) -> String {
         return "⚙  Schedule status: off".to_string();
     }
 
+    if let Some(delayed_until) = state.delayed_until.as_ref() {
+        return schedule_delayed_status_text(*delayed_until, state.has_selected_task);
+    }
+
     if state.active_window.is_some() {
         return schedule_active_window_status_text(state);
     }
@@ -3875,6 +3979,20 @@ fn schedule_active_window_status_text(state: &ScheduleDisplayState) -> String {
         TimerStatus::Idle => {
             schedule_idle_focus_status_text(state.has_selected_task, state.is_armed)
         }
+    }
+}
+
+fn schedule_delayed_status_text(delayed_until: DateTime<Local>, has_selected_task: bool) -> String {
+    if has_selected_task {
+        format!(
+            "⚙  Schedule status: delayed until {}; press [Space] to start now or [z] to delay 10m",
+            delayed_until.format("%H:%M")
+        )
+    } else {
+        format!(
+            "⚙  Schedule status: delayed until {}; select [t] then [Space], or press [z] to delay 10m",
+            delayed_until.format("%H:%M")
+        )
     }
 }
 
@@ -5872,9 +5990,120 @@ mod tests {
         assert_eq!(
             app.phase_notification.as_deref(),
             Some(
-                "Scheduled window started. Select a task label with [t], then press [Space] to start focus."
+                "Scheduled window started. Select a task label with [t], then press [Space] to start focus or [z] to delay 10m."
             )
         );
+    }
+
+    #[test]
+    fn schedule_delay_key_sets_delay_for_active_window() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+                ..RecurringScheduleConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.sync_recurring_schedule(now);
+        app.current_frame_now = now;
+
+        app.handle_key(key(KeyCode::Char('z')));
+
+        assert!(app.schedule_armed_occurrence_key.is_none());
+        assert!(app.schedule_delayed_occurrence_key.is_some());
+        assert!(
+            app.schedule_delay_until
+                .is_some_and(|delayed_until| delayed_until > now)
+        );
+        assert!(
+            app.phase_notification
+                .as_deref()
+                .is_some_and(|message| message.contains("delayed for 10m"))
+        );
+    }
+
+    #[test]
+    fn schedule_delay_suppresses_trigger_until_delay_expires() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+                ..RecurringScheduleConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.sync_recurring_schedule(now);
+        app.current_frame_now = now;
+        app.handle_key(key(KeyCode::Char('z')));
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+        app.phase_notification = None;
+
+        app.sync_recurring_schedule(now + ChronoDuration::minutes(5));
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+        assert!(app.phase_notification.is_none());
+        assert!(app.schedule_armed_occurrence_key.is_none());
+
+        app.sync_recurring_schedule(now + ChronoDuration::minutes(11));
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("Scheduled window started. Focus auto-started.")
+        );
+    }
+
+    #[test]
+    fn schedule_delay_key_requires_active_schedule_window() {
+        let mut app = App::default();
+        app.current_frame_now = local_datetime_today(10, 15);
+
+        app.handle_key(key(KeyCode::Char('z')));
+
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("No active schedule window to delay.")
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_status_text_shows_delayed_state() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+                ..RecurringScheduleConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.sync_recurring_schedule(now);
+        app.current_frame_now = now;
+        app.handle_key(key(KeyCode::Char('z')));
+
+        let status = app
+            .recurring_schedule_texts_at(now + ChronoDuration::minutes(1))
+            .1;
+        assert!(status.contains("Schedule status: delayed until"));
+        assert!(status.contains("[z] to delay 10m"));
     }
 
     #[test]

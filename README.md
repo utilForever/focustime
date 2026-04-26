@@ -359,6 +359,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - `recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
 - `recurring_schedule.one_time_windows[]` accepts one-time date windows with `date` (`YYYY-MM-DD`) plus `start`/`end` (`HH:MM`)
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
+- while a schedule window is active and focus is not already running, press `z` to delay the scheduled start by 10 minutes
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - the timer session overview shows the current/next scheduled window
