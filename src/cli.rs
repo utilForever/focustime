@@ -3351,6 +3351,7 @@ mod tests {
     use crate::session_recovery::{
         self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
     };
+    use chrono::{Datelike, Duration};
     #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
 
@@ -4521,37 +4522,86 @@ mod tests {
     fn build_status_output_reports_daily_weekly_monthly_goal_state() {
         let mut stats = FocusStats::default();
         let today = current_day_key();
+        let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse as a date");
+        let weekly_day = (-6..=6)
+            .filter(|offset| *offset != 0)
+            .map(|offset| today_date + Duration::days(i64::from(offset)))
+            .find(|candidate| candidate.iso_week() == today_date.iso_week())
+            .expect("there should be at least one nearby day in the current ISO week");
+        let monthly_day = (-31..=31)
+            .filter(|offset| *offset != 0)
+            .map(|offset| today_date + Duration::days(i64::from(offset)))
+            .find(|candidate| {
+                candidate.year() == today_date.year()
+                    && candidate.month() == today_date.month()
+                    && candidate.iso_week() != today_date.iso_week()
+            })
+            .expect("there should be at least one nearby day in the current month");
+        let outside_period_day = today_date - Duration::days(40);
+
         let daily_snapshot = DailyGoalSnapshot {
             minutes: 30,
             pomodoros: 1,
         };
         stats.record_focus_elapsed(&today, 30 * 60, daily_snapshot);
         stats.record_completed_pomodoro(&today, daily_snapshot);
+        let weekly_day_key = weekly_day.format("%Y-%m-%d").to_string();
+        stats.record_focus_elapsed(&weekly_day_key, 20 * 60, daily_snapshot);
+        stats.record_completed_pomodoro(&weekly_day_key, daily_snapshot);
+        let monthly_day_key = monthly_day.format("%Y-%m-%d").to_string();
+        stats.record_focus_elapsed(&monthly_day_key, 25 * 60, daily_snapshot);
+        stats.record_completed_pomodoro(&monthly_day_key, daily_snapshot);
+        let outside_period_day_key = outside_period_day.format("%Y-%m-%d").to_string();
+        stats.record_focus_elapsed(&outside_period_day_key, 200 * 60, daily_snapshot);
+        stats.record_completed_pomodoro(&outside_period_day_key, daily_snapshot);
 
-        let config = AppConfig {
+        let in_period_config = AppConfig {
             daily_goal: DailyGoalConfig {
                 minutes: 30,
                 pomodoros: 1,
             },
             weekly_goal: WeeklyGoalConfig {
-                minutes: 30,
-                pomodoros: 1,
+                minutes: 50,
+                pomodoros: 2,
             },
             monthly_goal: MonthlyGoalConfig {
-                minutes: 30,
-                pomodoros: 1,
+                minutes: 55,
+                pomodoros: 2,
             },
             ..AppConfig::default()
         };
 
-        let output = build_status_output(&config, &stats);
+        let in_period_output = build_status_output(&in_period_config, &stats);
 
-        assert!(output.goal.configured);
-        assert!(output.goal.met);
-        assert!(output.weekly_goal.configured);
-        assert!(output.weekly_goal.met);
-        assert!(output.monthly_goal.configured);
-        assert!(output.monthly_goal.met);
+        assert!(in_period_output.goal.configured);
+        assert!(in_period_output.goal.met);
+        assert!(in_period_output.weekly_goal.configured);
+        assert!(in_period_output.weekly_goal.met);
+        assert!(in_period_output.monthly_goal.configured);
+        assert!(in_period_output.monthly_goal.met);
+
+        let boundary_config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 30,
+                pomodoros: 1,
+            },
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 120,
+                pomodoros: 3,
+            },
+            monthly_goal: MonthlyGoalConfig {
+                minutes: 120,
+                pomodoros: 3,
+            },
+            ..AppConfig::default()
+        };
+
+        let boundary_output = build_status_output(&boundary_config, &stats);
+
+        assert!(boundary_output.goal.met);
+        assert!(!boundary_output.weekly_goal.met);
+        assert!(!boundary_output.monthly_goal.met);
     }
 
     #[test]
