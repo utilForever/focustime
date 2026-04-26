@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-04-26
+
 ### Added
 
-- **One-time ad-hoc schedule windows (#181):** added date-specific one-time schedule windows across config/CLI/TUI/runtime flows while preserving recurring schedule defaults and compatibility.
+- **One-time ad-hoc schedule windows (#213):** added date-specific one-time schedule windows across config/CLI/TUI/runtime flows while preserving recurring schedule defaults and compatibility.
+- **Schedule delay shortcut for active windows (#214):** added a 10-minute schedule snooze/delay control for currently active schedule windows.
+- **Schedule conflict inspector for UI/CLI (#215):** added overlap/conflict inspection surfaces in both TUI and CLI schedule workflows.
+
+### Changed
+
+- **One-time schedule normalization hardening (#213):** prevented malformed one-time window date/time fields from being coerced into valid windows during normalization.
+- **Schedule conflict review hardening (#215):** refined conflict-inspection implementation and added direct one-time overlap regression coverage from review follow-up.
 
 ## [0.6.1] - 2026-04-26
 
@@ -162,7 +171,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/utilForever/focustime/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/utilForever/focustime/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/utilForever/focustime/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/utilForever/focustime/compare/v0.5.1...v0.5.2
