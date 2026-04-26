@@ -14,8 +14,8 @@ use serde::Serialize;
 use crate::app::{App, SetupCheck, SetupCheckLevel, SetupDiagnostics};
 use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
-    AppConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig,
+    AppConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
+    OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
 };
 use crate::session_recovery;
 use crate::stats::{DailyGoalSnapshot, FocusStats, current_day_key};
@@ -67,7 +67,7 @@ Options:
   --goal          Show current daily goal, or set minutes/pomodoros targets
   --strict        Show strict mode, or set on/off
   --schedule      Show recurring schedule
-  --schedule-set  Replace recurring schedule from JSON payload
+  --schedule-set  Replace schedule (recurring + one-time) from JSON payload
   --blocklist-profile         Show active blocklist profile, or set active profile
   --blocklist-profile-create  Create a blocklist profile and select it
   --blocklist-profile-rename  Rename the active blocklist profile
@@ -2462,7 +2462,7 @@ fn parse_site_edit_value(value: &str) -> Result<SiteEditValue, String> {
 fn parse_schedule_value(value: &str) -> Result<RecurringScheduleConfig, String> {
     let schedule = serde_json::from_str::<RecurringScheduleConfig>(value).map_err(|error| {
         invalid_usage(&format!(
-            "Invalid schedule JSON payload: {error}. Use `--schedule-set='{{\"windows\":[...],\"exception_dates\":[...]}}'`."
+            "Invalid schedule JSON payload: {error}. Use `--schedule-set='{{\"windows\":[...],\"exception_dates\":[...],\"one_time_windows\":[...]}}'`."
         ))
     })?;
     validate_schedule_value(&schedule)?;
@@ -2475,6 +2475,9 @@ fn validate_schedule_value(schedule: &RecurringScheduleConfig) -> Result<(), Str
     }
     for (index, date) in schedule.exception_dates.iter().enumerate() {
         validate_schedule_exception_date(date, index)?;
+    }
+    for (index, window) in schedule.one_time_windows.iter().enumerate() {
+        validate_one_time_schedule_window(window, index)?;
     }
     Ok(())
 }
@@ -2523,6 +2526,39 @@ fn validate_schedule_exception_date(value: &str, index: usize) -> Result<(), Str
             "Invalid exception date at index {index}: `{value}` must be YYYY-MM-DD."
         ))
     })?;
+    Ok(())
+}
+
+fn validate_one_time_schedule_window(
+    window: &OneTimeFocusWindowConfig,
+    index: usize,
+) -> Result<(), String> {
+    NaiveDate::parse_from_str(window.date.trim(), "%Y-%m-%d").map_err(|_| {
+        invalid_usage(&format!(
+            "Invalid one-time window at index {index}: date `{}` must be YYYY-MM-DD.",
+            window.date
+        ))
+    })?;
+
+    let start_minutes = parse_schedule_minutes(&window.start).ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid one-time window at index {index}: start `{}` must be HH:MM in 24-hour format.",
+            window.start
+        ))
+    })?;
+    let end_minutes = parse_schedule_minutes(&window.end).ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid one-time window at index {index}: end `{}` must be HH:MM in 24-hour format.",
+            window.end
+        ))
+    })?;
+
+    if start_minutes >= end_minutes {
+        return Err(invalid_usage(&format!(
+            "Invalid one-time window at index {index}: start must be earlier than end."
+        )));
+    }
+
     Ok(())
 }
 
@@ -2890,12 +2926,12 @@ fn print_strict_command_output(payload: &StrictCommandOutput) {
 
 fn print_schedule_command_output(payload: &ScheduleCommandOutput) {
     if payload.updated {
-        println!("Recurring schedule updated.");
+        println!("Schedule updated.");
     }
     if payload.schedule.windows.is_empty() {
-        println!("Schedule windows: none");
+        println!("Recurring windows: none");
     } else {
-        println!("Schedule windows:");
+        println!("Recurring windows:");
         for window in &payload.schedule.windows {
             println!(
                 "  - [{}] {}-{}",
@@ -2912,6 +2948,14 @@ fn print_schedule_command_output(payload: &ScheduleCommandOutput) {
             "Exception dates: {}",
             payload.schedule.exception_dates.join(", ")
         );
+    }
+    if payload.schedule.one_time_windows.is_empty() {
+        println!("One-time windows: none");
+    } else {
+        println!("One-time windows:");
+        for window in &payload.schedule.one_time_windows {
+            println!("  - {} {}-{}", window.date, window.start, window.end);
+        }
     }
 }
 
@@ -3359,6 +3403,31 @@ mod tests {
                             end: "11:00".to_string(),
                         }],
                         exception_dates: vec!["2026-12-25".to_string()],
+                        one_time_windows: Vec::new(),
+                    }),
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_schedule_set_accepts_one_time_windows_payload() {
+        let payload = r#"{"windows":[],"exception_dates":[],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"15:30"}]}"#;
+        let parsed =
+            parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::Schedule {
+                    schedule: Some(RecurringScheduleConfig {
+                        windows: Vec::new(),
+                        exception_dates: Vec::new(),
+                        one_time_windows: vec![OneTimeFocusWindowConfig {
+                            date: "2026-05-02".to_string(),
+                            start: "14:00".to_string(),
+                            end: "15:30".to_string(),
+                        }],
                     }),
                 },
                 output: OutputMode::Text
@@ -3599,6 +3668,7 @@ mod tests {
                     end: "11:00".to_string(),
                 }],
                 exception_dates: Vec::new(),
+                one_time_windows: Vec::new(),
             }))
         );
     }
@@ -3695,6 +3765,14 @@ mod tests {
         let error =
             parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
         assert!(error.contains("must be YYYY-MM-DD"));
+    }
+
+    #[test]
+    fn parse_rejects_schedule_set_with_invalid_one_time_date() {
+        let payload = r#"{"windows":[],"exception_dates":[],"one_time_windows":[{"date":"2026-99-99","start":"09:00","end":"10:00"}]}"#;
+        let error =
+            parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
+        assert!(error.contains("Invalid one-time window"));
     }
 
     #[test]

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **One-time ad-hoc schedule windows (#181):** added date-specific one-time schedule windows across config/CLI/TUI/runtime flows while preserving recurring schedule defaults and compatibility.
+
 ## [0.6.1] - 2026-04-26
 
 ### Added

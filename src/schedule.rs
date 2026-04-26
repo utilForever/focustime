@@ -4,7 +4,7 @@ use chrono::{
     DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, TimeZone, Timelike, Weekday,
 };
 
-use crate::config::RecurringFocusWindowConfig;
+use crate::config::{OneTimeFocusWindowConfig, RecurringFocusWindowConfig};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecurringWindow {
@@ -14,7 +14,21 @@ pub struct RecurringWindow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OneTimeWindow {
+    pub date: NaiveDate,
+    start_minutes: u16,
+    end_minutes: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowOccurrenceKind {
+    Recurring,
+    OneTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowOccurrence {
+    pub kind: WindowOccurrenceKind,
     pub window_index: usize,
     pub start: DateTime<Local>,
     pub end: DateTime<Local>,
@@ -27,6 +41,13 @@ pub fn compile_windows(config_windows: &[RecurringFocusWindowConfig]) -> Vec<Rec
         .collect()
 }
 
+pub fn compile_one_time_windows(config_windows: &[OneTimeFocusWindowConfig]) -> Vec<OneTimeWindow> {
+    config_windows
+        .iter()
+        .filter_map(OneTimeWindow::from_config)
+        .collect()
+}
+
 pub fn compile_exception_dates(config_dates: &[String]) -> HashSet<NaiveDate> {
     config_dates
         .iter()
@@ -35,8 +56,12 @@ pub fn compile_exception_dates(config_dates: &[String]) -> HashSet<NaiveDate> {
 }
 
 pub fn occurrence_key(occurrence: &WindowOccurrence) -> String {
+    let kind_key = match occurrence.kind {
+        WindowOccurrenceKind::Recurring => "r",
+        WindowOccurrenceKind::OneTime => "o",
+    };
     format!(
-        "{}-{}",
+        "{kind_key}-{}-{}",
         occurrence.window_index,
         occurrence.start.timestamp()
     )
@@ -72,13 +97,14 @@ pub fn active_occurrence(
         }
 
         let candidate = WindowOccurrence {
+            kind: WindowOccurrenceKind::Recurring,
             window_index,
             start,
             end,
         };
         let should_replace = selected
             .as_ref()
-            .is_none_or(|existing| active_candidate_is_higher_priority(&candidate, existing));
+            .is_none_or(|existing| active_occurrence_is_higher_priority(&candidate, existing));
         if should_replace {
             selected = Some(candidate);
         }
@@ -119,13 +145,14 @@ pub fn next_occurrence_after(
                 continue;
             };
             let candidate = WindowOccurrence {
+                kind: WindowOccurrenceKind::Recurring,
                 window_index,
                 start,
                 end,
             };
             let should_replace = selected
                 .as_ref()
-                .is_none_or(|existing| next_candidate_is_higher_priority(&candidate, existing));
+                .is_none_or(|existing| next_occurrence_is_higher_priority(&candidate, existing));
             if should_replace {
                 selected = Some(candidate);
             }
@@ -133,6 +160,117 @@ pub fn next_occurrence_after(
     }
 
     selected
+}
+
+pub fn active_one_time_occurrence(
+    now: DateTime<Local>,
+    windows: &[OneTimeWindow],
+) -> Option<WindowOccurrence> {
+    let now_minutes = now.hour() as u16 * 60 + now.minute() as u16;
+    let today = now.date_naive();
+    let mut selected: Option<WindowOccurrence> = None;
+
+    for (window_index, window) in windows.iter().enumerate() {
+        if window.date != today {
+            continue;
+        }
+        if now_minutes < window.start_minutes || now_minutes >= window.end_minutes {
+            continue;
+        }
+        let Some(start) = local_datetime_on(today, window.start_minutes) else {
+            continue;
+        };
+        let Some(end) = local_datetime_on(today, window.end_minutes) else {
+            continue;
+        };
+        if now < start || now >= end {
+            continue;
+        }
+
+        let candidate = WindowOccurrence {
+            kind: WindowOccurrenceKind::OneTime,
+            window_index,
+            start,
+            end,
+        };
+        let should_replace = selected
+            .as_ref()
+            .is_none_or(|existing| active_occurrence_is_higher_priority(&candidate, existing));
+        if should_replace {
+            selected = Some(candidate);
+        }
+    }
+
+    selected
+}
+
+pub fn next_one_time_occurrence_after(
+    now: DateTime<Local>,
+    windows: &[OneTimeWindow],
+) -> Option<WindowOccurrence> {
+    let mut selected: Option<WindowOccurrence> = None;
+
+    for (window_index, window) in windows.iter().enumerate() {
+        let Some(start) = local_datetime_on(window.date, window.start_minutes) else {
+            continue;
+        };
+        if start <= now {
+            continue;
+        }
+        let Some(end) = local_datetime_on(window.date, window.end_minutes) else {
+            continue;
+        };
+        let candidate = WindowOccurrence {
+            kind: WindowOccurrenceKind::OneTime,
+            window_index,
+            start,
+            end,
+        };
+        let should_replace = selected
+            .as_ref()
+            .is_none_or(|existing| next_occurrence_is_higher_priority(&candidate, existing));
+        if should_replace {
+            selected = Some(candidate);
+        }
+    }
+
+    selected
+}
+
+pub fn pick_active_occurrence(
+    first: Option<WindowOccurrence>,
+    second: Option<WindowOccurrence>,
+) -> Option<WindowOccurrence> {
+    match (first, second) {
+        (Some(first), Some(second)) => {
+            if active_occurrence_is_higher_priority(&first, &second) {
+                Some(first)
+            } else {
+                Some(second)
+            }
+        }
+        (Some(first), None) => Some(first),
+        (None, Some(second)) => Some(second),
+        (None, None) => None,
+    }
+}
+
+pub fn pick_next_occurrence(
+    first: Option<WindowOccurrence>,
+    second: Option<WindowOccurrence>,
+) -> Option<WindowOccurrence> {
+    match (first, second) {
+        (Some(first), Some(second)) => {
+            if next_occurrence_is_higher_priority(&first, &second) {
+                Some(first)
+            } else {
+                Some(second)
+            }
+        }
+        (Some(first), None) => Some(first),
+        (None, Some(second)) => Some(second),
+        (None, None) => None,
+    }
 }
 
 impl RecurringWindow {
@@ -148,6 +286,22 @@ impl RecurringWindow {
         }
         Some(Self {
             days,
+            start_minutes,
+            end_minutes,
+        })
+    }
+}
+
+impl OneTimeWindow {
+    fn from_config(config: &OneTimeFocusWindowConfig) -> Option<Self> {
+        let date = parse_exception_date(&config.date)?;
+        let start_minutes = parse_time_minutes(&config.start)?;
+        let end_minutes = parse_time_minutes(&config.end)?;
+        if start_minutes >= end_minutes {
+            return None;
+        }
+        Some(Self {
+            date,
             start_minutes,
             end_minutes,
         })
@@ -198,20 +352,27 @@ fn parse_exception_date(raw: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d").ok()
 }
 
-fn active_candidate_is_higher_priority(
+fn active_occurrence_is_higher_priority(
     candidate: &WindowOccurrence,
     existing: &WindowOccurrence,
 ) -> bool {
     candidate.start > existing.start
-        || (candidate.start == existing.start && candidate.window_index < existing.window_index)
+        || (candidate.start == existing.start && occurrence_tie_break(candidate, existing))
 }
 
-fn next_candidate_is_higher_priority(
+fn next_occurrence_is_higher_priority(
     candidate: &WindowOccurrence,
     existing: &WindowOccurrence,
 ) -> bool {
     candidate.start < existing.start
-        || (candidate.start == existing.start && candidate.window_index < existing.window_index)
+        || (candidate.start == existing.start && occurrence_tie_break(candidate, existing))
+}
+
+fn occurrence_tie_break(candidate: &WindowOccurrence, existing: &WindowOccurrence) -> bool {
+    if candidate.kind != existing.kind {
+        return candidate.kind == WindowOccurrenceKind::OneTime;
+    }
+    candidate.window_index < existing.window_index
 }
 
 fn local_datetime_on(date: NaiveDate, total_minutes: u16) -> Option<DateTime<Local>> {
@@ -262,6 +423,35 @@ mod tests {
     }
 
     #[test]
+    fn compile_one_time_windows_ignores_invalid_entries() {
+        let windows = vec![
+            OneTimeFocusWindowConfig {
+                date: "2026-04-27".to_string(),
+                start: "10:00".to_string(),
+                end: "11:00".to_string(),
+            },
+            OneTimeFocusWindowConfig {
+                date: "not-a-date".to_string(),
+                start: "10:00".to_string(),
+                end: "11:00".to_string(),
+            },
+            OneTimeFocusWindowConfig {
+                date: "2026-04-27".to_string(),
+                start: "12:00".to_string(),
+                end: "11:00".to_string(),
+            },
+        ];
+
+        let compiled = compile_one_time_windows(&windows);
+
+        assert_eq!(compiled.len(), 1);
+        assert_eq!(
+            compiled[0].date,
+            NaiveDate::from_ymd_opt(2026, 4, 27).expect("valid date literal")
+        );
+    }
+
+    #[test]
     fn compile_exception_dates_ignores_invalid_and_deduplicates() {
         let dates = compile_exception_dates(&[
             " 2026-12-25 ".to_string(),
@@ -289,6 +479,25 @@ mod tests {
         let active =
             active_occurrence(now, &windows, &HashSet::new()).expect("window should be active");
 
+        assert_eq!(active.kind, WindowOccurrenceKind::Recurring);
+        assert_eq!(active.start, local_datetime(date, 10, 0));
+        assert_eq!(active.end, local_datetime(date, 11, 0));
+    }
+
+    #[test]
+    fn active_one_time_occurrence_returns_window_when_inside_range() {
+        let date = Local::now().date_naive();
+        let now = local_datetime(date, 10, 15);
+        let windows = compile_one_time_windows(&[OneTimeFocusWindowConfig {
+            date: date.format("%Y-%m-%d").to_string(),
+            start: "10:00".to_string(),
+            end: "11:00".to_string(),
+        }]);
+
+        let active =
+            active_one_time_occurrence(now, &windows).expect("one-time window should be active");
+
+        assert_eq!(active.kind, WindowOccurrenceKind::OneTime);
         assert_eq!(active.start, local_datetime(date, 10, 0));
         assert_eq!(active.end, local_datetime(date, 11, 0));
     }
@@ -437,5 +646,49 @@ mod tests {
 
         assert_eq!(next.start, local_datetime(following_week, 11, 0));
         assert_eq!(next.end, local_datetime(following_week, 12, 0));
+    }
+
+    #[test]
+    fn pick_active_occurrence_prefers_one_time_on_equal_start() {
+        let date = Local::now().date_naive();
+        let recurring = WindowOccurrence {
+            kind: WindowOccurrenceKind::Recurring,
+            window_index: 0,
+            start: local_datetime(date, 10, 0),
+            end: local_datetime(date, 11, 0),
+        };
+        let one_time = WindowOccurrence {
+            kind: WindowOccurrenceKind::OneTime,
+            window_index: 0,
+            start: local_datetime(date, 10, 0),
+            end: local_datetime(date, 10, 30),
+        };
+
+        let selected = pick_active_occurrence(Some(recurring), Some(one_time))
+            .expect("one occurrence should be selected");
+
+        assert_eq!(selected.kind, WindowOccurrenceKind::OneTime);
+    }
+
+    #[test]
+    fn pick_next_occurrence_prefers_earlier_start() {
+        let date = Local::now().date_naive();
+        let recurring = WindowOccurrence {
+            kind: WindowOccurrenceKind::Recurring,
+            window_index: 0,
+            start: local_datetime(date, 11, 0),
+            end: local_datetime(date, 12, 0),
+        };
+        let one_time = WindowOccurrence {
+            kind: WindowOccurrenceKind::OneTime,
+            window_index: 0,
+            start: local_datetime(date, 10, 0),
+            end: local_datetime(date, 10, 30),
+        };
+
+        let selected = pick_next_occurrence(Some(recurring), Some(one_time))
+            .expect("one occurrence should be selected");
+
+        assert_eq!(selected.kind, WindowOccurrenceKind::OneTime);
     }
 }
