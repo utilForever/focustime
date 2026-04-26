@@ -200,7 +200,7 @@ impl Default for RecurringFocusWindowConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OneTimeFocusWindowConfig {
-    #[serde(default = "default_one_time_schedule_date")]
+    #[serde(default)]
     pub date: String,
     #[serde(default = "default_schedule_window_start")]
     pub start: String,
@@ -212,8 +212,8 @@ impl OneTimeFocusWindowConfig {
     pub fn normalized(&self) -> Self {
         Self {
             date: self.date.trim().to_string(),
-            start: normalize_schedule_time_or_default(&self.start, default_schedule_window_start),
-            end: normalize_schedule_time_or_default(&self.end, default_schedule_window_end),
+            start: self.start.trim().to_string(),
+            end: self.end.trim().to_string(),
         }
     }
 }
@@ -969,6 +969,20 @@ date = "2026-04-27"
     }
 
     #[test]
+    fn normalize_drops_one_time_window_without_date_in_config() {
+        let partial = r#"
+[recurring_schedule]
+[[recurring_schedule.one_time_windows]]
+start = "09:00"
+end = "10:00"
+"#;
+        let cfg: AppConfig = toml::from_str(partial).unwrap();
+        let normalized = cfg.normalize();
+
+        assert!(normalized.recurring_schedule.one_time_windows.is_empty());
+    }
+
+    #[test]
     fn normalize_drops_recurring_windows_with_invalid_time_ranges() {
         let cfg = AppConfig {
             recurring_schedule: RecurringScheduleConfig {
@@ -1041,6 +1055,16 @@ date = "2026-04-27"
                         date: "2026-04-28".to_string(),
                         start: "12:00".to_string(),
                         end: "11:00".to_string(),
+                    },
+                    OneTimeFocusWindowConfig {
+                        date: "2026-04-29".to_string(),
+                        start: "25:00".to_string(),
+                        end: "26:00".to_string(),
+                    },
+                    OneTimeFocusWindowConfig {
+                        date: String::new(),
+                        start: "09:00".to_string(),
+                        end: "10:00".to_string(),
                     },
                 ],
             },
