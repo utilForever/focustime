@@ -95,6 +95,9 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload.get("day").is_some());
     assert!(payload.get("focus_intention").is_some());
     assert!(payload.get("task_note").is_some());
+    assert!(payload.get("goal").is_some());
+    assert!(payload.get("weekly_goal").is_some());
+    assert!(payload.get("monthly_goal").is_some());
     assert!(payload.get("live").is_some());
     assert!(payload["live"].get("focus_intention").is_some());
     assert!(payload["live"].get("task_note").is_some());
