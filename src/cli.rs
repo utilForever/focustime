@@ -1881,19 +1881,24 @@ fn execute_task_goal_command(
         requested_label
     };
 
-    let progress = stats
-        .task_goal_progress_for_label(&task_label)
-        .ok_or_else(|| "Task goal lookup failed: invalid task label.".to_string())?;
-    let focused_minutes = progress.focused_minutes();
+    let TaskGoalOutput {
+        task_label,
+        configured,
+        minutes_target,
+        pomodoros_target,
+        focused_minutes,
+        pomodoros_completed,
+        met,
+    } = build_task_goal_output(&stats, &task_label);
     let payload = TaskGoalCommandOutput {
         updated,
-        task_label: progress.task_label,
-        configured: progress.target.has_any_target(),
-        minutes_target: progress.target.minutes,
-        pomodoros_target: progress.target.pomodoros,
+        task_label,
+        configured,
+        minutes_target,
+        pomodoros_target,
         focused_minutes,
-        pomodoros_completed: progress.pomodoros_completed,
-        met: progress.met,
+        pomodoros_completed,
+        met,
     };
 
     match output {
@@ -2742,20 +2747,9 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let goal_snapshot = effective_daily_goal_snapshot_for_day(config, stats, day_date);
     let weekly_goal_snapshot = effective_weekly_goal_snapshot(config, stats, day_date);
     let monthly_goal_snapshot = effective_monthly_goal_snapshot(config, stats, day_date);
-    let selected_task_goal = selected_task_label.as_ref().and_then(|label| {
-        stats.task_goal_progress_for_label(label).map(|progress| {
-            let focused_minutes = progress.focused_minutes();
-            TaskGoalOutput {
-                task_label: progress.task_label,
-                configured: progress.target.has_any_target(),
-                minutes_target: progress.target.minutes,
-                pomodoros_target: progress.target.pomodoros,
-                focused_minutes,
-                pomodoros_completed: progress.pomodoros_completed,
-                met: progress.met,
-            }
-        })
-    });
+    let selected_task_goal = selected_task_label
+        .as_ref()
+        .map(|label| build_task_goal_output(stats, label));
     let active_sites_count = config
         .blocklist_profiles
         .iter()
@@ -2835,6 +2829,32 @@ fn effective_daily_goal_snapshot_for_day(
         })
     });
     carry_over_goal_target(base, config.goal_carry_over.daily, previous)
+}
+
+fn build_task_goal_output(stats: &FocusStats, label: &str) -> TaskGoalOutput {
+    match stats.task_goal_progress_for_label(label) {
+        Some(progress) => {
+            let focused_minutes = progress.focused_minutes();
+            TaskGoalOutput {
+                task_label: progress.task_label,
+                configured: progress.target.has_any_target(),
+                minutes_target: progress.target.minutes,
+                pomodoros_target: progress.target.pomodoros,
+                focused_minutes,
+                pomodoros_completed: progress.pomodoros_completed,
+                met: progress.met,
+            }
+        }
+        None => TaskGoalOutput {
+            task_label: label.to_string(),
+            configured: false,
+            minutes_target: 0,
+            pomodoros_target: 0,
+            focused_minutes: 0,
+            pomodoros_completed: 0,
+            met: false,
+        },
+    }
 }
 
 fn effective_weekly_goal_snapshot(
@@ -5359,6 +5379,28 @@ mod tests {
         assert_eq!(output.goal.minutes_target, 30);
         assert_eq!(output.goal.pomodoros_target, 1);
         assert!(output.goal.met);
+    }
+
+    #[test]
+    fn build_status_output_includes_unconfigured_selected_task_goal() {
+        let mut stats = FocusStats::default();
+        let changed =
+            stats.update_task_planner_state(vec!["Docs".to_string()], Some("Docs".to_string()));
+        assert!(changed);
+        let config = AppConfig::default();
+
+        let output = build_status_output(&config, &stats);
+        let selected_task_goal = output
+            .selected_task_goal
+            .expect("selected task goal should exist when a task is selected");
+
+        assert_eq!(selected_task_goal.task_label, "Docs");
+        assert!(!selected_task_goal.configured);
+        assert_eq!(selected_task_goal.minutes_target, 0);
+        assert_eq!(selected_task_goal.pomodoros_target, 0);
+        assert_eq!(selected_task_goal.focused_minutes, 0);
+        assert_eq!(selected_task_goal.pomodoros_completed, 0);
+        assert!(!selected_task_goal.met);
     }
 
     #[test]

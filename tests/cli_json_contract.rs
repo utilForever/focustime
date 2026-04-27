@@ -139,6 +139,29 @@ fn task_goal_json_sets_and_reads_per_task_target() {
 }
 
 #[test]
+fn task_goal_json_reads_unconfigured_selected_task_goal() {
+    let env = TestEnv::new("task-goal-json-unconfigured");
+
+    let select_output = env.run(&["--task", "Docs", "--json"]);
+    assert_eq!(select_output.status.code(), Some(0));
+    assert!(stderr_text(&select_output).trim().is_empty());
+
+    let read_output = env.run(&["--task-goal", "Docs", "--json"]);
+    assert_eq!(read_output.status.code(), Some(0));
+    assert!(stderr_text(&read_output).trim().is_empty());
+    let read_payload: Value =
+        serde_json::from_slice(&read_output.stdout).expect("stdout should be JSON");
+    assert_eq!(read_payload["updated"], false);
+    assert_eq!(read_payload["task_label"], "Docs");
+    assert_eq!(read_payload["configured"], false);
+    assert_eq!(read_payload["minutes_target"], 0);
+    assert_eq!(read_payload["pomodoros_target"], 0);
+    assert_eq!(read_payload["focused_minutes"], 0);
+    assert_eq!(read_payload["pomodoros_completed"], 0);
+    assert_eq!(read_payload["met"], false);
+}
+
+#[test]
 fn status_watch_json_streams_multiple_snapshots() {
     let env = TestEnv::new("status-watch-json");
     let output = env.run_watch(
