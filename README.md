@@ -157,7 +157,7 @@ cargo run -- --diagnostics --json
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
 
-# Show status (text or JSON, including live timer/session fields and selected task-goal progress in JSON)
+# Show status (text or JSON, including live timer/session fields and `selected_task_goal` in JSON)
 cargo run -- --status
 cargo run -- --status --json
 
