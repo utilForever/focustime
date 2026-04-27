@@ -759,14 +759,6 @@ impl FocusStats {
         totals
     }
 
-    pub fn weekly_for_day_if_present(&self, day: chrono::NaiveDate) -> Option<WeeklyStats> {
-        let week = self.weekly_for_day(day);
-        (week.focused_seconds > 0
-            || week.pomodoros_completed > 0
-            || self.weekly_goal_snapshot_for_day(day).is_some())
-        .then_some(week)
-    }
-
     pub fn monthly_for_day(&self, day: chrono::NaiveDate) -> MonthlyStats {
         let mut totals = MonthlyStats {
             year: day.year(),
@@ -786,14 +778,6 @@ impl FocusStats {
             totals.focused_seconds = totals.focused_seconds.saturating_add(stats.focused_seconds);
         }
         totals
-    }
-
-    pub fn monthly_for_day_if_present(&self, day: chrono::NaiveDate) -> Option<MonthlyStats> {
-        let month = self.monthly_for_day(day);
-        (month.focused_seconds > 0
-            || month.pomodoros_completed > 0
-            || self.monthly_goal_snapshot_for_day(day).is_some())
-        .then_some(month)
     }
 
     pub fn weekly_goal_snapshot_for_day(&self, day: chrono::NaiveDate) -> Option<DailyGoalSnapshot> {

@@ -2689,8 +2689,15 @@ fn effective_weekly_goal_snapshot(
         day.checked_sub_signed(chrono::Duration::weeks(1))
             .and_then(|previous_week_day| {
                 stats
-                    .weekly_for_day_if_present(previous_week_day)
-                    .map(|week| (base, week.focused_minutes(), week.pomodoros_completed))
+                    .weekly_goal_snapshot_for_day(previous_week_day)
+                    .map(|previous_target| {
+                        let week = stats.weekly_for_day(previous_week_day);
+                        (
+                            previous_target,
+                            week.focused_minutes(),
+                            week.pomodoros_completed,
+                        )
+                    })
             });
     carry_over_goal_target(base, config.goal_carry_over.weekly, previous)
 }
@@ -2706,8 +2713,15 @@ fn effective_monthly_goal_snapshot(
     };
     let previous = previous_month_reference_day(day).and_then(|previous_month_day| {
         stats
-            .monthly_for_day_if_present(previous_month_day)
-            .map(|month| (base, month.focused_minutes(), month.pomodoros_completed))
+            .monthly_goal_snapshot_for_day(previous_month_day)
+            .map(|previous_target| {
+                let month = stats.monthly_for_day(previous_month_day);
+                (
+                    previous_target,
+                    month.focused_minutes(),
+                    month.pomodoros_completed,
+                )
+            })
     });
     carry_over_goal_target(base, config.goal_carry_over.monthly, previous)
 }
@@ -5039,13 +5053,20 @@ mod tests {
         assert_eq!(output.goal.pomodoros_target, 4);
         assert!(output.goal.carry_over);
 
+        stats.sync_monthly_goal_snapshot(
+            previous_month_day,
+            DailyGoalSnapshot {
+                minutes: 200,
+                pomodoros: 6,
+            },
+        );
         stats.record_focus_elapsed(&previous_month_key, 120 * 60, base_daily_goal);
         for _ in 0..4 {
             stats.record_completed_pomodoro(&previous_month_key, base_daily_goal);
         }
         let output = build_status_output(&config, &stats);
-        assert_eq!(output.monthly_goal.minutes_target, 480);
-        assert_eq!(output.monthly_goal.pomodoros_target, 16);
+        assert_eq!(output.monthly_goal.minutes_target, 380);
+        assert_eq!(output.monthly_goal.pomodoros_target, 12);
         assert!(output.monthly_goal.carry_over);
     }
 
@@ -5150,7 +5171,14 @@ mod tests {
             minutes: 60,
             pomodoros: 2,
         };
-        stats.record_focus_elapsed(&previous_week_key, 70 * 60, goal);
+        stats.sync_weekly_goal_snapshot(
+            previous_week_day,
+            DailyGoalSnapshot {
+                minutes: 50,
+                pomodoros: 2,
+            },
+        );
+        stats.record_focus_elapsed(&previous_week_key, 20 * 60, goal);
         stats.record_completed_pomodoro(&previous_week_key, goal);
         stats.record_focus_elapsed(&today, 40 * 60, goal);
         stats.record_completed_pomodoro(&today, goal);
@@ -5169,8 +5197,85 @@ mod tests {
 
         let output = build_status_output(&config, &stats);
         assert_eq!(output.weekly_goal.minutes_target, 130);
-        assert_eq!(output.weekly_goal.pomodoros_target, 5);
+        assert_eq!(output.weekly_goal.pomodoros_target, 4);
         assert!(output.weekly_goal.carry_over);
+    }
+
+    #[test]
+    fn build_status_output_weekly_carry_over_skips_when_previous_period_has_no_snapshot() {
+        let mut stats = FocusStats::default();
+        let today = current_day_key();
+        let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse as a date");
+        let previous_week_day = today_date - Duration::days(7);
+        let previous_week_key = previous_week_day.format("%Y-%m-%d").to_string();
+        let goal = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        };
+        stats.record_focus_elapsed(&previous_week_key, 70 * 60, goal);
+        stats.record_completed_pomodoro(&previous_week_key, goal);
+
+        let config = AppConfig {
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 100,
+                pomodoros: 3,
+            },
+            goal_carry_over: crate::config::GoalCarryOverConfig {
+                weekly: true,
+                ..crate::config::GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+
+        let output = build_status_output(&config, &stats);
+        assert_eq!(output.weekly_goal.minutes_target, 100);
+        assert_eq!(output.weekly_goal.pomodoros_target, 3);
+    }
+
+    #[test]
+    fn build_status_output_monthly_carry_over_uses_previous_snapshot_after_goal_change() {
+        let mut stats = FocusStats::default();
+        let today = current_day_key();
+        let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse as a date");
+        let month_start = NaiveDate::from_ymd_opt(today_date.year(), today_date.month(), 1)
+            .expect("month start should be representable");
+        let previous_month_day = month_start
+            .pred_opt()
+            .expect("previous month day should be representable");
+        let previous_month_key = previous_month_day.format("%Y-%m-%d").to_string();
+        let goal = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        };
+        stats.sync_monthly_goal_snapshot(
+            previous_month_day,
+            DailyGoalSnapshot {
+                minutes: 200,
+                pomodoros: 6,
+            },
+        );
+        stats.record_focus_elapsed(&previous_month_key, 120 * 60, goal);
+        for _ in 0..4 {
+            stats.record_completed_pomodoro(&previous_month_key, goal);
+        }
+
+        let config = AppConfig {
+            monthly_goal: MonthlyGoalConfig {
+                minutes: 300,
+                pomodoros: 10,
+            },
+            goal_carry_over: crate::config::GoalCarryOverConfig {
+                monthly: true,
+                ..crate::config::GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+
+        let output = build_status_output(&config, &stats);
+        assert_eq!(output.monthly_goal.minutes_target, 380);
+        assert_eq!(output.monthly_goal.pomodoros_target, 12);
     }
 
     #[test]
