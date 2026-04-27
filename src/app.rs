@@ -607,6 +607,7 @@ impl App {
         app.sync_recovery_snapshot();
         app.apply_blocking_for_phase();
         app.refresh_setup_diagnostics();
+        app.sync_today_goal_snapshot();
         app
     }
 
@@ -3542,7 +3543,7 @@ impl App {
         }
 
         let day_key = current_day_key();
-        let goal_snapshot = self.today_goal_snapshot();
+        let goal_snapshot = self.current_goal_snapshot();
         let session_minutes_before = self.stats.session().focused_minutes();
         let today_minutes_before = self.stats.daily_for(&day_key).focused_minutes();
 
@@ -3561,7 +3562,7 @@ impl App {
 
     fn record_completed_focus_session(&mut self, focused_seconds: u64) {
         let day_key = current_day_key();
-        let goal = self.today_goal_snapshot();
+        let goal = self.current_goal_snapshot();
         if let Some(active_task_label) = self.active_focus_task_label.clone() {
             let focus_intention = self
                 .active_focus_intention
@@ -3595,6 +3596,20 @@ impl App {
         }
     }
 
+    fn current_week_goal_snapshot(&self) -> DailyGoalSnapshot {
+        DailyGoalSnapshot {
+            minutes: self.weekly_goal.minutes,
+            pomodoros: self.weekly_goal.pomodoros,
+        }
+    }
+
+    fn current_month_goal_snapshot(&self) -> DailyGoalSnapshot {
+        DailyGoalSnapshot {
+            minutes: self.monthly_goal.minutes,
+            pomodoros: self.monthly_goal.pomodoros,
+        }
+    }
+
     fn today_goal_snapshot(&self) -> DailyGoalSnapshot {
         self.effective_daily_goal_snapshot_for_day(Local::now().date_naive())
     }
@@ -3603,12 +3618,10 @@ impl App {
         let base = self.current_goal_snapshot();
         let previous = day.pred_opt().and_then(|previous_day| {
             let day_key = previous_day.format("%Y-%m-%d").to_string();
-            self.stats.daily_entry(&day_key).map(|stats| {
-                (
-                    stats.goal.unwrap_or(base),
-                    stats.focused_minutes(),
-                    stats.pomodoros_completed,
-                )
+            self.stats.daily_entry(&day_key).and_then(|stats| {
+                stats
+                    .goal
+                    .map(|goal| (goal, stats.focused_minutes(), stats.pomodoros_completed))
             })
         });
         carry_over_goal_target(base, self.goal_carry_over.daily, previous)
@@ -3623,8 +3636,15 @@ impl App {
             day.checked_sub_signed(chrono::Duration::weeks(1))
                 .and_then(|previous_week_day| {
                     self.stats
-                        .weekly_for_day_if_present(previous_week_day)
-                        .map(|week| (base, week.focused_minutes(), week.pomodoros_completed))
+                        .weekly_goal_snapshot_for_day(previous_week_day)
+                        .map(|previous_target| {
+                            let week = self.stats.weekly_for_day(previous_week_day);
+                            (
+                                previous_target,
+                                week.focused_minutes(),
+                                week.pomodoros_completed,
+                            )
+                        })
                 });
         carry_over_goal_target(base, self.goal_carry_over.weekly, previous)
     }
@@ -3636,18 +3656,32 @@ impl App {
         };
         let previous = previous_month_reference_day(day).and_then(|previous_month_day| {
             self.stats
-                .monthly_for_day_if_present(previous_month_day)
-                .map(|month| (base, month.focused_minutes(), month.pomodoros_completed))
+                .monthly_goal_snapshot_for_day(previous_month_day)
+                .map(|previous_target| {
+                    let month = self.stats.monthly_for_day(previous_month_day);
+                    (
+                        previous_target,
+                        month.focused_minutes(),
+                        month.pomodoros_completed,
+                    )
+                })
         });
         carry_over_goal_target(base, self.goal_carry_over.monthly, previous)
     }
 
     fn sync_today_goal_snapshot(&mut self) {
+        let today = Local::now().date_naive();
         let day_key = current_day_key();
-        if self
+        let daily_changed = self
             .stats
-            .sync_goal_snapshot(&day_key, self.today_goal_snapshot())
-        {
+            .sync_goal_snapshot(&day_key, self.current_goal_snapshot());
+        let weekly_changed = self
+            .stats
+            .sync_weekly_goal_snapshot(today, self.current_week_goal_snapshot());
+        let monthly_changed = self
+            .stats
+            .sync_monthly_goal_snapshot(today, self.current_month_goal_snapshot());
+        if daily_changed || weekly_changed || monthly_changed {
             self.stats_dirty = true;
             self.flush_stats_if_dirty(false);
         }
@@ -5414,9 +5448,16 @@ mod tests {
         let previous_week_day = today_date - chrono::Duration::days(7);
         let previous_week_key = previous_week_day.format("%Y-%m-%d").to_string();
         let goal = app.current_goal_snapshot();
+        app.stats.sync_weekly_goal_snapshot(
+            previous_week_day,
+            DailyGoalSnapshot {
+                minutes: 50,
+                pomodoros: 2,
+            },
+        );
 
         app.stats
-            .record_focus_elapsed(&previous_week_key, 70 * 60, goal);
+            .record_focus_elapsed(&previous_week_key, 20 * 60, goal);
         app.stats
             .record_completed_pomodoro(&previous_week_key, goal);
         app.stats.record_focus_elapsed(&today, 20 * 60, goal);
@@ -5424,7 +5465,7 @@ mod tests {
 
         let weekly = app.current_week_goal_progress();
         assert_eq!(weekly.minutes.target, 130);
-        assert_eq!(weekly.pomodoros.target, 5);
+        assert_eq!(weekly.pomodoros.target, 4);
         assert_eq!(weekly.minutes.completed, 20);
         assert_eq!(weekly.pomodoros.completed, 1);
     }
@@ -5453,6 +5494,13 @@ mod tests {
             .expect("previous month day should be representable");
         let previous_month_key = previous_month_day.format("%Y-%m-%d").to_string();
         let goal = app.current_goal_snapshot();
+        app.stats.sync_monthly_goal_snapshot(
+            previous_month_day,
+            DailyGoalSnapshot {
+                minutes: 200,
+                pomodoros: 6,
+            },
+        );
 
         app.stats
             .record_focus_elapsed(&previous_month_key, 120 * 60, goal);
@@ -5464,10 +5512,83 @@ mod tests {
         app.stats.record_completed_pomodoro(&today, goal);
 
         let monthly = app.current_month_goal_progress();
-        assert_eq!(monthly.minutes.target, 480);
-        assert_eq!(monthly.pomodoros.target, 16);
+        assert_eq!(monthly.minutes.target, 380);
+        assert_eq!(monthly.pomodoros.target, 12);
         assert_eq!(monthly.minutes.completed, 20);
         assert_eq!(monthly.pomodoros.completed, 1);
+    }
+
+    #[test]
+    fn weekly_goal_progress_carries_full_previous_week_when_snapshot_exists_without_activity() {
+        let config = AppConfig {
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 100,
+                pomodoros: 3,
+            },
+            goal_carry_over: GoalCarryOverConfig {
+                weekly: true,
+                ..GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let today = current_day_key();
+        let today_date = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse");
+        let previous_week_day = today_date - chrono::Duration::days(7);
+        let goal = app.current_goal_snapshot();
+        app.stats.sync_weekly_goal_snapshot(
+            previous_week_day,
+            DailyGoalSnapshot {
+                minutes: 40,
+                pomodoros: 2,
+            },
+        );
+        app.stats.record_focus_elapsed(&today, 20 * 60, goal);
+        app.stats.record_completed_pomodoro(&today, goal);
+
+        let weekly = app.current_week_goal_progress();
+        assert_eq!(weekly.minutes.target, 140);
+        assert_eq!(weekly.pomodoros.target, 5);
+        assert_eq!(weekly.minutes.completed, 20);
+        assert_eq!(weekly.pomodoros.completed, 1);
+    }
+
+    #[test]
+    fn record_focus_elapsed_persists_base_daily_goal_snapshot_when_carry_over_is_enabled() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 2,
+            },
+            goal_carry_over: GoalCarryOverConfig {
+                daily: true,
+                ..GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let today = chrono::Local::now().date_naive();
+        let yesterday = today.pred_opt().expect("yesterday should exist");
+        let yesterday_key = yesterday.format("%Y-%m-%d").to_string();
+        let previous_target = DailyGoalSnapshot {
+            minutes: 50,
+            pomodoros: 3,
+        };
+        app.stats
+            .record_focus_elapsed(&yesterday_key, 30 * 60, previous_target);
+        app.stats
+            .record_completed_pomodoro(&yesterday_key, previous_target);
+
+        app.record_focus_elapsed(60);
+
+        assert_eq!(
+            app.today_stats().goal,
+            Some(DailyGoalSnapshot {
+                minutes: 60,
+                pomodoros: 2,
+            })
+        );
     }
 
     #[test]

@@ -459,6 +459,10 @@ struct PersistedStats {
     #[serde(default)]
     daily: BTreeMap<String, DailyStats>,
     #[serde(default)]
+    weekly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
+    #[serde(default)]
+    monthly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
+    #[serde(default)]
     task_labels: Vec<String>,
     #[serde(default)]
     selected_task_label: Option<String>,
@@ -472,6 +476,8 @@ struct PersistedStats {
 pub struct FocusStats {
     session: SessionStats,
     daily: BTreeMap<String, DailyStats>,
+    weekly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
+    monthly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
     task_labels: Vec<String>,
     selected_task_label: Option<String>,
     focus_sessions: Vec<FocusSessionRecord>,
@@ -543,6 +549,8 @@ impl FocusStats {
         Self {
             session: SessionStats::default(),
             daily: persisted.daily,
+            weekly_goal_snapshots: persisted.weekly_goal_snapshots,
+            monthly_goal_snapshots: persisted.monthly_goal_snapshots,
             task_labels,
             selected_task_label,
             focus_sessions,
@@ -553,6 +561,8 @@ impl FocusStats {
     fn to_persisted(&self) -> PersistedStats {
         PersistedStats {
             daily: self.daily.clone(),
+            weekly_goal_snapshots: self.weekly_goal_snapshots.clone(),
+            monthly_goal_snapshots: self.monthly_goal_snapshots.clone(),
             task_labels: self.task_labels.clone(),
             selected_task_label: self.selected_task_label.clone(),
             focus_sessions: self.focus_sessions.clone(),
@@ -688,6 +698,32 @@ impl FocusStats {
         true
     }
 
+    pub fn sync_weekly_goal_snapshot(
+        &mut self,
+        day: chrono::NaiveDate,
+        goal: DailyGoalSnapshot,
+    ) -> bool {
+        let key = week_key_for_day(day);
+        if self.weekly_goal_snapshots.get(&key) == Some(&goal) {
+            return false;
+        }
+        self.weekly_goal_snapshots.insert(key, goal);
+        true
+    }
+
+    pub fn sync_monthly_goal_snapshot(
+        &mut self,
+        day: chrono::NaiveDate,
+        goal: DailyGoalSnapshot,
+    ) -> bool {
+        let key = month_key_for_day(day);
+        if self.monthly_goal_snapshots.get(&key) == Some(&goal) {
+            return false;
+        }
+        self.monthly_goal_snapshots.insert(key, goal);
+        true
+    }
+
     pub fn session(&self) -> SessionStats {
         self.session
     }
@@ -725,7 +761,10 @@ impl FocusStats {
 
     pub fn weekly_for_day_if_present(&self, day: chrono::NaiveDate) -> Option<WeeklyStats> {
         let week = self.weekly_for_day(day);
-        (week.focused_seconds > 0 || week.pomodoros_completed > 0).then_some(week)
+        (week.focused_seconds > 0
+            || week.pomodoros_completed > 0
+            || self.weekly_goal_snapshot_for_day(day).is_some())
+        .then_some(week)
     }
 
     pub fn monthly_for_day(&self, day: chrono::NaiveDate) -> MonthlyStats {
@@ -751,7 +790,23 @@ impl FocusStats {
 
     pub fn monthly_for_day_if_present(&self, day: chrono::NaiveDate) -> Option<MonthlyStats> {
         let month = self.monthly_for_day(day);
-        (month.focused_seconds > 0 || month.pomodoros_completed > 0).then_some(month)
+        (month.focused_seconds > 0
+            || month.pomodoros_completed > 0
+            || self.monthly_goal_snapshot_for_day(day).is_some())
+        .then_some(month)
+    }
+
+    pub fn weekly_goal_snapshot_for_day(&self, day: chrono::NaiveDate) -> Option<DailyGoalSnapshot> {
+        let key = week_key_for_day(day);
+        self.weekly_goal_snapshots.get(&key).copied()
+    }
+
+    pub fn monthly_goal_snapshot_for_day(
+        &self,
+        day: chrono::NaiveDate,
+    ) -> Option<DailyGoalSnapshot> {
+        let key = month_key_for_day(day);
+        self.monthly_goal_snapshots.get(&key).copied()
     }
 
     pub fn task_planner_state(&self) -> (Vec<String>, Option<String>) {
@@ -1685,6 +1740,15 @@ fn consistency_score_from_active_days(active_days: u8) -> u8 {
 
 fn format_week_label(year: i32, week: u32) -> String {
     format!("{year:04}-W{week:02}")
+}
+
+fn week_key_for_day(day: chrono::NaiveDate) -> String {
+    let week = day.iso_week();
+    format_week_label(week.year(), week.week())
+}
+
+fn month_key_for_day(day: chrono::NaiveDate) -> String {
+    format!("{:04}-{:02}", day.year(), day.month())
 }
 
 fn write_atomic_bytes(path: &Path, content: &[u8]) -> io::Result<()> {
