@@ -5614,19 +5614,18 @@ mod tests {
             ..AppConfig::default()
         };
         let mut app = App::from_config(config);
-        let day1 =
-            chrono::NaiveDate::from_ymd_opt(2026, 4, 8).expect("day1 date should be valid");
-        let day2 =
-            chrono::NaiveDate::from_ymd_opt(2026, 4, 9).expect("day2 date should be valid");
-        let day3 =
-            chrono::NaiveDate::from_ymd_opt(2026, 4, 10).expect("day3 date should be valid");
+        let day1 = chrono::NaiveDate::from_ymd_opt(2026, 4, 8).expect("day1 date should be valid");
+        let day2 = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).expect("day2 date should be valid");
+        let day3 = chrono::NaiveDate::from_ymd_opt(2026, 4, 10).expect("day3 date should be valid");
 
         app.sync_goal_snapshot_for_day(day1);
         app.sync_goal_snapshot_for_day(day2);
 
         let day2_key = day2.format("%Y-%m-%d").to_string();
         assert_eq!(
-            app.stats.daily_entry(&day2_key).and_then(|stats| stats.goal),
+            app.stats
+                .daily_entry(&day2_key)
+                .and_then(|stats| stats.goal),
             Some(DailyGoalSnapshot {
                 minutes: 60,
                 pomodoros: 0,
