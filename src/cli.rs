@@ -3043,16 +3043,15 @@ fn parse_profile_id(value: &str) -> Result<ProfileId, String> {
 
 fn parse_task_goal_value(value: &str) -> Result<(String, Option<DailyGoalConfig>), String> {
     let trimmed = value.trim();
-    if let Some((label_raw, goal_raw)) = trimmed.split_once(':') {
-        let label =
-            require_nonempty_key_value(label_raw, "Task goal requires a task label before `:`.")?
-                .to_string();
-        let goal_raw = require_nonempty_key_value(
-            goal_raw,
-            "Task goal requires `MINUTES,POMODOROS` after `:`.",
-        )?;
-        let (minutes, pomodoros) = parse_goal_components(goal_raw, "--task-goal")?;
-        return Ok((label, Some(DailyGoalConfig { minutes, pomodoros })));
+    if let Some((label_raw, goal_raw)) = trimmed.rsplit_once(':') {
+        if let Ok((minutes, pomodoros)) = parse_goal_components(goal_raw, "--task-goal") {
+            let label = require_nonempty_key_value(
+                label_raw,
+                "Task goal requires a task label before `:`.",
+            )?
+            .to_string();
+            return Ok((label, Some(DailyGoalConfig { minutes, pomodoros })));
+        }
     }
 
     let label = require_nonempty_key_value(
@@ -4064,6 +4063,21 @@ mod tests {
                         minutes: 120,
                         pomodoros: 4
                     })
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_task_goal_with_colon_in_label_reads_specific_goal() {
+        let parsed = parse(&["--task-goal", "Docs:API"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::TaskGoal {
+                    label: Some("Docs:API".to_string()),
+                    goal: None
                 },
                 output: OutputMode::Text
             })
