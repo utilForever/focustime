@@ -9,8 +9,8 @@ use ratatui::{
 
 use crate::app::{
     App, AppMode, BlocklistProfileInputMode, DailyGoalProgress, HistoryFeedbackLevel,
-    PLANNER_RECENT_LABEL_LIMIT, PROFILE_EDIT_FIELD_LABELS, PROFILE_IDS, PlannerFeedbackLevel,
-    PlannerInputMode, SetupCheck, SetupCheckLevel, SiteFeedbackLevel, SiteInputMode, SiteListMode,
+    PLANNER_RECENT_LABEL_LIMIT, PROFILE_IDS, PlannerFeedbackLevel, PlannerInputMode, SetupCheck,
+    SetupCheckLevel, SiteFeedbackLevel, SiteInputMode, SiteListMode,
 };
 use crate::blocker::BlockingPreviewAction;
 use crate::timer::{TimerPhase, TimerStatus};
@@ -44,7 +44,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 fn render_timer(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
-    let outer = centered_rect(88, 90, area);
+    let outer = centered_rect(90, 90, area);
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" focustime ")
@@ -56,10 +56,10 @@ fn render_timer(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(2), // phase + pomodoro count
+            Constraint::Length(1), // phase + pomodoro count
             Constraint::Min(10),   // body
             Constraint::Length(1), // latest phase notification
-            Constraint::Length(4), // key hints
+            Constraint::Length(3), // key hints
         ])
         .split(outer);
 
@@ -67,7 +67,7 @@ fn render_timer(frame: &mut Frame, app: &App) {
 
     let body = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
+        .constraints([Constraint::Percentage(44), Constraint::Percentage(56)])
         .split(inner[1]);
     render_timer_focus_panel(frame, app, body[0]);
     render_timer_session_panel(frame, app, body[1]);
@@ -155,9 +155,7 @@ fn render_timer_progress_bar(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" 🧭 Session Overview ");
+    let block = Block::default().borders(Borders::ALL).title(" 🧭 Session ");
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -179,28 +177,39 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
         )
     };
     let (stats_text, stats_style) = timer_stats_line(app);
-    let goal_line = format!("🔥 {}", format_timer_goal_streak_line(app));
+    let goal_text = readable_goal_streak_text(&format_timer_goal_streak_line(app));
     let (waka_text, waka_color) = wakatime_status_line(app);
     let (schedule_next_text, schedule_status_text) = app.recurring_schedule_display_texts();
+    let strict_and_break_glass = format!("{strict_status_text} · {break_glass_status_text}");
 
-    let lines = vec![
-        Line::from(""),
+    let mut lines = vec![
+        Line::styled(task_text, task_style),
         Line::styled(status_text, Style::default().fg(Color::Gray)),
-        Line::styled(strict_status_text, Style::default().fg(Color::DarkGray)),
-        Line::styled(
-            break_glass_status_text,
-            Style::default().fg(Color::DarkGray),
-        ),
+        Line::styled(profile_line, Style::default().fg(Color::DarkGray)),
         Line::styled(schedule_next_text, Style::default().fg(Color::DarkGray)),
         Line::styled(schedule_status_text, Style::default().fg(Color::DarkGray)),
-        Line::from(""),
-        Line::styled(profile_line, Style::default().fg(Color::DarkGray)),
-        Line::styled(task_text, task_style),
-        Line::from(""),
         Line::styled(format!("📈 {stats_text}"), stats_style),
-        Line::styled(goal_line, Style::default().fg(Color::DarkGray)),
-        Line::styled(waka_text, Style::default().fg(waka_color)),
     ];
+    if let Some((goals, streak)) = goal_text.split_once(" | Streak: ") {
+        lines.push(Line::styled(
+            format!("🔥 {goals}"),
+            Style::default().fg(Color::DarkGray),
+        ));
+        lines.push(Line::styled(
+            format!("🔥 Streak: {streak}"),
+            Style::default().fg(Color::DarkGray),
+        ));
+    } else {
+        lines.push(Line::styled(
+            format!("🔥 {goal_text}"),
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
+    lines.push(Line::styled(waka_text, Style::default().fg(waka_color)));
+    lines.push(Line::styled(
+        strict_and_break_glass,
+        Style::default().fg(Color::DarkGray),
+    ));
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
@@ -338,48 +347,58 @@ fn format_duration_label(duration_secs: u64) -> String {
 }
 
 fn render_timer_hints(frame: &mut Frame, app: &App, area: Rect) {
-    let hints_widget = Paragraph::new(vec![
-        Line::from(timer_primary_hint(app)),
-        Line::from(timer_secondary_hint(app)),
-        Line::from(timer_tertiary_hint(app)),
-    ])
-    .alignment(Alignment::Center)
-    .style(Style::default().fg(Color::DarkGray))
-    .wrap(Wrap { trim: true });
-    frame.render_widget(hints_widget, area);
+    render_hint_lines(
+        frame,
+        area,
+        vec![
+            Line::from(timer_primary_hint(app)),
+            Line::from(timer_secondary_hint(app)),
+            Line::from(timer_tertiary_hint(app)),
+        ],
+    );
+}
+
+fn render_hint_lines(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>) {
+    frame.render_widget(
+        Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
 }
 
 fn timer_primary_hint(app: &App) -> &'static str {
     if app.break_glass_confirmation_pending() {
-        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [z] Delay 10m  [u] Confirm unblock"
+        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [u] Confirm unblock  [z] Delay 10m"
     } else if app.strict_reset_confirmation_pending() {
-        "⌨  Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)  [z] Delay 10m  [u] Unblock"
+        "Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)  [u] Unblock  [z] Delay 10m"
     } else if app.strict_mode_enforced_for_focus() {
-        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)  [z] Delay 10m  [u] Unblock"
+        "Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)  [u] Unblock  [z] Delay 10m"
     } else {
-        "⌨  Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [z] Delay 10m  [u] Unblock"
+        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [u] Unblock  [z] Delay 10m"
     }
 }
 
 fn timer_secondary_hint(app: &App) -> &'static str {
     if app.strict_mode_enforced_for_focus() {
-        "🧭 Views: [t] Planner  [h] History  [p] Profiles (Locked)  [b] Sites  [d] Setup"
+        "Views: [t] Planner  [h] History  [b] Sites  [p] Profiles (Locked)  [d] Setup"
     } else {
-        "🧭 Views: [t] Planner  [h] History  [p] Profiles  [b] Sites  [d] Setup"
+        "Views: [t] Planner  [h] History  [b] Sites  [p] Profiles  [d] Setup"
     }
 }
 
 fn timer_tertiary_hint(app: &App) -> &'static str {
     if app.strict_mode_enforced_for_focus() {
-        "🚪 Quit: [q/Esc] Locked during active focus"
+        "Navigate: [q/Esc] Quit (Locked during active focus)"
     } else {
-        "🚪 Quit: [q/Esc]"
+        "Navigate: [q/Esc] Quit"
     }
 }
 
 fn render_site_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();
-    let outer = centered_rect(60, 80, area);
+    let outer = centered_rect(70, 82, area);
 
     let block_color = if app.blocker.is_blocking {
         Color::Red
@@ -406,15 +425,11 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         .constraints([
             Constraint::Length(1), // status line
             Constraint::Length(1), // profile line
-            Constraint::Length(1), // DoH warning
-            Constraint::Length(1), // spacer
-            Constraint::Min(3),    // site list
-            Constraint::Length(1), // spacer
+            Constraint::Min(4),    // site list
             Constraint::Length(3), // site input area
             Constraint::Length(3), // profile input area
-            Constraint::Length(1), // error line
-            Constraint::Length(1), // spacer
-            Constraint::Length(2), // key hints
+            Constraint::Length(1), // error/feedback line
+            Constraint::Length(3), // key hints
         ])
         .split(outer);
 
@@ -480,13 +495,6 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         inner[1],
     );
 
-    // DoH warning
-    let doh_warning =
-        Paragraph::new("⚠ Disable DNS-over-HTTPS in your browser for blocking to work")
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Yellow));
-    frame.render_widget(doh_warning, inner[2]);
-
     let input_mode = app.site_input_mode();
     let profile_input_mode = app.blocklist_profile_input_mode();
     let (list_title_label, empty_text, idle_input_text) = match site_list_mode {
@@ -517,7 +525,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         let empty = Paragraph::new(empty_text)
             .style(Style::default().fg(Color::DarkGray))
             .block(list_block);
-        frame.render_widget(empty, inner[4]);
+        frame.render_widget(empty, inner[2]);
     } else {
         let items: Vec<ListItem> = app
             .active_policy_sites()
@@ -537,7 +545,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
 
         let mut list_state = ListState::default();
         list_state.select(Some(app.selected_site));
-        frame.render_stateful_widget(list, inner[4], &mut list_state);
+        frame.render_stateful_widget(list, inner[2], &mut list_state);
     }
 
     // Input area
@@ -573,7 +581,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             } else {
                 Style::default().fg(Color::DarkGray)
             });
-    frame.render_widget(input_widget, inner[6]);
+    frame.render_widget(input_widget, inner[3]);
 
     let profile_input_title = match profile_input_mode {
         Some(BlocklistProfileInputMode::Create) => " New Blocklist Profile ",
@@ -602,7 +610,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             } else {
                 Style::default().fg(Color::DarkGray)
             }),
-        inner[7],
+        inner[4],
     );
 
     // Error line
@@ -614,11 +622,11 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         };
         render_centered_error(
             frame,
-            inner[8],
+            inner[5],
             format!("⚠  {err}{privilege_hint} · open [d] Setup for remediation"),
         );
     } else if let Some(err) = app.config_error.as_ref() {
-        render_centered_error(frame, inner[8], format!("⚠  {err}"));
+        render_centered_error(frame, inner[5], format!("⚠  {err}"));
     } else if let Some(feedback) = app.site_feedback.as_ref() {
         let (prefix, color) = match feedback.level {
             SiteFeedbackLevel::Success => ("✓", Color::Green),
@@ -627,7 +635,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
         let feedback_widget = Paragraph::new(format!("{prefix}  {}", feedback.message))
             .alignment(Alignment::Center)
             .style(Style::default().fg(color));
-        frame.render_widget(feedback_widget, inner[8]);
+        frame.render_widget(feedback_widget, inner[5]);
     }
 
     // Key hints
@@ -641,11 +649,13 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
                 SiteInputMode::Add => "Tip: paste comma/newline hostnames, then press [Enter]",
                 SiteInputMode::Edit => "Tip: enter one hostname, then press [Enter]",
             }),
+            Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
         ]
     } else if app.blocklist_profile_input_active {
         vec![
             Line::from("Profile: [Enter] Save  [Esc] Cancel"),
             Line::from("Tip: use descriptive names like Work, Study, or Deep Work"),
+            Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
         ]
     } else if app.strict_mode_enforced_for_focus() {
         vec![
@@ -656,6 +666,7 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
             Line::from(
                 "Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [b/Esc] Back  [q] Quit (Locked)",
             ),
+            Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
         ]
     } else {
         vec![
@@ -664,19 +675,16 @@ fn render_site_manager(frame: &mut Frame, app: &App) {
                 site_list_mode.label()
             )),
             Line::from("Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [b/Esc] Back"),
+            Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
         ]
     };
-    let hints_widget = Paragraph::new(hint_lines)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints_widget, inner[10]);
+    render_hint_lines(frame, inner[6], hint_lines);
 }
 
 fn render_profile_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();
-    let outer = centered_rect(70, 80, area);
-    let profile_editor_height =
-        PROFILE_EDIT_FIELD_LABELS.len() as u16 + PROFILE_EDIT_GROUPS.len() as u16 + 4 + 2;
+    let outer = centered_rect(56, 72, area);
+    let editor_height = profile_editor_height(app);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -690,13 +698,11 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         .margin(2)
         .constraints([
             Constraint::Length(1), // current profile
-            Constraint::Length(1), // spacer
-            Constraint::Length(7), // profile list
-            Constraint::Length(1), // spacer
-            Constraint::Length(profile_editor_height),
+            Constraint::Length(6), // profile list
+            Constraint::Length(editor_height),
             Constraint::Min(0),    // spacer
             Constraint::Length(1), // error line
-            Constraint::Length(4), // key hints
+            Constraint::Length(3), // key hints
         ])
         .split(outer);
 
@@ -721,21 +727,17 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         .highlight_symbol("▶ ");
     let mut list_state = ListState::default();
     list_state.select(Some(app.profile_selection_index.min(PROFILE_IDS.len() - 1)));
-    frame.render_stateful_widget(list, inner[2], &mut list_state);
+    frame.render_stateful_widget(list, inner[1], &mut list_state);
 
     let editor_block = profile_editor_block(app);
     let lines = profile_editor_lines(app);
-    frame.render_widget(Paragraph::new(lines).block(editor_block), inner[4]);
+    frame.render_widget(Paragraph::new(lines).block(editor_block), inner[2]);
 
     if let Some(err) = app.config_error.as_ref() {
-        render_centered_error(frame, inner[6], format!("⚠  {err}"));
+        render_centered_error(frame, inner[4], format!("⚠  {err}"));
     }
 
-    let hints = profile_manager_hints(app);
-    let hints_widget = Paragraph::new(hints)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints_widget, inner[7]);
+    render_hint_lines(frame, inner[5], profile_manager_hints(app));
 }
 
 fn profile_list_items(app: &App) -> Vec<ListItem<'static>> {
@@ -770,34 +772,66 @@ fn profile_editor_block(app: &App) -> Block<'static> {
 }
 
 fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
-    let mut lines = Vec::with_capacity(PROFILE_EDIT_FIELD_LABELS.len() + PROFILE_EDIT_GROUPS.len());
-    for (group_index, (group_name, fields)) in PROFILE_EDIT_GROUPS.iter().enumerate() {
+    if !app.profile_edit_active {
+        return vec![
+            Line::from("Press [e] to edit the selected profile."),
+            Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule"),
+            Line::from("Editor is compact for smaller terminals."),
+        ];
+    }
+
+    let (group_name, fields) = profile_edit_group(app.profile_edit_field);
+    let selected_pos = fields
+        .iter()
+        .position(|index| *index == app.profile_edit_field)
+        .unwrap_or(0);
+    const MAX_VISIBLE_FIELDS: usize = 8;
+    let max_start = fields.len().saturating_sub(MAX_VISIBLE_FIELDS);
+    let mut start = selected_pos.saturating_sub(MAX_VISIBLE_FIELDS / 2);
+    if start > max_start {
+        start = max_start;
+    }
+    let end = (start + MAX_VISIBLE_FIELDS).min(fields.len());
+
+    let mut lines = Vec::new();
+    lines.push(Line::styled(
+        format!(
+            " {group_name} settings ({}/{}) ",
+            selected_pos + 1,
+            fields.len()
+        ),
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    ));
+    if start > 0 {
         lines.push(Line::styled(
-            format!(" {group_name} "),
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
+            "… ↑ more fields",
+            Style::default().fg(Color::DarkGray),
         ));
-        for index in *fields {
-            let value = app.profile_edit_field_value(*index);
-            let label = profile_edit_field_display_label(*index);
-            let mut line = Line::from(format!("{label:<22} {value}"));
-            if app.profile_edit_active && *index == app.profile_edit_field {
-                line = Line::from(vec![
-                    Span::styled("> ", Style::default().fg(Color::Yellow)),
-                    Span::styled(
-                        format!("{label:<22} {value}"),
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ]);
-            }
-            lines.push(line);
+    }
+    for index in &fields[start..end] {
+        let value = app.profile_edit_field_value(*index);
+        let label = profile_edit_field_display_label(*index);
+        let mut line = Line::from(format!("{label:<18} {value}"));
+        if *index == app.profile_edit_field {
+            line = Line::from(vec![
+                Span::styled("> ", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{label:<18} {value}"),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]);
         }
-        if group_index + 1 != PROFILE_EDIT_GROUPS.len() {
-            lines.push(Line::from(""));
-        }
+        lines.push(line);
+    }
+    if end < fields.len() {
+        lines.push(Line::styled(
+            "… ↓ more fields",
+            Style::default().fg(Color::DarkGray),
+        ));
     }
     lines
 }
@@ -806,10 +840,7 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
     if app.profile_edit_active {
         vec![
             Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule"),
-            Line::from(
-                "Edit: [↑/↓] Field  [←/→] Change value (schedule recurring + one-time windows; inspector is read-only)",
-            ),
-            Line::from("Text input: [Type/Backspace] WakaTime project/language"),
+            Line::from("Edit: [↑/↓] Field  [←/→] Change value  [Type/Backspace] WakaTime text"),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit (Locked)"
             } else {
@@ -875,7 +906,7 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
 
 fn render_session_planner(frame: &mut Frame, app: &App) {
     let area = frame.area();
-    let outer = centered_rect(66, 82, area);
+    let outer = centered_rect(52, 70, area);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -888,39 +919,28 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(2), // current task
-            Constraint::Length(1), // spacer
-            Constraint::Min(5),    // task labels list
-            Constraint::Length(3), // add input
-            Constraint::Length(2), // feedback
-            Constraint::Length(4), // hints
+            Constraint::Length(1), // current task
+            Constraint::Min(4),    // task labels list
+            Constraint::Length(3), // task label input
+            Constraint::Length(1), // feedback
+            Constraint::Length(2), // hints
         ])
         .split(outer);
 
     render_session_planner_selected_task(frame, app, inner[0]);
-    render_session_planner_labels(frame, app, inner[2]);
-    render_session_planner_input(frame, app, inner[3]);
-    render_session_planner_feedback(frame, app, inner[4]);
-    render_session_planner_hints(frame, app, inner[5]);
+    render_session_planner_labels(frame, app, inner[1]);
+    render_session_planner_input(frame, app, inner[2]);
+    render_session_planner_feedback(frame, app, inner[3]);
+    render_session_planner_hints(frame, app, inner[4]);
 }
 
 fn render_session_planner_selected_task(frame: &mut Frame, app: &App, area: Rect) {
     let selected_text = app.selected_task_label.as_ref().map_or_else(
-        || {
-            vec![
-                Line::from("Selected task:"),
-                Line::from("  none (required before focus starts)"),
-            ]
-        },
-        |label| {
-            vec![
-                Line::from("Selected task:"),
-                Line::from(format!("  {label}")),
-            ]
-        },
+        || "Selected task: none (required before focus starts)".to_string(),
+        |label| format!("Selected task: {label}"),
     );
     frame.render_widget(
-        Paragraph::new(selected_text)
+        Paragraph::new(Line::from(selected_text))
             .style(Style::default().fg(Color::White))
             .wrap(Wrap { trim: true }),
         area,
@@ -1064,17 +1084,12 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
             }),
         ]
     };
-    frame.render_widget(
-        Paragraph::new(hints)
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::DarkGray)),
-        area,
-    );
+    render_hint_lines(frame, area, hints);
 }
 
 fn render_stats_history(frame: &mut Frame, app: &App) {
     let area = frame.area();
-    let outer = centered_rect(86, 84, area);
+    let outer = centered_rect(72, 78, area);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -1087,99 +1102,67 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1), // session + today summary
-            Constraint::Length(1), // goal + streak summary
-            Constraint::Length(1), // spacer
-            Constraint::Min(8),    // history panels
-            Constraint::Length(2), // status line
+            Constraint::Length(5), // overview
+            Constraint::Min(6),    // history panels
+            Constraint::Length(1), // status line
             Constraint::Length(2), // hints
         ])
         .split(outer);
 
     let session_stats = app.session_stats();
     let today_stats = app.today_stats();
-    let session_summary = Paragraph::new(format!(
-        "This session: 🍅{} · {}m   Today: 🍅{} · {}m",
-        session_stats.pomodoros_completed,
-        session_stats.focused_minutes(),
-        today_stats.pomodoros_completed,
-        today_stats.focused_minutes()
-    ))
-    .style(
-        Style::default()
-            .fg(Color::White)
-            .add_modifier(Modifier::BOLD),
-    );
-    frame.render_widget(session_summary, inner[0]);
+    let recent_active_days = app.recent_daily_stats(7).len();
+    let focus_score_line = readable_focus_score_text(&format_history_focus_score_line(app));
+    let goals_line = readable_goal_streak_text(&format_history_goal_streak_line(app));
+    let overview = Paragraph::new(vec![
+        Line::styled(
+            format!(
+                "Session 🍅{} · {}m | Today 🍅{} · {}m",
+                session_stats.pomodoros_completed,
+                session_stats.focused_minutes(),
+                today_stats.pomodoros_completed,
+                today_stats.focused_minutes()
+            ),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Line::styled(focus_score_line, Style::default().fg(Color::DarkGray)),
+        Line::styled(goals_line, Style::default().fg(Color::DarkGray)),
+        Line::styled(
+            format!("Active days (7d): {recent_active_days}"),
+            Style::default().fg(Color::DarkGray),
+        ),
+    ])
+    .block(Block::default().borders(Borders::ALL).title(" Overview "))
+    .wrap(Wrap { trim: true });
+    frame.render_widget(overview, inner[0]);
 
-    let goal_and_consistency_summary = format!(
-        "{}   |   {}",
-        format_history_goal_streak_line(app),
-        format_history_focus_score_line(app)
-    );
-    let goal_summary =
-        Paragraph::new(goal_and_consistency_summary).style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(goal_summary, inner[1]);
-
-    let history_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(56), Constraint::Percentage(44)])
-        .split(inner[3]);
-
-    let top_sections = Layout::default()
+    let content_layout = Layout::default()
         .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
+        .split(inner[1]);
+
+    let left_sections = Layout::default()
+        .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
+            Constraint::Percentage(34),
+            Constraint::Percentage(33),
+            Constraint::Percentage(33),
         ])
-        .split(history_layout[0]);
+        .split(content_layout[0]);
 
-    let monthly_items: Vec<ListItem> = app
-        .recent_monthly_stats(6)
-        .into_iter()
-        .map(|stats| {
-            ListItem::new(format!(
-                "  {}   🍅{}   {}m",
-                format_month_label(stats.year, stats.month),
-                stats.pomodoros_completed,
-                stats.focused_minutes()
-            ))
-        })
-        .collect();
-    render_history_panel(
-        frame,
-        top_sections[0],
-        " Monthly Trend ",
-        monthly_items,
-        "  No monthly totals yet.",
-    );
-
-    render_monthly_heatmap_panel(frame, top_sections[1], app);
-
-    let profile_items: Vec<ListItem> = app
-        .profile_effectiveness()
-        .into_iter()
-        .map(|entry| {
-            ListItem::new(format!(
-                "  {:<9} {:>3}% {:>3}m/🍅",
-                entry.profile.label(),
-                entry.focus_share_pct,
-                entry.average_focused_minutes_per_session()
-            ))
-        })
-        .collect();
-    render_history_panel(
-        frame,
-        top_sections[2],
-        " Profile Effectiveness ",
-        profile_items,
-        "  No profile effectiveness yet.",
-    );
+    let right_sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(34),
+            Constraint::Percentage(33),
+            Constraint::Percentage(33),
+        ])
+        .split(content_layout[1]);
 
     let task_total_items: Vec<ListItem> = app
-        .task_focus_totals(5)
+        .task_focus_totals(6)
         .into_iter()
         .map(|stats| {
             let goal_summary = app
@@ -1197,42 +1180,14 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
-        top_sections[3],
+        left_sections[0],
         " Task Totals ",
         task_total_items,
         "  No task totals yet.",
     );
 
-    let bottom_sections = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(36),
-            Constraint::Percentage(32),
-            Constraint::Percentage(32),
-        ])
-        .split(history_layout[1]);
-
-    let history_items: Vec<ListItem> = app
-        .recent_daily_stats(10)
-        .into_iter()
-        .map(|(day, stats)| {
-            ListItem::new(format!(
-                "  {day}   🍅{}   {}m",
-                stats.pomodoros_completed,
-                stats.focused_minutes()
-            ))
-        })
-        .collect();
-    render_history_panel(
-        frame,
-        bottom_sections[0],
-        " Recent Days ",
-        history_items,
-        "  No completed focus history yet.",
-    );
-
     let task_trend_items: Vec<ListItem> = app
-        .recent_task_trends(5)
+        .recent_task_trends(6)
         .into_iter()
         .map(|trend| {
             ListItem::new(format!(
@@ -1245,14 +1200,34 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
-        bottom_sections[1],
+        left_sections[1],
         " Task Trends (7d vs prev 7d) ",
         task_trend_items,
         "  Not enough task history for trend yet.",
     );
 
+    let profile_items: Vec<ListItem> = app
+        .profile_effectiveness()
+        .into_iter()
+        .map(|entry| {
+            ListItem::new(format!(
+                "  {:<9} {:>3}% {:>3}m/🍅",
+                entry.profile.label(),
+                entry.focus_share_pct,
+                entry.average_focused_minutes_per_session()
+            ))
+        })
+        .collect();
+    render_history_panel(
+        frame,
+        right_sections[0],
+        " Profile Effect ",
+        profile_items,
+        "  No profile effectiveness yet.",
+    );
+
     let override_items: Vec<ListItem> = app
-        .recent_break_glass_overrides(4)
+        .recent_break_glass_overrides(6)
         .into_iter()
         .map(|event| {
             let task_label = event.task_label.unwrap_or_else(|| "Unlabeled".to_string());
@@ -1267,11 +1242,33 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
-        bottom_sections[2],
+        left_sections[2],
         " Break-glass Audit ",
         override_items,
         "  No break-glass overrides yet.",
     );
+
+    let monthly_items: Vec<ListItem> = app
+        .recent_monthly_stats(4)
+        .into_iter()
+        .map(|stats| {
+            ListItem::new(format!(
+                "  {}   🍅{}   {}m",
+                format_month_label(stats.year, stats.month),
+                stats.pomodoros_completed,
+                stats.focused_minutes()
+            ))
+        })
+        .collect();
+    render_history_panel(
+        frame,
+        right_sections[1],
+        " Monthly Trend ",
+        monthly_items,
+        "  No monthly totals yet.",
+    );
+
+    render_monthly_heatmap_panel(frame, right_sections[2], app);
 
     if let Some(feedback) = app.history_feedback.as_ref() {
         let (prefix, color) = match feedback.level {
@@ -1283,26 +1280,69 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
             .alignment(Alignment::Center)
             .style(Style::default().fg(color))
             .wrap(Wrap { trim: true });
-        frame.render_widget(feedback_widget, inner[4]);
+        frame.render_widget(feedback_widget, inner[2]);
     } else if let Some(err) = app.stats_error.as_ref() {
         let error_widget = Paragraph::new(format!("⚠  {err}"))
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Red))
             .wrap(Wrap { trim: true });
-        frame.render_widget(error_widget, inner[4]);
+        frame.render_widget(error_widget, inner[2]);
     }
 
-    let hints = Paragraph::new(vec![
-        Line::from("History: [e] Export CSV + JSON"),
-        Line::from(if app.strict_mode_enforced_for_focus() {
-            "View: [h/Esc] Back  [q/Ctrl-C] Quit (Locked)"
-        } else {
-            "View: [h/Esc] Back  [q/Ctrl-C] Quit"
-        }),
-    ])
-    .alignment(Alignment::Center)
-    .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints, inner[5]);
+    render_hint_lines(
+        frame,
+        inner[3],
+        vec![
+            Line::from("History: [e] Export CSV + JSON"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "View: [h/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+            } else {
+                "View: [h/Esc] Back  [q/Ctrl-C] Quit"
+            }),
+        ],
+    );
+}
+
+fn readable_goal_streak_text(text: &str) -> String {
+    text.replace("   Streaks: ", " | Streak: ")
+        .replace(" current · ", " current, ")
+        .replace("Off (set via [p] -> [e])", "off (set in Profiles)")
+        .replace("Goals: Off", "Goals: off")
+        .replace("Streaks: Off", "Streak: off")
+}
+
+fn readable_focus_score_text(text: &str) -> String {
+    if text.contains("weekly goal off; consistency ") {
+        text.replace(
+            "Focus score: n/a (weekly goal off; consistency ",
+            "Focus score: n/a · Consistency: ",
+        )
+        .replace(" days))", " days, weekly goal off)")
+    } else {
+        text.replace(" (consistency ", " · Consistency: ")
+            .replace(" · completion ", " · Goal progress: ")
+            .replace("%)", "%")
+    }
+}
+
+fn profile_edit_group(field_index: usize) -> (&'static str, &'static [usize]) {
+    for (group_name, fields) in PROFILE_EDIT_GROUPS {
+        if fields.contains(&field_index) {
+            return (group_name, fields);
+        }
+    }
+    PROFILE_EDIT_GROUPS[0]
+}
+
+fn profile_editor_height(app: &App) -> u16 {
+    if !app.profile_edit_active {
+        return 7;
+    }
+
+    let (_, fields) = profile_edit_group(app.profile_edit_field);
+    let visible_rows = fields.len().min(8) as u16;
+    let overflow_rows = if fields.len() > 8 { 2 } else { 0 };
+    visible_rows + overflow_rows + 3
 }
 
 fn render_history_panel(
@@ -1478,17 +1518,18 @@ fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         inner[6],
     );
 
-    let hints = Paragraph::new(vec![
-        Line::from("Diagnostics: [r] Refresh checks + preview"),
-        Line::from(if app.strict_mode_enforced_for_focus() {
-            "View: [d/Esc] Back  [q/Ctrl-C] Quit (Locked)"
-        } else {
-            "View: [d/Esc] Back  [q/Ctrl-C] Quit"
-        }),
-    ])
-    .alignment(Alignment::Center)
-    .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(hints, inner[7]);
+    render_hint_lines(
+        frame,
+        inner[7],
+        vec![
+            Line::from("Diagnostics: [r] Refresh checks + preview"),
+            Line::from(if app.strict_mode_enforced_for_focus() {
+                "View: [d/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+            } else {
+                "View: [d/Esc] Back  [q/Ctrl-C] Quit"
+            }),
+        ],
+    );
 }
 
 fn render_setup_check(frame: &mut Frame, area: Rect, label: &str, check: &SetupCheck) {
@@ -2143,27 +2184,19 @@ mod tests {
         let mut app = App::default();
         app.mode = AppMode::ProfileManager;
         app.profile_edit_active = true;
+        app.profile_edit_field = PROFILE_EDIT_GROUP_SCHEDULE[0];
 
         terminal
             .draw(|frame| render(frame, &app))
             .expect("render should succeed");
 
         let text = terminal_text(&terminal, width, height);
-        assert!(text.contains("Schedule"));
+        assert!(text.contains("Schedule settings"));
         assert!(text.contains("Window selector"));
         assert!(text.contains("Day selector"));
         assert!(text.contains("Start time"));
-        assert!(text.contains("End time"));
-        assert!(text.contains("Add/remove"));
         assert!(text.contains("Exception selector"));
-        assert!(text.contains("Exception date"));
-        assert!(text.contains("Exception add/remove"));
-        assert!(text.contains("One-time selector"));
-        assert!(text.contains("One-time date"));
-        assert!(text.contains("One-time start"));
-        assert!(text.contains("One-time end"));
-        assert!(text.contains("One-time add/remove"));
-        assert!(text.contains("Conflict inspector"));
+        assert!(text.contains("more fields"));
     }
 
     #[test]
@@ -2199,7 +2232,7 @@ mod tests {
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("Rename"));
         assert!(text.contains("Delete"));
-        assert!(text.contains("Recent: none yet"));
+        assert!(text.contains("Planner:"));
     }
 
     #[test]
