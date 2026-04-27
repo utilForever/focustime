@@ -2739,7 +2739,7 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let (_, selected_task_label) = stats.task_planner_state();
     let (selected_task_label, focus_intention, task_note) =
         mirror_metadata_from_task_label(selected_task_label);
-    let goal_snapshot = effective_daily_goal_snapshot(config, stats, day_date);
+    let goal_snapshot = effective_daily_goal_snapshot_for_day(config, stats, day_date);
     let weekly_goal_snapshot = effective_weekly_goal_snapshot(config, stats, day_date);
     let monthly_goal_snapshot = effective_monthly_goal_snapshot(config, stats, day_date);
     let selected_task_goal = selected_task_label.as_ref().and_then(|label| {
@@ -2813,15 +2813,19 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     }
 }
 
-fn effective_daily_goal_snapshot(
+fn effective_daily_goal_snapshot_for_day(
     config: &AppConfig,
     stats: &FocusStats,
     day: NaiveDate,
 ) -> DailyGoalSnapshot {
-    let base = DailyGoalSnapshot {
-        minutes: config.daily_goal.minutes,
-        pomodoros: config.daily_goal.pomodoros,
-    };
+    let day_key = day.format("%Y-%m-%d").to_string();
+    let base = stats
+        .daily_entry(&day_key)
+        .and_then(|daily| daily.goal)
+        .unwrap_or(DailyGoalSnapshot {
+            minutes: config.daily_goal.minutes,
+            pomodoros: config.daily_goal.pomodoros,
+        });
     let previous = day.pred_opt().and_then(|previous_day| {
         let day_key = previous_day.format("%Y-%m-%d").to_string();
         stats.daily_entry(&day_key).and_then(|daily| {
@@ -5302,6 +5306,32 @@ mod tests {
         assert!(boundary_output.goal.met);
         assert!(!boundary_output.weekly_goal.met);
         assert!(!boundary_output.monthly_goal.met);
+    }
+
+    #[test]
+    fn build_status_output_daily_goal_uses_persisted_same_day_snapshot() {
+        let mut stats = FocusStats::default();
+        let today = current_day_key();
+        let persisted_snapshot = DailyGoalSnapshot {
+            minutes: 30,
+            pomodoros: 1,
+        };
+        stats.record_focus_elapsed(&today, 30 * 60, persisted_snapshot);
+        stats.record_completed_pomodoro(&today, persisted_snapshot);
+
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 120,
+                pomodoros: 4,
+            },
+            ..AppConfig::default()
+        };
+
+        let output = build_status_output(&config, &stats);
+
+        assert_eq!(output.goal.minutes_target, 30);
+        assert_eq!(output.goal.pomodoros_target, 1);
+        assert!(output.goal.met);
     }
 
     #[test]
