@@ -134,6 +134,8 @@ fn task_goal_json_sets_and_reads_per_task_target() {
     assert_eq!(read_payload["updated"], false);
     assert_eq!(read_payload["task_label"], "Docs");
     assert_eq!(read_payload["configured"], true);
+    assert_eq!(read_payload["minutes_target"], 120);
+    assert_eq!(read_payload["pomodoros_target"], 4);
 }
 
 #[test]
