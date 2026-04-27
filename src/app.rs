@@ -3606,10 +3606,15 @@ impl App {
     }
 
     fn effective_daily_goal_snapshot_for_day(&self, day: NaiveDate) -> DailyGoalSnapshot {
-        let base = self.current_goal_snapshot();
+        let day_key = day.format("%Y-%m-%d").to_string();
+        let base = self
+            .stats
+            .daily_entry(&day_key)
+            .and_then(|stats| stats.goal)
+            .unwrap_or_else(|| self.current_goal_snapshot());
         let previous = day.pred_opt().and_then(|previous_day| {
-            let day_key = previous_day.format("%Y-%m-%d").to_string();
-            self.stats.daily_entry(&day_key).and_then(|stats| {
+            let previous_day_key = previous_day.format("%Y-%m-%d").to_string();
+            self.stats.daily_entry(&previous_day_key).and_then(|stats| {
                 stats
                     .goal
                     .map(|goal| (goal, stats.focused_minutes(), stats.pomodoros_completed))
@@ -5745,6 +5750,49 @@ mod tests {
         let streak = app.goal_streak_for_day_key("2026-04-09");
         assert_eq!(streak.current, 0);
         assert_eq!(streak.best, 0);
+    }
+
+    #[test]
+    fn goal_streak_for_day_key_uses_historical_day_base_goal_when_config_changed() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 120,
+                pomodoros: 0,
+            },
+            goal_carry_over: GoalCarryOverConfig {
+                daily: true,
+                ..GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.stats.insert_daily_for_tests(
+            "2026-04-08",
+            DailyStats {
+                pomodoros_completed: 0,
+                focused_seconds: 0,
+                goal: Some(DailyGoalSnapshot {
+                    minutes: 40,
+                    pomodoros: 0,
+                }),
+            },
+        );
+        app.stats.insert_daily_for_tests(
+            "2026-04-09",
+            DailyStats {
+                pomodoros_completed: 0,
+                focused_seconds: 130 * 60,
+                goal: Some(DailyGoalSnapshot {
+                    minutes: 60,
+                    pomodoros: 0,
+                }),
+            },
+        );
+
+        let streak = app.goal_streak_for_day_key("2026-04-09");
+        assert_eq!(streak.current, 1);
+        assert_eq!(streak.best, 1);
     }
 
     #[test]
