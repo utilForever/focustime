@@ -1011,12 +1011,7 @@ impl App {
             return GoalStreak::default();
         };
 
-        let today = Local::now().date_naive();
-        let current_goal = if day == today {
-            self.today_goal_snapshot()
-        } else {
-            self.current_goal_snapshot()
-        };
+        let current_goal = self.effective_daily_goal_snapshot_for_day(day);
         self.stats
             .goal_streak(day, current_goal, self.stats.daily_for(day_key))
     }
@@ -3610,10 +3605,6 @@ impl App {
         }
     }
 
-    fn today_goal_snapshot(&self) -> DailyGoalSnapshot {
-        self.effective_daily_goal_snapshot_for_day(Local::now().date_naive())
-    }
-
     fn effective_daily_goal_snapshot_for_day(&self, day: NaiveDate) -> DailyGoalSnapshot {
         let base = self.current_goal_snapshot();
         let previous = day.pred_opt().and_then(|previous_day| {
@@ -5711,6 +5702,49 @@ mod tests {
         let streak = app.goal_streak_for_day_key("2026-04-09");
         assert_eq!(streak.current, 2);
         assert_eq!(streak.best, 2);
+    }
+
+    #[test]
+    fn goal_streak_for_day_key_applies_daily_carry_over_to_historical_day_targets() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 0,
+            },
+            goal_carry_over: GoalCarryOverConfig {
+                daily: true,
+                ..GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.stats.insert_daily_for_tests(
+            "2026-04-08",
+            DailyStats {
+                pomodoros_completed: 0,
+                focused_seconds: 0,
+                goal: Some(DailyGoalSnapshot {
+                    minutes: 30,
+                    pomodoros: 0,
+                }),
+            },
+        );
+        app.stats.insert_daily_for_tests(
+            "2026-04-09",
+            DailyStats {
+                pomodoros_completed: 0,
+                focused_seconds: 60 * 60,
+                goal: Some(DailyGoalSnapshot {
+                    minutes: 60,
+                    pomodoros: 0,
+                }),
+            },
+        );
+
+        let streak = app.goal_streak_for_day_key("2026-04-09");
+        assert_eq!(streak.current, 0);
+        assert_eq!(streak.best, 0);
     }
 
     #[test]
