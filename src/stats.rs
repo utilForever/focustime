@@ -56,6 +56,33 @@ impl DailyGoalSnapshot {
     }
 }
 
+pub fn carry_over_goal_target(
+    base: DailyGoalSnapshot,
+    carry_enabled: bool,
+    previous: Option<(DailyGoalSnapshot, u64, u32)>,
+) -> DailyGoalSnapshot {
+    if !carry_enabled {
+        return base;
+    }
+    let Some((previous_target, previous_minutes, previous_pomodoros)) = previous else {
+        return base;
+    };
+    DailyGoalSnapshot {
+        minutes: if base.minutes == 0 {
+            0
+        } else {
+            base.minutes
+                .saturating_add(previous_target.minutes.saturating_sub(previous_minutes))
+        },
+        pomodoros: if base.pomodoros == 0 {
+            0
+        } else {
+            base.pomodoros
+                .saturating_add(previous_target.pomodoros.saturating_sub(previous_pomodoros))
+        },
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct GoalStreak {
     pub current: u32,
@@ -669,6 +696,10 @@ impl FocusStats {
         self.daily.get(day_key).copied().unwrap_or_default()
     }
 
+    pub fn daily_entry(&self, day_key: &str) -> Option<DailyStats> {
+        self.daily.get(day_key).copied()
+    }
+
     pub fn weekly_for_day(&self, day: chrono::NaiveDate) -> WeeklyStats {
         let week = day.iso_week();
         let mut totals = WeeklyStats {
@@ -692,6 +723,11 @@ impl FocusStats {
         totals
     }
 
+    pub fn weekly_for_day_if_present(&self, day: chrono::NaiveDate) -> Option<WeeklyStats> {
+        let week = self.weekly_for_day(day);
+        (week.focused_seconds > 0 || week.pomodoros_completed > 0).then_some(week)
+    }
+
     pub fn monthly_for_day(&self, day: chrono::NaiveDate) -> MonthlyStats {
         let mut totals = MonthlyStats {
             year: day.year(),
@@ -711,6 +747,11 @@ impl FocusStats {
             totals.focused_seconds = totals.focused_seconds.saturating_add(stats.focused_seconds);
         }
         totals
+    }
+
+    pub fn monthly_for_day_if_present(&self, day: chrono::NaiveDate) -> Option<MonthlyStats> {
+        let month = self.monthly_for_day(day);
+        (month.focused_seconds > 0 || month.pomodoros_completed > 0).then_some(month)
     }
 
     pub fn task_planner_state(&self) -> (Vec<String>, Option<String>) {
@@ -1746,6 +1787,56 @@ mod tests {
     use super::*;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn carry_over_goal_target_returns_base_when_disabled() {
+        let base = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        };
+        let carried = carry_over_goal_target(base, false, Some((base, 0, 0)));
+        assert_eq!(carried, base);
+    }
+
+    #[test]
+    fn carry_over_goal_target_adds_previous_period_deficit() {
+        let base = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        };
+        let previous_target = DailyGoalSnapshot {
+            minutes: 50,
+            pomodoros: 3,
+        };
+        let carried = carry_over_goal_target(base, true, Some((previous_target, 30, 1)));
+        assert_eq!(
+            carried,
+            DailyGoalSnapshot {
+                minutes: 80,
+                pomodoros: 4,
+            }
+        );
+    }
+
+    #[test]
+    fn carry_over_goal_target_keeps_disabled_metrics_off() {
+        let base = DailyGoalSnapshot {
+            minutes: 0,
+            pomodoros: 2,
+        };
+        let previous_target = DailyGoalSnapshot {
+            minutes: 120,
+            pomodoros: 5,
+        };
+        let carried = carry_over_goal_target(base, true, Some((previous_target, 0, 1)));
+        assert_eq!(
+            carried,
+            DailyGoalSnapshot {
+                minutes: 0,
+                pomodoros: 6,
+            }
+        );
+    }
 
     #[test]
     fn recording_updates_session_and_daily_totals() {

@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use chrono::{DateTime, Local, NaiveDate};
+use chrono::{DateTime, Datelike, Local, NaiveDate};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::blocker::{
@@ -13,8 +13,9 @@ use crate::blocker::{
 };
 use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
-    MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, WakatimeMetadataConfig, WeeklyGoalConfig,
+    GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig,
+    ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig, WakatimeMetadataConfig,
+    WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -28,7 +29,7 @@ use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles,
     FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats,
     ProfileEffectiveness, ProfileTotals, SessionStats, TaskTotals, TaskTrend, WeeklyConsistency,
-    WeeklyStats, current_day_key,
+    WeeklyStats, carry_over_goal_target, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -39,7 +40,7 @@ use crate::wakatime::{WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeT
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 32] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 35] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -51,10 +52,13 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 32] = [
     "Strict focus mode",
     "Daily goal minutes",
     "Daily goal pomodoros",
+    "Daily goal carry-over",
     "Weekly goal minutes",
     "Weekly goal pomodoros",
+    "Weekly goal carry-over",
     "Monthly goal minutes",
     "Monthly goal pomodoros",
+    "Monthly goal carry-over",
     "WakaTime project",
     "WakaTime language",
     "Schedule window",
@@ -75,27 +79,30 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 32] = [
 ];
 const PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX: usize = 9;
 const PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX: usize = 10;
-const PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX: usize = 11;
-const PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX: usize = 12;
-const PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX: usize = 13;
-const PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX: usize = 14;
-const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = 15;
-const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = 16;
-const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 17;
-const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 18;
-const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 19;
-const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 20;
-const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 21;
-const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 22;
-const PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX: usize = 23;
-const PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX: usize = 24;
-const PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX: usize = 25;
-const PROFILE_EDIT_ONE_TIME_WINDOW_INDEX: usize = 26;
-const PROFILE_EDIT_ONE_TIME_DATE_INDEX: usize = 27;
-const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 28;
-const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 29;
-const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 30;
-const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 31;
+const PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX: usize = 11;
+const PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX: usize = 12;
+const PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX: usize = 13;
+const PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX: usize = 14;
+const PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX: usize = 15;
+const PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX: usize = 16;
+const PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX: usize = 17;
+const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = 18;
+const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = 19;
+const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 20;
+const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 21;
+const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 22;
+const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 23;
+const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 24;
+const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 25;
+const PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX: usize = 26;
+const PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX: usize = 27;
+const PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX: usize = 28;
+const PROFILE_EDIT_ONE_TIME_WINDOW_INDEX: usize = 29;
+const PROFILE_EDIT_ONE_TIME_DATE_INDEX: usize = 30;
+const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 31;
+const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 32;
+const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 33;
+const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 34;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
@@ -188,6 +195,7 @@ struct ProfileEditSnapshot {
     daily_goal: DailyGoalConfig,
     weekly_goal: WeeklyGoalConfig,
     monthly_goal: MonthlyGoalConfig,
+    goal_carry_over: GoalCarryOverConfig,
     wakatime_metadata: WakatimeMetadataConfig,
 }
 
@@ -461,6 +469,7 @@ pub struct App {
     daily_goal: DailyGoalConfig,
     weekly_goal: WeeklyGoalConfig,
     monthly_goal: MonthlyGoalConfig,
+    goal_carry_over: GoalCarryOverConfig,
     wakatime_metadata: WakatimeMetadataConfig,
     pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
@@ -497,6 +506,7 @@ impl App {
         let daily_goal = config.daily_goal;
         let weekly_goal = config.weekly_goal;
         let monthly_goal = config.monthly_goal;
+        let goal_carry_over = config.goal_carry_over;
         let wakatime_metadata = config.wakatime;
         let blocklist_profiles = config.blocklist_profiles.clone();
         let active_blocklist_profile =
@@ -584,6 +594,7 @@ impl App {
             daily_goal,
             weekly_goal,
             monthly_goal,
+            goal_carry_over,
             wakatime_metadata,
             pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
@@ -954,28 +965,39 @@ impl App {
     }
 
     pub fn today_goal_progress(&self) -> DailyGoalProgress {
-        self.daily_goal_progress_for(self.today_stats())
+        let today = Local::now().date_naive();
+        let today_key = today.format("%Y-%m-%d").to_string();
+        let today_stats = self.stats.daily_for(&today_key);
+        let target = self.effective_daily_goal_snapshot_for_day(today);
+        goal_progress_for_totals(
+            today_stats.focused_minutes(),
+            today_stats.pomodoros_completed,
+            target.minutes,
+            target.pomodoros,
+        )
     }
 
     pub fn current_week_goal_progress(&self) -> DailyGoalProgress {
         let today = Local::now().date_naive();
         let week = self.stats.weekly_for_day(today);
+        let target = self.effective_weekly_goal_snapshot_for_day(today);
         goal_progress_for_totals(
             week.focused_minutes(),
             week.pomodoros_completed,
-            self.weekly_goal.minutes,
-            self.weekly_goal.pomodoros,
+            target.minutes,
+            target.pomodoros,
         )
     }
 
     pub fn current_month_goal_progress(&self) -> DailyGoalProgress {
         let today = Local::now().date_naive();
         let month = self.stats.monthly_for_day(today);
+        let target = self.effective_monthly_goal_snapshot_for_day(today);
         goal_progress_for_totals(
             month.focused_minutes(),
             month.pomodoros_completed,
-            self.monthly_goal.minutes,
-            self.monthly_goal.pomodoros,
+            target.minutes,
+            target.pomodoros,
         )
     }
 
@@ -988,13 +1010,17 @@ impl App {
             return GoalStreak::default();
         };
 
-        self.stats.goal_streak(
-            day,
-            self.current_goal_snapshot(),
-            self.stats.daily_for(day_key),
-        )
+        let today = Local::now().date_naive();
+        let current_goal = if day == today {
+            self.today_goal_snapshot()
+        } else {
+            self.current_goal_snapshot()
+        };
+        self.stats
+            .goal_streak(day, current_goal, self.stats.daily_for(day_key))
     }
 
+    #[allow(dead_code)]
     pub fn daily_goal_progress_for(&self, stats: DailyStats) -> DailyGoalProgress {
         goal_progress_for_totals(
             stats.focused_minutes(),
@@ -1078,17 +1104,26 @@ impl App {
             PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX => {
                 format_daily_goal_pomodoros_label(self.daily_goal.pomodoros)
             }
+            PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX => {
+                bool_label(self.goal_carry_over.daily).to_string()
+            }
             PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX => {
                 format_daily_goal_minutes_label(self.weekly_goal.minutes)
             }
             PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX => {
                 format_daily_goal_pomodoros_label(self.weekly_goal.pomodoros)
             }
+            PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX => {
+                bool_label(self.goal_carry_over.weekly).to_string()
+            }
             PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX => {
                 format_daily_goal_minutes_label(self.monthly_goal.minutes)
             }
             PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX => {
                 format_daily_goal_pomodoros_label(self.monthly_goal.pomodoros)
+            }
+            PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX => {
+                bool_label(self.goal_carry_over.monthly).to_string()
             }
             PROFILE_EDIT_WAKATIME_PROJECT_INDEX => self.wakatime_metadata.project.clone(),
             PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => self.wakatime_metadata.language.clone(),
@@ -1947,6 +1982,7 @@ impl App {
             daily_goal: self.daily_goal,
             weekly_goal: self.weekly_goal,
             monthly_goal: self.monthly_goal,
+            goal_carry_over: self.goal_carry_over,
             wakatime: self.wakatime_metadata.clone(),
         }
     }
@@ -2518,6 +2554,7 @@ impl App {
             daily_goal: self.daily_goal,
             weekly_goal: self.weekly_goal,
             monthly_goal: self.monthly_goal,
+            goal_carry_over: self.goal_carry_over,
             wakatime_metadata: self.wakatime_metadata.clone(),
         });
         self.profile_edit_active = true;
@@ -2539,6 +2576,7 @@ impl App {
             self.daily_goal = snapshot.daily_goal;
             self.weekly_goal = snapshot.weekly_goal;
             self.monthly_goal = snapshot.monthly_goal;
+            self.goal_carry_over = snapshot.goal_carry_over;
             self.wakatime_metadata = snapshot.wakatime_metadata;
             self.sync_wakatime_metadata_to_tracker();
             self.rebuild_notifier();
@@ -2573,6 +2611,10 @@ impl App {
             .profile_edit_snapshot
             .as_ref()
             .is_some_and(|snapshot| snapshot.monthly_goal != self.monthly_goal);
+        let goal_carry_over_changed = self
+            .profile_edit_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.goal_carry_over != self.goal_carry_over);
         self.custom_profile = self.custom_profile.normalized();
         self.recurring_schedule = normalized_schedule;
         self.wakatime_metadata = self.wakatime_metadata.normalized();
@@ -2598,7 +2640,11 @@ impl App {
             self.current_frame_now = now;
             self.sync_recurring_schedule(now);
         }
-        if daily_goal_changed || weekly_goal_changed || monthly_goal_changed {
+        if daily_goal_changed
+            || weekly_goal_changed
+            || monthly_goal_changed
+            || goal_carry_over_changed
+        {
             self.sync_today_goal_snapshot();
         }
         self.profile_edit_active = false;
@@ -2652,17 +2698,26 @@ impl App {
             PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX => {
                 adjust_daily_goal_pomodoros(&mut self.daily_goal.pomodoros, increase);
             }
+            PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX => {
+                self.goal_carry_over.daily = increase;
+            }
             PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX => {
                 adjust_daily_goal_minutes(&mut self.weekly_goal.minutes, increase);
             }
             PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX => {
                 adjust_daily_goal_pomodoros(&mut self.weekly_goal.pomodoros, increase);
             }
+            PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX => {
+                self.goal_carry_over.weekly = increase;
+            }
             PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX => {
                 adjust_daily_goal_minutes(&mut self.monthly_goal.minutes, increase);
             }
             PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX => {
                 adjust_daily_goal_pomodoros(&mut self.monthly_goal.pomodoros, increase);
+            }
+            PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX => {
+                self.goal_carry_over.monthly = increase;
             }
             PROFILE_EDIT_SCHEDULE_WINDOW_INDEX => {
                 self.cycle_schedule_window(increase);
@@ -3487,7 +3542,7 @@ impl App {
         }
 
         let day_key = current_day_key();
-        let goal_snapshot = self.current_goal_snapshot();
+        let goal_snapshot = self.today_goal_snapshot();
         let session_minutes_before = self.stats.session().focused_minutes();
         let today_minutes_before = self.stats.daily_for(&day_key).focused_minutes();
 
@@ -3506,7 +3561,7 @@ impl App {
 
     fn record_completed_focus_session(&mut self, focused_seconds: u64) {
         let day_key = current_day_key();
-        let goal = self.current_goal_snapshot();
+        let goal = self.today_goal_snapshot();
         if let Some(active_task_label) = self.active_focus_task_label.clone() {
             let focus_intention = self
                 .active_focus_intention
@@ -3540,11 +3595,58 @@ impl App {
         }
     }
 
+    fn today_goal_snapshot(&self) -> DailyGoalSnapshot {
+        self.effective_daily_goal_snapshot_for_day(Local::now().date_naive())
+    }
+
+    fn effective_daily_goal_snapshot_for_day(&self, day: NaiveDate) -> DailyGoalSnapshot {
+        let base = self.current_goal_snapshot();
+        let previous = day.pred_opt().and_then(|previous_day| {
+            let day_key = previous_day.format("%Y-%m-%d").to_string();
+            self.stats.daily_entry(&day_key).map(|stats| {
+                (
+                    stats.goal.unwrap_or(base),
+                    stats.focused_minutes(),
+                    stats.pomodoros_completed,
+                )
+            })
+        });
+        carry_over_goal_target(base, self.goal_carry_over.daily, previous)
+    }
+
+    fn effective_weekly_goal_snapshot_for_day(&self, day: NaiveDate) -> DailyGoalSnapshot {
+        let base = DailyGoalSnapshot {
+            minutes: self.weekly_goal.minutes,
+            pomodoros: self.weekly_goal.pomodoros,
+        };
+        let previous =
+            day.checked_sub_signed(chrono::Duration::weeks(1))
+                .and_then(|previous_week_day| {
+                    self.stats
+                        .weekly_for_day_if_present(previous_week_day)
+                        .map(|week| (base, week.focused_minutes(), week.pomodoros_completed))
+                });
+        carry_over_goal_target(base, self.goal_carry_over.weekly, previous)
+    }
+
+    fn effective_monthly_goal_snapshot_for_day(&self, day: NaiveDate) -> DailyGoalSnapshot {
+        let base = DailyGoalSnapshot {
+            minutes: self.monthly_goal.minutes,
+            pomodoros: self.monthly_goal.pomodoros,
+        };
+        let previous = previous_month_reference_day(day).and_then(|previous_month_day| {
+            self.stats
+                .monthly_for_day_if_present(previous_month_day)
+                .map(|month| (base, month.focused_minutes(), month.pomodoros_completed))
+        });
+        carry_over_goal_target(base, self.goal_carry_over.monthly, previous)
+    }
+
     fn sync_today_goal_snapshot(&mut self) {
         let day_key = current_day_key();
         if self
             .stats
-            .sync_goal_snapshot(&day_key, self.current_goal_snapshot())
+            .sync_goal_snapshot(&day_key, self.today_goal_snapshot())
         {
             self.stats_dirty = true;
             self.flush_stats_if_dirty(false);
@@ -4138,6 +4240,11 @@ fn parse_day_key(day_key: &str) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d").ok()
 }
 
+fn previous_month_reference_day(day: NaiveDate) -> Option<NaiveDate> {
+    let month_start = NaiveDate::from_ymd_opt(day.year(), day.month(), 1)?;
+    month_start.pred_opt()
+}
+
 fn goal_progress(completed: u64, target: u64) -> GoalProgress {
     let ratio = if target == 0 {
         0.0
@@ -4407,6 +4514,7 @@ mod tests {
             daily_goal: DailyGoalConfig::default(),
             weekly_goal: WeeklyGoalConfig::default(),
             monthly_goal: MonthlyGoalConfig::default(),
+            goal_carry_over: GoalCarryOverConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
         };
         let app = App::from_config(config);
@@ -4708,8 +4816,11 @@ mod tests {
         assert_eq!(app.profile_edit_field_value(12), "Off");
         assert_eq!(app.profile_edit_field_value(13), "Off");
         assert_eq!(app.profile_edit_field_value(14), "Off");
-        assert_eq!(app.profile_edit_field_value(15), "focustime");
-        assert_eq!(app.profile_edit_field_value(16), "Pomodoro");
+        assert_eq!(app.profile_edit_field_value(15), "Off");
+        assert_eq!(app.profile_edit_field_value(16), "Off");
+        assert_eq!(app.profile_edit_field_value(17), "Off");
+        assert_eq!(app.profile_edit_field_value(18), "focustime");
+        assert_eq!(app.profile_edit_field_value(19), "Pomodoro");
     }
 
     #[test]
@@ -4944,6 +5055,30 @@ mod tests {
     }
 
     #[test]
+    fn editing_goal_carry_over_fields_updates_and_persists_settings() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.profile_edit_field = PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX;
+        app.handle_key(key(KeyCode::Right));
+        app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX;
+        app.handle_key(key(KeyCode::Right));
+        app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX;
+        app.handle_key(key(KeyCode::Right));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.goal_carry_over.daily);
+        assert!(app.goal_carry_over.weekly);
+        assert!(app.goal_carry_over.monthly);
+
+        let persisted = app.persisted_config();
+        assert!(persisted.goal_carry_over.daily);
+        assert!(persisted.goal_carry_over.weekly);
+        assert!(persisted.goal_carry_over.monthly);
+    }
+
+    #[test]
     fn cancelling_profile_edit_restores_recurring_schedule_settings() {
         let original_schedule = RecurringScheduleConfig {
             windows: vec![RecurringFocusWindowConfig {
@@ -5104,6 +5239,33 @@ mod tests {
     }
 
     #[test]
+    fn cancelling_profile_edit_restores_goal_carry_over_settings() {
+        let config = AppConfig {
+            goal_carry_over: GoalCarryOverConfig {
+                daily: true,
+                weekly: false,
+                monthly: true,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.profile_edit_field = PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX;
+        app.handle_key(key(KeyCode::Left));
+        app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX;
+        app.handle_key(key(KeyCode::Right));
+        app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX;
+        app.handle_key(key(KeyCode::Left));
+        app.handle_key(key(KeyCode::Esc));
+
+        assert!(app.goal_carry_over.daily);
+        assert!(!app.goal_carry_over.weekly);
+        assert!(app.goal_carry_over.monthly);
+    }
+
+    #[test]
     fn cancelling_profile_edit_restores_auto_start_settings() {
         let config = AppConfig {
             auto_start: AutoStartConfig {
@@ -5190,6 +5352,122 @@ mod tests {
         assert_eq!(monthly.pomodoros.completed, 1);
         assert_eq!(monthly.pomodoros.target, 3);
         assert!((monthly.pomodoros.ratio - (1.0 / 3.0)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn daily_goal_progress_applies_previous_day_deficit_when_carry_over_is_enabled() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 2,
+            },
+            goal_carry_over: GoalCarryOverConfig {
+                daily: true,
+                ..GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let today = current_day_key();
+        let today_date = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse");
+        let yesterday = today_date.pred_opt().expect("yesterday should exist");
+        let yesterday_key = yesterday.format("%Y-%m-%d").to_string();
+        let previous_target = DailyGoalSnapshot {
+            minutes: 50,
+            pomodoros: 3,
+        };
+
+        app.stats
+            .record_focus_elapsed(&yesterday_key, 30 * 60, previous_target);
+        app.stats
+            .record_completed_pomodoro(&yesterday_key, previous_target);
+        app.stats
+            .record_focus_elapsed(&today, 40 * 60, app.current_goal_snapshot());
+        app.stats
+            .record_completed_pomodoro(&today, app.current_goal_snapshot());
+
+        let progress = app.today_goal_progress();
+        assert_eq!(progress.minutes.completed, 40);
+        assert_eq!(progress.minutes.target, 80);
+        assert_eq!(progress.pomodoros.completed, 1);
+        assert_eq!(progress.pomodoros.target, 4);
+    }
+
+    #[test]
+    fn weekly_goal_progress_applies_previous_week_deficit_when_enabled() {
+        let config = AppConfig {
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 100,
+                pomodoros: 3,
+            },
+            goal_carry_over: GoalCarryOverConfig {
+                weekly: true,
+                ..GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let today = current_day_key();
+        let today_date = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse");
+        let previous_week_day = today_date - chrono::Duration::days(7);
+        let previous_week_key = previous_week_day.format("%Y-%m-%d").to_string();
+        let goal = app.current_goal_snapshot();
+
+        app.stats
+            .record_focus_elapsed(&previous_week_key, 70 * 60, goal);
+        app.stats
+            .record_completed_pomodoro(&previous_week_key, goal);
+        app.stats.record_focus_elapsed(&today, 20 * 60, goal);
+        app.stats.record_completed_pomodoro(&today, goal);
+
+        let weekly = app.current_week_goal_progress();
+        assert_eq!(weekly.minutes.target, 130);
+        assert_eq!(weekly.pomodoros.target, 5);
+        assert_eq!(weekly.minutes.completed, 20);
+        assert_eq!(weekly.pomodoros.completed, 1);
+    }
+
+    #[test]
+    fn monthly_goal_progress_applies_previous_month_deficit_when_enabled() {
+        let config = AppConfig {
+            monthly_goal: MonthlyGoalConfig {
+                minutes: 300,
+                pomodoros: 10,
+            },
+            goal_carry_over: GoalCarryOverConfig {
+                monthly: true,
+                ..GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let today = current_day_key();
+        let today_date = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse");
+        let month_start = chrono::NaiveDate::from_ymd_opt(today_date.year(), today_date.month(), 1)
+            .expect("current month start should be representable");
+        let previous_month_day = month_start
+            .pred_opt()
+            .expect("previous month day should be representable");
+        let previous_month_key = previous_month_day.format("%Y-%m-%d").to_string();
+        let goal = app.current_goal_snapshot();
+
+        app.stats
+            .record_focus_elapsed(&previous_month_key, 120 * 60, goal);
+        for _ in 0..4 {
+            app.stats
+                .record_completed_pomodoro(&previous_month_key, goal);
+        }
+        app.stats.record_focus_elapsed(&today, 20 * 60, goal);
+        app.stats.record_completed_pomodoro(&today, goal);
+
+        let monthly = app.current_month_goal_progress();
+        assert_eq!(monthly.minutes.target, 480);
+        assert_eq!(monthly.pomodoros.target, 16);
+        assert_eq!(monthly.minutes.completed, 20);
+        assert_eq!(monthly.pomodoros.completed, 1);
     }
 
     #[test]
@@ -6678,6 +6956,7 @@ mod tests {
             daily_goal: app.daily_goal,
             weekly_goal: app.weekly_goal,
             monthly_goal: app.monthly_goal,
+            goal_carry_over: app.goal_carry_over,
             wakatime_metadata: app.wakatime_metadata.clone(),
         });
         app.custom_profile.focus_secs = app.custom_profile.focus_secs.saturating_add(60);
@@ -6722,6 +7001,7 @@ mod tests {
             daily_goal: app.daily_goal,
             weekly_goal: app.weekly_goal,
             monthly_goal: app.monthly_goal,
+            goal_carry_over: app.goal_carry_over,
             wakatime_metadata: app.wakatime_metadata.clone(),
         });
 

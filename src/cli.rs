@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use serde::Serialize;
 
 use crate::app::{App, SetupCheck, SetupCheckLevel, SetupDiagnostics};
@@ -20,7 +20,7 @@ use crate::config::{
 };
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
-use crate::stats::{DailyGoalSnapshot, FocusStats, current_day_key};
+use crate::stats::{DailyGoalSnapshot, FocusStats, carry_over_goal_target, current_day_key};
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerStatus,
@@ -41,6 +41,12 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --goal-weekly=MINUTES,POMODOROS [--json]
   focustime --goal-monthly [--json]
   focustime --goal-monthly=MINUTES,POMODOROS [--json]
+  focustime --goal-carry [--json]
+  focustime --goal-carry=on|off [--json]
+  focustime --goal-carry-weekly [--json]
+  focustime --goal-carry-weekly=on|off [--json]
+  focustime --goal-carry-monthly [--json]
+  focustime --goal-carry-monthly=on|off [--json]
   focustime --strict [--json]
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
@@ -73,6 +79,9 @@ Options:
   --goal          Show current daily goal, or set minutes/pomodoros targets
   --goal-weekly   Show current weekly goal, or set minutes/pomodoros targets
   --goal-monthly  Show current monthly goal, or set minutes/pomodoros targets
+  --goal-carry          Show daily goal carry-over, or set on/off
+  --goal-carry-weekly   Show weekly goal carry-over, or set on/off
+  --goal-carry-monthly  Show monthly goal carry-over, or set on/off
   --strict        Show strict mode, or set on/off
   --schedule      Show recurring schedule with overlap/conflict inspection
   --schedule-set  Replace schedule (recurring + one-time) from JSON payload
@@ -163,6 +172,15 @@ pub enum CommandKind {
     GoalMonthly {
         goal: Option<MonthlyGoalConfig>,
     },
+    GoalCarry {
+        enabled: Option<bool>,
+    },
+    GoalCarryWeekly {
+        enabled: Option<bool>,
+    },
+    GoalCarryMonthly {
+        enabled: Option<bool>,
+    },
     Strict {
         enabled: Option<bool>,
     },
@@ -211,6 +229,9 @@ enum PrimaryCommand {
     Goal(Option<DailyGoalConfig>),
     GoalWeekly(Option<WeeklyGoalConfig>),
     GoalMonthly(Option<MonthlyGoalConfig>),
+    GoalCarry(Option<bool>),
+    GoalCarryWeekly(Option<bool>),
+    GoalCarryMonthly(Option<bool>),
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
@@ -248,6 +269,9 @@ enum ParsedToken {
     Goal(Option<DailyGoalConfig>),
     GoalWeekly(Option<WeeklyGoalConfig>),
     GoalMonthly(Option<MonthlyGoalConfig>),
+    GoalCarry(Option<bool>),
+    GoalCarryWeekly(Option<bool>),
+    GoalCarryMonthly(Option<bool>),
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
@@ -342,6 +366,7 @@ struct GoalOutput {
     minutes_target: u64,
     pomodoros_target: u32,
     met: bool,
+    carry_over: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -429,6 +454,12 @@ struct GoalCommandOutput {
     configured: bool,
     minutes_target: u64,
     pomodoros_target: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+struct GoalCarryCommandOutput {
+    updated: bool,
+    carry_over: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -660,12 +691,15 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 18] = [
+    let parsers: [(&str, ValueArgParser); 21] = [
         ("--task", classify_task_arg),
         ("--profile", classify_profile_arg),
         ("--goal", classify_goal_arg),
         ("--goal-weekly", classify_goal_weekly_arg),
         ("--goal-monthly", classify_goal_monthly_arg),
+        ("--goal-carry", classify_goal_carry_arg),
+        ("--goal-carry-weekly", classify_goal_carry_weekly_arg),
+        ("--goal-carry-monthly", classify_goal_carry_monthly_arg),
         ("--strict", classify_strict_arg),
         ("--schedule-set", classify_schedule_set_arg),
         ("--watch", classify_watch_arg),
@@ -965,6 +999,48 @@ fn classify_strict_arg(args: &[String], index: usize) -> Result<(ParsedToken, us
     Ok((ParsedToken::Strict(None), 1))
 }
 
+fn classify_goal_carry_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((
+            ParsedToken::GoalCarry(Some(parse_goal_carry_value(next)?)),
+            2,
+        ));
+    }
+    Ok((ParsedToken::GoalCarry(None), 1))
+}
+
+fn classify_goal_carry_weekly_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((
+            ParsedToken::GoalCarryWeekly(Some(parse_goal_carry_value(next)?)),
+            2,
+        ));
+    }
+    Ok((ParsedToken::GoalCarryWeekly(None), 1))
+}
+
+fn classify_goal_carry_monthly_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        return Ok((
+            ParsedToken::GoalCarryMonthly(Some(parse_goal_carry_value(next)?)),
+            2,
+        ));
+    }
+    Ok((ParsedToken::GoalCarryMonthly(None), 1))
+}
+
 fn classify_schedule_set_arg(
     args: &[String],
     index: usize,
@@ -980,12 +1056,15 @@ fn classify_schedule_set_arg(
 }
 
 fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 18] = [
+    let parsers: [KeyValueParser; 21] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_goal_key_value_arg,
         parse_goal_weekly_key_value_arg,
         parse_goal_monthly_key_value_arg,
+        parse_goal_carry_key_value_arg,
+        parse_goal_carry_weekly_key_value_arg,
+        parse_goal_carry_monthly_key_value_arg,
         parse_strict_key_value_arg,
         parse_schedule_set_key_value_arg,
         parse_watch_key_value_arg,
@@ -1067,6 +1146,38 @@ fn parse_strict_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> 
     if let Some(value) = arg.strip_prefix("--strict=") {
         let value = require_nonempty_key_value(value, "`--strict=` requires `on` or `off`.")?;
         return Ok(Some(ParsedToken::Strict(Some(parse_strict_value(value)?))));
+    }
+    Ok(None)
+}
+
+fn parse_goal_carry_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--goal-carry=") {
+        let value = require_nonempty_key_value(value, "`--goal-carry=` requires `on` or `off`.")?;
+        return Ok(Some(ParsedToken::GoalCarry(Some(parse_goal_carry_value(
+            value,
+        )?))));
+    }
+    Ok(None)
+}
+
+fn parse_goal_carry_weekly_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--goal-carry-weekly=") {
+        let value =
+            require_nonempty_key_value(value, "`--goal-carry-weekly=` requires `on` or `off`.")?;
+        return Ok(Some(ParsedToken::GoalCarryWeekly(Some(
+            parse_goal_carry_value(value)?,
+        ))));
+    }
+    Ok(None)
+}
+
+fn parse_goal_carry_monthly_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--goal-carry-monthly=") {
+        let value =
+            require_nonempty_key_value(value, "`--goal-carry-monthly=` requires `on` or `off`.")?;
+        return Ok(Some(ParsedToken::GoalCarryMonthly(Some(
+            parse_goal_carry_value(value)?,
+        ))));
     }
     Ok(None)
 }
@@ -1226,6 +1337,9 @@ fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), Str
             | ParsedToken::Goal(_)
             | ParsedToken::GoalWeekly(_)
             | ParsedToken::GoalMonthly(_)
+            | ParsedToken::GoalCarry(_)
+            | ParsedToken::GoalCarryWeekly(_)
+            | ParsedToken::GoalCarryMonthly(_)
             | ParsedToken::Strict(_)
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
@@ -1274,6 +1388,15 @@ fn parse_primary_command(tokens: &[ParsedToken]) -> Result<Option<PrimaryCommand
             }
             ParsedToken::GoalMonthly(goal) => {
                 set_primary_command(&mut primary, PrimaryCommand::GoalMonthly(*goal))?
+            }
+            ParsedToken::GoalCarry(enabled) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalCarry(*enabled))?
+            }
+            ParsedToken::GoalCarryWeekly(enabled) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalCarryWeekly(*enabled))?
+            }
+            ParsedToken::GoalCarryMonthly(enabled) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalCarryMonthly(*enabled))?
             }
             ParsedToken::Strict(enabled) => {
                 set_primary_command(&mut primary, PrimaryCommand::Strict(*enabled))?
@@ -1392,6 +1515,18 @@ fn finalize_cli_action(
         })),
         Some(PrimaryCommand::GoalMonthly(goal)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::GoalMonthly { goal },
+            output,
+        })),
+        Some(PrimaryCommand::GoalCarry(enabled)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalCarry { enabled },
+            output,
+        })),
+        Some(PrimaryCommand::GoalCarryWeekly(enabled)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalCarryWeekly { enabled },
+            output,
+        })),
+        Some(PrimaryCommand::GoalCarryMonthly(enabled)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalCarryMonthly { enabled },
             output,
         })),
         Some(PrimaryCommand::Strict(enabled)) => Ok(CliAction::RunCommand(CliCommand {
@@ -1544,6 +1679,15 @@ pub fn execute_command(cli_command: CliCommand) -> Result<(), String> {
         CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
         CommandKind::GoalWeekly { goal } => execute_weekly_goal_command(goal, cli_command.output),
         CommandKind::GoalMonthly { goal } => execute_monthly_goal_command(goal, cli_command.output),
+        CommandKind::GoalCarry { enabled } => {
+            execute_goal_carry_command(enabled, cli_command.output)
+        }
+        CommandKind::GoalCarryWeekly { enabled } => {
+            execute_weekly_goal_carry_command(enabled, cli_command.output)
+        }
+        CommandKind::GoalCarryMonthly { enabled } => {
+            execute_monthly_goal_carry_command(enabled, cli_command.output)
+        }
         CommandKind::Strict { enabled } => execute_strict_command(enabled, cli_command.output),
         CommandKind::Schedule { schedule } => {
             execute_schedule_command(schedule, cli_command.output)
@@ -2172,6 +2316,78 @@ fn execute_monthly_goal_command(
     Ok(())
 }
 
+fn execute_goal_carry_command(enabled: Option<bool>, output: OutputMode) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(enabled) = enabled {
+        config.goal_carry_over.daily = enabled;
+        config
+            .save()
+            .map_err(|error| format!("Failed to save daily goal carry-over: {error}"))?;
+        updated = true;
+    }
+
+    let payload = GoalCarryCommandOutput {
+        updated,
+        carry_over: config.goal_carry_over.daily,
+    };
+    match output {
+        OutputMode::Text => print_goal_carry_command_output("Daily", &payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_weekly_goal_carry_command(
+    enabled: Option<bool>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(enabled) = enabled {
+        config.goal_carry_over.weekly = enabled;
+        config
+            .save()
+            .map_err(|error| format!("Failed to save weekly goal carry-over: {error}"))?;
+        updated = true;
+    }
+
+    let payload = GoalCarryCommandOutput {
+        updated,
+        carry_over: config.goal_carry_over.weekly,
+    };
+    match output {
+        OutputMode::Text => print_goal_carry_command_output("Weekly", &payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_monthly_goal_carry_command(
+    enabled: Option<bool>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(enabled) = enabled {
+        config.goal_carry_over.monthly = enabled;
+        config
+            .save()
+            .map_err(|error| format!("Failed to save monthly goal carry-over: {error}"))?;
+        updated = true;
+    }
+
+    let payload = GoalCarryCommandOutput {
+        updated,
+        carry_over: config.goal_carry_over.monthly,
+    };
+    match output {
+        OutputMode::Text => print_goal_carry_command_output("Monthly", &payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
 fn execute_strict_command(enabled: Option<bool>, output: OutputMode) -> Result<(), String> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
@@ -2381,18 +2597,9 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let (_, selected_task_label) = stats.task_planner_state();
     let (selected_task_label, focus_intention, task_note) =
         mirror_metadata_from_task_label(selected_task_label);
-    let goal_snapshot = DailyGoalSnapshot {
-        minutes: config.daily_goal.minutes,
-        pomodoros: config.daily_goal.pomodoros,
-    };
-    let weekly_goal_snapshot = DailyGoalSnapshot {
-        minutes: config.weekly_goal.minutes,
-        pomodoros: config.weekly_goal.pomodoros,
-    };
-    let monthly_goal_snapshot = DailyGoalSnapshot {
-        minutes: config.monthly_goal.minutes,
-        pomodoros: config.monthly_goal.pomodoros,
-    };
+    let goal_snapshot = effective_daily_goal_snapshot(config, stats, day_date);
+    let weekly_goal_snapshot = effective_weekly_goal_snapshot(config, stats, day_date);
+    let monthly_goal_snapshot = effective_monthly_goal_snapshot(config, stats, day_date);
     let active_sites_count = config
         .blocklist_profiles
         .iter()
@@ -2419,6 +2626,7 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
             minutes_target: goal_snapshot.minutes,
             pomodoros_target: goal_snapshot.pomodoros,
             met: goal_snapshot.is_met_by(today),
+            carry_over: config.goal_carry_over.daily,
         },
         weekly_goal: GoalOutput {
             configured: weekly_goal_snapshot.has_any_target(),
@@ -2426,6 +2634,7 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
             pomodoros_target: weekly_goal_snapshot.pomodoros,
             met: weekly_goal_snapshot
                 .is_met_by_totals(week.focused_minutes(), week.pomodoros_completed),
+            carry_over: config.goal_carry_over.weekly,
         },
         monthly_goal: GoalOutput {
             configured: monthly_goal_snapshot.has_any_target(),
@@ -2433,6 +2642,7 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
             pomodoros_target: monthly_goal_snapshot.pomodoros,
             met: monthly_goal_snapshot
                 .is_met_by_totals(month.focused_minutes(), month.pomodoros_completed),
+            carry_over: config.goal_carry_over.monthly,
         },
         session: SessionOutput {
             focused_minutes: session.focused_minutes(),
@@ -2444,6 +2654,69 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
         },
         live,
     }
+}
+
+fn effective_daily_goal_snapshot(
+    config: &AppConfig,
+    stats: &FocusStats,
+    day: NaiveDate,
+) -> DailyGoalSnapshot {
+    let base = DailyGoalSnapshot {
+        minutes: config.daily_goal.minutes,
+        pomodoros: config.daily_goal.pomodoros,
+    };
+    let previous = day.pred_opt().and_then(|previous_day| {
+        let day_key = previous_day.format("%Y-%m-%d").to_string();
+        stats.daily_entry(&day_key).map(|daily| {
+            (
+                daily.goal.unwrap_or(base),
+                daily.focused_minutes(),
+                daily.pomodoros_completed,
+            )
+        })
+    });
+    carry_over_goal_target(base, config.goal_carry_over.daily, previous)
+}
+
+fn effective_weekly_goal_snapshot(
+    config: &AppConfig,
+    stats: &FocusStats,
+    day: NaiveDate,
+) -> DailyGoalSnapshot {
+    let base = DailyGoalSnapshot {
+        minutes: config.weekly_goal.minutes,
+        pomodoros: config.weekly_goal.pomodoros,
+    };
+    let previous =
+        day.checked_sub_signed(chrono::Duration::weeks(1))
+            .and_then(|previous_week_day| {
+                stats
+                    .weekly_for_day_if_present(previous_week_day)
+                    .map(|week| (base, week.focused_minutes(), week.pomodoros_completed))
+            });
+    carry_over_goal_target(base, config.goal_carry_over.weekly, previous)
+}
+
+fn effective_monthly_goal_snapshot(
+    config: &AppConfig,
+    stats: &FocusStats,
+    day: NaiveDate,
+) -> DailyGoalSnapshot {
+    let base = DailyGoalSnapshot {
+        minutes: config.monthly_goal.minutes,
+        pomodoros: config.monthly_goal.pomodoros,
+    };
+    let previous = previous_month_reference_day(day).and_then(|previous_month_day| {
+        stats
+            .monthly_for_day_if_present(previous_month_day)
+            .map(|month| (base, month.focused_minutes(), month.pomodoros_completed))
+    });
+    carry_over_goal_target(base, config.goal_carry_over.monthly, previous)
+}
+
+fn previous_month_reference_day(day: NaiveDate) -> Option<NaiveDate> {
+    let month_start = NaiveDate::from_ymd_opt(day.year(), day.month(), 1)?;
+    month_start.pred_opt()
 }
 
 fn build_live_status_output(
@@ -2640,6 +2913,16 @@ fn parse_strict_value(value: &str) -> Result<bool, String> {
     }
 }
 
+fn parse_goal_carry_value(value: &str) -> Result<bool, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        _ => Err(invalid_usage(&format!(
+            "Invalid goal carry-over `{value}`. Use `on` or `off`."
+        ))),
+    }
+}
+
 fn parse_site_edit_value(value: &str) -> Result<SiteEditValue, String> {
     let trimmed = value.trim();
     let (previous, next) = trimmed.split_once('=').ok_or_else(|| {
@@ -2826,6 +3109,9 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Goal(_) => "--goal",
         PrimaryCommand::GoalWeekly(_) => "--goal-weekly",
         PrimaryCommand::GoalMonthly(_) => "--goal-monthly",
+        PrimaryCommand::GoalCarry(_) => "--goal-carry",
+        PrimaryCommand::GoalCarryWeekly(_) => "--goal-carry-weekly",
+        PrimaryCommand::GoalCarryMonthly(_) => "--goal-carry-monthly",
         PrimaryCommand::Strict(_) => "--strict",
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
@@ -3063,13 +3349,17 @@ fn print_status_output(payload: &StatusOutput) {
 fn print_status_goal_line(label: &str, goal: &GoalOutput) {
     if goal.configured {
         println!(
-            "{label}: {} min, {} pomodoros ({})",
+            "{label}: {} min, {} pomodoros ({}, carry-over: {})",
             goal.minutes_target,
             goal.pomodoros_target,
-            if goal.met { "met" } else { "in progress" }
+            if goal.met { "met" } else { "in progress" },
+            if goal.carry_over { "on" } else { "off" }
         );
     } else {
-        println!("{label}: off");
+        println!(
+            "{label}: off (carry-over: {})",
+            if goal.carry_over { "on" } else { "off" }
+        );
     }
 }
 
@@ -3117,6 +3407,16 @@ fn print_goal_command_output(label: &str, payload: &GoalCommandOutput) {
     } else {
         println!("{label} goal: off");
     }
+}
+
+fn print_goal_carry_command_output(label: &str, payload: &GoalCarryCommandOutput) {
+    if payload.updated {
+        println!("{label} goal carry-over updated.");
+    }
+    println!(
+        "{label} goal carry-over: {}",
+        if payload.carry_over { "on" } else { "off" }
+    );
 }
 
 fn print_strict_command_output(payload: &StrictCommandOutput) {
@@ -3652,6 +3952,46 @@ mod tests {
     }
 
     #[test]
+    fn parse_goal_carry_without_value_reads_current_state() {
+        let parsed = parse(&["--goal-carry"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::GoalCarry { enabled: None },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_goal_carry_weekly_with_equals_sets_state() {
+        let parsed = parse(&["--goal-carry-weekly=on"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::GoalCarryWeekly {
+                    enabled: Some(true)
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_goal_carry_monthly_with_value_sets_state() {
+        let parsed = parse(&["--goal-carry-monthly", "off"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::GoalCarryMonthly {
+                    enabled: Some(false)
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
     fn parse_schedule_reads_current_schedule() {
         let parsed = parse(&["--schedule"]).unwrap();
         assert_eq!(
@@ -3998,6 +4338,24 @@ mod tests {
     }
 
     #[test]
+    fn classify_key_value_arg_accepts_goal_carry_equals_value() {
+        let parsed = classify_key_value_arg("--goal-carry=on").unwrap();
+        assert_eq!(parsed, Some(ParsedToken::GoalCarry(Some(true))));
+    }
+
+    #[test]
+    fn classify_key_value_arg_accepts_goal_carry_weekly_equals_value() {
+        let parsed = classify_key_value_arg("--goal-carry-weekly=off").unwrap();
+        assert_eq!(parsed, Some(ParsedToken::GoalCarryWeekly(Some(false))));
+    }
+
+    #[test]
+    fn classify_key_value_arg_accepts_goal_carry_monthly_equals_value() {
+        let parsed = classify_key_value_arg("--goal-carry-monthly=on").unwrap();
+        assert_eq!(parsed, Some(ParsedToken::GoalCarryMonthly(Some(true))));
+    }
+
+    #[test]
     fn classify_key_value_arg_accepts_schedule_set_equals_value() {
         let payload = "--schedule-set={\"windows\":[{\"days\":[\"fri\"],\"start\":\"10:00\",\"end\":\"11:00\"}],\"exception_dates\":[]}";
         let parsed = classify_key_value_arg(payload).unwrap();
@@ -4043,6 +4401,24 @@ mod tests {
     fn classify_key_value_arg_rejects_empty_strict_equals_value() {
         let error = classify_key_value_arg("--strict=").unwrap_err();
         assert!(error.contains("`--strict=` requires `on` or `off`"));
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_goal_carry_equals_value() {
+        let error = classify_key_value_arg("--goal-carry=").unwrap_err();
+        assert!(error.contains("`--goal-carry=` requires `on` or `off`"));
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_goal_carry_weekly_equals_value() {
+        let error = classify_key_value_arg("--goal-carry-weekly=").unwrap_err();
+        assert!(error.contains("`--goal-carry-weekly=` requires `on` or `off`"));
+    }
+
+    #[test]
+    fn classify_key_value_arg_rejects_empty_goal_carry_monthly_equals_value() {
+        let error = classify_key_value_arg("--goal-carry-monthly=").unwrap_err();
+        assert!(error.contains("`--goal-carry-monthly=` requires `on` or `off`"));
     }
 
     #[test]
@@ -4097,6 +4473,12 @@ mod tests {
     fn parse_rejects_strict_with_unknown_value() {
         let error = parse(&["--strict=enabled"]).unwrap_err();
         assert!(error.contains("Invalid strict mode"));
+    }
+
+    #[test]
+    fn parse_rejects_goal_carry_with_unknown_value() {
+        let error = parse(&["--goal-carry=enabled"]).unwrap_err();
+        assert!(error.contains("Invalid goal carry-over"));
     }
 
     #[test]
@@ -4602,6 +4984,106 @@ mod tests {
         assert!(boundary_output.goal.met);
         assert!(!boundary_output.weekly_goal.met);
         assert!(!boundary_output.monthly_goal.met);
+    }
+
+    #[test]
+    fn build_status_output_applies_carry_over_to_goal_targets_when_enabled() {
+        let mut stats = FocusStats::default();
+        let today = current_day_key();
+        let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse as a date");
+        let yesterday = today_date.pred_opt().expect("yesterday should exist");
+        let yesterday_key = yesterday.format("%Y-%m-%d").to_string();
+        let month_start = NaiveDate::from_ymd_opt(today_date.year(), today_date.month(), 1)
+            .expect("month start should be representable");
+        let previous_month_day = month_start
+            .pred_opt()
+            .expect("previous month day should be representable");
+        let previous_month_key = previous_month_day.format("%Y-%m-%d").to_string();
+        let previous_daily_goal = DailyGoalSnapshot {
+            minutes: 50,
+            pomodoros: 3,
+        };
+
+        stats.record_focus_elapsed(&yesterday_key, 30 * 60, previous_daily_goal);
+        stats.record_completed_pomodoro(&yesterday_key, previous_daily_goal);
+
+        let base_daily_goal = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        };
+        stats.record_focus_elapsed(&today, 40 * 60, base_daily_goal);
+        stats.record_completed_pomodoro(&today, base_daily_goal);
+
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 2,
+            },
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 100,
+                pomodoros: 3,
+            },
+            monthly_goal: MonthlyGoalConfig {
+                minutes: 300,
+                pomodoros: 10,
+            },
+            goal_carry_over: crate::config::GoalCarryOverConfig {
+                daily: true,
+                weekly: true,
+                monthly: true,
+            },
+            ..AppConfig::default()
+        };
+
+        let output = build_status_output(&config, &stats);
+        assert_eq!(output.goal.minutes_target, 80);
+        assert_eq!(output.goal.pomodoros_target, 4);
+        assert!(output.goal.carry_over);
+
+        stats.record_focus_elapsed(&previous_month_key, 120 * 60, base_daily_goal);
+        for _ in 0..4 {
+            stats.record_completed_pomodoro(&previous_month_key, base_daily_goal);
+        }
+        let output = build_status_output(&config, &stats);
+        assert_eq!(output.monthly_goal.minutes_target, 480);
+        assert_eq!(output.monthly_goal.pomodoros_target, 16);
+        assert!(output.monthly_goal.carry_over);
+    }
+
+    #[test]
+    fn build_status_output_applies_weekly_carry_over_to_goal_targets_when_enabled() {
+        let mut stats = FocusStats::default();
+        let today = current_day_key();
+        let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse as a date");
+        let previous_week_day = today_date - Duration::days(7);
+        let previous_week_key = previous_week_day.format("%Y-%m-%d").to_string();
+        let goal = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        };
+        stats.record_focus_elapsed(&previous_week_key, 70 * 60, goal);
+        stats.record_completed_pomodoro(&previous_week_key, goal);
+        stats.record_focus_elapsed(&today, 40 * 60, goal);
+        stats.record_completed_pomodoro(&today, goal);
+
+        let config = AppConfig {
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 100,
+                pomodoros: 3,
+            },
+            goal_carry_over: crate::config::GoalCarryOverConfig {
+                weekly: true,
+                ..crate::config::GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+
+        let output = build_status_output(&config, &stats);
+        assert_eq!(output.weekly_goal.minutes_target, 130);
+        assert_eq!(output.weekly_goal.pomodoros_target, 5);
+        assert!(output.weekly_goal.carry_over);
     }
 
     #[test]
