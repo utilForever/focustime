@@ -1512,36 +1512,53 @@ impl FocusStats {
     }
 
     fn weekly_focus_score_stats(&self) -> Vec<WeeklyFocusScore> {
+        let consistency_by_key: BTreeMap<(i32, u32), WeeklyConsistency> = self
+            .weekly_consistency_stats()
+            .into_iter()
+            .map(|consistency| ((consistency.year, consistency.week), consistency))
+            .collect();
         let weekly_totals_by_key: BTreeMap<(i32, u32), WeeklyStats> = self
             .weekly_stats()
             .into_iter()
             .map(|stats| ((stats.year, stats.week), stats))
             .collect();
-        self.weekly_consistency_stats()
+        let mut all_week_keys: BTreeSet<(i32, u32)> = consistency_by_key.keys().copied().collect();
+        for week_label in self.weekly_goal_snapshots.keys() {
+            if let Some(week_key) = parse_week_label(week_label) {
+                all_week_keys.insert(week_key);
+            }
+        }
+
+        all_week_keys
             .into_iter()
-            .map(|consistency| {
-                let totals = weekly_totals_by_key
-                    .get(&(consistency.year, consistency.week))
-                    .copied()
-                    .unwrap_or(WeeklyStats {
-                        year: consistency.year,
-                        week: consistency.week,
-                        ..WeeklyStats::default()
-                    });
+            .map(|(year, week)| {
+                let consistency = consistency_by_key.get(&(year, week));
+                let week_label = format_week_label(year, week);
+                let active_days = consistency.map_or(0, |entry| entry.active_days);
+                let consistency_score_pct =
+                    consistency.map_or(0, |entry| entry.consistency_score_pct);
+                let totals =
+                    weekly_totals_by_key
+                        .get(&(year, week))
+                        .copied()
+                        .unwrap_or(WeeklyStats {
+                            year,
+                            week,
+                            ..WeeklyStats::default()
+                        });
                 let completion_score_pct = self
                     .weekly_goal_snapshots
-                    .get(&consistency.week_label)
+                    .get(&week_label)
                     .copied()
                     .and_then(|goal| weekly_completion_score_pct(goal, totals));
-                let focus_score_pct = completion_score_pct.map(|completion| {
-                    average_two_percentages(consistency.consistency_score_pct, completion)
-                });
+                let focus_score_pct = completion_score_pct
+                    .map(|completion| average_two_percentages(consistency_score_pct, completion));
                 WeeklyFocusScore {
-                    year: consistency.year,
-                    week: consistency.week,
-                    week_label: consistency.week_label,
-                    active_days: consistency.active_days,
-                    consistency_score_pct: consistency.consistency_score_pct,
+                    year,
+                    week,
+                    week_label,
+                    active_days,
+                    consistency_score_pct,
                     completion_score_pct,
                     focus_score_pct,
                 }
@@ -2057,6 +2074,13 @@ fn average_two_percentages(left: u8, right: u8) -> u8 {
 
 fn format_week_label(year: i32, week: u32) -> String {
     format!("{year:04}-W{week:02}")
+}
+
+fn parse_week_label(week_label: &str) -> Option<(i32, u32)> {
+    let (year, week) = week_label.split_once("-W")?;
+    let parsed_year = year.parse::<i32>().ok()?;
+    let parsed_week = week.parse::<u32>().ok()?;
+    Some((parsed_year, parsed_week))
 }
 
 fn week_key_for_day(day: chrono::NaiveDate) -> String {
@@ -2777,6 +2801,28 @@ mod tests {
         assert_eq!(focus_score.completion_score_pct, None);
         assert_eq!(focus_score.focus_score_pct, None);
         assert_eq!(focus_score.consistency_score_pct, 14);
+    }
+
+    #[test]
+    fn weekly_focus_score_includes_goal_enabled_idle_weeks() {
+        let mut stats = FocusStats::default();
+        let week_day = chrono::NaiveDate::from_ymd_opt(2026, 4, 6).unwrap();
+        let goal = DailyGoalSnapshot {
+            minutes: 100,
+            pomodoros: 4,
+        };
+        stats.sync_weekly_goal_snapshot(week_day, goal);
+
+        let recent = stats.recent_weekly_focus_scores(1);
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].active_days, 0);
+        assert_eq!(recent[0].consistency_score_pct, 0);
+        assert_eq!(recent[0].completion_score_pct, Some(0));
+        assert_eq!(recent[0].focus_score_pct, Some(0));
+
+        let latest = stats.latest_weekly_focus_score().unwrap();
+        assert_eq!(latest.week_label, recent[0].week_label);
+        assert_eq!(latest.focus_score_pct, Some(0));
     }
 
     #[test]
