@@ -923,7 +923,7 @@ fn render_session_planner(frame: &mut Frame, app: &App) {
             Constraint::Min(4),    // task labels list
             Constraint::Length(3), // task label input
             Constraint::Length(1), // feedback
-            Constraint::Length(2), // hints
+            Constraint::Length(3), // hints
         ])
         .split(outer);
 
