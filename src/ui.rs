@@ -1111,7 +1111,11 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
 
     let session_stats = app.session_stats();
     let today_stats = app.today_stats();
-    let recent_active_days = app.recent_daily_stats(7).len();
+    let recent_active_days = app
+        .recent_daily_stats(7)
+        .into_iter()
+        .filter(|(_, stats)| stats.pomodoros_completed > 0 || stats.focused_seconds > 0)
+        .count();
     let focus_score_line = readable_focus_score_text(&format_history_focus_score_line(app));
     let goals_line = readable_goal_streak_text(&format_history_goal_streak_line(app));
     let overview = Paragraph::new(vec![
