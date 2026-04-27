@@ -7912,13 +7912,11 @@ mod tests {
 
         assert_eq!(app.task_labels, vec!["Docs".to_string()]);
         assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
-        assert!(
-            app.planner_feedback.as_ref().is_some_and(|feedback| {
-                feedback
-                    .message
-                    .contains("destination task goal already exists")
-            })
-        );
+        assert!(app.planner_feedback.as_ref().is_some_and(|feedback| {
+            feedback
+                .message
+                .contains("destination task goal already exists")
+        }));
         let source_progress = app
             .task_goal_progress_for_label("Docs")
             .expect("source task progress should be available");
