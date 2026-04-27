@@ -780,7 +780,10 @@ impl FocusStats {
         totals
     }
 
-    pub fn weekly_goal_snapshot_for_day(&self, day: chrono::NaiveDate) -> Option<DailyGoalSnapshot> {
+    pub fn weekly_goal_snapshot_for_day(
+        &self,
+        day: chrono::NaiveDate,
+    ) -> Option<DailyGoalSnapshot> {
         let key = week_key_for_day(day);
         self.weekly_goal_snapshots.get(&key).copied()
     }
