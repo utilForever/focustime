@@ -3044,12 +3044,13 @@ fn parse_profile_id(value: &str) -> Result<ProfileId, String> {
 fn parse_task_goal_value(value: &str) -> Result<(String, Option<DailyGoalConfig>), String> {
     let trimmed = value.trim();
     if let Some((label_raw, goal_raw)) = trimmed.rsplit_once(':') {
-        if let Ok((minutes, pomodoros)) = parse_goal_components(goal_raw, "--task-goal") {
+        if goal_raw.contains(',') {
             let label = require_nonempty_key_value(
                 label_raw,
                 "Task goal requires a task label before `:`.",
             )?
             .to_string();
+            let (minutes, pomodoros) = parse_goal_components(goal_raw, "--task-goal")?;
             return Ok((label, Some(DailyGoalConfig { minutes, pomodoros })));
         }
     }
@@ -4785,6 +4786,18 @@ mod tests {
     fn parse_rejects_task_goal_with_blank_label() {
         let error = parse(&["--task-goal=:120,4"]).unwrap_err();
         assert!(error.contains("Task goal requires a task label before `:`."));
+    }
+
+    #[test]
+    fn parse_rejects_task_goal_with_non_numeric_pomodoros_suffix() {
+        let error = parse(&["--task-goal=Docs:120,abc"]).unwrap_err();
+        assert!(error.contains("Invalid goal pomodoros"));
+    }
+
+    #[test]
+    fn parse_rejects_task_goal_with_extra_goal_components() {
+        let error = parse(&["--task-goal=Docs:120,4,5"]).unwrap_err();
+        assert!(error.contains("Invalid goal pomodoros"));
     }
 
     #[test]
