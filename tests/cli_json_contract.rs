@@ -101,9 +101,64 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload["goal"].get("carry_over").is_some());
     assert!(payload["weekly_goal"].get("carry_over").is_some());
     assert!(payload["monthly_goal"].get("carry_over").is_some());
+    assert!(payload.get("selected_task_goal").is_some());
     assert!(payload.get("live").is_some());
     assert!(payload["live"].get("focus_intention").is_some());
     assert!(payload["live"].get("task_note").is_some());
+}
+
+#[test]
+fn task_goal_json_sets_and_reads_per_task_target() {
+    let env = TestEnv::new("task-goal-json");
+
+    let select_output = env.run(&["--task", "Docs", "--json"]);
+    assert_eq!(select_output.status.code(), Some(0));
+    assert!(stderr_text(&select_output).trim().is_empty());
+
+    let set_output = env.run(&["--task-goal", "Docs:120,4", "--json"]);
+    assert_eq!(set_output.status.code(), Some(0));
+    assert!(stderr_text(&set_output).trim().is_empty());
+    let set_payload: Value =
+        serde_json::from_slice(&set_output.stdout).expect("stdout should be JSON");
+    assert_eq!(set_payload["updated"], true);
+    assert_eq!(set_payload["task_label"], "Docs");
+    assert_eq!(set_payload["configured"], true);
+    assert_eq!(set_payload["minutes_target"], 120);
+    assert_eq!(set_payload["pomodoros_target"], 4);
+
+    let read_output = env.run(&["--task-goal", "Docs", "--json"]);
+    assert_eq!(read_output.status.code(), Some(0));
+    assert!(stderr_text(&read_output).trim().is_empty());
+    let read_payload: Value =
+        serde_json::from_slice(&read_output.stdout).expect("stdout should be JSON");
+    assert_eq!(read_payload["updated"], false);
+    assert_eq!(read_payload["task_label"], "Docs");
+    assert_eq!(read_payload["configured"], true);
+    assert_eq!(read_payload["minutes_target"], 120);
+    assert_eq!(read_payload["pomodoros_target"], 4);
+}
+
+#[test]
+fn task_goal_json_reads_unconfigured_selected_task_goal() {
+    let env = TestEnv::new("task-goal-json-unconfigured");
+
+    let select_output = env.run(&["--task", "Docs", "--json"]);
+    assert_eq!(select_output.status.code(), Some(0));
+    assert!(stderr_text(&select_output).trim().is_empty());
+
+    let read_output = env.run(&["--task-goal", "Docs", "--json"]);
+    assert_eq!(read_output.status.code(), Some(0));
+    assert!(stderr_text(&read_output).trim().is_empty());
+    let read_payload: Value =
+        serde_json::from_slice(&read_output.stdout).expect("stdout should be JSON");
+    assert_eq!(read_payload["updated"], false);
+    assert_eq!(read_payload["task_label"], "Docs");
+    assert_eq!(read_payload["configured"], false);
+    assert_eq!(read_payload["minutes_target"], 0);
+    assert_eq!(read_payload["pomodoros_target"], 0);
+    assert_eq!(read_payload["focused_minutes"], 0);
+    assert_eq!(read_payload["pomodoros_completed"], 0);
+    assert_eq!(read_payload["met"], false);
 }
 
 #[test]
