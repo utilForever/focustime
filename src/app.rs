@@ -612,6 +612,7 @@ impl App {
     }
 
     pub fn on_tick(&mut self, is_catchup: bool) {
+        self.sync_today_goal_snapshot();
         let completed_phase = self.timer.phase;
         let completed_focus_secs = self.timer.focus_secs;
         if self.should_record_focus_elapsed(is_catchup) {
@@ -731,6 +732,7 @@ impl App {
     pub fn poll_wakatime_status(&mut self) {
         let now = Local::now();
         self.current_frame_now = now;
+        self.sync_today_goal_snapshot();
         self.wakatime.poll_events();
         self.sync_break_glass_override();
         self.sync_recurring_schedule(now);
@@ -3666,17 +3668,20 @@ impl App {
     }
 
     fn sync_today_goal_snapshot(&mut self) {
-        let today = Local::now().date_naive();
-        let day_key = current_day_key();
+        self.sync_goal_snapshot_for_day(Local::now().date_naive());
+    }
+
+    fn sync_goal_snapshot_for_day(&mut self, day: NaiveDate) {
+        let day_key = day.format("%Y-%m-%d").to_string();
         let daily_changed = self
             .stats
             .sync_goal_snapshot(&day_key, self.current_goal_snapshot());
         let weekly_changed = self
             .stats
-            .sync_weekly_goal_snapshot(today, self.current_week_goal_snapshot());
+            .sync_weekly_goal_snapshot(day, self.current_week_goal_snapshot());
         let monthly_changed = self
             .stats
-            .sync_monthly_goal_snapshot(today, self.current_month_goal_snapshot());
+            .sync_monthly_goal_snapshot(day, self.current_month_goal_snapshot());
         if daily_changed || weekly_changed || monthly_changed {
             self.stats_dirty = true;
             self.flush_stats_if_dirty(false);
@@ -5548,6 +5553,83 @@ mod tests {
         assert_eq!(weekly.pomodoros.target, 5);
         assert_eq!(weekly.minutes.completed, 20);
         assert_eq!(weekly.pomodoros.completed, 1);
+    }
+
+    #[test]
+    fn sync_goal_snapshot_for_day_keeps_weekly_and_monthly_carry_across_idle_boundaries() {
+        let config = AppConfig {
+            weekly_goal: WeeklyGoalConfig {
+                minutes: 100,
+                pomodoros: 0,
+            },
+            monthly_goal: MonthlyGoalConfig {
+                minutes: 200,
+                pomodoros: 0,
+            },
+            goal_carry_over: GoalCarryOverConfig {
+                weekly: true,
+                monthly: true,
+                ..GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        let week1 = chrono::NaiveDate::from_ymd_opt(2026, 4, 6).expect("week1 date should be valid");
+        let week2 = chrono::NaiveDate::from_ymd_opt(2026, 4, 13).expect("week2 date should be valid");
+        let week3 = chrono::NaiveDate::from_ymd_opt(2026, 4, 20).expect("week3 date should be valid");
+        app.sync_goal_snapshot_for_day(week1);
+        app.sync_goal_snapshot_for_day(week2);
+        let weekly_target = app.effective_weekly_goal_snapshot_for_day(week3);
+        assert_eq!(weekly_target.minutes, 200);
+        assert_eq!(weekly_target.pomodoros, 0);
+
+        let month1 =
+            chrono::NaiveDate::from_ymd_opt(2026, 1, 15).expect("month1 date should be valid");
+        let month2 =
+            chrono::NaiveDate::from_ymd_opt(2026, 2, 15).expect("month2 date should be valid");
+        let month3 =
+            chrono::NaiveDate::from_ymd_opt(2026, 3, 15).expect("month3 date should be valid");
+        app.sync_goal_snapshot_for_day(month1);
+        app.sync_goal_snapshot_for_day(month2);
+        let monthly_target = app.effective_monthly_goal_snapshot_for_day(month3);
+        assert_eq!(monthly_target.minutes, 400);
+        assert_eq!(monthly_target.pomodoros, 0);
+    }
+
+    #[test]
+    fn poll_wakatime_status_and_on_tick_sync_today_goal_snapshot() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 2,
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let day_key = current_day_key();
+
+        app.stats.insert_daily_for_tests(
+            &day_key,
+            DailyStats {
+                pomodoros_completed: 0,
+                focused_seconds: 0,
+                goal: None,
+            },
+        );
+        app.poll_wakatime_status();
+        assert_eq!(app.today_stats().goal, Some(app.current_goal_snapshot()));
+
+        app.stats.insert_daily_for_tests(
+            &day_key,
+            DailyStats {
+                pomodoros_completed: 0,
+                focused_seconds: 0,
+                goal: None,
+            },
+        );
+        app.on_tick(true);
+        assert_eq!(app.today_stats().goal, Some(app.current_goal_snapshot()));
     }
 
     #[test]
