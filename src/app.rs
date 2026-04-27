@@ -5575,9 +5575,12 @@ mod tests {
         };
         let mut app = App::from_config(config);
 
-        let week1 = chrono::NaiveDate::from_ymd_opt(2026, 4, 6).expect("week1 date should be valid");
-        let week2 = chrono::NaiveDate::from_ymd_opt(2026, 4, 13).expect("week2 date should be valid");
-        let week3 = chrono::NaiveDate::from_ymd_opt(2026, 4, 20).expect("week3 date should be valid");
+        let week1 =
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 6).expect("week1 date should be valid");
+        let week2 =
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 13).expect("week2 date should be valid");
+        let week3 =
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 20).expect("week3 date should be valid");
         app.sync_goal_snapshot_for_day(week1);
         app.sync_goal_snapshot_for_day(week2);
         let weekly_target = app.effective_weekly_goal_snapshot_for_day(week3);
