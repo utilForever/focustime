@@ -1890,6 +1890,28 @@ mod tests {
     }
 
     #[test]
+    fn weekly_and_monthly_goal_snapshot_sync_and_lookup_are_idempotent() {
+        let mut stats = FocusStats::default();
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).expect("day should be valid");
+        let weekly_goal = DailyGoalSnapshot {
+            minutes: 300,
+            pomodoros: 10,
+        };
+        let monthly_goal = DailyGoalSnapshot {
+            minutes: 1200,
+            pomodoros: 40,
+        };
+
+        assert!(stats.sync_weekly_goal_snapshot(day, weekly_goal));
+        assert!(!stats.sync_weekly_goal_snapshot(day, weekly_goal));
+        assert_eq!(stats.weekly_goal_snapshot_for_day(day), Some(weekly_goal));
+
+        assert!(stats.sync_monthly_goal_snapshot(day, monthly_goal));
+        assert!(!stats.sync_monthly_goal_snapshot(day, monthly_goal));
+        assert_eq!(stats.monthly_goal_snapshot_for_day(day), Some(monthly_goal));
+    }
+
+    #[test]
     fn recording_updates_session_and_daily_totals() {
         let mut stats = FocusStats::default();
         let goal = DailyGoalSnapshot {
@@ -2371,6 +2393,28 @@ mod tests {
         assert_eq!(profile_totals[0].profile, ProfileBucket::DeepWork);
         assert_eq!(profile_totals[0].pomodoros_completed, 1);
         assert_eq!(profile_totals[0].focused_minutes(), 25);
+    }
+
+    #[test]
+    fn persisted_stats_round_trip_preserves_weekly_and_monthly_goal_snapshots() {
+        let mut original = FocusStats::default();
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).expect("day should be valid");
+        let weekly_goal = DailyGoalSnapshot {
+            minutes: 300,
+            pomodoros: 10,
+        };
+        let monthly_goal = DailyGoalSnapshot {
+            minutes: 1200,
+            pomodoros: 40,
+        };
+        original.sync_weekly_goal_snapshot(day, weekly_goal);
+        original.sync_monthly_goal_snapshot(day, monthly_goal);
+
+        let toml_str = toml::to_string_pretty(&original.to_persisted()).unwrap();
+        let restored = FocusStats::try_from_toml(&toml_str).unwrap();
+
+        assert_eq!(restored.weekly_goal_snapshot_for_day(day), Some(weekly_goal));
+        assert_eq!(restored.monthly_goal_snapshot_for_day(day), Some(monthly_goal));
     }
 
     #[test]
