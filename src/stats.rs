@@ -2413,8 +2413,14 @@ mod tests {
         let toml_str = toml::to_string_pretty(&original.to_persisted()).unwrap();
         let restored = FocusStats::try_from_toml(&toml_str).unwrap();
 
-        assert_eq!(restored.weekly_goal_snapshot_for_day(day), Some(weekly_goal));
-        assert_eq!(restored.monthly_goal_snapshot_for_day(day), Some(monthly_goal));
+        assert_eq!(
+            restored.weekly_goal_snapshot_for_day(day),
+            Some(weekly_goal)
+        );
+        assert_eq!(
+            restored.monthly_goal_snapshot_for_day(day),
+            Some(monthly_goal)
+        );
     }
 
     #[test]
