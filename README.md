@@ -112,6 +112,13 @@ cargo run -- --goal-monthly
 cargo run -- --goal-monthly=2400,80
 cargo run -- --goal-monthly --json
 
+# Show or set goal carry-over behavior (on/off)
+cargo run -- --goal-carry
+cargo run -- --goal-carry=on
+cargo run -- --goal-carry-weekly=on
+cargo run -- --goal-carry-monthly=off
+cargo run -- --goal-carry --json
+
 # Show or set strict mode
 cargo run -- --strict
 cargo run -- --strict=on

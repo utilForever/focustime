@@ -82,6 +82,9 @@ pub struct AppConfig {
     /// A value of `0` disables the corresponding goal.
     #[serde(default)]
     pub monthly_goal: MonthlyGoalConfig,
+    /// Carry-over behavior for unmet daily/weekly/monthly targets.
+    #[serde(default)]
+    pub goal_carry_over: GoalCarryOverConfig,
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
     pub wakatime: WakatimeMetadataConfig,
@@ -266,6 +269,19 @@ pub struct MonthlyGoalConfig {
     /// Target completed pomodoros for the current month.
     #[serde(default)]
     pub pomodoros: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct GoalCarryOverConfig {
+    /// When enabled, unmet daily targets are added to the next day's target.
+    #[serde(default)]
+    pub daily: bool,
+    /// When enabled, unmet weekly targets are added to the next week's target.
+    #[serde(default)]
+    pub weekly: bool,
+    /// When enabled, unmet monthly targets are added to the next month's target.
+    #[serde(default)]
+    pub monthly: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -465,6 +481,7 @@ impl Default for AppConfig {
             daily_goal: DailyGoalConfig::default(),
             weekly_goal: WeeklyGoalConfig::default(),
             monthly_goal: MonthlyGoalConfig::default(),
+            goal_carry_over: GoalCarryOverConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
         }
     }
@@ -829,6 +846,7 @@ mod tests {
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
         assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
         assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
+        assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
         assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }
 
@@ -895,6 +913,11 @@ mod tests {
                 minutes: 2400,
                 pomodoros: 80,
             },
+            goal_carry_over: GoalCarryOverConfig {
+                daily: true,
+                weekly: false,
+                monthly: true,
+            },
             wakatime: WakatimeMetadataConfig {
                 project: "Team Focus".to_string(),
                 language: "Focus Session".to_string(),
@@ -925,6 +948,7 @@ mod tests {
         assert_eq!(parsed.daily_goal, original.daily_goal);
         assert_eq!(parsed.weekly_goal, original.weekly_goal);
         assert_eq!(parsed.monthly_goal, original.monthly_goal);
+        assert_eq!(parsed.goal_carry_over, original.goal_carry_over);
         assert_eq!(parsed.wakatime, original.wakatime);
     }
 
@@ -952,6 +976,7 @@ mod tests {
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
         assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
         assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
+        assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
         assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }
 
@@ -1152,6 +1177,7 @@ blocked_sites = ["reddit.com", "youtube.com"]
         assert_eq!(parsed.daily_goal, DailyGoalConfig::default());
         assert_eq!(parsed.weekly_goal, WeeklyGoalConfig::default());
         assert_eq!(parsed.monthly_goal, MonthlyGoalConfig::default());
+        assert_eq!(parsed.goal_carry_over, GoalCarryOverConfig::default());
         assert_eq!(parsed.wakatime, WakatimeMetadataConfig::default());
     }
 
@@ -1196,6 +1222,7 @@ long_break_interval = 3
             daily_goal: DailyGoalConfig::default(),
             weekly_goal: WeeklyGoalConfig::default(),
             monthly_goal: MonthlyGoalConfig::default(),
+            goal_carry_over: GoalCarryOverConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
         };
         let custom = cfg.effective_custom_profile();
@@ -1250,6 +1277,7 @@ long_break_interval = 3
         assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
         assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
         assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
+        assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
         assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     }
 

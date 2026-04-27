@@ -18,10 +18,10 @@ use crate::wakatime::WakatimeRuntimeState;
 
 const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
 const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
-const PROFILE_EDIT_GROUP_GOALS: [usize; 6] = [9, 10, 11, 12, 13, 14];
-const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [15, 16];
+const PROFILE_EDIT_GROUP_GOALS: [usize; 9] = [9, 10, 11, 12, 13, 14, 15, 16, 17];
+const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [18, 19];
 const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 15] =
-    [17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31];
+    [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34];
 const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
     ("Timer", &PROFILE_EDIT_GROUP_TIMER),
     ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
@@ -845,27 +845,30 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         8 => "Strict focus mode",
         9 => "Daily goal minutes",
         10 => "Daily goal pomodoros",
-        11 => "Weekly goal minutes",
-        12 => "Weekly goal pomodoros",
-        13 => "Monthly goal minutes",
-        14 => "Monthly goal pomodoros",
-        15 => "WakaTime project",
-        16 => "WakaTime language",
-        17 => "Window selector",
-        18 => "Day selector",
-        19 => "Day enabled",
-        20 => "Start time",
-        21 => "End time",
-        22 => "Add/remove",
-        23 => "Exception selector",
-        24 => "Exception date",
-        25 => "Exception add/remove",
-        26 => "One-time selector",
-        27 => "One-time date",
-        28 => "One-time start",
-        29 => "One-time end",
-        30 => "One-time add/remove",
-        31 => "Conflict inspector",
+        11 => "Daily goal carry-over",
+        12 => "Weekly goal minutes",
+        13 => "Weekly goal pomodoros",
+        14 => "Weekly goal carry-over",
+        15 => "Monthly goal minutes",
+        16 => "Monthly goal pomodoros",
+        17 => "Monthly goal carry-over",
+        18 => "WakaTime project",
+        19 => "WakaTime language",
+        20 => "Window selector",
+        21 => "Day selector",
+        22 => "Day enabled",
+        23 => "Start time",
+        24 => "End time",
+        25 => "Add/remove",
+        26 => "Exception selector",
+        27 => "Exception date",
+        28 => "Exception add/remove",
+        29 => "One-time selector",
+        30 => "One-time date",
+        31 => "One-time start",
+        32 => "One-time end",
+        33 => "One-time add/remove",
+        34 => "Conflict inspector",
         _ => "",
     }
 }
@@ -1724,11 +1727,6 @@ mod tests {
             crossterm::event::KeyCode::Char('e'),
             crossterm::event::KeyModifiers::NONE,
         ));
-        app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[2];
-        app.handle_key(crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::Right,
-            crossterm::event::KeyModifiers::NONE,
-        ));
         app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[3];
         app.handle_key(crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Right,
@@ -1739,7 +1737,12 @@ mod tests {
             crossterm::event::KeyCode::Right,
             crossterm::event::KeyModifiers::NONE,
         ));
-        app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[5];
+        app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[6];
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Right,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[7];
         app.handle_key(crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Right,
             crossterm::event::KeyModifiers::NONE,

@@ -56,6 +56,33 @@ impl DailyGoalSnapshot {
     }
 }
 
+pub fn carry_over_goal_target(
+    base: DailyGoalSnapshot,
+    carry_enabled: bool,
+    previous: Option<(DailyGoalSnapshot, u64, u32)>,
+) -> DailyGoalSnapshot {
+    if !carry_enabled {
+        return base;
+    }
+    let Some((previous_target, previous_minutes, previous_pomodoros)) = previous else {
+        return base;
+    };
+    DailyGoalSnapshot {
+        minutes: if base.minutes == 0 {
+            0
+        } else {
+            base.minutes
+                .saturating_add(previous_target.minutes.saturating_sub(previous_minutes))
+        },
+        pomodoros: if base.pomodoros == 0 {
+            0
+        } else {
+            base.pomodoros
+                .saturating_add(previous_target.pomodoros.saturating_sub(previous_pomodoros))
+        },
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct GoalStreak {
     pub current: u32,
@@ -432,6 +459,10 @@ struct PersistedStats {
     #[serde(default)]
     daily: BTreeMap<String, DailyStats>,
     #[serde(default)]
+    weekly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
+    #[serde(default)]
+    monthly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
+    #[serde(default)]
     task_labels: Vec<String>,
     #[serde(default)]
     selected_task_label: Option<String>,
@@ -445,6 +476,8 @@ struct PersistedStats {
 pub struct FocusStats {
     session: SessionStats,
     daily: BTreeMap<String, DailyStats>,
+    weekly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
+    monthly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
     task_labels: Vec<String>,
     selected_task_label: Option<String>,
     focus_sessions: Vec<FocusSessionRecord>,
@@ -516,6 +549,8 @@ impl FocusStats {
         Self {
             session: SessionStats::default(),
             daily: persisted.daily,
+            weekly_goal_snapshots: persisted.weekly_goal_snapshots,
+            monthly_goal_snapshots: persisted.monthly_goal_snapshots,
             task_labels,
             selected_task_label,
             focus_sessions,
@@ -526,6 +561,8 @@ impl FocusStats {
     fn to_persisted(&self) -> PersistedStats {
         PersistedStats {
             daily: self.daily.clone(),
+            weekly_goal_snapshots: self.weekly_goal_snapshots.clone(),
+            monthly_goal_snapshots: self.monthly_goal_snapshots.clone(),
             task_labels: self.task_labels.clone(),
             selected_task_label: self.selected_task_label.clone(),
             focus_sessions: self.focus_sessions.clone(),
@@ -649,9 +686,7 @@ impl FocusStats {
     }
 
     pub fn sync_goal_snapshot(&mut self, day_key: &str, goal: DailyGoalSnapshot) -> bool {
-        let Some(daily) = self.daily.get_mut(day_key) else {
-            return false;
-        };
+        let daily = self.daily.entry(day_key.to_string()).or_default();
 
         if daily.goal == Some(goal) {
             return false;
@@ -661,12 +696,42 @@ impl FocusStats {
         true
     }
 
+    pub fn sync_weekly_goal_snapshot(
+        &mut self,
+        day: chrono::NaiveDate,
+        goal: DailyGoalSnapshot,
+    ) -> bool {
+        let key = week_key_for_day(day);
+        if self.weekly_goal_snapshots.get(&key) == Some(&goal) {
+            return false;
+        }
+        self.weekly_goal_snapshots.insert(key, goal);
+        true
+    }
+
+    pub fn sync_monthly_goal_snapshot(
+        &mut self,
+        day: chrono::NaiveDate,
+        goal: DailyGoalSnapshot,
+    ) -> bool {
+        let key = month_key_for_day(day);
+        if self.monthly_goal_snapshots.get(&key) == Some(&goal) {
+            return false;
+        }
+        self.monthly_goal_snapshots.insert(key, goal);
+        true
+    }
+
     pub fn session(&self) -> SessionStats {
         self.session
     }
 
     pub fn daily_for(&self, day_key: &str) -> DailyStats {
         self.daily.get(day_key).copied().unwrap_or_default()
+    }
+
+    pub fn daily_entry(&self, day_key: &str) -> Option<DailyStats> {
+        self.daily.get(day_key).copied()
     }
 
     pub fn weekly_for_day(&self, day: chrono::NaiveDate) -> WeeklyStats {
@@ -711,6 +776,22 @@ impl FocusStats {
             totals.focused_seconds = totals.focused_seconds.saturating_add(stats.focused_seconds);
         }
         totals
+    }
+
+    pub fn weekly_goal_snapshot_for_day(
+        &self,
+        day: chrono::NaiveDate,
+    ) -> Option<DailyGoalSnapshot> {
+        let key = week_key_for_day(day);
+        self.weekly_goal_snapshots.get(&key).copied()
+    }
+
+    pub fn monthly_goal_snapshot_for_day(
+        &self,
+        day: chrono::NaiveDate,
+    ) -> Option<DailyGoalSnapshot> {
+        let key = month_key_for_day(day);
+        self.monthly_goal_snapshots.get(&key).copied()
     }
 
     pub fn task_planner_state(&self) -> (Vec<String>, Option<String>) {
@@ -1646,6 +1727,15 @@ fn format_week_label(year: i32, week: u32) -> String {
     format!("{year:04}-W{week:02}")
 }
 
+fn week_key_for_day(day: chrono::NaiveDate) -> String {
+    let week = day.iso_week();
+    format_week_label(week.year(), week.week())
+}
+
+fn month_key_for_day(day: chrono::NaiveDate) -> String {
+    format!("{:04}-{:02}", day.year(), day.month())
+}
+
 fn write_atomic_bytes(path: &Path, content: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -1746,6 +1836,78 @@ mod tests {
     use super::*;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn carry_over_goal_target_returns_base_when_disabled() {
+        let base = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        };
+        let carried = carry_over_goal_target(base, false, Some((base, 0, 0)));
+        assert_eq!(carried, base);
+    }
+
+    #[test]
+    fn carry_over_goal_target_adds_previous_period_deficit() {
+        let base = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        };
+        let previous_target = DailyGoalSnapshot {
+            minutes: 50,
+            pomodoros: 3,
+        };
+        let carried = carry_over_goal_target(base, true, Some((previous_target, 30, 1)));
+        assert_eq!(
+            carried,
+            DailyGoalSnapshot {
+                minutes: 80,
+                pomodoros: 4,
+            }
+        );
+    }
+
+    #[test]
+    fn carry_over_goal_target_keeps_disabled_metrics_off() {
+        let base = DailyGoalSnapshot {
+            minutes: 0,
+            pomodoros: 2,
+        };
+        let previous_target = DailyGoalSnapshot {
+            minutes: 120,
+            pomodoros: 5,
+        };
+        let carried = carry_over_goal_target(base, true, Some((previous_target, 0, 1)));
+        assert_eq!(
+            carried,
+            DailyGoalSnapshot {
+                minutes: 0,
+                pomodoros: 6,
+            }
+        );
+    }
+
+    #[test]
+    fn weekly_and_monthly_goal_snapshot_sync_and_lookup_are_idempotent() {
+        let mut stats = FocusStats::default();
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).expect("day should be valid");
+        let weekly_goal = DailyGoalSnapshot {
+            minutes: 300,
+            pomodoros: 10,
+        };
+        let monthly_goal = DailyGoalSnapshot {
+            minutes: 1200,
+            pomodoros: 40,
+        };
+
+        assert!(stats.sync_weekly_goal_snapshot(day, weekly_goal));
+        assert!(!stats.sync_weekly_goal_snapshot(day, weekly_goal));
+        assert_eq!(stats.weekly_goal_snapshot_for_day(day), Some(weekly_goal));
+
+        assert!(stats.sync_monthly_goal_snapshot(day, monthly_goal));
+        assert!(!stats.sync_monthly_goal_snapshot(day, monthly_goal));
+        assert_eq!(stats.monthly_goal_snapshot_for_day(day), Some(monthly_goal));
+    }
 
     #[test]
     fn recording_updates_session_and_daily_totals() {
@@ -2229,6 +2391,34 @@ mod tests {
         assert_eq!(profile_totals[0].profile, ProfileBucket::DeepWork);
         assert_eq!(profile_totals[0].pomodoros_completed, 1);
         assert_eq!(profile_totals[0].focused_minutes(), 25);
+    }
+
+    #[test]
+    fn persisted_stats_round_trip_preserves_weekly_and_monthly_goal_snapshots() {
+        let mut original = FocusStats::default();
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).expect("day should be valid");
+        let weekly_goal = DailyGoalSnapshot {
+            minutes: 300,
+            pomodoros: 10,
+        };
+        let monthly_goal = DailyGoalSnapshot {
+            minutes: 1200,
+            pomodoros: 40,
+        };
+        original.sync_weekly_goal_snapshot(day, weekly_goal);
+        original.sync_monthly_goal_snapshot(day, monthly_goal);
+
+        let toml_str = toml::to_string_pretty(&original.to_persisted()).unwrap();
+        let restored = FocusStats::try_from_toml(&toml_str).unwrap();
+
+        assert_eq!(
+            restored.weekly_goal_snapshot_for_day(day),
+            Some(weekly_goal)
+        );
+        assert_eq!(
+            restored.monthly_goal_snapshot_for_day(day),
+            Some(monthly_goal)
+        );
     }
 
     #[test]
