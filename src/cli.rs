@@ -408,6 +408,14 @@ struct TodayOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct FocusScoreOutput {
+    available: bool,
+    focus_score_pct: Option<u8>,
+    consistency_score_pct: u8,
+    completion_score_pct: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct LiveStatusOutput {
     state_source: &'static str,
     recovery_error: Option<String>,
@@ -439,6 +447,7 @@ struct StatusOutput {
     selected_task_goal: Option<TaskGoalOutput>,
     session: SessionOutput,
     today: TodayOutput,
+    focus_score: FocusScoreOutput,
     live: LiveStatusOutput,
 }
 
@@ -2761,6 +2770,21 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
         .map(|profile| effective_blocked_sites_for_profile(profile).len())
         .unwrap_or_default();
     let live = build_live_status_output(config, selected_task_label.clone());
+    let consistency_score_pct = stats
+        .weekly_focus_score_for_day(day_date)
+        .consistency_score_pct;
+    let completion_score_pct = if weekly_goal_snapshot.has_any_target() {
+        weekly_goal_completion_score_pct(
+            weekly_goal_snapshot,
+            week.focused_minutes(),
+            week.pomodoros_completed,
+        )
+    } else {
+        None
+    };
+    let focus_score_pct = completion_score_pct.map(|completion| {
+        (u16::from(consistency_score_pct) + u16::from(completion)).div_ceil(2) as u8
+    });
 
     StatusOutput {
         day,
@@ -2803,8 +2827,50 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
             focused_minutes: today.focused_minutes(),
             pomodoros_completed: today.pomodoros_completed,
         },
+        focus_score: FocusScoreOutput {
+            available: focus_score_pct.is_some(),
+            focus_score_pct,
+            consistency_score_pct,
+            completion_score_pct,
+        },
         live,
     }
+}
+
+fn weekly_goal_completion_score_pct(
+    goal: DailyGoalSnapshot,
+    focused_minutes: u64,
+    pomodoros_completed: u32,
+) -> Option<u8> {
+    let minute_score = if goal.minutes > 0 {
+        Some(percentage_round_nearest(
+            focused_minutes.min(goal.minutes),
+            goal.minutes,
+        ))
+    } else {
+        None
+    };
+    let pomodoro_score = if goal.pomodoros > 0 {
+        Some(percentage_round_nearest(
+            u64::from(pomodoros_completed.min(goal.pomodoros)),
+            u64::from(goal.pomodoros),
+        ))
+    } else {
+        None
+    };
+    match (minute_score, pomodoro_score) {
+        (None, None) => None,
+        (Some(score), None) | (None, Some(score)) => Some(score),
+        (Some(left), Some(right)) => Some((u16::from(left) + u16::from(right)).div_ceil(2) as u8),
+    }
+}
+
+fn percentage_round_nearest(part: u64, total: u64) -> u8 {
+    if total == 0 {
+        return 0;
+    }
+    let rounded = (u128::from(part) * 100 + (u128::from(total) / 2)) / u128::from(total);
+    rounded.min(u128::from(u8::MAX)) as u8
 }
 
 fn effective_daily_goal_snapshot_for_day(
@@ -3543,6 +3609,7 @@ fn print_status_output(payload: &StatusOutput) {
         "Session: {} focused minutes, {} pomodoros",
         payload.session.focused_minutes, payload.session.pomodoros_completed
     );
+    print_status_focus_score_line(&payload.focus_score);
     println!(
         "Live timer: {} {} ({} remaining, source: {})",
         payload.live.phase,
@@ -3601,6 +3668,22 @@ fn print_status_task_goal_line(task_goal: Option<&TaskGoalOutput>) {
         "Selected task progress (`{}`): {} min, {} pomodoros",
         task_goal.task_label, task_goal.focused_minutes, task_goal.pomodoros_completed
     );
+}
+
+fn print_status_focus_score_line(focus_score: &FocusScoreOutput) {
+    if focus_score.available {
+        println!(
+            "Focus score: {}% (consistency {}%, completion {}%)",
+            focus_score.focus_score_pct.unwrap_or(0),
+            focus_score.consistency_score_pct,
+            focus_score.completion_score_pct.unwrap_or(0)
+        );
+    } else {
+        println!(
+            "Focus score: n/a (weekly goal off; consistency {}%)",
+            focus_score.consistency_score_pct
+        );
+    }
 }
 
 fn print_timer_state_output(timer: &TimerStateOutput) {
@@ -5331,6 +5414,9 @@ mod tests {
         assert!(in_period_output.weekly_goal.met);
         assert!(in_period_output.monthly_goal.configured);
         assert!(in_period_output.monthly_goal.met);
+        assert!(in_period_output.focus_score.available);
+        assert_eq!(in_period_output.focus_score.completion_score_pct, Some(100));
+        assert!(in_period_output.focus_score.focus_score_pct.is_some());
 
         let boundary_config = AppConfig {
             daily_goal: DailyGoalConfig {
@@ -5353,6 +5439,7 @@ mod tests {
         assert!(boundary_output.goal.met);
         assert!(!boundary_output.weekly_goal.met);
         assert!(!boundary_output.monthly_goal.met);
+        assert!(boundary_output.focus_score.available);
     }
 
     #[test]
@@ -5401,6 +5488,8 @@ mod tests {
         assert_eq!(selected_task_goal.focused_minutes, 0);
         assert_eq!(selected_task_goal.pomodoros_completed, 0);
         assert!(!selected_task_goal.met);
+        assert!(!output.focus_score.available);
+        assert!(output.focus_score.focus_score_pct.is_none());
     }
 
     #[test]

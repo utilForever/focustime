@@ -102,6 +102,15 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload["weekly_goal"].get("carry_over").is_some());
     assert!(payload["monthly_goal"].get("carry_over").is_some());
     assert!(payload.get("selected_task_goal").is_some());
+    assert!(payload.get("focus_score").is_some());
+    assert!(payload["focus_score"].get("available").is_some());
+    assert!(
+        payload["focus_score"]
+            .get("consistency_score_pct")
+            .is_some()
+    );
+    assert!(payload["focus_score"].get("completion_score_pct").is_some());
+    assert!(payload["focus_score"].get("focus_score_pct").is_some());
     assert!(payload.get("live").is_some());
     assert!(payload["live"].get("focus_intention").is_some());
     assert!(payload["live"].get("task_note").is_some());

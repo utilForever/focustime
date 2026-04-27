@@ -1115,7 +1115,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
     let goal_and_consistency_summary = format!(
         "{}   |   {}",
         format_history_goal_streak_line(app),
-        format_history_weekly_consistency_line(app)
+        format_history_focus_score_line(app)
     );
     let goal_summary =
         Paragraph::new(goal_and_consistency_summary).style(Style::default().fg(Color::DarkGray));
@@ -1585,13 +1585,19 @@ fn format_history_goal_streak_line(app: &App) -> String {
     }
 }
 
-fn format_history_weekly_consistency_line(app: &App) -> String {
-    match app.latest_weekly_consistency() {
-        Some(consistency) => format!(
-            "Weekly consistency: {}% ({}/7 days)",
-            consistency.consistency_score_pct, consistency.active_days
-        ),
-        None => "Weekly consistency: n/a".to_string(),
+fn format_history_focus_score_line(app: &App) -> String {
+    match app.latest_weekly_focus_score() {
+        Some(score) => match (score.focus_score_pct, score.completion_score_pct) {
+            (Some(focus_score), Some(completion_score)) => format!(
+                "Focus score: {focus_score}% (consistency {}% · completion {completion_score}%)",
+                score.consistency_score_pct
+            ),
+            _ => format!(
+                "Focus score: n/a (weekly goal off; consistency {}% ({}/7 days))",
+                score.consistency_score_pct, score.active_days
+            ),
+        },
+        None => "Focus score: n/a".to_string(),
     }
 }
 
@@ -2072,7 +2078,7 @@ mod tests {
         assert!(text.contains("Task Totals"));
         assert!(text.contains("Task Trends"));
         assert!(text.contains("Break-glass Audit"));
-        assert!(text_lower.contains("weekly consistency"));
+        assert!(text_lower.contains("focus score"));
         assert!(text.contains(&format_month_label(2026, 4)));
     }
 
