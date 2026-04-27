@@ -457,6 +457,7 @@ Override events are recorded for audit visibility in the History view and includ
 - daily aggregates persisted in `stats.toml` (in the same config directory as `config.toml`)
 - weekly totals derived from daily aggregates in the History view
 - weekly consistency score (`active_days / 7`, rounded to `%`) derived from daily activity
+- weekly focus score KPI (50/50 blend of consistency and weekly goal completion; `n/a` when weekly goal is off)
 - profile effectiveness comparison (focus share % and average focused minutes per completed session)
 - per-task totals (pomodoros and focused minutes) derived from labeled focus sessions
 - per-task trend summaries in History (`last 7 days` vs `previous 7 days`)
@@ -479,12 +480,13 @@ From timer view:
 - while the history panel is open, press **`e`** to export `focustime-stats.json` and `focustime-stats.csv` into the current working directory
 - press **`h`** or **`Esc`** to return to timer view
 
-Exports include daily/weekly aggregates, weekly consistency, profile
+Exports include daily/weekly aggregates, weekly consistency, weekly focus score,
+profile
 effectiveness, task summaries/trends, and labeled focus-session records where
 task labels were attached. Focus-session rows persist and export first-class
 `focus_intention` and `task_note` fields; when dedicated metadata input is not
 provided, both fields default to the selected `task_label`. Export files expose
-`schema_version` (currently `3`) so downstream consumers can handle versioned
+`schema_version` (currently `4`) so downstream consumers can handle versioned
 contracts explicitly.
 
 ## The way the system works

@@ -17,7 +17,7 @@ use crate::task_labels::{canonical_task_label, normalize_task_label, task_label_
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
 const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
-const EXPORT_SCHEMA_VERSION: u32 = 3;
+const EXPORT_SCHEMA_VERSION: u32 = 4;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -110,6 +110,17 @@ pub struct WeeklyConsistency {
     pub week_label: String,
     pub active_days: u8,
     pub consistency_score_pct: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WeeklyFocusScore {
+    pub year: i32,
+    pub week: u32,
+    pub week_label: String,
+    pub active_days: u8,
+    pub consistency_score_pct: u8,
+    pub completion_score_pct: Option<u8>,
+    pub focus_score_pct: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -345,6 +356,7 @@ struct StatsExport {
     task_totals: Vec<TaskTotalsExportRow>,
     task_trends: Vec<TaskTrendExportRow>,
     weekly_consistency: Vec<WeeklyConsistencyExportRow>,
+    focus_scores: Vec<FocusScoreExportRow>,
     profile_effectiveness: Vec<ProfileEffectivenessExportRow>,
 }
 
@@ -423,6 +435,17 @@ struct WeeklyConsistencyExportRow {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct FocusScoreExportRow {
+    year: i32,
+    week: u32,
+    week_label: String,
+    active_days: u8,
+    consistency_score_pct: u8,
+    completion_score_pct: Option<u8>,
+    focus_score_pct: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 struct ProfileEffectivenessExportRow {
     profile: String,
     sessions_completed: u32,
@@ -465,6 +488,8 @@ struct CsvExportRow {
     sessions_completed: Option<u32>,
     active_days: Option<u32>,
     consistency_score_pct: Option<u8>,
+    completion_score_pct: Option<u8>,
+    focus_score_pct: Option<u8>,
     average_focused_minutes_per_session: Option<u64>,
     focus_share_pct: Option<u8>,
 }
@@ -815,6 +840,35 @@ impl FocusStats {
         self.monthly_goal_snapshots.get(&key).copied()
     }
 
+    pub fn weekly_focus_score_for_day(&self, day: chrono::NaiveDate) -> WeeklyFocusScore {
+        let iso_week = day.iso_week();
+        let year = iso_week.year();
+        let week = iso_week.week();
+        let week_label = format_week_label(year, week);
+        let active_days = self
+            .weekly_active_days()
+            .get(&(year, week))
+            .copied()
+            .unwrap_or(0);
+        let consistency_score_pct = consistency_score_from_active_days(active_days);
+        let totals = self.weekly_for_day(day);
+        let completion_score_pct = self
+            .weekly_goal_snapshot_for_day(day)
+            .and_then(|goal| weekly_completion_score_pct(goal, totals));
+        let focus_score_pct = completion_score_pct
+            .map(|completion| average_two_percentages(consistency_score_pct, completion));
+
+        WeeklyFocusScore {
+            year,
+            week,
+            week_label,
+            active_days,
+            consistency_score_pct,
+            completion_score_pct,
+            focus_score_pct,
+        }
+    }
+
     pub fn task_planner_state(&self) -> (Vec<String>, Option<String>) {
         (self.task_labels.clone(), self.selected_task_label.clone())
     }
@@ -1014,8 +1068,15 @@ impl FocusStats {
         weekly
     }
 
-    pub fn latest_weekly_consistency(&self) -> Option<WeeklyConsistency> {
-        self.recent_weekly_consistency(1).into_iter().next()
+    pub fn recent_weekly_focus_scores(&self, limit: usize) -> Vec<WeeklyFocusScore> {
+        let mut weekly = self.weekly_focus_score_stats();
+        weekly.reverse();
+        weekly.truncate(limit);
+        weekly
+    }
+
+    pub fn latest_weekly_focus_score(&self) -> Option<WeeklyFocusScore> {
+        self.recent_weekly_focus_scores(1).into_iter().next()
     }
 
     pub fn recent_monthly(&self, limit: usize) -> Vec<MonthlyStats> {
@@ -1279,6 +1340,7 @@ impl FocusStats {
             task_totals: self.export_task_totals_rows(),
             task_trends: self.export_task_trend_rows(),
             weekly_consistency: self.export_weekly_consistency_rows(),
+            focus_scores: self.export_focus_score_rows(),
             profile_effectiveness: self.export_profile_effectiveness_rows(),
         }
     }
@@ -1406,6 +1468,21 @@ impl FocusStats {
             .collect()
     }
 
+    fn export_focus_score_rows(&self) -> Vec<FocusScoreExportRow> {
+        self.weekly_focus_score_stats()
+            .into_iter()
+            .map(|entry| FocusScoreExportRow {
+                year: entry.year,
+                week: entry.week,
+                week_label: entry.week_label,
+                active_days: entry.active_days,
+                consistency_score_pct: entry.consistency_score_pct,
+                completion_score_pct: entry.completion_score_pct,
+                focus_score_pct: entry.focus_score_pct,
+            })
+            .collect()
+    }
+
     fn export_profile_effectiveness_rows(&self) -> Vec<ProfileEffectivenessExportRow> {
         self.profile_effectiveness()
             .into_iter()
@@ -1422,6 +1499,57 @@ impl FocusStats {
     }
 
     fn weekly_consistency_stats(&self) -> Vec<WeeklyConsistency> {
+        self.weekly_active_days()
+            .into_iter()
+            .map(|((year, week), active_days)| WeeklyConsistency {
+                year,
+                week,
+                week_label: format_week_label(year, week),
+                active_days,
+                consistency_score_pct: consistency_score_from_active_days(active_days),
+            })
+            .collect()
+    }
+
+    fn weekly_focus_score_stats(&self) -> Vec<WeeklyFocusScore> {
+        let weekly_totals_by_key: BTreeMap<(i32, u32), WeeklyStats> = self
+            .weekly_stats()
+            .into_iter()
+            .map(|stats| ((stats.year, stats.week), stats))
+            .collect();
+        self.weekly_consistency_stats()
+            .into_iter()
+            .map(|consistency| {
+                let totals = weekly_totals_by_key
+                    .get(&(consistency.year, consistency.week))
+                    .copied()
+                    .unwrap_or(WeeklyStats {
+                        year: consistency.year,
+                        week: consistency.week,
+                        ..WeeklyStats::default()
+                    });
+                let completion_score_pct = self
+                    .weekly_goal_snapshots
+                    .get(&consistency.week_label)
+                    .copied()
+                    .and_then(|goal| weekly_completion_score_pct(goal, totals));
+                let focus_score_pct = completion_score_pct.map(|completion| {
+                    average_two_percentages(consistency.consistency_score_pct, completion)
+                });
+                WeeklyFocusScore {
+                    year: consistency.year,
+                    week: consistency.week,
+                    week_label: consistency.week_label,
+                    active_days: consistency.active_days,
+                    consistency_score_pct: consistency.consistency_score_pct,
+                    completion_score_pct,
+                    focus_score_pct,
+                }
+            })
+            .collect()
+    }
+
+    fn weekly_active_days(&self) -> BTreeMap<(i32, u32), u8> {
         let mut weekly = BTreeMap::new();
         for (day_key, stats) in &self.daily {
             if !daily_has_activity(*stats) {
@@ -1436,17 +1564,7 @@ impl FocusStats {
                 .or_insert(0_u8);
             *active_days = active_days.saturating_add(1).min(7);
         }
-
         weekly
-            .into_iter()
-            .map(|((year, week), active_days)| WeeklyConsistency {
-                year,
-                week,
-                week_label: format_week_label(year, week),
-                active_days,
-                consistency_score_pct: consistency_score_from_active_days(active_days),
-            })
-            .collect()
     }
 
     fn weekly_stats(&self) -> Vec<WeeklyStats> {
@@ -1637,6 +1755,8 @@ impl StatsExport {
             sessions_completed: None,
             active_days: None,
             consistency_score_pct: None,
+            completion_score_pct: None,
+            focus_score_pct: None,
             average_focused_minutes_per_session: None,
             focus_share_pct: None,
         }
@@ -1651,6 +1771,7 @@ impl StatsExport {
                 + self.task_totals.len()
                 + self.task_trends.len()
                 + self.weekly_consistency.len()
+                + self.focus_scores.len()
                 + self.profile_effectiveness.len(),
         );
 
@@ -1739,6 +1860,19 @@ impl StatsExport {
                 active_days: Some(u32::from(consistency.active_days)),
                 consistency_score_pct: Some(consistency.consistency_score_pct),
                 ..Self::csv_row_defaults("weekly_consistency")
+            });
+        }
+
+        for focus_score in &self.focus_scores {
+            rows.push(CsvExportRow {
+                week_label: Some(focus_score.week_label.clone()),
+                year: Some(focus_score.year),
+                week: Some(focus_score.week),
+                active_days: Some(u32::from(focus_score.active_days)),
+                consistency_score_pct: Some(focus_score.consistency_score_pct),
+                completion_score_pct: focus_score.completion_score_pct,
+                focus_score_pct: focus_score.focus_score_pct,
+                ..Self::csv_row_defaults("focus_score")
             });
         }
 
@@ -1891,6 +2025,34 @@ fn consistency_score_from_active_days(active_days: u8) -> u8 {
     let capped_days = active_days.min(7);
     let rounded = (u32::from(capped_days) * 100 + 3) / 7;
     rounded.min(u32::from(u8::MAX)) as u8
+}
+
+fn weekly_completion_score_pct(goal: DailyGoalSnapshot, totals: WeeklyStats) -> Option<u8> {
+    let minute_score = if goal.minutes > 0 {
+        let completed_minutes = totals.focused_minutes().min(goal.minutes);
+        Some(percentage_round_nearest(completed_minutes, goal.minutes))
+    } else {
+        None
+    };
+    let pomodoro_score = if goal.pomodoros > 0 {
+        let completed_pomodoros = totals.pomodoros_completed.min(goal.pomodoros);
+        Some(percentage_round_nearest(
+            u64::from(completed_pomodoros),
+            u64::from(goal.pomodoros),
+        ))
+    } else {
+        None
+    };
+    match (minute_score, pomodoro_score) {
+        (None, None) => None,
+        (Some(score), None) | (None, Some(score)) => Some(score),
+        (Some(left), Some(right)) => Some(average_two_percentages(left, right)),
+    }
+}
+
+fn average_two_percentages(left: u8, right: u8) -> u8 {
+    let sum = u16::from(left) + u16::from(right);
+    sum.div_ceil(2) as u8
 }
 
 fn format_week_label(year: i32, week: u32) -> String {
@@ -2570,6 +2732,54 @@ mod tests {
     }
 
     #[test]
+    fn weekly_focus_score_combines_consistency_and_completion() {
+        let mut stats = FocusStats::default();
+        let week_day = chrono::NaiveDate::from_ymd_opt(2026, 4, 6).unwrap();
+        let day_key = week_day.format("%Y-%m-%d").to_string();
+        let other_day = week_day.succ_opt().unwrap();
+        let other_day_key = other_day.format("%Y-%m-%d").to_string();
+        let goal = DailyGoalSnapshot {
+            minutes: 50,
+            pomodoros: 2,
+        };
+
+        stats.sync_weekly_goal_snapshot(week_day, goal);
+        stats.record_focus_elapsed(&day_key, 25 * 60, goal);
+        stats.record_completed_pomodoro(&day_key, goal);
+        stats.record_focus_elapsed(&other_day_key, 25 * 60, goal);
+        stats.record_completed_pomodoro(&other_day_key, goal);
+
+        let focus_score = stats.latest_weekly_focus_score().unwrap();
+        let iso_week = week_day.iso_week();
+        assert_eq!(
+            focus_score.week_label,
+            format_week_label(iso_week.year(), iso_week.week())
+        );
+        assert_eq!(focus_score.active_days, 2);
+        assert_eq!(focus_score.consistency_score_pct, 29);
+        assert_eq!(focus_score.completion_score_pct, Some(100));
+        assert_eq!(focus_score.focus_score_pct, Some(65));
+    }
+
+    #[test]
+    fn weekly_focus_score_is_unavailable_when_weekly_goal_is_off() {
+        let mut stats = FocusStats::default();
+        stats.insert_daily_for_tests(
+            "2026-04-06",
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 25 * 60,
+                goal: None,
+            },
+        );
+
+        let focus_score = stats.latest_weekly_focus_score().unwrap();
+        assert_eq!(focus_score.completion_score_pct, None);
+        assert_eq!(focus_score.focus_score_pct, None);
+        assert_eq!(focus_score.consistency_score_pct, 14);
+    }
+
+    #[test]
     fn persisted_stats_round_trip_preserves_daily_history() {
         let mut original = FocusStats::default();
         let goal = DailyGoalSnapshot {
@@ -3128,6 +3338,7 @@ mod tests {
         let task_totals = json_value["task_totals"].as_array().unwrap();
         let task_trends = json_value["task_trends"].as_array().unwrap();
         let weekly_consistency = json_value["weekly_consistency"].as_array().unwrap();
+        let focus_scores = json_value["focus_scores"].as_array().unwrap();
         let profile_effectiveness = json_value["profile_effectiveness"].as_array().unwrap();
         assert_eq!(daily.len(), 2);
         assert!(!weekly.is_empty());
@@ -3136,6 +3347,7 @@ mod tests {
         assert_eq!(task_totals.len(), 1);
         assert_eq!(task_trends.len(), 1);
         assert!(!weekly_consistency.is_empty());
+        assert!(!focus_scores.is_empty());
         assert_eq!(profile_effectiveness.len(), 1);
         assert!(
             daily
@@ -3166,6 +3378,11 @@ mod tests {
                 .iter()
                 .any(|entry| entry["consistency_score_pct"].as_u64().unwrap_or(0) > 0)
         );
+        assert!(
+            focus_scores
+                .iter()
+                .any(|entry| entry.get("focus_score_pct").is_some())
+        );
         assert_eq!(profile_effectiveness[0]["profile"], "Classic");
         assert_eq!(
             profile_effectiveness[0]["average_focused_minutes_per_session"],
@@ -3174,22 +3391,23 @@ mod tests {
         assert_eq!(profile_effectiveness[0]["focus_share_pct"], 100);
 
         let csv = fs::read_to_string(&exported.csv_path).unwrap();
-        assert!(csv.contains("schema_version,record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes,profile_name,sessions_completed,active_days,consistency_score_pct,average_focused_minutes_per_session,focus_share_pct"));
+        assert!(csv.contains("schema_version,record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes,profile_name,sessions_completed,active_days,consistency_score_pct,completion_score_pct,focus_score_pct,average_focused_minutes_per_session,focus_share_pct"));
         assert!(csv.contains(&format!(
-            "3,daily,{labeled_day},,,,1,1800,30,25,1,true,,,,,"
+            "4,daily,{labeled_day},,,,1,1800,30,25,1,true,,,,,"
         )));
-        assert!(csv.contains("3,weekly,,"));
+        assert!(csv.contains("4,weekly,,"));
         assert!(csv.contains(&format!(
-            "3,focus_session,{labeled_day},,,,1,1800,30,,,,Project A,,,Project A,Project A"
+            "4,focus_session,{labeled_day},,,,1,1800,30,,,,Project A,,,Project A,Project A"
         )));
         assert!(csv.contains(&format!(
-            "3,break_glass_override,{labeled_day},,,,0,0,0,,,,Project A,1711000000,300,,"
+            "4,break_glass_override,{labeled_day},,,,0,0,0,,,,Project A,1711000000,300,,"
         )));
-        assert!(csv.contains("3,task_summary,,,,,1,1800,30,,,,Project A"));
-        assert!(csv.contains("3,task_trend,,,,,1,1800,30,,,,Project A"));
-        assert!(csv.contains("3,weekly_consistency,"));
-        assert!(csv.contains("3,profile_effectiveness,,,,,1,1800,30"));
-        assert!(csv.contains("Classic,1,1,,30,100"));
+        assert!(csv.contains("4,task_summary,,,,,1,1800,30,,,,Project A"));
+        assert!(csv.contains("4,task_trend,,,,,1,1800,30,,,,Project A"));
+        assert!(csv.contains("4,weekly_consistency,"));
+        assert!(csv.contains("4,focus_score,"));
+        assert!(csv.contains("4,profile_effectiveness,,,,,1,1800,30"));
+        assert!(csv.contains("Classic,1,1,"));
 
         fs::remove_dir_all(export_dir).unwrap();
     }

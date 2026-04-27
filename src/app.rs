@@ -29,7 +29,7 @@ use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles,
     FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats,
     ProfileEffectiveness, ProfileTotals, SessionStats, TaskGoalProgress, TaskTotals, TaskTrend,
-    WeeklyConsistency, WeeklyStats, carry_over_goal_target, current_day_key,
+    WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -1042,8 +1042,8 @@ impl App {
         self.stats.recent_weekly_consistency(limit)
     }
 
-    pub fn latest_weekly_consistency(&self) -> Option<WeeklyConsistency> {
-        self.stats.latest_weekly_consistency()
+    pub fn latest_weekly_focus_score(&self) -> Option<WeeklyFocusScore> {
+        self.stats.latest_weekly_focus_score()
     }
 
     pub fn recent_monthly_stats(&self, limit: usize) -> Vec<MonthlyStats> {
