@@ -5920,11 +5920,9 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('p')));
         app.handle_key(key(KeyCode::Char('e')));
-        for _ in 0..11 {
-            app.handle_key(key(KeyCode::Down));
-        }
+        app.profile_edit_field = PROFILE_EDIT_WAKATIME_PROJECT_INDEX;
         app.handle_key(key(KeyCode::Char('X')));
-        app.handle_key(key(KeyCode::Down));
+        app.profile_edit_field = PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX;
         app.handle_key(key(KeyCode::Char('Y')));
         app.handle_key(key(KeyCode::Esc));
 
