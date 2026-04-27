@@ -2667,12 +2667,10 @@ fn effective_daily_goal_snapshot(
     };
     let previous = day.pred_opt().and_then(|previous_day| {
         let day_key = previous_day.format("%Y-%m-%d").to_string();
-        stats.daily_entry(&day_key).map(|daily| {
-            (
-                daily.goal.unwrap_or(base),
-                daily.focused_minutes(),
-                daily.pomodoros_completed,
-            )
+        stats.daily_entry(&day_key).and_then(|daily| {
+            daily
+                .goal
+                .map(|goal| (goal, daily.focused_minutes(), daily.pomodoros_completed))
         })
     });
     carry_over_goal_target(base, config.goal_carry_over.daily, previous)
@@ -5049,6 +5047,95 @@ mod tests {
         assert_eq!(output.monthly_goal.minutes_target, 480);
         assert_eq!(output.monthly_goal.pomodoros_target, 16);
         assert!(output.monthly_goal.carry_over);
+    }
+
+    #[test]
+    fn build_status_output_daily_carry_over_does_not_reapply_older_day_debt() {
+        let mut stats = FocusStats::default();
+        let today = current_day_key();
+        let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse as a date");
+        let yesterday = today_date.pred_opt().expect("yesterday should exist");
+        let yesterday_key = yesterday.format("%Y-%m-%d").to_string();
+        let day_before = yesterday.pred_opt().expect("day before should exist");
+        let day_before_key = day_before.format("%Y-%m-%d").to_string();
+
+        stats.record_focus_elapsed(
+            &day_before_key,
+            30 * 60,
+            DailyGoalSnapshot {
+                minutes: 50,
+                pomodoros: 2,
+            },
+        );
+        stats.record_completed_pomodoro(
+            &day_before_key,
+            DailyGoalSnapshot {
+                minutes: 50,
+                pomodoros: 2,
+            },
+        );
+        stats.insert_daily_for_tests(
+            &yesterday_key,
+            crate::stats::DailyStats {
+                pomodoros_completed: 0,
+                focused_seconds: 0,
+                goal: Some(DailyGoalSnapshot {
+                    minutes: 60,
+                    pomodoros: 2,
+                }),
+            },
+        );
+
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 2,
+            },
+            goal_carry_over: crate::config::GoalCarryOverConfig {
+                daily: true,
+                ..crate::config::GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+
+        let output = build_status_output(&config, &stats);
+        assert_eq!(output.goal.minutes_target, 120);
+        assert_eq!(output.goal.pomodoros_target, 4);
+    }
+
+    #[test]
+    fn build_status_output_daily_carry_over_skips_when_previous_day_goal_is_absent() {
+        let mut stats = FocusStats::default();
+        let today = current_day_key();
+        let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+            .expect("current day key should parse as a date");
+        let yesterday = today_date.pred_opt().expect("yesterday should exist");
+        let yesterday_key = yesterday.format("%Y-%m-%d").to_string();
+        stats.insert_daily_for_tests(
+            &yesterday_key,
+            crate::stats::DailyStats {
+                pomodoros_completed: 4,
+                focused_seconds: 120 * 60,
+                goal: None,
+            },
+        );
+
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 2,
+            },
+            goal_carry_over: crate::config::GoalCarryOverConfig {
+                daily: true,
+                ..crate::config::GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+
+        let output = build_status_output(&config, &stats);
+        assert_eq!(output.goal.minutes_target, 60);
+        assert_eq!(output.goal.pomodoros_target, 2);
     }
 
     #[test]
