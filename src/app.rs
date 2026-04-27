@@ -28,8 +28,8 @@ use crate::session_recovery::{self, InProgressSessionSnapshot};
 use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles,
     FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats,
-    ProfileEffectiveness, ProfileTotals, SessionStats, TaskTotals, TaskTrend, WeeklyConsistency,
-    WeeklyStats, carry_over_goal_target, current_day_key,
+    ProfileEffectiveness, ProfileTotals, SessionStats, TaskGoalProgress, TaskTotals, TaskTrend,
+    WeeklyConsistency, WeeklyStats, carry_over_goal_target, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -1065,6 +1065,10 @@ impl App {
 
     pub fn task_focus_totals(&self, limit: usize) -> Vec<TaskTotals> {
         self.stats.task_totals(limit)
+    }
+
+    pub fn task_goal_progress_for_label(&self, label: &str) -> Option<TaskGoalProgress> {
+        self.stats.task_goal_progress_for_label(label)
     }
 
     pub fn recent_task_trends(&self, limit: usize) -> Vec<TaskTrend> {
@@ -2446,6 +2450,7 @@ impl App {
             self.active_focus_intention = Some(label.clone());
             self.active_focus_task_note = Some(label.clone());
         }
+        self.stats.rename_task_goal_target(&current_label, &label);
 
         self.sync_task_planner_state();
         self.sync_recovery_snapshot();
@@ -2465,6 +2470,7 @@ impl App {
         self.clamp_planner_selection();
         let removed = self.task_labels.remove(self.planner_selection_index);
         self.clamp_planner_selection();
+        self.stats.remove_task_goal_target(&removed);
 
         let removed_was_selected = self
             .selected_task_label
@@ -7831,6 +7837,31 @@ mod tests {
     }
 
     #[test]
+    fn session_planner_rename_moves_task_goal_target() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.sync_task_planner_state();
+        let task_goal = DailyGoalSnapshot {
+            minutes: 120,
+            pomodoros: 4,
+        };
+        app.stats
+            .set_task_goal_target("Docs", task_goal)
+            .expect("task goal should be set");
+
+        app.handle_key(key(KeyCode::Char('t')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.planner_input = "Writing".to_string();
+        app.handle_key(key(KeyCode::Enter));
+
+        let progress = app
+            .task_goal_progress_for_label("Writing")
+            .expect("renamed task goal should exist");
+        assert_eq!(progress.target, task_goal);
+    }
+
+    #[test]
     fn session_planner_delete_selected_label_selects_nearest_remaining() {
         let mut app = App::default();
         app.task_labels = vec![
@@ -7864,6 +7895,31 @@ mod tests {
         assert!(app.task_labels.is_empty());
         assert!(app.selected_task_label.is_none());
         assert_eq!(app.planner_selection_index, 0);
+    }
+
+    #[test]
+    fn session_planner_delete_removes_task_goal_target() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.sync_task_planner_state();
+        app.stats
+            .set_task_goal_target(
+                "Docs",
+                DailyGoalSnapshot {
+                    minutes: 90,
+                    pomodoros: 3,
+                },
+            )
+            .expect("task goal should be set");
+
+        app.handle_key(key(KeyCode::Char('t')));
+        app.handle_key(key(KeyCode::Delete));
+
+        let progress = app
+            .task_goal_progress_for_label("Docs")
+            .expect("task progress should be available");
+        assert_eq!(progress.target, DailyGoalSnapshot::default());
     }
 
     #[test]

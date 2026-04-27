@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Task-level cumulative goals (#186):** added per-task goal targets (minutes/pomodoros) with CLI management via `--task-goal`, status JSON exposure for the selected task, and history-panel progress evaluation against each task target.
+
 ## [0.6.2] - 2026-04-26
 
 ### Added

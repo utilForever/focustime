@@ -289,6 +289,21 @@ impl TaskTrend {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskGoalProgress {
+    pub task_label: String,
+    pub target: DailyGoalSnapshot,
+    pub pomodoros_completed: u32,
+    pub focused_seconds: u64,
+    pub met: bool,
+}
+
+impl TaskGoalProgress {
+    pub fn focused_minutes(&self) -> u64 {
+        self.focused_seconds / 60
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TaskTrendWindow {
     recent_start: chrono::NaiveDate,
@@ -470,6 +485,8 @@ struct PersistedStats {
     focus_sessions: Vec<FocusSessionRecord>,
     #[serde(default)]
     break_glass_overrides: Vec<BreakGlassOverrideEvent>,
+    #[serde(default)]
+    task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -482,6 +499,7 @@ pub struct FocusStats {
     selected_task_label: Option<String>,
     focus_sessions: Vec<FocusSessionRecord>,
     break_glass_overrides: Vec<BreakGlassOverrideEvent>,
+    task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
 }
 
 impl FocusStats {
@@ -515,6 +533,7 @@ impl FocusStats {
     fn from_persisted(persisted: PersistedStats) -> Self {
         let (task_labels, selected_task_label) =
             normalize_task_planner_state(persisted.task_labels, persisted.selected_task_label);
+        let task_goal_targets = normalize_task_goal_targets(persisted.task_goal_targets);
         let mut focus_sessions = Vec::new();
         for session in persisted.focus_sessions {
             if let Some(task_label) = normalize_task_label(&session.task_label) {
@@ -555,6 +574,7 @@ impl FocusStats {
             selected_task_label,
             focus_sessions,
             break_glass_overrides,
+            task_goal_targets,
         }
     }
 
@@ -567,6 +587,7 @@ impl FocusStats {
             selected_task_label: self.selected_task_label.clone(),
             focus_sessions: self.focus_sessions.clone(),
             break_glass_overrides: self.break_glass_overrides.clone(),
+            task_goal_targets: self.task_goal_targets.clone(),
         }
     }
 
@@ -798,6 +819,125 @@ impl FocusStats {
         (self.task_labels.clone(), self.selected_task_label.clone())
     }
 
+    pub fn set_task_goal_target(
+        &mut self,
+        label: &str,
+        target: DailyGoalSnapshot,
+    ) -> Result<String, String> {
+        let Some(normalized) = normalize_task_label(label) else {
+            return Err("Task label cannot be empty.".to_string());
+        };
+        let canonical = canonical_task_label(&self.task_labels, &normalized).unwrap_or(normalized);
+        if task_label_index(&self.task_labels, &canonical).is_none() {
+            self.task_labels.push(canonical.clone());
+        }
+        self.selected_task_label = Some(canonical.clone());
+        let key = canonical.to_ascii_lowercase();
+        if target.has_any_target() {
+            self.task_goal_targets.insert(key, target);
+        } else {
+            self.task_goal_targets.remove(&key);
+        }
+        Ok(canonical)
+    }
+
+    pub fn remove_task_goal_target(&mut self, label: &str) -> bool {
+        let Some(normalized) = normalize_task_label(label) else {
+            return false;
+        };
+        let canonical = canonical_task_label(&self.task_labels, &normalized).unwrap_or(normalized);
+        self.task_goal_targets
+            .remove(&canonical.to_ascii_lowercase())
+            .is_some()
+    }
+
+    pub fn rename_task_goal_target(&mut self, previous_label: &str, next_label: &str) -> bool {
+        let Some(previous_normalized) = normalize_task_label(previous_label) else {
+            return false;
+        };
+        let Some(next_normalized) = normalize_task_label(next_label) else {
+            return false;
+        };
+        let previous_canonical = canonical_task_label(&self.task_labels, &previous_normalized)
+            .unwrap_or(previous_normalized);
+        let next_canonical =
+            canonical_task_label(&self.task_labels, &next_normalized).unwrap_or(next_normalized);
+        let previous_key = previous_canonical.to_ascii_lowercase();
+        let next_key = next_canonical.to_ascii_lowercase();
+        if previous_key == next_key {
+            return false;
+        }
+
+        let Some(target) = self.task_goal_targets.remove(&previous_key) else {
+            return false;
+        };
+        self.task_goal_targets.insert(next_key, target);
+        true
+    }
+
+    pub fn task_goal_progress_for_label(&self, label: &str) -> Option<TaskGoalProgress> {
+        let normalized = normalize_task_label(label)?;
+        let task_label = canonical_task_label(&self.task_labels, &normalized).unwrap_or(normalized);
+        let key = task_label.to_ascii_lowercase();
+        let target = self
+            .task_goal_targets
+            .get(&key)
+            .copied()
+            .unwrap_or_default();
+        let totals_by_key = self.task_totals_by_key();
+        let (pomodoros_completed, focused_seconds) =
+            totals_by_key.get(&key).copied().unwrap_or((0, 0));
+        Some(TaskGoalProgress {
+            task_label,
+            target,
+            pomodoros_completed,
+            focused_seconds,
+            met: target.is_met_by_totals(focused_seconds / 60, pomodoros_completed),
+        })
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn task_goal_progress(&self, limit: usize) -> Vec<TaskGoalProgress> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let totals_by_key = self.task_totals_by_key();
+        let mut progress: Vec<TaskGoalProgress> = self
+            .task_goal_targets
+            .iter()
+            .filter_map(|(key, target)| {
+                if !target.has_any_target() {
+                    return None;
+                }
+                let (pomodoros_completed, focused_seconds) =
+                    totals_by_key.get(key).copied().unwrap_or((0, 0));
+                let task_label = self
+                    .task_labels
+                    .iter()
+                    .find(|label| label.eq_ignore_ascii_case(key))
+                    .cloned()
+                    .unwrap_or_else(|| key.clone());
+                Some(TaskGoalProgress {
+                    task_label,
+                    target: *target,
+                    pomodoros_completed,
+                    focused_seconds,
+                    met: target.is_met_by_totals(focused_seconds / 60, pomodoros_completed),
+                })
+            })
+            .collect();
+        progress.sort_by(|left, right| {
+            left.met
+                .cmp(&right.met)
+                .then_with(|| right.focused_seconds.cmp(&left.focused_seconds))
+                .then_with(|| right.pomodoros_completed.cmp(&left.pomodoros_completed))
+                .then_with(|| left.task_label.cmp(&right.task_label))
+        });
+        progress.truncate(limit);
+        progress
+    }
+
     pub fn update_task_planner_state(
         &mut self,
         labels: Vec<String>,
@@ -834,6 +974,20 @@ impl FocusStats {
             }
         }
         recent
+    }
+
+    fn task_totals_by_key(&self) -> BTreeMap<String, (u32, u64)> {
+        let mut by_task: BTreeMap<String, (u32, u64)> = BTreeMap::new();
+        for session in &self.focus_sessions {
+            let Some(task_label) = normalize_task_label(&session.task_label) else {
+                continue;
+            };
+            let key = task_label.to_ascii_lowercase();
+            let entry = by_task.entry(key).or_insert((0, 0));
+            entry.0 = entry.0.saturating_add(1);
+            entry.1 = entry.1.saturating_add(session.focused_seconds);
+        }
+        by_task
     }
 
     pub fn recent_daily(&self, limit: usize) -> Vec<(String, DailyStats)> {
@@ -1637,6 +1791,22 @@ fn normalize_task_planner_state(
     (normalized_labels, normalized_selected)
 }
 
+fn normalize_task_goal_targets(
+    task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
+) -> BTreeMap<String, DailyGoalSnapshot> {
+    let mut normalized = BTreeMap::new();
+    for (label, target) in task_goal_targets {
+        if !target.has_any_target() {
+            continue;
+        }
+        let Some(label) = normalize_task_label(&label) else {
+            continue;
+        };
+        normalized.insert(label.to_ascii_lowercase(), target);
+    }
+    normalized
+}
+
 fn normalize_session_metadata_text(input: &str) -> Option<String> {
     let trimmed = input.trim();
     (!trimmed.is_empty()).then(|| trimmed.to_string())
@@ -2038,6 +2208,83 @@ mod tests {
     }
 
     #[test]
+    fn task_goal_progress_for_label_uses_cumulative_task_totals() {
+        let mut stats = FocusStats::default();
+        let daily_goal = DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        };
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-01",
+            daily_goal,
+            Some("Docs"),
+            30 * 60,
+            None,
+        );
+        stats.record_completed_pomodoro_with_task(
+            "2026-04-02",
+            daily_goal,
+            Some("docs"),
+            30 * 60,
+            None,
+        );
+
+        let task_goal = DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        };
+        let canonical = stats.set_task_goal_target("docs", task_goal).unwrap();
+        assert_eq!(canonical, "Docs");
+
+        let progress = stats.task_goal_progress_for_label("DOCS").unwrap();
+        assert_eq!(progress.task_label, "Docs");
+        assert_eq!(progress.target, task_goal);
+        assert_eq!(progress.focused_minutes(), 60);
+        assert_eq!(progress.pomodoros_completed, 2);
+        assert!(progress.met);
+    }
+
+    #[test]
+    fn task_goal_progress_lists_configured_targets_without_history() {
+        let mut stats = FocusStats::default();
+        let task_goal = DailyGoalSnapshot {
+            minutes: 120,
+            pomodoros: 4,
+        };
+        stats
+            .set_task_goal_target("Project A", task_goal)
+            .expect("task goal should be set");
+
+        let progress = stats.task_goal_progress(5);
+        assert_eq!(progress.len(), 1);
+        assert_eq!(progress[0].task_label, "Project A");
+        assert_eq!(progress[0].target, task_goal);
+        assert_eq!(progress[0].focused_minutes(), 0);
+        assert_eq!(progress[0].pomodoros_completed, 0);
+        assert!(!progress[0].met);
+    }
+
+    #[test]
+    fn renaming_and_removing_task_goals_updates_lookup() {
+        let mut stats = FocusStats::default();
+        let task_goal = DailyGoalSnapshot {
+            minutes: 90,
+            pomodoros: 3,
+        };
+        stats
+            .set_task_goal_target("Docs", task_goal)
+            .expect("task goal should be set");
+        assert!(stats.rename_task_goal_target("Docs", "Writing"));
+
+        let renamed = stats.task_goal_progress_for_label("Writing").unwrap();
+        assert_eq!(renamed.target, task_goal);
+        assert!(stats.remove_task_goal_target("Writing"));
+
+        let removed = stats.task_goal_progress_for_label("Writing").unwrap();
+        assert_eq!(removed.target, DailyGoalSnapshot::default());
+    }
+
+    #[test]
     fn recent_task_trends_compare_last_seven_days_vs_previous_window() {
         let mut stats = FocusStats::default();
         let goal = DailyGoalSnapshot {
@@ -2419,6 +2666,27 @@ mod tests {
             restored.monthly_goal_snapshot_for_day(day),
             Some(monthly_goal)
         );
+    }
+
+    #[test]
+    fn persisted_stats_round_trip_preserves_task_goal_targets() {
+        let mut original = FocusStats::default();
+        let task_goal = DailyGoalSnapshot {
+            minutes: 180,
+            pomodoros: 6,
+        };
+        original
+            .set_task_goal_target("Project A", task_goal)
+            .expect("task goal should be set");
+
+        let toml_str = toml::to_string_pretty(&original.to_persisted()).unwrap();
+        let restored = FocusStats::try_from_toml(&toml_str).unwrap();
+        let progress = restored
+            .task_goal_progress_for_label("project a")
+            .expect("task goal progress should exist");
+
+        assert_eq!(progress.task_label, "Project A");
+        assert_eq!(progress.target, task_goal);
     }
 
     #[test]

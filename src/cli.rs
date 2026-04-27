@@ -34,6 +34,8 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --stop [--json]
   focustime --next [--json]
   focustime --task=LABEL [--json]
+  focustime --task-goal [LABEL|LABEL:MINUTES,POMODOROS] [--json]
+  focustime --task-goal=LABEL[:MINUTES,POMODOROS] [--json]
   focustime --profile [classic|deep-work|custom] [--json]
   focustime --goal [--json]
   focustime --goal=MINUTES,POMODOROS [--json]
@@ -75,6 +77,7 @@ Options:
   --stop          Stop/reset the current phase
   --next          Skip to the next phase
   --task          Select task label (auto-creates unknown labels)
+  --task-goal     Show or set per-task cumulative goal targets
   --profile       Show current profile, or set it when value is provided
   --goal          Show current daily goal, or set minutes/pomodoros targets
   --goal-weekly   Show current weekly goal, or set minutes/pomodoros targets
@@ -160,6 +163,10 @@ pub enum CommandKind {
     Task {
         label: String,
     },
+    TaskGoal {
+        label: Option<String>,
+        goal: Option<DailyGoalConfig>,
+    },
     Profile {
         profile: Option<ProfileId>,
     },
@@ -225,6 +232,10 @@ enum PrimaryCommand {
     Stop,
     Next,
     Task(String),
+    TaskGoal {
+        label: Option<String>,
+        goal: Option<DailyGoalConfig>,
+    },
     Profile(Option<ProfileId>),
     Goal(Option<DailyGoalConfig>),
     GoalWeekly(Option<WeeklyGoalConfig>),
@@ -263,6 +274,10 @@ enum ParsedToken {
     Stop,
     Next,
     Task(String),
+    TaskGoal {
+        label: Option<String>,
+        goal: Option<DailyGoalConfig>,
+    },
     Status,
     Watch(Option<u64>),
     Profile(Option<ProfileId>),
@@ -370,6 +385,17 @@ struct GoalOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct TaskGoalOutput {
+    task_label: String,
+    configured: bool,
+    minutes_target: u64,
+    pomodoros_target: u32,
+    focused_minutes: u64,
+    pomodoros_completed: u32,
+    met: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct SessionOutput {
     focused_minutes: u64,
     pomodoros_completed: u32,
@@ -410,6 +436,7 @@ struct StatusOutput {
     goal: GoalOutput,
     weekly_goal: GoalOutput,
     monthly_goal: GoalOutput,
+    selected_task_goal: Option<TaskGoalOutput>,
     session: SessionOutput,
     today: TodayOutput,
     live: LiveStatusOutput,
@@ -446,6 +473,18 @@ struct TaskCommandOutput {
     created: bool,
     selected_task_label: String,
     timer: TimerStateOutput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct TaskGoalCommandOutput {
+    updated: bool,
+    task_label: String,
+    configured: bool,
+    minutes_target: u64,
+    pomodoros_target: u32,
+    focused_minutes: u64,
+    pomodoros_completed: u32,
+    met: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -691,8 +730,9 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 21] = [
+    let parsers: [(&str, ValueArgParser); 22] = [
         ("--task", classify_task_arg),
+        ("--task-goal", classify_task_goal_arg),
         ("--profile", classify_profile_arg),
         ("--goal", classify_goal_arg),
         ("--goal-weekly", classify_goal_weekly_arg),
@@ -769,6 +809,28 @@ fn classify_task_arg(args: &[String], index: usize) -> Result<(ParsedToken, usiz
     }
     Err(invalid_usage(
         "`--task` requires a task label. Use `--task=LABEL` or `--task LABEL`.",
+    ))
+}
+
+fn classify_task_goal_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let (label, goal) = parse_task_goal_value(next)?;
+        return Ok((
+            ParsedToken::TaskGoal {
+                label: Some(label),
+                goal,
+            },
+            2,
+        ));
+    }
+    Ok((
+        ParsedToken::TaskGoal {
+            label: None,
+            goal: None,
+        },
+        1,
     ))
 }
 
@@ -1056,8 +1118,9 @@ fn classify_schedule_set_arg(
 }
 
 fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 21] = [
+    let parsers: [KeyValueParser; 22] = [
         parse_task_key_value_arg,
+        parse_task_goal_key_value_arg,
         parse_profile_key_value_arg,
         parse_goal_key_value_arg,
         parse_goal_weekly_key_value_arg,
@@ -1093,6 +1156,21 @@ fn parse_task_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--task=") {
         let value = require_nonempty_key_value(value, "`--task=` requires a task label.")?;
         return Ok(Some(ParsedToken::Task(value.to_string())));
+    }
+    Ok(None)
+}
+
+fn parse_task_goal_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--task-goal=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--task-goal=` requires `LABEL` or `LABEL:MINUTES,POMODOROS`.",
+        )?;
+        let (label, goal) = parse_task_goal_value(value)?;
+        return Ok(Some(ParsedToken::TaskGoal {
+            label: Some(label),
+            goal,
+        }));
     }
     Ok(None)
 }
@@ -1331,6 +1409,7 @@ fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), Str
             | ParsedToken::Stop
             | ParsedToken::Next
             | ParsedToken::Task(_)
+            | ParsedToken::TaskGoal { .. }
             | ParsedToken::Status
             | ParsedToken::Watch(_)
             | ParsedToken::Profile(_)
@@ -1375,6 +1454,13 @@ fn parse_primary_command(tokens: &[ParsedToken]) -> Result<Option<PrimaryCommand
             ParsedToken::Task(label) => {
                 set_primary_command(&mut primary, PrimaryCommand::Task(label.clone()))?
             }
+            ParsedToken::TaskGoal { label, goal } => set_primary_command(
+                &mut primary,
+                PrimaryCommand::TaskGoal {
+                    label: label.clone(),
+                    goal: *goal,
+                },
+            )?,
             ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
             ParsedToken::Watch(_) => {}
             ParsedToken::Profile(profile) => {
@@ -1571,6 +1657,10 @@ fn finalize_cli_action(
             kind: CommandKind::Task { label },
             output,
         })),
+        Some(PrimaryCommand::TaskGoal { label, goal }) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::TaskGoal { label, goal },
+            output,
+        })),
         Some(PrimaryCommand::Status) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Status {
                 watch_interval_secs,
@@ -1675,6 +1765,9 @@ pub fn execute_command(cli_command: CliCommand) -> Result<(), String> {
         CommandKind::Stop => execute_stop_command(cli_command.output),
         CommandKind::Next => execute_next_command(cli_command.output),
         CommandKind::Task { label } => execute_task_command(label, cli_command.output),
+        CommandKind::TaskGoal { label, goal } => {
+            execute_task_goal_command(label, goal, cli_command.output)
+        }
         CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
         CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
         CommandKind::GoalWeekly { goal } => execute_weekly_goal_command(goal, cli_command.output),
@@ -1756,6 +1849,55 @@ fn execute_task_command(label: String, output: OutputMode) -> Result<(), String>
             }
             print_timer_state_output(&payload.timer);
         }
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_task_goal_command(
+    label: Option<String>,
+    goal: Option<DailyGoalConfig>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut stats = FocusStats::load()?;
+    let selected_task_label = stats.task_planner_state().1;
+    let requested_label = label.or(selected_task_label).ok_or_else(|| {
+        "No task label selected. Use `--task LABEL` first or pass `--task-goal LABEL`.".to_string()
+    })?;
+
+    let mut updated = false;
+    let task_label = if let Some(goal) = goal {
+        let target = DailyGoalSnapshot {
+            minutes: goal.minutes,
+            pomodoros: goal.pomodoros,
+        };
+        let canonical = stats.set_task_goal_target(&requested_label, target)?;
+        stats
+            .save()
+            .map_err(|error| format!("Failed to save task goals: {error}"))?;
+        updated = true;
+        canonical
+    } else {
+        requested_label
+    };
+
+    let progress = stats
+        .task_goal_progress_for_label(&task_label)
+        .ok_or_else(|| "Task goal lookup failed: invalid task label.".to_string())?;
+    let focused_minutes = progress.focused_minutes();
+    let payload = TaskGoalCommandOutput {
+        updated,
+        task_label: progress.task_label,
+        configured: progress.target.has_any_target(),
+        minutes_target: progress.target.minutes,
+        pomodoros_target: progress.target.pomodoros,
+        focused_minutes,
+        pomodoros_completed: progress.pomodoros_completed,
+        met: progress.met,
+    };
+
+    match output {
+        OutputMode::Text => print_task_goal_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
@@ -2600,6 +2742,20 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let goal_snapshot = effective_daily_goal_snapshot(config, stats, day_date);
     let weekly_goal_snapshot = effective_weekly_goal_snapshot(config, stats, day_date);
     let monthly_goal_snapshot = effective_monthly_goal_snapshot(config, stats, day_date);
+    let selected_task_goal = selected_task_label.as_ref().and_then(|label| {
+        stats.task_goal_progress_for_label(label).map(|progress| {
+            let focused_minutes = progress.focused_minutes();
+            TaskGoalOutput {
+                task_label: progress.task_label,
+                configured: progress.target.has_any_target(),
+                minutes_target: progress.target.minutes,
+                pomodoros_target: progress.target.pomodoros,
+                focused_minutes,
+                pomodoros_completed: progress.pomodoros_completed,
+                met: progress.met,
+            }
+        })
+    });
     let active_sites_count = config
         .blocklist_profiles
         .iter()
@@ -2644,6 +2800,7 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
                 .is_met_by_totals(month.focused_minutes(), month.pomodoros_completed),
             carry_over: config.goal_carry_over.monthly,
         },
+        selected_task_goal,
         session: SessionOutput {
             focused_minutes: session.focused_minutes(),
             pomodoros_completed: session.pomodoros_completed,
@@ -2878,6 +3035,28 @@ fn parse_profile_id(value: &str) -> Result<ProfileId, String> {
             "Invalid profile `{value}`. Use `classic`, `deep-work`, or `custom`."
         ))),
     }
+}
+
+fn parse_task_goal_value(value: &str) -> Result<(String, Option<DailyGoalConfig>), String> {
+    let trimmed = value.trim();
+    if let Some((label_raw, goal_raw)) = trimmed.split_once(':') {
+        let label =
+            require_nonempty_key_value(label_raw, "Task goal requires a task label before `:`.")?
+                .to_string();
+        let goal_raw = require_nonempty_key_value(
+            goal_raw,
+            "Task goal requires `MINUTES,POMODOROS` after `:`.",
+        )?;
+        let (minutes, pomodoros) = parse_goal_components(goal_raw, "--task-goal")?;
+        return Ok((label, Some(DailyGoalConfig { minutes, pomodoros })));
+    }
+
+    let label = require_nonempty_key_value(
+        trimmed,
+        "`--task-goal` requires `LABEL` or `LABEL:MINUTES,POMODOROS`.",
+    )?
+    .to_string();
+    Ok((label, None))
 }
 
 fn parse_goal_value(value: &str) -> Result<DailyGoalConfig, String> {
@@ -3117,6 +3296,7 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Stop => "--stop",
         PrimaryCommand::Next => "--next",
         PrimaryCommand::Task(_) => "--task",
+        PrimaryCommand::TaskGoal { .. } => "--task-goal",
         PrimaryCommand::Profile(_) => "--profile",
         PrimaryCommand::Goal(_) => "--goal",
         PrimaryCommand::GoalWeekly(_) => "--goal-weekly",
@@ -3334,6 +3514,7 @@ fn print_status_output(payload: &StatusOutput) {
     print_status_goal_line("Daily goal", &payload.goal);
     print_status_goal_line("Weekly goal", &payload.weekly_goal);
     print_status_goal_line("Monthly goal", &payload.monthly_goal);
+    print_status_task_goal_line(payload.selected_task_goal.as_ref());
     println!(
         "Session: {} focused minutes, {} pomodoros",
         payload.session.focused_minutes, payload.session.pomodoros_completed
@@ -3373,6 +3554,29 @@ fn print_status_goal_line(label: &str, goal: &GoalOutput) {
             if goal.carry_over { "on" } else { "off" }
         );
     }
+}
+
+fn print_status_task_goal_line(task_goal: Option<&TaskGoalOutput>) {
+    let Some(task_goal) = task_goal else {
+        println!("Selected task goal: none");
+        return;
+    };
+
+    if task_goal.configured {
+        println!(
+            "Selected task goal (`{}`): {} min, {} pomodoros ({})",
+            task_goal.task_label,
+            task_goal.minutes_target,
+            task_goal.pomodoros_target,
+            if task_goal.met { "met" } else { "in progress" }
+        );
+    } else {
+        println!("Selected task goal (`{}`): off", task_goal.task_label);
+    }
+    println!(
+        "Selected task progress (`{}`): {} min, {} pomodoros",
+        task_goal.task_label, task_goal.focused_minutes, task_goal.pomodoros_completed
+    );
 }
 
 fn print_timer_state_output(timer: &TimerStateOutput) {
@@ -3419,6 +3623,27 @@ fn print_goal_command_output(label: &str, payload: &GoalCommandOutput) {
     } else {
         println!("{label} goal: off");
     }
+}
+
+fn print_task_goal_command_output(payload: &TaskGoalCommandOutput) {
+    if payload.updated {
+        println!("Task goal updated for `{}`.", payload.task_label);
+    }
+    if payload.configured {
+        println!(
+            "Task goal (`{}`): {} min, {} pomodoros ({})",
+            payload.task_label,
+            payload.minutes_target,
+            payload.pomodoros_target,
+            if payload.met { "met" } else { "in progress" }
+        );
+    } else {
+        println!("Task goal (`{}`): off", payload.task_label);
+    }
+    println!(
+        "Task progress (`{}`): {} min, {} pomodoros",
+        payload.task_label, payload.focused_minutes, payload.pomodoros_completed
+    );
 }
 
 fn print_goal_carry_command_output(label: &str, payload: &GoalCarryCommandOutput) {
@@ -3787,6 +4012,54 @@ mod tests {
             CliAction::RunCommand(CliCommand {
                 kind: CommandKind::Task {
                     label: "Docs".to_string()
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_task_goal_without_value_reads_selected_label_goal() {
+        let parsed = parse(&["--task-goal"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::TaskGoal {
+                    label: None,
+                    goal: None
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_task_goal_with_label_reads_specific_goal() {
+        let parsed = parse(&["--task-goal", "Docs"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::TaskGoal {
+                    label: Some("Docs".to_string()),
+                    goal: None
+                },
+                output: OutputMode::Text
+            })
+        );
+    }
+
+    #[test]
+    fn parse_task_goal_with_label_and_target_sets_goal() {
+        let parsed = parse(&["--task-goal", "Docs:120,4"]).unwrap();
+        assert_eq!(
+            parsed,
+            CliAction::RunCommand(CliCommand {
+                kind: CommandKind::TaskGoal {
+                    label: Some("Docs".to_string()),
+                    goal: Some(DailyGoalConfig {
+                        minutes: 120,
+                        pomodoros: 4
+                    })
                 },
                 output: OutputMode::Text
             })
@@ -4287,6 +4560,33 @@ mod tests {
     }
 
     #[test]
+    fn classify_key_value_arg_accepts_task_goal_equals_label() {
+        let parsed = classify_key_value_arg("--task-goal=Docs").unwrap();
+        assert_eq!(
+            parsed,
+            Some(ParsedToken::TaskGoal {
+                label: Some("Docs".to_string()),
+                goal: None
+            })
+        );
+    }
+
+    #[test]
+    fn classify_key_value_arg_accepts_task_goal_equals_label_and_target() {
+        let parsed = classify_key_value_arg("--task-goal=Docs:90,3").unwrap();
+        assert_eq!(
+            parsed,
+            Some(ParsedToken::TaskGoal {
+                label: Some("Docs".to_string()),
+                goal: Some(DailyGoalConfig {
+                    minutes: 90,
+                    pomodoros: 3
+                })
+            })
+        );
+    }
+
+    #[test]
     fn classify_key_value_arg_rejects_empty_task_equals_value() {
         let error = classify_key_value_arg("--task=").unwrap_err();
         assert!(error.contains("`--task=` requires a task label."));
@@ -4461,6 +4761,12 @@ mod tests {
     fn parse_rejects_task_with_blank_value() {
         let error = parse(&["--task", "   "]).unwrap_err();
         assert!(error.contains("`--task` requires a task label"));
+    }
+
+    #[test]
+    fn parse_rejects_task_goal_with_blank_label() {
+        let error = parse(&["--task-goal=:120,4"]).unwrap_err();
+        assert!(error.contains("Task goal requires a task label before `:`."));
     }
 
     #[test]

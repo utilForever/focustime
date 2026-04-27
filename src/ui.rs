@@ -1182,11 +1182,16 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .task_focus_totals(5)
         .into_iter()
         .map(|stats| {
+            let goal_summary = app
+                .task_goal_progress_for_label(&stats.task_label)
+                .map(|progress| format_task_goal_progress_summary(&progress))
+                .unwrap_or_else(|| "goal off".to_string());
             ListItem::new(format!(
-                "  {} · 🍅{} · {}m",
+                "  {} · 🍅{} · {}m · {}",
                 stats.task_label,
                 stats.pomodoros_completed,
-                stats.focused_minutes()
+                stats.focused_minutes(),
+                goal_summary
             ))
         })
         .collect();
@@ -1601,6 +1606,30 @@ fn format_task_trend_delta(trend: &crate::stats::TaskTrend) -> String {
     }
 }
 
+fn format_task_goal_progress_summary(progress: &crate::stats::TaskGoalProgress) -> String {
+    if !progress.target.has_any_target() {
+        return "goal off".to_string();
+    }
+    let pomodoros = format_goal_metric_progress(
+        "🍅",
+        u64::from(progress.pomodoros_completed),
+        u64::from(progress.target.pomodoros),
+        "",
+    );
+    let minutes = format_goal_metric_progress(
+        "⏱",
+        progress.focused_minutes(),
+        progress.target.minutes,
+        "m",
+    );
+    format!(
+        "goal {} · {} · {}",
+        if progress.met { "met" } else { "in progress" },
+        pomodoros,
+        minutes
+    )
+}
+
 fn heatmap_cell_symbol(focused_minutes: u64, max_focused_minutes: u64) -> (char, Color) {
     if focused_minutes == 0 || max_focused_minutes == 0 {
         return ('.', Color::DarkGray);
@@ -1807,6 +1836,33 @@ mod tests {
 
         assert_eq!(format_timer_goal_streak_line(&app), expected);
         assert_eq!(format_history_goal_streak_line(&app), expected);
+    }
+
+    #[test]
+    fn task_goal_progress_summary_formats_state_and_metrics() {
+        let configured = crate::stats::TaskGoalProgress {
+            task_label: "Docs".to_string(),
+            target: crate::stats::DailyGoalSnapshot {
+                minutes: 120,
+                pomodoros: 4,
+            },
+            pomodoros_completed: 2,
+            focused_seconds: 60 * 60,
+            met: false,
+        };
+        let configured_text = format_task_goal_progress_summary(&configured);
+        assert!(configured_text.contains("goal in progress"));
+        assert!(configured_text.contains("🍅 2/4"));
+        assert!(configured_text.contains("⏱ 60/120m"));
+
+        let off = crate::stats::TaskGoalProgress {
+            task_label: "Docs".to_string(),
+            target: crate::stats::DailyGoalSnapshot::default(),
+            pomodoros_completed: 0,
+            focused_seconds: 0,
+            met: false,
+        };
+        assert_eq!(format_task_goal_progress_summary(&off), "goal off");
     }
 
     #[test]

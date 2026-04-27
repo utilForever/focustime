@@ -92,6 +92,11 @@ cargo run -- --next --json
 cargo run -- --task "Write docs"
 cargo run -- --task=Write-docs --json
 
+# Show or set cumulative goal targets for a task label
+cargo run -- --task-goal "Write docs"
+cargo run -- --task-goal "Write docs:120,4"
+cargo run -- --task-goal=Write-docs:120,4 --json
+
 # Show or set the active profile
 cargo run -- --profile
 cargo run -- --profile deep-work
@@ -152,7 +157,7 @@ cargo run -- --diagnostics --json
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
 
-# Show status (text or JSON, including live timer/session fields in JSON)
+# Show status (text or JSON, including live timer/session fields and selected task-goal progress in JSON)
 cargo run -- --status
 cargo run -- --status --json
 
@@ -455,6 +460,7 @@ Override events are recorded for audit visibility in the History view and includ
 - profile effectiveness comparison (focus share % and average focused minutes per completed session)
 - per-task totals (pomodoros and focused minutes) derived from labeled focus sessions
 - per-task trend summaries in History (`last 7 days` vs `previous 7 days`)
+- per-task cumulative goals (minutes/pomodoros) with per-label progress and met/in-progress evaluation
 - current streak and best streak based on completed daily goals
 
 If daily, weekly, or monthly goals are configured, timer and history views also
