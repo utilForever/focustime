@@ -224,6 +224,23 @@ requests to `main`.
 > For pull requests from forks, the SonarCloud job is skipped because
 > repository secrets are not available in untrusted fork contexts.
 
+## TUI layout and interaction model
+
+The TUI keeps the same keyboard shortcuts, but uses a cleaner hierarchy and more
+consistent screen structure:
+
+- **Timer view** prioritizes phase/countdown/progress first, then shows grouped
+  session context (task, profile, schedule, stats, WakaTime, strict/break-glass).
+- **Manager/detail views** (sites, profiles, planner, history, diagnostics)
+  follow a consistent pattern: context header, primary content block, feedback
+  line, and compact command legend.
+- **Profiles, planner, and history** are now laid out to fit narrower and
+  shorter terminal windows than before.
+- **Focus History** uses a redesigned structure with an overview block and
+  dedicated task/trend/audit panels for faster scanning.
+- **Command legends** use short grouped lines so common actions are easier to
+  scan quickly during focus sessions.
+
 ## Pomodoro profiles
 
 `focustime` now supports selectable Pomodoro profiles:
@@ -346,6 +363,8 @@ Add/import input supports:
 Invalid and duplicate entries are reported inline so you can fix them without leaving the view.
 
 Allowlist entries act as explicit exceptions: effective focus blocking is computed as **blocklist sites minus allowlist sites** for the active profile.
+
+For hosts-based blocking to apply reliably, keep DNS-over-HTTPS disabled in your browser.
 
 ## Setup diagnostics
 
