@@ -1102,7 +1102,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(5), // overview
+            Constraint::Length(6), // overview
             Constraint::Min(6),    // history panels
             Constraint::Length(1), // status line
             Constraint::Length(2), // hints
