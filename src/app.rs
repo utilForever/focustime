@@ -2431,6 +2431,29 @@ impl App {
             return;
         }
 
+        let source_goal_target = self
+            .stats
+            .task_goal_progress_for_label(&current_label)
+            .map(|progress| progress.target)
+            .unwrap_or_default();
+        let destination_goal_target = self
+            .stats
+            .task_goal_progress_for_label(&label)
+            .map(|progress| progress.target)
+            .unwrap_or_default();
+        if !current_label.eq_ignore_ascii_case(&label)
+            && source_goal_target.has_any_target()
+            && destination_goal_target.has_any_target()
+        {
+            self.set_planner_feedback(
+                PlannerFeedbackLevel::Warning,
+                format!(
+                    "Cannot rename `{current_label}` -> `{label}`: destination task goal already exists"
+                ),
+            );
+            return;
+        }
+
         if let Some(target) = self.task_labels.get_mut(self.planner_selection_index) {
             *target = label.clone();
         }
@@ -7859,6 +7882,51 @@ mod tests {
             .task_goal_progress_for_label("Writing")
             .expect("renamed task goal should exist");
         assert_eq!(progress.target, task_goal);
+    }
+
+    #[test]
+    fn session_planner_rename_rejects_when_destination_task_goal_exists() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.sync_task_planner_state();
+        let source_goal = DailyGoalSnapshot {
+            minutes: 120,
+            pomodoros: 4,
+        };
+        let destination_goal = DailyGoalSnapshot {
+            minutes: 90,
+            pomodoros: 3,
+        };
+        app.stats
+            .set_task_goal_target("Docs", source_goal)
+            .expect("source task goal should be set");
+        app.stats
+            .set_task_goal_target("Writing", destination_goal)
+            .expect("destination task goal should be set");
+
+        app.handle_key(key(KeyCode::Char('t')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.planner_input = "Writing".to_string();
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.task_labels, vec!["Docs".to_string()]);
+        assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
+        assert!(
+            app.planner_feedback.as_ref().is_some_and(|feedback| {
+                feedback
+                    .message
+                    .contains("destination task goal already exists")
+            })
+        );
+        let source_progress = app
+            .task_goal_progress_for_label("Docs")
+            .expect("source task progress should be available");
+        assert_eq!(source_progress.target, source_goal);
+        let destination_progress = app
+            .task_goal_progress_for_label("Writing")
+            .expect("destination task progress should be available");
+        assert_eq!(destination_progress.target, destination_goal);
     }
 
     #[test]
