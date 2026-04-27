@@ -686,9 +686,7 @@ impl FocusStats {
     }
 
     pub fn sync_goal_snapshot(&mut self, day_key: &str, goal: DailyGoalSnapshot) -> bool {
-        let Some(daily) = self.daily.get_mut(day_key) else {
-            return false;
-        };
+        let daily = self.daily.entry(day_key.to_string()).or_default();
 
         if daily.goal == Some(goal) {
             return false;

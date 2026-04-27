@@ -5601,6 +5601,44 @@ mod tests {
     }
 
     #[test]
+    fn sync_goal_snapshot_for_day_persists_idle_daily_snapshots_for_next_day_carry_over() {
+        let config = AppConfig {
+            daily_goal: DailyGoalConfig {
+                minutes: 60,
+                pomodoros: 0,
+            },
+            goal_carry_over: GoalCarryOverConfig {
+                daily: true,
+                ..GoalCarryOverConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let day1 =
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 8).expect("day1 date should be valid");
+        let day2 =
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 9).expect("day2 date should be valid");
+        let day3 =
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 10).expect("day3 date should be valid");
+
+        app.sync_goal_snapshot_for_day(day1);
+        app.sync_goal_snapshot_for_day(day2);
+
+        let day2_key = day2.format("%Y-%m-%d").to_string();
+        assert_eq!(
+            app.stats.daily_entry(&day2_key).and_then(|stats| stats.goal),
+            Some(DailyGoalSnapshot {
+                minutes: 60,
+                pomodoros: 0,
+            })
+        );
+
+        let day3_target = app.effective_daily_goal_snapshot_for_day(day3);
+        assert_eq!(day3_target.minutes, 120);
+        assert_eq!(day3_target.pomodoros, 0);
+    }
+
+    #[test]
     fn poll_wakatime_status_and_on_tick_sync_today_goal_snapshot() {
         let config = AppConfig {
             daily_goal: DailyGoalConfig {
