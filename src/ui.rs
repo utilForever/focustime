@@ -1608,26 +1608,13 @@ fn format_task_trend_delta(trend: &crate::stats::TaskTrend) -> String {
 
 fn format_task_goal_progress_summary(progress: &crate::stats::TaskGoalProgress) -> String {
     if !progress.target.has_any_target() {
-        return "goal off".to_string();
+        return "g:off".to_string();
     }
-    let pomodoros = format_goal_metric_progress(
-        "🍅",
-        u64::from(progress.pomodoros_completed),
-        u64::from(progress.target.pomodoros),
-        "",
-    );
-    let minutes = format_goal_metric_progress(
-        "⏱",
-        progress.focused_minutes(),
-        progress.target.minutes,
-        "m",
-    );
-    format!(
-        "goal {} · {} · {}",
-        if progress.met { "met" } else { "in progress" },
-        pomodoros,
-        minutes
-    )
+    if progress.met {
+        "g:met".to_string()
+    } else {
+        "g:in".to_string()
+    }
 }
 
 fn heatmap_cell_symbol(focused_minutes: u64, max_focused_minutes: u64) -> (char, Color) {
@@ -1851,9 +1838,7 @@ mod tests {
             met: false,
         };
         let configured_text = format_task_goal_progress_summary(&configured);
-        assert!(configured_text.contains("goal in progress"));
-        assert!(configured_text.contains("🍅 2/4"));
-        assert!(configured_text.contains("⏱ 60/120m"));
+        assert_eq!(configured_text, "g:in");
 
         let off = crate::stats::TaskGoalProgress {
             task_label: "Docs".to_string(),
@@ -1862,7 +1847,19 @@ mod tests {
             focused_seconds: 0,
             met: false,
         };
-        assert_eq!(format_task_goal_progress_summary(&off), "goal off");
+        assert_eq!(format_task_goal_progress_summary(&off), "g:off");
+
+        let met = crate::stats::TaskGoalProgress {
+            task_label: "Docs".to_string(),
+            target: crate::stats::DailyGoalSnapshot {
+                minutes: 60,
+                pomodoros: 2,
+            },
+            pomodoros_completed: 2,
+            focused_seconds: 60 * 60,
+            met: true,
+        };
+        assert_eq!(format_task_goal_progress_summary(&met), "g:met");
     }
 
     #[test]
