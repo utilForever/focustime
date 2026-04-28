@@ -19,8 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **TUI layout and Focus History ergonomics refresh (#225):** reworked timer/history screen structure for clearer navigation and readability.
-- **Typo-check action dependency update (#226):** bumped GitHub Actions `crate-ci/typos` from `1.45.1` to `1.45.2`.
-- **v0.7.0 screenshot refresh (#227):** updated project screenshots to reflect current UI behavior.
 
 ## [0.6.2] - 2026-04-26
 
