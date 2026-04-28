@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-04-28
+
+### Added
+
+- **Session interruption tracking and visibility (#229):** added interruption event tracking for manual stop/skip flows, plus latest interruption summaries in CLI/TUI status outputs and stats exports.
+- **Mid-session note editing workflow (#230):** added in-focus note editing and timer-view note surfaces for active sessions.
+
+### Changed
+
+- **Interruption summary reliability hardening (#229):** fixed latest-interruption selection behavior and canonical-label rendering consistency.
+- **Mid-session note UX and input hardening (#230):** preserved custom notes on task rename, aligned note-editing UI hints, and sanitized pasted timer notes.
+
 ## [0.7.0] - 2026-04-28
 
 ### Added
@@ -184,7 +196,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/utilForever/focustime/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/utilForever/focustime/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/utilForever/focustime/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/utilForever/focustime/compare/v0.6.0...v0.6.1
