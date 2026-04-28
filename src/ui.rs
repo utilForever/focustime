@@ -176,11 +176,17 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Yellow),
         )
     };
+    let can_edit_session_note = app.can_edit_session_note();
     let (note_text, note_style) = if let Some(note) = app.current_task_note() {
         (format!("📝 Note: {note}"), Style::default().fg(Color::Cyan))
+    } else if can_edit_session_note {
+        (
+            "📝 Note: none yet ([m] Edit note)".to_string(),
+            Style::default().fg(Color::DarkGray),
+        )
     } else {
         (
-            "📝 Note: available during active/paused focus ([m])".to_string(),
+            "📝 Note: unavailable (start or resume focus to edit)".to_string(),
             Style::default().fg(Color::DarkGray),
         )
     };
@@ -395,8 +401,10 @@ fn timer_primary_hint(app: &App) -> &'static str {
         "Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)  [m] Note  [u] Unblock  [z] Delay 10m"
     } else if app.strict_mode_enforced_for_focus() {
         "Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)  [m] Note  [u] Unblock  [z] Delay 10m"
-    } else {
+    } else if app.can_edit_session_note() {
         "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [m] Note  [u] Unblock  [z] Delay 10m"
+    } else {
+        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [m] Note (Focus only)  [u] Unblock  [z] Delay 10m"
     }
 }
 
@@ -411,7 +419,9 @@ fn timer_secondary_hint(app: &App) -> &'static str {
 }
 
 fn timer_tertiary_hint(app: &App) -> &'static str {
-    if app.strict_mode_enforced_for_focus() {
+    if app.timer_note_input_active() {
+        "Note edit: [Esc] Cancel"
+    } else if app.strict_mode_enforced_for_focus() {
         "Navigate: [q/Esc] Quit (Locked during active focus)"
     } else {
         "Navigate: [q/Esc] Quit"
@@ -1812,6 +1822,12 @@ mod tests {
     }
 
     #[test]
+    fn timer_primary_hint_marks_note_as_focus_only_when_not_editable() {
+        let app = App::default();
+        assert!(timer_primary_hint(&app).contains("[m] Note (Focus only)"));
+    }
+
+    #[test]
     fn timer_hints_switch_when_note_edit_is_active() {
         let mut app = App::default();
         app.task_labels = vec!["Docs".to_string()];
@@ -1833,6 +1849,7 @@ mod tests {
             timer_secondary_hint(&app),
             "Views: shortcuts paused while editing note"
         );
+        assert_eq!(timer_tertiary_hint(&app), "Note edit: [Esc] Cancel");
     }
 
     #[test]
@@ -2251,6 +2268,22 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("Task: Docs"));
+    }
+
+    #[test]
+    fn timer_view_shows_note_unavailable_outside_active_focus() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let app = App::default();
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Note: unavailable"));
     }
 
     #[test]
