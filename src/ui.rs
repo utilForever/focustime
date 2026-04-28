@@ -2174,8 +2174,13 @@ mod tests {
         ));
 
         let line = format_history_interruption_line(&app);
+        let event = app
+            .latest_session_interruption()
+            .expect("skip should record an interruption event");
         assert!(line.contains("Last interruption"));
-        assert!(line.contains("skip/next"));
+        assert!(line.contains(event.reason.label()));
+        assert!(line.contains(&format_duration_label(event.remaining_secs)));
+        assert!(line.contains(event.task_label.as_deref().unwrap_or("Unlabeled")));
     }
 
     #[test]
