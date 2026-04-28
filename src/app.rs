@@ -973,6 +973,10 @@ impl App {
             .or(self.selected_task_label.as_deref())
     }
 
+    pub fn can_edit_session_note(&self) -> bool {
+        self.focus_session_active_for_current_state()
+    }
+
     pub fn timer_note_input_active(&self) -> bool {
         self.timer_note_input_active
     }
@@ -2607,7 +2611,13 @@ impl App {
         {
             self.active_focus_task_label = Some(label.clone());
             self.active_focus_intention = Some(label.clone());
-            self.active_focus_task_note = Some(label.clone());
+            let should_sync_note_to_label = match self.active_focus_task_note.as_deref() {
+                None => true,
+                Some(note) => note.eq_ignore_ascii_case(&current_label),
+            };
+            if should_sync_note_to_label {
+                self.active_focus_task_note = Some(label.clone());
+            }
         }
         self.stats.rename_task_goal_target(&current_label, &label);
 
@@ -8052,6 +8062,31 @@ mod tests {
             interruptions[0].task_note.as_deref(),
             Some("Pulled into production incident")
         );
+    }
+
+    #[test]
+    fn planner_rename_preserves_custom_mid_session_note() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(key(KeyCode::Char(' ')));
+
+        app.handle_key(key(KeyCode::Char('m')));
+        app.timer_note_input = "Keep this custom note".to_string();
+        app.handle_key(key(KeyCode::Enter));
+
+        app.open_session_planner();
+        app.planner_selection_index = 0;
+        app.commit_planner_rename_input("Writing".to_string());
+
+        assert_eq!(app.active_focus_task_label.as_deref(), Some("Writing"));
+        assert_eq!(app.active_focus_intention.as_deref(), Some("Writing"));
+        assert_eq!(
+            app.active_focus_task_note.as_deref(),
+            Some("Keep this custom note")
+        );
+        let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+        assert_eq!(snapshot.task_note.as_deref(), Some("Keep this custom note"));
     }
 
     #[test]
