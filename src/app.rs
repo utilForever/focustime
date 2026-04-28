@@ -440,6 +440,8 @@ pub struct App {
     active_focus_task_label: Option<String>,
     active_focus_intention: Option<String>,
     active_focus_task_note: Option<String>,
+    timer_note_input: String,
+    timer_note_input_active: bool,
     active_focus_profile: Option<ProfileId>,
     site_list_mode: SiteListMode,
     /// Index of the highlighted site in the SiteManager list.
@@ -566,6 +568,8 @@ impl App {
             active_focus_task_label: None,
             active_focus_intention: None,
             active_focus_task_note: None,
+            timer_note_input: String::new(),
+            timer_note_input_active: false,
             active_focus_profile: None,
             site_list_mode: SiteListMode::Blocklist,
             selected_site: 0,
@@ -668,6 +672,7 @@ impl App {
             self.active_focus_task_label = None;
             self.active_focus_intention = None;
             self.active_focus_task_note = None;
+            self.clear_timer_note_input();
             self.active_focus_profile = None;
         }
 
@@ -683,6 +688,7 @@ impl App {
             self.active_focus_task_label = None;
             self.active_focus_intention = None;
             self.active_focus_task_note = None;
+            self.clear_timer_note_input();
             self.active_focus_profile = None;
             self.break_glass_expires_at = None;
         }
@@ -955,6 +961,24 @@ impl App {
         } else {
             self.selected_task_label.as_deref()
         }
+    }
+
+    pub fn current_task_note(&self) -> Option<&str> {
+        if !self.focus_session_active_for_current_state() {
+            return None;
+        }
+        self.active_focus_task_note
+            .as_deref()
+            .or(self.active_focus_task_label.as_deref())
+            .or(self.selected_task_label.as_deref())
+    }
+
+    pub fn timer_note_input_active(&self) -> bool {
+        self.timer_note_input_active
+    }
+
+    pub fn timer_note_input_value(&self) -> &str {
+        &self.timer_note_input
     }
 
     pub fn profile_values(&self, profile: ProfileId) -> (u64, u64, u64, u32) {
@@ -2064,6 +2088,11 @@ impl App {
     }
 
     pub fn handle_paste(&mut self, text: String) {
+        if self.mode == AppMode::Timer && self.timer_note_input_active {
+            self.timer_note_input.push_str(&text);
+            return;
+        }
+
         if self.mode != AppMode::SiteManager {
             return;
         }
@@ -2080,6 +2109,11 @@ impl App {
     }
 
     fn handle_key_timer(&mut self, key: KeyEvent) {
+        if self.timer_note_input_active {
+            self.handle_timer_note_input_key(key);
+            return;
+        }
+
         if self.handle_quit_key(&key, true) {
             return;
         }
@@ -2161,6 +2195,10 @@ impl App {
             KeyCode::Char('d') => {
                 self.open_setup_diagnostics();
             }
+            // Edit mid-session note
+            KeyCode::Char('m') => {
+                self.start_timer_note_input();
+            }
             // Break-glass override (temporary unblock)
             KeyCode::Char('u') => {
                 self.handle_break_glass_key();
@@ -2171,6 +2209,76 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn start_timer_note_input(&mut self) {
+        if !self.focus_session_active_for_current_state() {
+            self.phase_notification = Some(
+                "Mid-session notes are available only during active or paused focus.".to_string(),
+            );
+            return;
+        }
+
+        self.timer_note_input = self
+            .current_task_note()
+            .map(str::to_string)
+            .unwrap_or_default();
+        self.timer_note_input_active = true;
+        self.phase_notification =
+            Some("Editing session note: type text, then press [Enter] to save.".to_string());
+    }
+
+    fn handle_timer_note_input_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Enter => self.commit_timer_note_input(),
+            KeyCode::Esc => {
+                self.clear_timer_note_input();
+                self.phase_notification = Some("Session note edit canceled.".to_string());
+            }
+            KeyCode::Backspace => {
+                self.timer_note_input.pop();
+            }
+            KeyCode::Char(c)
+                if !key
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
+                self.timer_note_input.push(c);
+            }
+            _ => {}
+        }
+    }
+
+    fn commit_timer_note_input(&mut self) {
+        if !self.focus_session_active_for_current_state() {
+            self.clear_timer_note_input();
+            self.phase_notification =
+                Some("Session note save failed: focus is no longer active.".to_string());
+            return;
+        }
+
+        let note = if self.timer_note_input.trim().is_empty() {
+            self.active_focus_task_label
+                .clone()
+                .or_else(|| self.selected_task_label.clone())
+        } else {
+            Some(self.timer_note_input.trim().to_string())
+        };
+
+        self.clear_timer_note_input();
+        if let Some(note) = note {
+            self.active_focus_task_note = Some(note);
+            self.sync_recovery_snapshot();
+            self.phase_notification = Some("Session note updated.".to_string());
+        } else {
+            self.phase_notification =
+                Some("Session note save failed: no task selected.".to_string());
+        }
+    }
+
+    fn clear_timer_note_input(&mut self) {
+        self.timer_note_input.clear();
+        self.timer_note_input_active = false;
     }
 
     fn delay_active_schedule_start(&mut self) {
@@ -3468,6 +3576,7 @@ impl App {
             self.active_focus_task_label = self.selected_task_label.clone();
             self.active_focus_intention = self.selected_task_label.clone();
             self.active_focus_task_note = self.selected_task_label.clone();
+            self.clear_timer_note_input();
             self.active_focus_profile = Some(self.selected_profile);
             self.schedule_armed_occurrence_key = None;
             self.clear_schedule_delay_state();
@@ -3475,6 +3584,7 @@ impl App {
             self.active_focus_task_label = None;
             self.active_focus_intention = None;
             self.active_focus_task_note = None;
+            self.clear_timer_note_input();
             self.active_focus_profile = None;
             self.break_glass_expires_at = None;
         }
@@ -7863,6 +7973,84 @@ mod tests {
         assert_eq!(
             app.phase_notification.as_deref(),
             Some("Select a task label with [t] before starting focus.")
+        );
+    }
+
+    #[test]
+    fn mid_session_note_input_requires_active_focus() {
+        let mut app = App::default();
+        app.selected_task_label = Some("Docs".to_string());
+
+        app.handle_key(key(KeyCode::Char('m')));
+
+        assert!(!app.timer_note_input_active);
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some("Mid-session notes are available only during active or paused focus.")
+        );
+    }
+
+    #[test]
+    fn mid_session_note_input_commits_and_syncs_recovery_snapshot() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(key(KeyCode::Char(' ')));
+
+        app.handle_key(key(KeyCode::Char('m')));
+        assert!(app.timer_note_input_active);
+        assert_eq!(app.timer_note_input, "Docs");
+
+        app.timer_note_input = "Capture blockers for retro".to_string();
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(!app.timer_note_input_active);
+        assert_eq!(
+            app.active_focus_task_note.as_deref(),
+            Some("Capture blockers for retro")
+        );
+        let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+        assert_eq!(
+            snapshot.task_note.as_deref(),
+            Some("Capture blockers for retro")
+        );
+    }
+
+    #[test]
+    fn mid_session_note_input_empty_commit_falls_back_to_task_label() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(key(KeyCode::Char(' ')));
+
+        app.handle_key(key(KeyCode::Char('m')));
+        app.timer_note_input = "   ".to_string();
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.active_focus_task_note.as_deref(), Some("Docs"));
+        let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+        assert_eq!(snapshot.task_note.as_deref(), Some("Docs"));
+    }
+
+    #[test]
+    fn mid_session_note_input_updates_interruption_metadata() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(key(KeyCode::Char(' ')));
+
+        app.handle_key(key(KeyCode::Char('m')));
+        app.timer_note_input = "Pulled into production incident".to_string();
+        app.handle_key(key(KeyCode::Enter));
+        app.timer.remaining_secs = 1_000;
+
+        app.handle_key(key(KeyCode::Char('s')));
+
+        let interruptions = app.recent_session_interruptions(1);
+        assert_eq!(interruptions.len(), 1);
+        assert_eq!(
+            interruptions[0].task_note.as_deref(),
+            Some("Pulled into production incident")
         );
     }
 
