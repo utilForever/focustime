@@ -3486,16 +3486,23 @@ impl App {
         &self,
         reason: SessionInterruptionReason,
     ) -> FocusInterruptionContext {
+        let now = Local::now();
+        let day_key = now.date_naive().format("%Y-%m-%d").to_string();
+        let timestamp_epoch_secs = now.timestamp().max(0) as u64;
+        let task_label = self
+            .active_focus_task_label
+            .clone()
+            .or_else(|| self.selected_task_label.clone());
         FocusInterruptionContext {
-            day_key: current_day_key(),
-            timestamp_epoch_secs: current_epoch_secs(),
+            day_key,
+            timestamp_epoch_secs,
             reason,
-            task_label: self
-                .active_focus_task_label
+            task_label: task_label.clone(),
+            focus_intention: self
+                .active_focus_intention
                 .clone()
-                .or_else(|| self.selected_task_label.clone()),
-            focus_intention: self.active_focus_intention.clone(),
-            task_note: self.active_focus_task_note.clone(),
+                .or_else(|| task_label.clone()),
+            task_note: self.active_focus_task_note.clone().or(task_label),
             remaining_secs: self.timer.remaining_secs,
             profile: self.active_focus_profile.or(Some(self.selected_profile)),
         }
