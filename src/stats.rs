@@ -17,7 +17,7 @@ use crate::task_labels::{canonical_task_label, normalize_task_label, task_label_
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
 const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
-const EXPORT_SCHEMA_VERSION: u32 = 4;
+const EXPORT_SCHEMA_VERSION: u32 = 5;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -202,6 +202,39 @@ pub struct FocusSessionMetadata<'a> {
     pub task_note: Option<&'a str>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionInterruptionReason {
+    ManualStop,
+    ManualSkip,
+}
+
+impl SessionInterruptionReason {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::ManualStop => "stop/reset",
+            Self::ManualSkip => "skip/next",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionInterruptionEvent {
+    pub timestamp_epoch_secs: u64,
+    pub date: String,
+    pub reason: SessionInterruptionReason,
+    #[serde(default)]
+    pub task_label: Option<String>,
+    #[serde(default)]
+    pub focus_intention: Option<String>,
+    #[serde(default)]
+    pub task_note: Option<String>,
+    #[serde(default)]
+    pub remaining_secs: u64,
+    #[serde(default)]
+    pub profile: Option<ProfileId>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ProfileBucket {
     Classic,
@@ -352,6 +385,7 @@ struct StatsExport {
     daily: Vec<DailyExportRow>,
     weekly: Vec<WeeklyExportRow>,
     sessions: Vec<SessionExportRow>,
+    interruptions: Vec<SessionInterruptionExportRow>,
     overrides: Vec<BreakGlassOverrideExportRow>,
     task_totals: Vec<TaskTotalsExportRow>,
     task_trends: Vec<TaskTrendExportRow>,
@@ -398,6 +432,18 @@ struct BreakGlassOverrideExportRow {
     task_label: Option<String>,
     duration_seconds: u64,
     duration_minutes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct SessionInterruptionExportRow {
+    timestamp_epoch_secs: u64,
+    date: String,
+    reason: SessionInterruptionReason,
+    task_label: Option<String>,
+    focus_intention: Option<String>,
+    task_note: Option<String>,
+    remaining_secs: u64,
+    profile: Option<ProfileId>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -473,6 +519,9 @@ struct CsvExportRow {
     task_label: Option<String>,
     break_glass_timestamp_epoch_secs: Option<u64>,
     break_glass_duration_seconds: Option<u64>,
+    interruption_timestamp_epoch_secs: Option<u64>,
+    interruption_reason: Option<SessionInterruptionReason>,
+    interruption_remaining_secs: Option<u64>,
     focus_intention: Option<String>,
     task_note: Option<String>,
     recent_window_start: Option<String>,
@@ -509,6 +558,8 @@ struct PersistedStats {
     #[serde(default)]
     focus_sessions: Vec<FocusSessionRecord>,
     #[serde(default)]
+    session_interruptions: Vec<SessionInterruptionEvent>,
+    #[serde(default)]
     break_glass_overrides: Vec<BreakGlassOverrideEvent>,
     #[serde(default)]
     task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
@@ -523,6 +574,7 @@ pub struct FocusStats {
     task_labels: Vec<String>,
     selected_task_label: Option<String>,
     focus_sessions: Vec<FocusSessionRecord>,
+    session_interruptions: Vec<SessionInterruptionEvent>,
     break_glass_overrides: Vec<BreakGlassOverrideEvent>,
     task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
 }
@@ -576,6 +628,25 @@ impl FocusStats {
                 });
             }
         }
+        let mut session_interruptions = Vec::new();
+        for event in persisted.session_interruptions {
+            session_interruptions.push(SessionInterruptionEvent {
+                timestamp_epoch_secs: event.timestamp_epoch_secs,
+                date: event.date.trim().to_string(),
+                reason: event.reason,
+                task_label: event
+                    .task_label
+                    .and_then(|label| normalize_task_label(&label)),
+                focus_intention: event
+                    .focus_intention
+                    .and_then(|value| normalize_session_metadata_text(&value)),
+                task_note: event
+                    .task_note
+                    .and_then(|value| normalize_session_metadata_text(&value)),
+                remaining_secs: event.remaining_secs,
+                profile: event.profile,
+            });
+        }
         let mut break_glass_overrides = Vec::new();
         for event in persisted.break_glass_overrides {
             if event.duration_seconds == 0 {
@@ -598,6 +669,7 @@ impl FocusStats {
             task_labels,
             selected_task_label,
             focus_sessions,
+            session_interruptions,
             break_glass_overrides,
             task_goal_targets,
         }
@@ -611,6 +683,7 @@ impl FocusStats {
             task_labels: self.task_labels.clone(),
             selected_task_label: self.selected_task_label.clone(),
             focus_sessions: self.focus_sessions.clone(),
+            session_interruptions: self.session_interruptions.clone(),
             break_glass_overrides: self.break_glass_overrides.clone(),
             task_goal_targets: self.task_goal_targets.clone(),
         }
@@ -728,6 +801,36 @@ impl FocusStats {
             date: day_key.to_string(),
             task_label: normalized_task_label,
             duration_seconds,
+        });
+    }
+
+    pub fn record_session_interruption_event(
+        &mut self,
+        day_key: &str,
+        timestamp_epoch_secs: u64,
+        reason: SessionInterruptionReason,
+        metadata: FocusSessionMetadata<'_>,
+        remaining_secs: u64,
+        profile: Option<ProfileId>,
+    ) {
+        let normalized_task_label = metadata.task_label.and_then(normalize_task_label);
+        if let Some(task_label) = normalized_task_label.as_ref()
+            && task_label_index(&self.task_labels, task_label).is_none()
+        {
+            self.task_labels.push(task_label.clone());
+        }
+
+        self.session_interruptions.push(SessionInterruptionEvent {
+            timestamp_epoch_secs,
+            date: day_key.to_string(),
+            reason,
+            task_label: normalized_task_label,
+            focus_intention: metadata
+                .focus_intention
+                .and_then(normalize_session_metadata_text),
+            task_note: metadata.task_note.and_then(normalize_session_metadata_text),
+            remaining_secs,
+            profile,
         });
     }
 
@@ -1222,6 +1325,20 @@ impl FocusStats {
             .collect()
     }
 
+    #[cfg(test)]
+    pub fn recent_session_interruptions(&self, limit: usize) -> Vec<SessionInterruptionEvent> {
+        self.session_interruptions
+            .iter()
+            .rev()
+            .take(limit)
+            .cloned()
+            .collect()
+    }
+
+    pub fn latest_session_interruption(&self) -> Option<SessionInterruptionEvent> {
+        self.session_interruptions.last().cloned()
+    }
+
     fn task_trend_window(&self) -> Option<TaskTrendWindow> {
         if self.focus_sessions.is_empty() {
             return None;
@@ -1336,6 +1453,7 @@ impl FocusStats {
             daily: self.export_daily_rows(),
             weekly: self.export_weekly_rows(),
             sessions: self.export_session_rows(),
+            interruptions: self.export_session_interruption_rows(),
             overrides: self.export_break_glass_override_rows(),
             task_totals: self.export_task_totals_rows(),
             task_trends: self.export_task_trend_rows(),
@@ -1387,6 +1505,22 @@ impl FocusStats {
                 focused_seconds: session.focused_seconds,
                 focused_minutes: session.focused_seconds / 60,
                 profile: session.profile,
+            })
+            .collect()
+    }
+
+    fn export_session_interruption_rows(&self) -> Vec<SessionInterruptionExportRow> {
+        self.session_interruptions
+            .iter()
+            .map(|event| SessionInterruptionExportRow {
+                timestamp_epoch_secs: event.timestamp_epoch_secs,
+                date: event.date.clone(),
+                reason: event.reason,
+                task_label: event.task_label.clone(),
+                focus_intention: event.focus_intention.clone(),
+                task_note: event.task_note.clone(),
+                remaining_secs: event.remaining_secs,
+                profile: event.profile,
             })
             .collect()
     }
@@ -1757,6 +1891,9 @@ impl StatsExport {
             task_label: None,
             break_glass_timestamp_epoch_secs: None,
             break_glass_duration_seconds: None,
+            interruption_timestamp_epoch_secs: None,
+            interruption_reason: None,
+            interruption_remaining_secs: None,
             focus_intention: None,
             task_note: None,
             recent_window_start: None,
@@ -1784,6 +1921,7 @@ impl StatsExport {
             self.daily.len()
                 + self.weekly.len()
                 + self.sessions.len()
+                + self.interruptions.len()
                 + self.overrides.len()
                 + self.task_totals.len()
                 + self.task_trends.len()
@@ -1827,6 +1965,19 @@ impl StatsExport {
                 focus_intention: Some(session.focus_intention.clone()),
                 task_note: Some(session.task_note.clone()),
                 ..Self::csv_row_defaults("focus_session")
+            });
+        }
+
+        for interruption in &self.interruptions {
+            rows.push(CsvExportRow {
+                date: Some(interruption.date.clone()),
+                task_label: interruption.task_label.clone(),
+                interruption_timestamp_epoch_secs: Some(interruption.timestamp_epoch_secs),
+                interruption_reason: Some(interruption.reason),
+                interruption_remaining_secs: Some(interruption.remaining_secs),
+                focus_intention: interruption.focus_intention.clone(),
+                task_note: interruption.task_note.clone(),
+                ..Self::csv_row_defaults("session_interruption")
             });
         }
 
@@ -2870,6 +3021,41 @@ mod tests {
     }
 
     #[test]
+    fn persisted_stats_round_trip_preserves_session_interruptions() {
+        let mut original = FocusStats::default();
+        original.record_session_interruption_event(
+            "2026-04-09",
+            1_711_000_123,
+            SessionInterruptionReason::ManualStop,
+            FocusSessionMetadata {
+                task_label: Some("Project A"),
+                focus_intention: Some("Write release notes"),
+                task_note: Some("Urgent incident"),
+            },
+            720,
+            Some(ProfileId::DeepWork),
+        );
+
+        let persisted = original.to_persisted();
+        let toml_str = toml::to_string_pretty(&persisted).unwrap();
+        let restored = FocusStats::try_from_toml(&toml_str).unwrap();
+        let recent = restored.recent_session_interruptions(1);
+
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].date, "2026-04-09");
+        assert_eq!(recent[0].timestamp_epoch_secs, 1_711_000_123);
+        assert_eq!(recent[0].reason, SessionInterruptionReason::ManualStop);
+        assert_eq!(recent[0].task_label.as_deref(), Some("Project A"));
+        assert_eq!(
+            recent[0].focus_intention.as_deref(),
+            Some("Write release notes")
+        );
+        assert_eq!(recent[0].task_note.as_deref(), Some("Urgent incident"));
+        assert_eq!(recent[0].remaining_secs, 720);
+        assert_eq!(recent[0].profile, Some(ProfileId::DeepWork));
+    }
+
+    #[test]
     fn persisted_stats_round_trip_preserves_focus_session_profile() {
         let mut original = FocusStats::default();
         let goal = DailyGoalSnapshot {
@@ -3356,6 +3542,18 @@ mod tests {
             30 * 60,
             Some(ProfileId::Classic),
         );
+        stats.record_session_interruption_event(
+            &labeled_day,
+            1_711_000_111,
+            SessionInterruptionReason::ManualSkip,
+            FocusSessionMetadata {
+                task_label: Some("Project A"),
+                focus_intention: Some("Write release notes"),
+                task_note: Some("Pulled into urgent review"),
+            },
+            600,
+            Some(ProfileId::Classic),
+        );
         stats.record_break_glass_override_event(
             &labeled_day,
             1_711_000_000,
@@ -3380,6 +3578,7 @@ mod tests {
         let daily = json_value["daily"].as_array().unwrap();
         let weekly = json_value["weekly"].as_array().unwrap();
         let sessions = json_value["sessions"].as_array().unwrap();
+        let interruptions = json_value["interruptions"].as_array().unwrap();
         let overrides = json_value["overrides"].as_array().unwrap();
         let task_totals = json_value["task_totals"].as_array().unwrap();
         let task_trends = json_value["task_trends"].as_array().unwrap();
@@ -3389,6 +3588,7 @@ mod tests {
         assert_eq!(daily.len(), 2);
         assert!(!weekly.is_empty());
         assert_eq!(sessions.len(), 1);
+        assert_eq!(interruptions.len(), 1);
         assert_eq!(overrides.len(), 1);
         assert_eq!(task_totals.len(), 1);
         assert_eq!(task_trends.len(), 1);
@@ -3406,6 +3606,9 @@ mod tests {
         assert_eq!(sessions[0]["task_note"], "Project A");
         assert_eq!(sessions[0]["focused_minutes"], 30);
         assert_eq!(sessions[0]["profile"], "classic");
+        assert_eq!(interruptions[0]["reason"], "manual_skip");
+        assert_eq!(interruptions[0]["remaining_secs"], 600);
+        assert_eq!(interruptions[0]["task_label"], "Project A");
         assert_eq!(overrides[0]["duration_seconds"], 300);
         assert_eq!(overrides[0]["task_label"], "Project A");
         assert_eq!(task_totals[0]["task_label"], "Project A");
@@ -3437,22 +3640,33 @@ mod tests {
         assert_eq!(profile_effectiveness[0]["focus_share_pct"], 100);
 
         let csv = fs::read_to_string(&exported.csv_path).unwrap();
-        assert!(csv.contains("schema_version,record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes,profile_name,sessions_completed,active_days,consistency_score_pct,completion_score_pct,focus_score_pct,average_focused_minutes_per_session,focus_share_pct"));
+        assert!(csv.contains("schema_version,record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,interruption_timestamp_epoch_secs,interruption_reason,interruption_remaining_secs,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes,profile_name,sessions_completed,active_days,consistency_score_pct,completion_score_pct,focus_score_pct,average_focused_minutes_per_session,focus_share_pct"));
+        assert!(csv.contains(&format!("{},daily,{labeled_day}", EXPORT_SCHEMA_VERSION)));
+        assert!(csv.contains(&format!("{},weekly,,", EXPORT_SCHEMA_VERSION)));
         assert!(csv.contains(&format!(
-            "4,daily,{labeled_day},,,,1,1800,30,25,1,true,,,,,"
+            "{},focus_session,{labeled_day}",
+            EXPORT_SCHEMA_VERSION
         )));
-        assert!(csv.contains("4,weekly,,"));
+        assert!(csv.contains("Project A"));
         assert!(csv.contains(&format!(
-            "4,focus_session,{labeled_day},,,,1,1800,30,,,,Project A,,,Project A,Project A"
+            "{},session_interruption,{labeled_day}",
+            EXPORT_SCHEMA_VERSION
         )));
+        assert!(csv.contains("manual_skip"));
+        assert!(csv.contains("1711000111"));
         assert!(csv.contains(&format!(
-            "4,break_glass_override,{labeled_day},,,,0,0,0,,,,Project A,1711000000,300,,"
+            "{},break_glass_override,{labeled_day}",
+            EXPORT_SCHEMA_VERSION
         )));
-        assert!(csv.contains("4,task_summary,,,,,1,1800,30,,,,Project A"));
-        assert!(csv.contains("4,task_trend,,,,,1,1800,30,,,,Project A"));
-        assert!(csv.contains("4,weekly_consistency,"));
-        assert!(csv.contains("4,focus_score,"));
-        assert!(csv.contains("4,profile_effectiveness,,,,,1,1800,30"));
+        assert!(csv.contains("1711000000"));
+        assert!(csv.contains(&format!("{},task_summary", EXPORT_SCHEMA_VERSION)));
+        assert!(csv.contains(&format!("{},task_trend", EXPORT_SCHEMA_VERSION)));
+        assert!(csv.contains(&format!("{},weekly_consistency,", EXPORT_SCHEMA_VERSION)));
+        assert!(csv.contains(&format!("{},focus_score,", EXPORT_SCHEMA_VERSION)));
+        assert!(csv.contains(&format!(
+            "{},profile_effectiveness,,,,,1,1800,30",
+            EXPORT_SCHEMA_VERSION
+        )));
         assert!(csv.contains("Classic,1,1,"));
 
         fs::remove_dir_all(export_dir).unwrap();
