@@ -2093,7 +2093,13 @@ impl App {
 
     pub fn handle_paste(&mut self, text: String) {
         if self.mode == AppMode::Timer && self.timer_note_input_active {
-            self.timer_note_input.push_str(&text);
+            let sanitized = normalize_timer_note_paste(&text);
+            if !sanitized.is_empty() {
+                if !self.timer_note_input.is_empty() {
+                    self.timer_note_input.push(' ');
+                }
+                self.timer_note_input.push_str(&sanitized);
+            }
             return;
         }
 
@@ -4269,6 +4275,22 @@ fn adjust_duration_minutes(value: &mut u64, increase: bool) {
     }
 }
 
+fn normalize_timer_note_paste(input: &str) -> String {
+    input
+        .chars()
+        .map(|c| {
+            if c == '\r' || c == '\n' || c.is_control() {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn adjust_daily_goal_minutes(value: &mut u64, increase: bool) {
     if increase {
         *value = if *value == 0 {
@@ -6318,6 +6340,20 @@ mod tests {
         assert_eq!(app.blocklist_profile_input, "Work");
         assert!(!app.site_input_active);
         assert!(app.site_input.is_empty());
+    }
+
+    #[test]
+    fn timer_note_paste_sanitizes_multiline_and_control_characters() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(key(KeyCode::Char(' ')));
+        app.handle_key(key(KeyCode::Char('m')));
+        app.timer_note_input.clear();
+
+        app.handle_paste("  line1\nline2\r\n\tline3\u{0007}  ".to_string());
+
+        assert_eq!(app.timer_note_input, "line1 line2 line3");
     }
 
     #[test]
