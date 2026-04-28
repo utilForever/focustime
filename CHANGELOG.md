@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-28
+
 ### Added
 
 - **Task-level cumulative goals (#186):** added per-task goal targets (minutes/pomodoros) with CLI management via `--task-goal`, status JSON exposure for the selected task, and history-panel progress evaluation against each task target.
@@ -175,7 +177,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/utilForever/focustime/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/utilForever/focustime/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/utilForever/focustime/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/utilForever/focustime/compare/v0.5.2...v0.6.0
