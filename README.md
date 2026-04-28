@@ -157,7 +157,7 @@ cargo run -- --diagnostics --json
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
 
-# Show status (text or JSON, including live timer/session fields and `selected_task_goal` in JSON)
+# Show status (text or JSON, including live timer/session fields, latest interruption summary, and `selected_task_goal` in JSON)
 cargo run -- --status
 cargo run -- --status --json
 
@@ -481,6 +481,7 @@ Override events are recorded for audit visibility in the History view and includ
 - per-task totals (pomodoros and focused minutes) derived from labeled focus sessions
 - per-task trend summaries in History (`last 7 days` vs `previous 7 days`)
 - per-task cumulative goals (minutes/pomodoros) with per-label progress and met/in-progress evaluation
+- structured interruption events for manual `stop/reset` and `skip/next` actions
 - current streak and best streak based on completed daily goals
 
 If daily, weekly, or monthly goals are configured, timer and history views also
@@ -500,13 +501,13 @@ From timer view:
 - press **`h`** or **`Esc`** to return to timer view
 
 Exports include daily/weekly aggregates, weekly consistency, weekly focus score,
-profile
-effectiveness, task summaries/trends, and labeled focus-session records where
-task labels were attached. Focus-session rows persist and export first-class
-`focus_intention` and `task_note` fields; when dedicated metadata input is not
-provided, both fields default to the selected `task_label`. Export files expose
-`schema_version` (currently `4`) so downstream consumers can handle versioned
-contracts explicitly.
+profile effectiveness, task summaries/trends, interruption records, and labeled
+focus-session records where task labels were attached. Focus-session rows
+persist and export first-class `focus_intention` and `task_note` fields; when
+dedicated metadata input is not provided, both fields default to the selected
+`task_label`. Interruption records include structured `reason` values and
+remaining-time metadata. Export files expose `schema_version` (currently `5`)
+so downstream consumers can handle versioned contracts explicitly.
 
 ## The way the system works
 
