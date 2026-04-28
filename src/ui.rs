@@ -1215,7 +1215,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .into_iter()
         .map(|entry| {
             ListItem::new(format!(
-                "  {:<9} {:>3}% {:>3}m/🍅",
+                "  {:<9} {:>3}% {:>3}m/session",
                 entry.profile.label(),
                 entry.focus_share_pct,
                 entry.average_focused_minutes_per_session()
