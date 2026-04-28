@@ -11,7 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Task-level cumulative goals (#186):** added per-task goal targets (minutes/pomodoros) with CLI management via `--task-goal`, status JSON exposure for the selected task, and history-panel progress evaluation against each task target.
+- **Weekly and monthly goals across CLI and TUI (#218):** added configurable weekly/monthly goal targets across automation surfaces and in-app workflows.
+- **Optional goal carry-over rules (#219):** added configurable carry-over behavior for unmet goals to support flexible planning cycles.
+- **Task-level cumulative goals (#220):** added per-task goal targets (minutes/pomodoros) with CLI management via `--task-goal`, status JSON exposure for the selected task, and history-panel progress evaluation against each task target.
+- **Weekly focus score KPI across stats/history/CLI (#221):** added weekly focus score metric surfaces for analysis workflows in TUI history and CLI outputs.
+
+### Changed
+
+- **TUI layout and Focus History ergonomics refresh (#225):** reworked timer/history screen structure for clearer navigation and readability.
+- **Typo-check action dependency update (#226):** bumped GitHub Actions `crate-ci/typos` from `1.45.1` to `1.45.2`.
+- **v0.7.0 screenshot refresh (#227):** updated project screenshots to reflect current UI behavior.
 
 ## [0.6.2] - 2026-04-26
 
