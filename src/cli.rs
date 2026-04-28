@@ -20,7 +20,10 @@ use crate::config::{
 };
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
-use crate::stats::{DailyGoalSnapshot, FocusStats, carry_over_goal_target, current_day_key};
+use crate::stats::{
+    DailyGoalSnapshot, FocusStats, SessionInterruptionEvent, carry_over_goal_target,
+    current_day_key,
+};
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerStatus,
@@ -102,7 +105,7 @@ Options:
   --allowlist-site-delete     Delete allowlist hostname in active profile
   --diagnostics   Show setup diagnostics checks
   --blocking-preview  Preview focustime hosts-section changes without writing
-  --status        Print status summary (includes live timer/session fields)
+  --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
   --export        Export stats to current directory or DIR
   --json          Emit machine-readable JSON output
@@ -447,6 +450,7 @@ struct StatusOutput {
     selected_task_goal: Option<TaskGoalOutput>,
     session: SessionOutput,
     today: TodayOutput,
+    latest_interruption: Option<SessionInterruptionEvent>,
     focus_score: FocusScoreOutput,
     live: LiveStatusOutput,
 }
@@ -2770,6 +2774,7 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
         .map(|profile| effective_blocked_sites_for_profile(profile).len())
         .unwrap_or_default();
     let live = build_live_status_output(config, selected_task_label.clone());
+    let latest_interruption = stats.latest_session_interruption();
     let consistency_score_pct = stats
         .weekly_focus_score_for_day(day_date)
         .consistency_score_pct;
@@ -2827,6 +2832,7 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
             focused_minutes: today.focused_minutes(),
             pomodoros_completed: today.pomodoros_completed,
         },
+        latest_interruption,
         focus_score: FocusScoreOutput {
             available: focus_score_pct.is_some(),
             focus_score_pct,
@@ -3609,6 +3615,17 @@ fn print_status_output(payload: &StatusOutput) {
         "Session: {} focused minutes, {} pomodoros",
         payload.session.focused_minutes, payload.session.pomodoros_completed
     );
+    if let Some(interruption) = payload.latest_interruption.as_ref() {
+        println!(
+            "Last interruption: {} ({}, {} remaining, task: {})",
+            interruption.reason.label(),
+            interruption.date,
+            format_duration(interruption.remaining_secs),
+            interruption.task_label.as_deref().unwrap_or("none")
+        );
+    } else {
+        println!("Last interruption: none");
+    }
     print_status_focus_score_line(&payload.focus_score);
     println!(
         "Live timer: {} {} ({} remaining, source: {})",
@@ -5800,6 +5817,34 @@ mod tests {
         assert_eq!(output.live.task_note.as_deref(), Some("API section"));
         assert_eq!(output.live.selected_profile.id, "deep-work");
         assert!(output.live.recovery_error.is_none());
+    }
+
+    #[test]
+    fn build_status_output_includes_latest_session_interruption() {
+        let mut stats = FocusStats::default();
+        stats.record_session_interruption_event(
+            "2026-04-09",
+            1_711_000_123,
+            crate::stats::SessionInterruptionReason::ManualSkip,
+            crate::stats::FocusSessionMetadata {
+                task_label: Some("Docs"),
+                focus_intention: Some("Write API docs"),
+                task_note: Some("Skipped due urgent review"),
+            },
+            600,
+            Some(ProfileId::Classic),
+        );
+
+        let output = build_status_output(&AppConfig::default(), &stats);
+        let interruption = output
+            .latest_interruption
+            .expect("latest interruption should be present");
+        assert_eq!(
+            interruption.reason,
+            crate::stats::SessionInterruptionReason::ManualSkip
+        );
+        assert_eq!(interruption.task_label.as_deref(), Some("Docs"));
+        assert_eq!(interruption.remaining_secs, 600);
     }
 
     #[test]
