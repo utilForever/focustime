@@ -1336,7 +1336,10 @@ impl FocusStats {
     }
 
     pub fn latest_session_interruption(&self) -> Option<SessionInterruptionEvent> {
-        self.session_interruptions.last().cloned()
+        self.session_interruptions
+            .iter()
+            .max_by_key(|event| event.timestamp_epoch_secs)
+            .cloned()
     }
 
     fn task_trend_window(&self) -> Option<TaskTrendWindow> {
@@ -3053,6 +3056,42 @@ mod tests {
         assert_eq!(recent[0].task_note.as_deref(), Some("Urgent incident"));
         assert_eq!(recent[0].remaining_secs, 720);
         assert_eq!(recent[0].profile, Some(ProfileId::DeepWork));
+    }
+
+    #[test]
+    fn latest_session_interruption_prefers_greatest_timestamp() {
+        let mut stats = FocusStats::default();
+        stats.record_session_interruption_event(
+            "2026-04-09",
+            200,
+            SessionInterruptionReason::ManualStop,
+            FocusSessionMetadata {
+                task_label: Some("Project A"),
+                focus_intention: Some("Write release notes"),
+                task_note: Some("Urgent incident"),
+            },
+            720,
+            Some(ProfileId::Classic),
+        );
+        stats.record_session_interruption_event(
+            "2026-04-09",
+            100,
+            SessionInterruptionReason::ManualSkip,
+            FocusSessionMetadata {
+                task_label: Some("Project B"),
+                focus_intention: Some("Prototype"),
+                task_note: Some("Interrupt"),
+            },
+            600,
+            Some(ProfileId::DeepWork),
+        );
+
+        let latest = stats
+            .latest_session_interruption()
+            .expect("latest interruption should exist");
+        assert_eq!(latest.timestamp_epoch_secs, 200);
+        assert_eq!(latest.reason, SessionInterruptionReason::ManualStop);
+        assert_eq!(latest.task_label.as_deref(), Some("Project A"));
     }
 
     #[test]
