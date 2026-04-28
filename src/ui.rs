@@ -176,6 +176,14 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Yellow),
         )
     };
+    let (note_text, note_style) = if let Some(note) = app.current_task_note() {
+        (format!("📝 Note: {note}"), Style::default().fg(Color::Cyan))
+    } else {
+        (
+            "📝 Note: available during active/paused focus ([m])".to_string(),
+            Style::default().fg(Color::DarkGray),
+        )
+    };
     let (stats_text, stats_style) = timer_stats_line(app);
     let goal_text = readable_goal_streak_text(&format_timer_goal_streak_line(app));
     let (waka_text, waka_color) = wakatime_status_line(app);
@@ -184,6 +192,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
 
     let mut lines = vec![
         Line::styled(task_text, task_style),
+        Line::styled(note_text, note_style),
         Line::styled(status_text, Style::default().fg(Color::Gray)),
         Line::styled(profile_line, Style::default().fg(Color::DarkGray)),
         Line::styled(schedule_next_text, Style::default().fg(Color::DarkGray)),
@@ -251,6 +260,15 @@ fn render_timer_phase_notice(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn phase_notice_line(app: &App) -> (String, Style) {
+    if app.timer_note_input_active() {
+        let draft = app.timer_note_input_value().trim();
+        let draft = if draft.is_empty() { "<empty>" } else { draft };
+        return (
+            format!("📝 Note: {draft}   [Enter] Save   [Esc] Cancel"),
+            Style::default().fg(Color::Cyan),
+        );
+    }
+
     if let Some(message) = app.phase_notification.as_ref() {
         (format!("🔔 {message}"), Style::default().fg(Color::Yellow))
     } else {
@@ -369,19 +387,23 @@ fn render_hint_lines(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>) {
 }
 
 fn timer_primary_hint(app: &App) -> &'static str {
-    if app.break_glass_confirmation_pending() {
-        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [u] Confirm unblock  [z] Delay 10m"
+    if app.timer_note_input_active() {
+        "Note: Type text  [Enter] Save  [Esc] Cancel"
+    } else if app.break_glass_confirmation_pending() {
+        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [m] Note  [u] Confirm unblock  [z] Delay 10m"
     } else if app.strict_reset_confirmation_pending() {
-        "Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)  [u] Unblock  [z] Delay 10m"
+        "Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)  [m] Note  [u] Unblock  [z] Delay 10m"
     } else if app.strict_mode_enforced_for_focus() {
-        "Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)  [u] Unblock  [z] Delay 10m"
+        "Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)  [m] Note  [u] Unblock  [z] Delay 10m"
     } else {
-        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [u] Unblock  [z] Delay 10m"
+        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [m] Note  [u] Unblock  [z] Delay 10m"
     }
 }
 
 fn timer_secondary_hint(app: &App) -> &'static str {
-    if app.strict_mode_enforced_for_focus() {
+    if app.timer_note_input_active() {
+        "Views: shortcuts paused while editing note"
+    } else if app.strict_mode_enforced_for_focus() {
         "Views: [t] Planner  [h] History  [b] Sites  [p] Profiles (Locked)  [d] Setup"
     } else {
         "Views: [t] Planner  [h] History  [b] Sites  [p] Profiles  [d] Setup"
@@ -1784,6 +1806,36 @@ mod tests {
     }
 
     #[test]
+    fn timer_primary_hint_includes_note_shortcut() {
+        let app = App::default();
+        assert!(timer_primary_hint(&app).contains("[m] Note"));
+    }
+
+    #[test]
+    fn timer_hints_switch_when_note_edit_is_active() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char(' '),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('m'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        assert_eq!(
+            timer_primary_hint(&app),
+            "Note: Type text  [Enter] Save  [Esc] Cancel"
+        );
+        assert_eq!(
+            timer_secondary_hint(&app),
+            "Views: shortcuts paused while editing note"
+        );
+    }
+
+    #[test]
     fn goal_streak_lines_show_off_when_all_goals_disabled() {
         let app = App::default();
 
@@ -2199,6 +2251,55 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("Task: Docs"));
+    }
+
+    #[test]
+    fn timer_view_renders_active_session_note() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char(' '),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("Note: Docs"));
+    }
+
+    #[test]
+    fn timer_view_renders_note_edit_notice() {
+        let width = 100;
+        let height = 24;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char(' '),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('m'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("[Enter] Save"));
+        assert!(text.contains("Cancel"));
     }
 
     #[test]
