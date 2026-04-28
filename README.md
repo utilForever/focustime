@@ -280,7 +280,7 @@ While a focus session is running or paused, press **`m`** in timer view to edit 
 quick session note.
 
 - type or paste note text
-- `Enter`: save (replaces the previous note)
+- `Enter`: save (replaces the previous note); if the draft is blank or only whitespace, the note is not saved and the task label is used instead
 - `Esc`: cancel without changing the current note
 
 Saved notes are reflected in live status metadata (`task_note`), recovery state,
@@ -452,7 +452,7 @@ You can configure notification and auto-start settings directly from the TUI:
 `focustime` persists in-progress timer sessions so restart/crash recovery can resume where you left off.
 
 - while a focus/break phase is running or paused, the app saves phase, remaining time, task metadata (`task_label`, `focus_intention`, `task_note`), and active profile
-- while editing with `m`, pressing `Enter` replaces the in-progress session `task_note` and immediately syncs recovery metadata
+- while editing with `m`, pressing `Enter` replaces the in-progress session `task_note` and immediately syncs recovery metadata; if the draft is blank or only whitespace, the note is not saved and the task label is used instead
 - on startup, valid in-progress state is restored and shown in the timer notice line
 - on startup, blocking is reconciled with recovered timer state: recovered active focus re-applies blocking, while non-recovered startup attempts to remove stale crash-era block entries
 - stale or invalid saved recovery state is ignored safely with a warning notice
