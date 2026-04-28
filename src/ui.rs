@@ -1102,7 +1102,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(6), // overview
+            Constraint::Length(7), // overview
             Constraint::Min(6),    // history panels
             Constraint::Length(1), // status line
             Constraint::Length(2), // hints
@@ -1118,6 +1118,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
         .count();
     let focus_score_line = readable_focus_score_text(&format_history_focus_score_line(app));
     let goals_line = readable_goal_streak_text(&format_history_goal_streak_line(app));
+    let interruption_line = format_history_interruption_line(app);
     let overview = Paragraph::new(vec![
         Line::styled(
             format!(
@@ -1137,6 +1138,7 @@ fn render_stats_history(frame: &mut Frame, app: &App) {
             format!("Active days (7d): {recent_active_days}"),
             Style::default().fg(Color::DarkGray),
         ),
+        Line::styled(interruption_line, Style::default().fg(Color::DarkGray)),
     ])
     .block(Block::default().borders(Borders::ALL).title(" Overview "))
     .wrap(Wrap { trim: true });
@@ -1646,6 +1648,18 @@ fn format_history_focus_score_line(app: &App) -> String {
     }
 }
 
+fn format_history_interruption_line(app: &App) -> String {
+    match app.latest_session_interruption() {
+        Some(event) => format!(
+            "Last interruption: {} · {} remaining · {}",
+            event.reason.label(),
+            format_duration_label(event.remaining_secs),
+            event.task_label.unwrap_or_else(|| "Unlabeled".to_string())
+        ),
+        None => "Last interruption: none".to_string(),
+    }
+}
+
 fn format_task_trend_delta(trend: &crate::stats::TaskTrend) -> String {
     let delta_minutes = trend.delta_focused_minutes();
     if delta_minutes > 0 {
@@ -2142,6 +2156,31 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("[e] Export CSV + JSON"));
+    }
+
+    #[test]
+    fn history_view_shows_last_interruption_summary() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char(' '),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.timer.remaining_secs = 900;
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('n'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        let line = format_history_interruption_line(&app);
+        let event = app
+            .latest_session_interruption()
+            .expect("skip should record an interruption event");
+        assert!(line.contains("Last interruption"));
+        assert!(line.contains(event.reason.label()));
+        assert!(line.contains(&format_duration_label(event.remaining_secs)));
+        assert!(line.contains(event.task_label.as_deref().unwrap_or("Unlabeled")));
     }
 
     #[test]

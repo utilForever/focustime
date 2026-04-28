@@ -28,8 +28,9 @@ use crate::session_recovery::{self, InProgressSessionSnapshot};
 use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles,
     FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats,
-    ProfileEffectiveness, ProfileTotals, SessionStats, TaskGoalProgress, TaskTotals, TaskTrend,
-    WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target, current_day_key,
+    ProfileEffectiveness, ProfileTotals, SessionInterruptionEvent, SessionInterruptionReason,
+    SessionStats, TaskGoalProgress, TaskTotals, TaskTrend, WeeklyConsistency, WeeklyFocusScore,
+    WeeklyStats, carry_over_goal_target, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -216,6 +217,18 @@ struct ScheduleDisplayState {
     has_selected_task: bool,
     timer_phase: TimerPhase,
     timer_status: TimerStatus,
+}
+
+#[derive(Debug, Clone)]
+struct FocusInterruptionContext {
+    day_key: String,
+    timestamp_epoch_secs: u64,
+    reason: SessionInterruptionReason,
+    task_label: Option<String>,
+    focus_intention: Option<String>,
+    task_note: Option<String>,
+    remaining_secs: u64,
+    profile: Option<ProfileId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -775,7 +788,10 @@ impl App {
         if self.timer.status == TimerStatus::Idle {
             return Err("Cannot stop: timer is already idle.".to_string());
         }
-        self.update_timer_and_sync(TimerState::reset);
+        self.update_timer_and_sync_with_reason(
+            TimerState::reset,
+            Some(SessionInterruptionReason::ManualStop),
+        );
         Ok(())
     }
 
@@ -785,7 +801,10 @@ impl App {
                 "Cannot skip to next phase: strict mode is active during focus.".to_string(),
             );
         }
-        self.update_timer_and_sync(TimerState::next_phase);
+        self.update_timer_and_sync_with_reason(
+            TimerState::next_phase,
+            Some(SessionInterruptionReason::ManualSkip),
+        );
         Ok(())
     }
 
@@ -2068,7 +2087,10 @@ impl App {
         if self.strict_reset_confirmation_pending() {
             if key.code == KeyCode::Char('s') {
                 self.pending_timer_action = None;
-                self.update_timer_and_sync(TimerState::reset);
+                self.update_timer_and_sync_with_reason(
+                    TimerState::reset,
+                    Some(SessionInterruptionReason::ManualStop),
+                );
                 return;
             }
             self.pending_timer_action = None;
@@ -2101,14 +2123,20 @@ impl App {
                     self.pending_timer_action = Some(PendingTimerAction::Reset);
                     return;
                 }
-                self.update_timer_and_sync(TimerState::reset);
+                self.update_timer_and_sync_with_reason(
+                    TimerState::reset,
+                    Some(SessionInterruptionReason::ManualStop),
+                );
             }
             // Skip to next phase
             KeyCode::Char('n') => {
                 if self.strict_mode_enforced_for_focus() {
                     return;
                 }
-                self.update_timer_and_sync(TimerState::next_phase);
+                self.update_timer_and_sync_with_reason(
+                    TimerState::next_phase,
+                    Some(SessionInterruptionReason::ManualSkip),
+                );
             }
             // Open site manager
             KeyCode::Char('b') => {
@@ -3416,10 +3444,26 @@ impl App {
     }
 
     fn update_timer_and_sync(&mut self, action: fn(&mut TimerState)) {
+        self.update_timer_and_sync_with_reason(action, None);
+    }
+
+    fn update_timer_and_sync_with_reason(
+        &mut self,
+        action: fn(&mut TimerState),
+        interruption_reason: Option<SessionInterruptionReason>,
+    ) {
         let was_focus_active = self.focus_session_active_for_current_state();
+        let interruption_context = interruption_reason
+            .filter(|_| was_focus_active)
+            .map(|reason| self.build_focus_interruption_context(reason));
         self.pending_timer_action = None;
         action(&mut self.timer);
         let is_focus_active = self.focus_session_active_for_current_state();
+        if let Some(context) = interruption_context
+            && !is_focus_active
+        {
+            self.record_session_interruption_event(context);
+        }
         if !was_focus_active && is_focus_active {
             self.active_focus_task_label = self.selected_task_label.clone();
             self.active_focus_intention = self.selected_task_label.clone();
@@ -3436,6 +3480,48 @@ impl App {
         }
         self.apply_blocking_for_phase();
         self.sync_recovery_snapshot();
+    }
+
+    fn build_focus_interruption_context(
+        &self,
+        reason: SessionInterruptionReason,
+    ) -> FocusInterruptionContext {
+        let now = Local::now();
+        let day_key = now.date_naive().format("%Y-%m-%d").to_string();
+        let timestamp_epoch_secs = now.timestamp().max(0) as u64;
+        let task_label = self
+            .active_focus_task_label
+            .clone()
+            .or_else(|| self.selected_task_label.clone());
+        FocusInterruptionContext {
+            day_key,
+            timestamp_epoch_secs,
+            reason,
+            task_label: task_label.clone(),
+            focus_intention: self
+                .active_focus_intention
+                .clone()
+                .or_else(|| task_label.clone()),
+            task_note: self.active_focus_task_note.clone().or(task_label),
+            remaining_secs: self.timer.remaining_secs,
+            profile: self.active_focus_profile.or(Some(self.selected_profile)),
+        }
+    }
+
+    fn record_session_interruption_event(&mut self, context: FocusInterruptionContext) {
+        self.stats.record_session_interruption_event(
+            &context.day_key,
+            context.timestamp_epoch_secs,
+            context.reason,
+            FocusSessionMetadata {
+                task_label: context.task_label.as_deref(),
+                focus_intention: context.focus_intention.as_deref(),
+                task_note: context.task_note.as_deref(),
+            },
+            context.remaining_secs,
+            context.profile,
+        );
+        self.stats_dirty = true;
     }
 
     fn open_site_manager(&mut self) {
@@ -4041,6 +4127,15 @@ impl App {
 
     pub fn recent_break_glass_overrides(&self, limit: usize) -> Vec<BreakGlassOverrideEvent> {
         self.stats.recent_break_glass_overrides(limit)
+    }
+
+    #[cfg(test)]
+    pub fn recent_session_interruptions(&self, limit: usize) -> Vec<SessionInterruptionEvent> {
+        self.stats.recent_session_interruptions(limit)
+    }
+
+    pub fn latest_session_interruption(&self) -> Option<SessionInterruptionEvent> {
+        self.stats.latest_session_interruption()
     }
 }
 
@@ -6409,6 +6504,58 @@ mod tests {
     }
 
     #[test]
+    fn manual_skip_records_session_interruption_reason() {
+        let mut app = App::default();
+        app.task_labels = vec!["Project A".to_string()];
+        app.selected_task_label = Some("Project A".to_string());
+        app.handle_key(key(KeyCode::Char(' ')));
+        app.timer.remaining_secs = 1200;
+
+        app.handle_key(key(KeyCode::Char('n')));
+
+        let interruptions = app.recent_session_interruptions(1);
+        assert_eq!(interruptions.len(), 1);
+        assert_eq!(
+            interruptions[0].reason,
+            SessionInterruptionReason::ManualSkip
+        );
+        assert_eq!(interruptions[0].task_label.as_deref(), Some("Project A"));
+        assert_eq!(interruptions[0].remaining_secs, 1200);
+    }
+
+    #[test]
+    fn manual_stop_records_session_interruption_reason() {
+        let mut app = App::default();
+        app.task_labels = vec!["Project A".to_string()];
+        app.selected_task_label = Some("Project A".to_string());
+        app.handle_key(key(KeyCode::Char(' ')));
+        app.timer.remaining_secs = 900;
+
+        app.handle_key(key(KeyCode::Char('s')));
+
+        let interruptions = app.recent_session_interruptions(1);
+        assert_eq!(interruptions.len(), 1);
+        assert_eq!(
+            interruptions[0].reason,
+            SessionInterruptionReason::ManualStop
+        );
+        assert_eq!(interruptions[0].task_label.as_deref(), Some("Project A"));
+        assert_eq!(interruptions[0].remaining_secs, 900);
+    }
+
+    #[test]
+    fn natural_focus_completion_does_not_record_session_interruption() {
+        let mut app = App::default();
+        app.timer.phase = TimerPhase::Focus;
+        app.timer.status = TimerStatus::Running;
+        app.timer.remaining_secs = 1;
+
+        app.on_tick(false);
+
+        assert!(app.recent_session_interruptions(1).is_empty());
+    }
+
+    #[test]
     fn natural_focus_completion_auto_starts_break_when_enabled() {
         let config = AppConfig {
             auto_start: AutoStartConfig {
@@ -7791,6 +7938,44 @@ mod tests {
         );
         assert_eq!(app.timer.phase, TimerPhase::Focus);
         assert_eq!(app.timer.status, TimerStatus::Running);
+    }
+
+    #[test]
+    fn cli_stop_records_session_interruption_reason() {
+        let mut app = App::default();
+        app.selected_task_label = Some("Docs".to_string());
+        app.start_focus_for_cli().unwrap();
+        app.timer.remaining_secs = 1000;
+
+        app.stop_for_cli().unwrap();
+
+        let interruptions = app.recent_session_interruptions(1);
+        assert_eq!(interruptions.len(), 1);
+        assert_eq!(
+            interruptions[0].reason,
+            SessionInterruptionReason::ManualStop
+        );
+        assert_eq!(interruptions[0].task_label.as_deref(), Some("Docs"));
+        assert_eq!(interruptions[0].remaining_secs, 1000);
+    }
+
+    #[test]
+    fn cli_next_records_session_interruption_reason() {
+        let mut app = App::default();
+        app.selected_task_label = Some("Docs".to_string());
+        app.start_focus_for_cli().unwrap();
+        app.timer.remaining_secs = 800;
+
+        app.next_phase_for_cli().unwrap();
+
+        let interruptions = app.recent_session_interruptions(1);
+        assert_eq!(interruptions.len(), 1);
+        assert_eq!(
+            interruptions[0].reason,
+            SessionInterruptionReason::ManualSkip
+        );
+        assert_eq!(interruptions[0].task_label.as_deref(), Some("Docs"));
+        assert_eq!(interruptions[0].remaining_secs, 800);
     }
 
     #[test]
