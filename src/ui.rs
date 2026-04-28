@@ -1853,6 +1853,38 @@ mod tests {
     }
 
     #[test]
+    fn timer_hints_allow_note_edit_while_focus_is_paused() {
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char(' '),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char(' '),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert_eq!(app.timer.status, TimerStatus::Paused);
+        assert!(timer_primary_hint(&app).contains("[m] Note"));
+        assert!(!timer_primary_hint(&app).contains("Focus only"));
+
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('m'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert_eq!(
+            timer_primary_hint(&app),
+            "Note: Type text  [Enter] Save  [Esc] Cancel"
+        );
+        assert_eq!(
+            timer_secondary_hint(&app),
+            "Views: shortcuts paused while editing note"
+        );
+        assert_eq!(timer_tertiary_hint(&app), "Note edit: [Esc] Cancel");
+    }
+
+    #[test]
     fn goal_streak_lines_show_off_when_all_goals_disabled() {
         let app = App::default();
 
