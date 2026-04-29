@@ -3141,15 +3141,55 @@ fn break_template_view(template: &BreakTemplateConfig) -> BreakTemplateView {
     }
 }
 
-fn selected_break_template_view(config: &AppConfig) -> BreakTemplateView {
+fn break_template_matches_custom_profile(
+    template: &BreakTemplateConfig,
+    custom_profile: &CustomProfileConfig,
+) -> bool {
+    let template = template.normalized();
+    let custom_profile = custom_profile.normalized();
+    template.short_break_secs == custom_profile.short_break_secs
+        && template.long_break_secs == custom_profile.long_break_secs
+        && template.long_break_interval == custom_profile.long_break_interval
+}
+
+fn selected_break_template_index(config: &AppConfig) -> Option<usize> {
+    let custom_profile = config.effective_custom_profile();
     let selected_name = config.selected_break_template.trim();
+    let selected_index = config
+        .break_templates
+        .iter()
+        .position(|template| template.name.eq_ignore_ascii_case(selected_name));
+
+    if let Some(index) = selected_index {
+        if config.break_templates.get(index).is_some_and(|template| {
+            break_template_matches_custom_profile(template, &custom_profile)
+        }) {
+            return Some(index);
+        }
+    }
+
     config
         .break_templates
         .iter()
-        .find(|template| template.name.eq_ignore_ascii_case(selected_name))
-        .map(break_template_view)
-        .or_else(|| config.break_templates.first().map(break_template_view))
-        .unwrap_or_else(|| break_template_view(&BreakTemplateConfig::default()))
+        .position(|template| break_template_matches_custom_profile(template, &custom_profile))
+}
+
+fn selected_break_template_view(config: &AppConfig) -> BreakTemplateView {
+    if let Some(index) = selected_break_template_index(config) {
+        return config
+            .break_templates
+            .get(index)
+            .map(break_template_view)
+            .unwrap_or_else(|| break_template_view(&BreakTemplateConfig::default()));
+    }
+
+    let custom = config.effective_custom_profile();
+    BreakTemplateView {
+        name: "Custom".to_string(),
+        short_break_secs: custom.short_break_secs,
+        long_break_secs: custom.long_break_secs,
+        long_break_interval: custom.long_break_interval,
+    }
 }
 
 fn available_break_template_views(config: &AppConfig) -> Vec<BreakTemplateView> {
@@ -5433,6 +5473,12 @@ mod tests {
     fn build_status_output_trims_selected_break_template_name() {
         let config = AppConfig {
             selected_break_template: "  deep work  ".to_string(),
+            custom_profile: Some(CustomProfileConfig {
+                focus_secs: DEFAULT_FOCUS_SECS,
+                short_break_secs: 10 * 60,
+                long_break_secs: 30 * 60,
+                long_break_interval: 3,
+            }),
             ..AppConfig::default()
         };
         let stats = FocusStats::default();
@@ -5440,6 +5486,28 @@ mod tests {
         let output = build_status_output(&config, &stats);
 
         assert_eq!(output.selected_break_template.name, "Deep Work");
+    }
+
+    #[test]
+    fn build_status_output_uses_custom_template_sentinel_when_unmatched() {
+        let config = AppConfig {
+            selected_break_template: String::new(),
+            custom_profile: Some(CustomProfileConfig {
+                focus_secs: DEFAULT_FOCUS_SECS,
+                short_break_secs: 7 * 60,
+                long_break_secs: 21 * 60,
+                long_break_interval: 5,
+            }),
+            ..AppConfig::default()
+        };
+        let stats = FocusStats::default();
+
+        let output = build_status_output(&config, &stats);
+
+        assert_eq!(output.selected_break_template.name, "Custom");
+        assert_eq!(output.selected_break_template.short_break_secs, 7 * 60);
+        assert_eq!(output.selected_break_template.long_break_secs, 21 * 60);
+        assert_eq!(output.selected_break_template.long_break_interval, 5);
     }
 
     #[test]
