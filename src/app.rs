@@ -3222,8 +3222,9 @@ impl App {
     }
 
     fn apply_automation_for_profile(&mut self, profile: ProfileId) {
-        let fallback = self.selected_profile_automation();
-        let automation = self.profile_automation.for_profile(profile, &fallback);
+        let automation = self
+            .profile_automation
+            .for_profile(profile, &ProfileAutomationConfig::default());
         self.notification_settings = automation.notifications;
         self.auto_start = automation.auto_start;
         self.strict_mode = automation.strict_mode;
@@ -5192,6 +5193,37 @@ mod tests {
         assert!(app.auto_start.focus_to_break);
         assert!(app.auto_start.break_to_focus);
         assert!(!app.notification_settings.enabled);
+    }
+
+    #[test]
+    fn applying_profile_with_missing_automation_uses_neutral_defaults() {
+        let mut app = App::default();
+        app.notification_settings = NotificationConfig {
+            enabled: false,
+            sound: true,
+        };
+        app.auto_start = AutoStartConfig {
+            focus_to_break: true,
+            break_to_focus: true,
+        };
+        app.strict_mode = true;
+        app.recurring_schedule = RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["mon".to_string()],
+                start: "09:00".to_string(),
+                end: "10:00".to_string(),
+            }],
+            exception_dates: vec!["2026-12-25".to_string()],
+            one_time_windows: Vec::new(),
+        };
+        app.profile_automation.deep_work = None;
+
+        assert!(app.apply_profile(ProfileId::DeepWork));
+        assert_eq!(app.selected_profile, ProfileId::DeepWork);
+        assert_eq!(app.notification_settings, NotificationConfig::default());
+        assert_eq!(app.auto_start, AutoStartConfig::default());
+        assert!(!app.strict_mode);
+        assert_eq!(app.recurring_schedule, RecurringScheduleConfig::default());
     }
 
     #[test]
