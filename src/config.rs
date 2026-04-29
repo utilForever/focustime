@@ -51,7 +51,7 @@ pub struct AppConfig {
     #[serde(default = "default_break_templates")]
     pub break_templates: Vec<BreakTemplateConfig>,
     /// Name of the active break template.
-    #[serde(default = "default_break_template_name")]
+    #[serde(default)]
     pub selected_break_template: String,
     /// Notification preferences for phase transitions.
     #[serde(default)]
@@ -1293,7 +1293,7 @@ mod tests {
         assert_eq!(cfg.long_break_interval, 4);
         assert_eq!(cfg.selected_profile, ProfileId::Custom);
         assert!(cfg.custom_profile.is_none());
-        assert_eq!(cfg.selected_break_template, "Classic");
+        assert_eq!(cfg.selected_break_template, "");
         assert_eq!(cfg.break_templates.len(), 2);
         assert!(cfg.blocked_sites.is_empty());
         assert!(cfg.blocklist_profiles.is_empty());
