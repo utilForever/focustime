@@ -904,13 +904,18 @@ impl App {
         }
 
         let start = preferred_index.min(labels.len().saturating_sub(1));
-        for label in labels.iter().skip(start) {
-            if !self.is_task_label_archived(label) {
+        for distance in 0..labels.len() {
+            if let Some(index) = start.checked_sub(distance)
+                && let Some(label) = labels.get(index)
+                && !self.is_task_label_archived(label)
+            {
                 return Some(label.clone());
             }
-        }
-        for label in labels[..start].iter().rev() {
-            if !self.is_task_label_archived(label) {
+            if distance > 0
+                && let Some(index) = start.checked_add(distance)
+                && let Some(label) = labels.get(index)
+                && !self.is_task_label_archived(label)
+            {
                 return Some(label.clone());
             }
         }
@@ -8811,6 +8816,26 @@ mod tests {
 
         assert!(app.is_task_label_archived("Docs"));
         assert_eq!(app.selected_task_label.as_deref(), Some("Build"));
+    }
+
+    #[test]
+    fn session_planner_archiving_selected_label_prefers_left_when_closer_than_right() {
+        let mut app = App::default();
+        app.task_labels = vec![
+            "Design".to_string(),
+            "Build".to_string(),
+            "Docs".to_string(),
+            "Review".to_string(),
+        ];
+        app.selected_task_label = Some("Build".to_string());
+        app.task_label_archived.insert(task_label_key("Docs"));
+
+        app.open_session_planner();
+        app.planner_selection_index = 1;
+        app.handle_key(key(KeyCode::Char('x')));
+
+        assert!(app.is_task_label_archived("Build"));
+        assert_eq!(app.selected_task_label.as_deref(), Some("Design"));
     }
 
     #[test]
