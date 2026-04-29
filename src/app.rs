@@ -4466,11 +4466,11 @@ impl App {
     fn can_auto_start_focus_for_schedule(&self) -> bool {
         self.timer.phase == TimerPhase::Focus
             && self.timer.status == TimerStatus::Idle
-            && self.selected_task_label.is_some()
+            && self.has_selectable_task_label_for_focus()
     }
 
     fn schedule_arm_notification(&self) -> String {
-        if self.selected_task_label.is_none() {
+        if !self.has_selectable_task_label_for_focus() {
             "Scheduled window started. Select a task label with [t], then press [Space] to start focus or [z] to delay 10m."
                 .to_string()
         } else {
@@ -7426,6 +7426,38 @@ mod tests {
             ..AppConfig::default()
         };
         let mut app = App::from_config(config);
+
+        app.sync_recurring_schedule(now);
+
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Idle);
+        assert!(app.schedule_armed_occurrence_key.is_some());
+        assert_eq!(
+            app.phase_notification.as_deref(),
+            Some(
+                "Scheduled window started. Select a task label with [t], then press [Space] to start focus or [z] to delay 10m."
+            )
+        );
+    }
+
+    #[test]
+    fn recurring_schedule_arms_when_selected_task_label_is_archived() {
+        let now = local_datetime_today(10, 15);
+        let config = AppConfig {
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![crate::config::RecurringFocusWindowConfig {
+                    days: vec![weekday_token(now.weekday()).to_string()],
+                    start: "10:00".to_string(),
+                    end: "11:00".to_string(),
+                }],
+                ..RecurringScheduleConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        app.task_labels = vec!["Coding".to_string()];
+        app.selected_task_label = Some("Coding".to_string());
+        app.task_label_archived.insert(task_label_key("Coding"));
 
         app.sync_recurring_schedule(now);
 
