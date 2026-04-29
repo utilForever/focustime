@@ -91,6 +91,7 @@ cargo run -- --next --json
 # Select task label (creates label if it does not exist yet)
 cargo run -- --task "Write docs"
 cargo run -- --task=Write-docs --json
+# Archived labels are rejected by --task and cannot be used to start focus.
 
 # Show or set cumulative goal targets for a task label
 cargo run -- --task-goal "Write docs"
@@ -264,10 +265,12 @@ Open the session planner from timer view with **`t`**.
 
 - `a`: add a new task label
 - `e`: rename highlighted task label
+- `f`: toggle favorite for highlighted task label (favorites are listed first)
+- `x`: toggle archive state for highlighted task label
 - `d` or `Delete`: delete highlighted task label
 - `r` or `1-5`: quick-pick recent task labels
 - `↑/↓`: move selection
-- `Enter`: select highlighted task label
+- `Enter`: select highlighted task label (archived labels are visible but cannot be selected)
 - `t` or `Esc`: return to timer view
 - while adding/renaming a label, `Enter` saves and `Esc` cancels
 

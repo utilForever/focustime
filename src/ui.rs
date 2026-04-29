@@ -994,8 +994,8 @@ fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    let items: Vec<ListItem> = app
-        .task_labels
+    let display_labels = app.planner_labels_for_display();
+    let items: Vec<ListItem> = display_labels
         .iter()
         .map(|label| {
             let marker = if app
@@ -1007,7 +1007,19 @@ fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
             } else {
                 " "
             };
-            ListItem::new(format!(" {marker} {label}"))
+            let mut badges = Vec::new();
+            if app.is_task_label_favorite(label) {
+                badges.push("★");
+            }
+            if app.is_task_label_archived(label) {
+                badges.push("archived");
+            }
+            let suffix = if badges.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", badges.join(", "))
+            };
+            ListItem::new(format!(" {marker} {label}{suffix}"))
         })
         .collect();
     let list = List::new(items)
@@ -1026,7 +1038,7 @@ fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
     let mut state = ListState::default();
     state.select(Some(
         app.planner_selection_index
-            .min(app.task_labels.len().saturating_sub(1)),
+            .min(display_labels.len().saturating_sub(1)),
     ));
     frame.render_stateful_widget(list, area, &mut state);
 }
@@ -1038,12 +1050,12 @@ fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
             _ => " Add task label ",
         }
     } else {
-        " Task label input ([a] add / [e] rename) "
+        " Task label input ([a] add / [e] rename / [f] favorite / [x] archive) "
     };
     let input_text = if app.planner_input_active {
         format!("{}|", app.planner_input)
     } else {
-        "Use [a] add, [e] rename highlighted, [d/Del] delete highlighted".to_string()
+        "Use [a] add, [e] rename, [f] favorite, [x] archive, [d/Del] delete highlighted".to_string()
     };
     frame.render_widget(
         Paragraph::new(input_text)
@@ -1107,8 +1119,13 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
         ]
     } else {
         vec![
-            Line::from("Planner: [↑/↓] Move  [Enter] Select  [a] Add  [e] Rename  [d/Del] Delete"),
-            Line::from(planner_recent_quick_pick_text(app)),
+            Line::from(
+                "Planner: [↑/↓] Move  [Enter] Select  [a] Add  [e] Rename  [f] Favorite  [x] Archive  [d/Del] Delete",
+            ),
+            Line::from(format!(
+                "{}  |  Archived labels stay visible and cannot be selected",
+                planner_recent_quick_pick_text(app)
+            )),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "View: [t/Esc] Back  [q/Ctrl-C] Quit (Locked)"
             } else {
@@ -2462,6 +2479,42 @@ mod tests {
 
         let text = terminal_text(&terminal, width, height);
         assert!(text.contains("Rename task label"));
+    }
+
+    #[test]
+    fn session_planner_view_renders_favorite_and_archived_badges() {
+        let width = 120;
+        let height = 28;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+        let mut app = App::default();
+        app.task_labels = vec!["Docs".to_string(), "Review".to_string()];
+        app.selected_task_label = Some("Docs".to_string());
+
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('t'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('f'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('j'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('x'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("render should succeed");
+
+        let text = terminal_text(&terminal, width, height);
+        assert!(text.contains("★"));
+        assert!(text.contains("archived"));
     }
 
     #[test]
