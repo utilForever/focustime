@@ -897,12 +897,6 @@ impl App {
             .cloned()
     }
 
-    fn first_selectable_task_label(&self) -> Option<String> {
-        self.planner_labels_for_display()
-            .into_iter()
-            .find(|label| !self.is_task_label_archived(label))
-    }
-
     fn nearest_selectable_task_label(&self, preferred_index: usize) -> Option<String> {
         let labels = self.planner_labels_for_display();
         if labels.is_empty() {
@@ -2939,7 +2933,8 @@ impl App {
                 .as_ref()
                 .is_some_and(|selected| selected.eq_ignore_ascii_case(&label))
             {
-                self.selected_task_label = self.first_selectable_task_label();
+                self.selected_task_label =
+                    self.nearest_selectable_task_label(self.planner_selection_index);
             }
             format!("Archived `{label}`")
         };
@@ -8798,6 +8793,24 @@ mod tests {
 
         assert!(app.is_task_label_archived("Docs"));
         assert_eq!(app.selected_task_label.as_deref(), Some("Review"));
+    }
+
+    #[test]
+    fn session_planner_archiving_selected_label_prefers_nearest_selectable_label() {
+        let mut app = App::default();
+        app.task_labels = vec![
+            "Design".to_string(),
+            "Build".to_string(),
+            "Docs".to_string(),
+        ];
+        app.selected_task_label = Some("Docs".to_string());
+
+        app.open_session_planner();
+        app.planner_selection_index = 2;
+        app.handle_key(key(KeyCode::Char('x')));
+
+        assert!(app.is_task_label_archived("Docs"));
+        assert_eq!(app.selected_task_label.as_deref(), Some("Build"));
     }
 
     #[test]
