@@ -14,11 +14,11 @@ The project is in early-stage development.
 
 ## Tech Stack
 
-| Component | Details |
-|-----------|---------|
-| Language  | Rust (edition 2024) |
-| Build tool | Cargo |
-| Toolchain | stable |
+| Component  | Details             |
+| ---------- | ------------------- |
+| Language   | Rust (edition 2024) |
+| Build tool | Cargo               |
+| Toolchain  | stable              |
 
 ## Repository Structure
 
@@ -75,6 +75,7 @@ cargo audit
 ## Commit Style
 
 - Conventional Commits: `feat:`, `fix:`, `refactor:`, `perf:`, `test:`, `docs:`, `chore:`
+- Split commits by behavior or another meaningful unit of change.
 - Release commits: `feat: vX.Y.Z — short summary`
 - Hotfix: `fix: description` (no version in message)
 
