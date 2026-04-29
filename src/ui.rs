@@ -729,7 +729,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1), // current profile
+            Constraint::Length(2), // current profile + break template
             Constraint::Length(6), // profile list
             Constraint::Length(editor_height),
             Constraint::Min(0),    // spacer
@@ -738,12 +738,18 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         ])
         .split(outer);
 
-    let current = Paragraph::new(format!("Current profile: {}", app.selected_profile_name()))
-        .style(
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        );
+    let current = Paragraph::new(format!(
+        "Current profile: {} · Break template: {} ({})",
+        app.selected_profile_name(),
+        app.active_break_template_name(),
+        app.active_break_template_summary()
+    ))
+    .style(
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    )
+    .wrap(Wrap { trim: true });
     frame.render_widget(current, inner[0]);
 
     let items = profile_list_items(app);
@@ -886,6 +892,7 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
             } else {
                 "Profiles: [↑/↓] Move  [Enter] Apply  [e] Edit"
             }),
+            Line::from("Templates: [[ ] Cycle break template"),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "View: [p/Esc] Back  [q] Quit (Locked)"
             } else {

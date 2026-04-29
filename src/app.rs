@@ -12,9 +12,9 @@ use crate::blocker::{
     HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
 };
 use crate::config::{
-    AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
-    GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig,
-    ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
+    AppConfig, AutoStartConfig, BlocklistProfileConfig, BreakTemplateConfig, CustomProfileConfig,
+    DailyGoalConfig, GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig,
+    OneTimeFocusWindowConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
     RecurringFocusWindowConfig, RecurringScheduleConfig, WakatimeMetadataConfig, WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
@@ -107,6 +107,7 @@ const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 34;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
+const UNLINKED_BREAK_TEMPLATE_NAME: &str = "Custom";
 pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
 const SCHEDULE_TIME_STEP_MINUTES: u16 = 15;
 const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -184,6 +185,50 @@ fn blocklist_profile_index(profiles: &[BlocklistProfileConfig], selected_name: &
         .iter()
         .position(|profile| profile.name.eq_ignore_ascii_case(selected_name))
         .unwrap_or(0)
+}
+
+fn break_template_index(templates: &[BreakTemplateConfig], selected_name: &str) -> Option<usize> {
+    templates
+        .iter()
+        .position(|template| template.name.eq_ignore_ascii_case(selected_name))
+}
+
+fn break_template_matches_custom_profile(
+    template: &BreakTemplateConfig,
+    custom_profile: &CustomProfileConfig,
+) -> bool {
+    let template = template.normalized();
+    let custom_profile = custom_profile.normalized();
+    template.short_break_secs == custom_profile.short_break_secs
+        && template.long_break_secs == custom_profile.long_break_secs
+        && template.long_break_interval == custom_profile.long_break_interval
+}
+
+fn break_template_index_for_custom_profile(
+    templates: &[BreakTemplateConfig],
+    custom_profile: &CustomProfileConfig,
+) -> Option<usize> {
+    templates
+        .iter()
+        .position(|template| break_template_matches_custom_profile(template, custom_profile))
+}
+
+fn resolve_active_break_template(
+    templates: &[BreakTemplateConfig],
+    selected_name: &str,
+    custom_profile: &CustomProfileConfig,
+) -> Option<usize> {
+    let selected = break_template_index(templates, selected_name);
+    if let Some(selected_index) = selected {
+        if templates
+            .get(selected_index)
+            .is_some_and(|template| break_template_matches_custom_profile(template, custom_profile))
+        {
+            return Some(selected_index);
+        }
+    }
+
+    break_template_index_for_custom_profile(templates, custom_profile)
 }
 
 #[derive(Debug, Clone)]
@@ -426,6 +471,8 @@ pub struct App {
     site_edit_index: Option<usize>,
     pub blocklist_profiles: Vec<BlocklistProfileConfig>,
     active_blocklist_profile: usize,
+    pub break_templates: Vec<BreakTemplateConfig>,
+    active_break_template: Option<usize>,
     pub blocklist_profile_input: String,
     pub blocklist_profile_input_active: bool,
     blocklist_profile_input_mode: Option<BlocklistProfileInputMode>,
@@ -531,6 +578,12 @@ impl App {
         let blocklist_profiles = config.blocklist_profiles.clone();
         let active_blocklist_profile =
             blocklist_profile_index(&blocklist_profiles, &config.selected_blocklist_profile);
+        let break_templates = config.break_templates.clone();
+        let active_break_template = resolve_active_break_template(
+            &break_templates,
+            &config.selected_break_template,
+            &custom_profile,
+        );
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (stats, stats_error) = match FocusStats::load() {
             Ok(stats) => (stats, None),
@@ -558,6 +611,8 @@ impl App {
             site_edit_index: None,
             blocklist_profiles,
             active_blocklist_profile,
+            break_templates,
+            active_break_template,
             blocklist_profile_input: String::new(),
             blocklist_profile_input_active: false,
             blocklist_profile_input_mode: None,
@@ -626,6 +681,7 @@ impl App {
             stats_dirty: false,
             stats_has_unsaved_elapsed: false,
         };
+        app.clamp_break_template_selection();
         app.recompute_blocker_sites_from_active_profile();
         app.restore_in_progress_session();
         app.sync_planner_selection_to_selected_label();
@@ -1948,6 +2004,55 @@ impl App {
         self.blocklist_profiles.len()
     }
 
+    pub fn active_break_template_name(&self) -> &str {
+        self.active_break_template
+            .and_then(|index| self.break_templates.get(index))
+            .map(|template| template.name.as_str())
+            .unwrap_or(UNLINKED_BREAK_TEMPLATE_NAME)
+    }
+
+    pub fn active_break_template_summary(&self) -> String {
+        if let Some(template) = self
+            .active_break_template
+            .and_then(|index| self.break_templates.get(index))
+        {
+            format!(
+                "{}/{}, every {} focus",
+                format_duration_label(template.short_break_secs),
+                format_duration_label(template.long_break_secs),
+                template.long_break_interval
+            )
+        } else {
+            let custom_profile = self.custom_profile.normalized();
+            format!(
+                "{}/{}, every {} focus",
+                format_duration_label(custom_profile.short_break_secs),
+                format_duration_label(custom_profile.long_break_secs),
+                custom_profile.long_break_interval
+            )
+        }
+    }
+
+    fn selected_break_template_for_persistence(&self) -> String {
+        self.active_break_template
+            .and_then(|index| self.break_templates.get(index))
+            .map(|template| template.name.clone())
+            .unwrap_or_default()
+    }
+
+    fn sync_active_break_template_to_custom_profile(&mut self) {
+        let selected_name = self
+            .active_break_template
+            .and_then(|index| self.break_templates.get(index))
+            .map(|template| template.name.clone())
+            .unwrap_or_default();
+        self.active_break_template = resolve_active_break_template(
+            &self.break_templates,
+            &selected_name,
+            &self.custom_profile,
+        );
+    }
+
     fn restore_in_progress_session(&mut self) {
         let loaded_snapshot = match session_recovery::load() {
             Ok(snapshot) => snapshot,
@@ -2128,6 +2233,8 @@ impl App {
             selected_blocklist_profile,
             selected_profile: self.selected_profile,
             custom_profile: Some(custom_profile),
+            break_templates: self.break_templates.clone(),
+            selected_break_template: self.selected_break_template_for_persistence(),
             notifications: self.notification_settings,
             auto_start: self.auto_start,
             recurring_schedule: self.recurring_schedule.clone(),
@@ -2526,6 +2633,12 @@ impl App {
             }
             KeyCode::Char('e') => {
                 self.begin_profile_edit();
+            }
+            KeyCode::Char('[') => {
+                self.select_previous_break_template();
+            }
+            KeyCode::Char(']') => {
+                self.select_next_break_template();
             }
             _ => {}
         }
@@ -3038,6 +3151,7 @@ impl App {
             .as_ref()
             .is_some_and(|snapshot| snapshot.goal_carry_over != self.goal_carry_over);
         self.custom_profile = self.custom_profile.normalized();
+        self.sync_active_break_template_to_custom_profile();
         self.recurring_schedule = normalized_schedule;
         self.wakatime_metadata = self.wakatime_metadata.normalized();
         if self.selected_profile == ProfileId::Custom {
@@ -3720,6 +3834,82 @@ impl App {
         );
     }
 
+    fn clamp_break_template_selection(&mut self) {
+        if self.break_templates.is_empty() {
+            self.break_templates.push(BreakTemplateConfig::default());
+            return;
+        }
+        if let Some(active_break_template) = self.active_break_template {
+            self.active_break_template =
+                Some(active_break_template.min(self.break_templates.len().saturating_sub(1)));
+        }
+    }
+
+    fn select_previous_break_template(&mut self) {
+        self.clamp_break_template_selection();
+        if self.break_templates.is_empty() {
+            return;
+        }
+        let last = self.break_templates.len().saturating_sub(1);
+        let next = match self.active_break_template {
+            None | Some(0) => last,
+            Some(current) => current.min(last).saturating_sub(1),
+        };
+        self.switch_break_template(next);
+    }
+
+    fn select_next_break_template(&mut self) {
+        self.clamp_break_template_selection();
+        if self.break_templates.is_empty() {
+            return;
+        }
+        let last = self.break_templates.len().saturating_sub(1);
+        let next = match self.active_break_template {
+            None => 0,
+            Some(current) => (current.min(last) + 1) % self.break_templates.len(),
+        };
+        self.switch_break_template(next);
+    }
+
+    fn switch_break_template(&mut self, next_index: usize) {
+        if next_index >= self.break_templates.len()
+            || self.active_break_template == Some(next_index)
+        {
+            return;
+        }
+
+        let previous_index = self.active_break_template;
+        let previous_custom_profile = self.custom_profile.clone();
+        let Some(template) = self.break_templates.get(next_index).cloned() else {
+            return;
+        };
+        self.active_break_template = Some(next_index);
+        let template = template.normalized();
+        self.custom_profile.short_break_secs = template.short_break_secs;
+        self.custom_profile.long_break_secs = template.long_break_secs;
+        self.custom_profile.long_break_interval = template.long_break_interval;
+        self.custom_profile = self.custom_profile.normalized();
+        let custom_profile_changed = self.custom_profile != previous_custom_profile;
+
+        if self.selected_profile == ProfileId::Custom && custom_profile_changed {
+            let original_profile_automation = self.profile_automation.clone();
+            if !self.apply_profile(ProfileId::Custom) {
+                self.profile_automation = original_profile_automation;
+                self.active_break_template = previous_index;
+                self.custom_profile = previous_custom_profile;
+                return;
+            }
+        } else {
+            self.save_config();
+        }
+
+        self.phase_notification = Some(format!(
+            "Break template selected: {} ({})",
+            self.active_break_template_name(),
+            self.active_break_template_summary()
+        ));
+    }
+
     pub fn is_running(&self) -> bool {
         self.timer.status == TimerStatus::Running
     }
@@ -3961,6 +4151,7 @@ impl App {
         self.profile_selection_index = profile_index(self.selected_profile);
         self.clamp_profile_selection();
         self.clamp_profile_edit_schedule_selection();
+        self.clamp_break_template_selection();
     }
 
     fn open_session_planner(&mut self) {
@@ -5095,6 +5286,8 @@ mod tests {
         assert!(app.blocker.sites.is_empty());
         assert_eq!(app.blocklist_profile_count(), 1);
         assert_eq!(app.active_blocklist_profile_name(), "Default");
+        assert_eq!(app.break_templates.len(), 2);
+        assert_eq!(app.active_break_template_name(), "Classic");
         assert_eq!(app.timer.focus_secs, DEFAULT_FOCUS_SECS);
         assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
         assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
@@ -5124,6 +5317,21 @@ mod tests {
                 long_break_secs: 16 * 60,
                 long_break_interval: 2,
             }),
+            break_templates: vec![
+                BreakTemplateConfig {
+                    name: "Classic".to_string(),
+                    short_break_secs: 5 * 60,
+                    long_break_secs: 15 * 60,
+                    long_break_interval: 4,
+                },
+                BreakTemplateConfig {
+                    name: "Deep Work".to_string(),
+                    short_break_secs: 10 * 60,
+                    long_break_secs: 30 * 60,
+                    long_break_interval: 3,
+                },
+            ],
+            selected_break_template: "Classic".to_string(),
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
             recurring_schedule: RecurringScheduleConfig::default(),
@@ -5339,6 +5547,119 @@ mod tests {
         assert_eq!(app.timer.short_break_secs, short_break);
         assert_eq!(app.timer.long_break_secs, long_break);
         assert_eq!(app.timer.long_break_interval, cadence);
+    }
+
+    #[test]
+    fn profile_manager_cycles_break_template_for_custom_profile() {
+        let config = AppConfig {
+            selected_profile: ProfileId::Custom,
+            custom_profile: Some(CustomProfileConfig::default()),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char(']')));
+
+        assert_eq!(app.active_break_template_name(), "Deep Work");
+        assert_eq!(app.custom_profile.short_break_secs, 10 * 60);
+        assert_eq!(app.custom_profile.long_break_secs, 30 * 60);
+        assert_eq!(app.custom_profile.long_break_interval, 3);
+        assert_eq!(app.timer.short_break_secs, 10 * 60);
+        assert_eq!(app.timer.long_break_secs, 30 * 60);
+        assert_eq!(app.timer.long_break_interval, 3);
+    }
+
+    #[test]
+    fn profile_manager_cycles_break_template_without_replacing_builtin_timer() {
+        let config = AppConfig {
+            selected_profile: ProfileId::Classic,
+            custom_profile: Some(CustomProfileConfig::default()),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+        let original_short = app.timer.short_break_secs;
+        let original_long = app.timer.long_break_secs;
+        let original_cadence = app.timer.long_break_interval;
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char(']')));
+
+        assert_eq!(app.active_break_template_name(), "Deep Work");
+        assert_eq!(app.custom_profile.short_break_secs, 10 * 60);
+        assert_eq!(app.custom_profile.long_break_secs, 30 * 60);
+        assert_eq!(app.custom_profile.long_break_interval, 3);
+        assert_eq!(app.timer.short_break_secs, original_short);
+        assert_eq!(app.timer.long_break_secs, original_long);
+        assert_eq!(app.timer.long_break_interval, original_cadence);
+    }
+
+    #[test]
+    fn startup_recomputes_selected_break_template_from_custom_values() {
+        let config = AppConfig {
+            selected_profile: ProfileId::Classic,
+            custom_profile: Some(CustomProfileConfig {
+                focus_secs: DEFAULT_FOCUS_SECS,
+                short_break_secs: 10 * 60,
+                long_break_secs: 30 * 60,
+                long_break_interval: 3,
+            }),
+            break_templates: vec![
+                BreakTemplateConfig {
+                    name: "Classic".to_string(),
+                    short_break_secs: 5 * 60,
+                    long_break_secs: 15 * 60,
+                    long_break_interval: 4,
+                },
+                BreakTemplateConfig {
+                    name: "Deep Work".to_string(),
+                    short_break_secs: 10 * 60,
+                    long_break_secs: 30 * 60,
+                    long_break_interval: 3,
+                },
+            ],
+            selected_break_template: "Classic".to_string(),
+            ..AppConfig::default()
+        };
+
+        let app = App::from_config(config);
+
+        assert_eq!(app.active_break_template_name(), "Deep Work");
+    }
+
+    #[test]
+    fn committing_custom_profile_edit_clears_unmatched_template_selection() {
+        let config = AppConfig {
+            selected_profile: ProfileId::Custom,
+            custom_profile: Some(CustomProfileConfig::default()),
+            selected_break_template: "Classic".to_string(),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        app.handle_key(key(KeyCode::Char('p')));
+        app.handle_key(key(KeyCode::Char('e')));
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Right));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.active_break_template_name(), "Custom");
+        assert_eq!(app.persisted_config().selected_break_template, "");
+    }
+
+    #[test]
+    fn cycling_break_templates_from_unlinked_state_uses_first_and_last_entries() {
+        let mut app = App::default();
+        app.active_break_template = None;
+
+        app.select_next_break_template();
+        assert_eq!(app.active_break_template, Some(0));
+        assert_eq!(app.active_break_template_name(), "Classic");
+
+        app.active_break_template = None;
+        app.select_previous_break_template();
+        assert_eq!(app.active_break_template, Some(1));
+        assert_eq!(app.active_break_template_name(), "Deep Work");
     }
 
     #[test]

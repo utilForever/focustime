@@ -255,10 +255,11 @@ Open profile manager from timer view with **`p`**.
 - `↑/↓`: move between profiles
 - `Enter`: apply selected profile
 - `e`: open profile/settings editor
+- `[` / `]`: cycle the active break template for fast short/long break switching
 - In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values, `Type/Backspace` edits WakaTime project/language, `Enter` saves
 
-Profile selection, custom durations, and profile-scoped automation settings are
-persisted in `config.toml`.
+Profile selection, break template selection, custom durations, and profile-scoped
+automation settings are persisted in `config.toml`.
 
 ## Session planner
 
@@ -294,10 +295,23 @@ and interruption/completed-session history export fields.
 
 ```toml
 selected_profile = "custom"
+selected_break_template = "Classic"
 selected_blocklist_profile = "Work"
 # Legacy compatibility mirror for the selected profile's automation strict mode.
 strict_mode = false
 break_glass_duration_secs = 300
+
+[[break_templates]]
+name = "Classic"
+short_break_secs = 300
+long_break_secs = 900
+long_break_interval = 4
+
+[[break_templates]]
+name = "Deep Work"
+short_break_secs = 600
+long_break_secs = 1800
+long_break_interval = 3
 
 [[blocklist_profiles]]
 name = "Work"
