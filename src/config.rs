@@ -794,8 +794,12 @@ impl AppConfig {
         );
         self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
         self.break_templates = normalize_break_templates(&self.break_templates);
-        self.selected_break_template =
-            normalize_selected_break_template(&self.selected_break_template, &self.break_templates);
+        let effective_custom_profile = self.effective_custom_profile();
+        self.selected_break_template = normalize_selected_break_template(
+            &self.selected_break_template,
+            &self.break_templates,
+            &effective_custom_profile,
+        );
         self.recurring_schedule = self.recurring_schedule.normalized();
         let fallback_automation = self.legacy_profile_automation();
         let normalized_profile_automation = self
@@ -974,23 +978,36 @@ fn normalize_break_templates(templates: &[BreakTemplateConfig]) -> Vec<BreakTemp
 fn normalize_selected_break_template(
     selected_name: &str,
     templates: &[BreakTemplateConfig],
+    custom_profile: &CustomProfileConfig,
 ) -> String {
     let selected_name = selected_name.trim();
     if selected_name.is_empty() {
         return String::new();
     }
 
-    if let Some(template) = templates
-        .iter()
-        .find(|template| template.name.eq_ignore_ascii_case(selected_name))
-    {
+    if let Some(template) = templates.iter().find(|template| {
+        template.name.eq_ignore_ascii_case(selected_name)
+            && break_template_matches_custom_profile(template, custom_profile)
+    }) {
         template.name.clone()
     } else {
         templates
-            .first()
+            .iter()
+            .find(|template| break_template_matches_custom_profile(template, custom_profile))
             .map(|template| template.name.clone())
-            .unwrap_or_else(default_break_template_name)
+            .unwrap_or_default()
     }
+}
+
+fn break_template_matches_custom_profile(
+    template: &BreakTemplateConfig,
+    custom_profile: &CustomProfileConfig,
+) -> bool {
+    let template = template.normalized();
+    let custom_profile = custom_profile.normalized();
+    template.short_break_secs == custom_profile.short_break_secs
+        && template.long_break_secs == custom_profile.long_break_secs
+        && template.long_break_interval == custom_profile.long_break_interval
 }
 
 fn normalize_blocklist_profiles(
@@ -1377,6 +1394,40 @@ mod tests {
         );
         assert_eq!(cfg.break_templates[1].name, "recovery (2)");
         assert_eq!(cfg.selected_break_template, "Recovery");
+    }
+
+    #[test]
+    fn normalize_selected_break_template_uses_template_matching_custom_values() {
+        let cfg = AppConfig {
+            selected_break_template: "Classic".to_string(),
+            custom_profile: Some(CustomProfileConfig {
+                focus_secs: default_focus_secs(),
+                short_break_secs: 10 * 60,
+                long_break_secs: 30 * 60,
+                long_break_interval: 3,
+            }),
+            ..AppConfig::default()
+        }
+        .normalize();
+
+        assert_eq!(cfg.selected_break_template, "Deep Work");
+    }
+
+    #[test]
+    fn normalize_selected_break_template_clears_unknown_when_no_template_matches_custom_values() {
+        let cfg = AppConfig {
+            selected_break_template: "Classic".to_string(),
+            custom_profile: Some(CustomProfileConfig {
+                focus_secs: default_focus_secs(),
+                short_break_secs: 7 * 60,
+                long_break_secs: 21 * 60,
+                long_break_interval: 5,
+            }),
+            ..AppConfig::default()
+        }
+        .normalize();
+
+        assert_eq!(cfg.selected_break_template, "");
     }
 
     #[test]
