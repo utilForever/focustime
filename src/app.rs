@@ -2014,14 +2014,12 @@ impl App {
 
         self.selected_profile = snapshot.selected_profile;
         self.profile_selection_index = profile_index(snapshot.selected_profile);
+        self.load_automation_runtime_for_profile(snapshot.selected_profile);
+        self.current_frame_now = Local::now();
         self.timer = recovered_timer;
         self.selected_task_label = Some(selected_task_label);
         self.pending_timer_action = None;
         self.break_glass_expires_at = None;
-        self.schedule_armed_occurrence_key = None;
-        self.schedule_delayed_occurrence_key = None;
-        self.schedule_delay_until = None;
-        self.last_schedule_occurrence_key = None;
         self.active_focus_task_label = if self.timer.phase == TimerPhase::Focus {
             self.selected_task_label.clone()
         } else {
@@ -3225,7 +3223,7 @@ impl App {
             .set_for_profile(self.selected_profile, self.selected_profile_automation());
     }
 
-    fn apply_automation_for_profile(&mut self, profile: ProfileId) {
+    fn load_automation_runtime_for_profile(&mut self, profile: ProfileId) {
         let automation = self
             .profile_automation
             .for_profile(profile, &ProfileAutomationConfig::default());
@@ -3238,6 +3236,10 @@ impl App {
         self.schedule_armed_occurrence_key = None;
         self.clear_schedule_delay_state();
         self.last_schedule_occurrence_key = None;
+    }
+
+    fn apply_automation_for_profile(&mut self, profile: ProfileId) {
+        self.load_automation_runtime_for_profile(profile);
         let now = Local::now();
         self.current_frame_now = now;
         self.sync_recurring_schedule(now);
@@ -9124,6 +9126,59 @@ mod tests {
                 .as_deref()
                 .is_some_and(|message| message.contains("Recovered in-progress Focus session"))
         );
+    }
+
+    #[test]
+    fn startup_recovery_rehydrates_profile_automation_runtime_for_snapshot_profile() {
+        let deep_work_schedule = RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["mon".to_string()],
+                start: "09:00".to_string(),
+                end: "11:00".to_string(),
+            }],
+            exception_dates: vec!["2026-12-25".to_string()],
+            one_time_windows: Vec::new(),
+        };
+        let config = AppConfig {
+            selected_profile: ProfileId::Custom,
+            strict_mode: false,
+            profile_automation: Some(ProfileAutomationSettingsConfig {
+                classic: Some(ProfileAutomationConfig::default()),
+                deep_work: Some(ProfileAutomationConfig {
+                    notifications: NotificationConfig {
+                        enabled: false,
+                        sound: true,
+                    },
+                    auto_start: AutoStartConfig {
+                        focus_to_break: true,
+                        break_to_focus: true,
+                    },
+                    strict_mode: true,
+                    recurring_schedule: deep_work_schedule.clone(),
+                }),
+                custom: Some(ProfileAutomationConfig::default()),
+            }),
+            ..AppConfig::default()
+        };
+        session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
+            TimerPhase::Focus,
+            TimerStatus::Running,
+            42,
+            Some("Docs"),
+            ProfileId::DeepWork,
+        )));
+
+        let app = App::from_config(config);
+
+        assert_eq!(app.selected_profile, ProfileId::DeepWork);
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert!(!app.notification_settings.enabled);
+        assert!(app.notification_settings.sound);
+        assert!(app.auto_start.focus_to_break);
+        assert!(app.auto_start.break_to_focus);
+        assert!(app.strict_mode);
+        assert_eq!(app.recurring_schedule, deep_work_schedule);
     }
 
     #[test]
