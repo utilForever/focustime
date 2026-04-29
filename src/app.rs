@@ -3850,14 +3850,10 @@ impl App {
         if self.break_templates.is_empty() {
             return;
         }
-        let current = self
-            .active_break_template
-            .unwrap_or(0)
-            .min(self.break_templates.len().saturating_sub(1));
-        let next = if current == 0 {
-            self.break_templates.len().saturating_sub(1)
-        } else {
-            current.saturating_sub(1)
+        let last = self.break_templates.len().saturating_sub(1);
+        let next = match self.active_break_template {
+            None | Some(0) => last,
+            Some(current) => current.min(last).saturating_sub(1),
         };
         self.switch_break_template(next);
     }
@@ -3867,11 +3863,11 @@ impl App {
         if self.break_templates.is_empty() {
             return;
         }
-        let current = self
-            .active_break_template
-            .unwrap_or(0)
-            .min(self.break_templates.len().saturating_sub(1));
-        let next = (current + 1) % self.break_templates.len();
+        let last = self.break_templates.len().saturating_sub(1);
+        let next = match self.active_break_template {
+            None => 0,
+            Some(current) => (current.min(last) + 1) % self.break_templates.len(),
+        };
         self.switch_break_template(next);
     }
 
@@ -5649,6 +5645,21 @@ mod tests {
 
         assert_eq!(app.active_break_template_name(), "Custom");
         assert_eq!(app.persisted_config().selected_break_template, "");
+    }
+
+    #[test]
+    fn cycling_break_templates_from_unlinked_state_uses_first_and_last_entries() {
+        let mut app = App::default();
+        app.active_break_template = None;
+
+        app.select_next_break_template();
+        assert_eq!(app.active_break_template, Some(0));
+        assert_eq!(app.active_break_template_name(), "Classic");
+
+        app.active_break_template = None;
+        app.select_previous_break_template();
+        assert_eq!(app.active_break_template, Some(1));
+        assert_eq!(app.active_break_template_name(), "Deep Work");
     }
 
     #[test]
