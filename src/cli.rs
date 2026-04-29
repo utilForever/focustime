@@ -3142,14 +3142,11 @@ fn break_template_view(template: &BreakTemplateConfig) -> BreakTemplateView {
 }
 
 fn selected_break_template_view(config: &AppConfig) -> BreakTemplateView {
+    let selected_name = config.selected_break_template.trim();
     config
         .break_templates
         .iter()
-        .find(|template| {
-            template
-                .name
-                .eq_ignore_ascii_case(&config.selected_break_template)
-        })
+        .find(|template| template.name.eq_ignore_ascii_case(selected_name))
         .map(break_template_view)
         .or_else(|| config.break_templates.first().map(break_template_view))
         .unwrap_or_else(|| break_template_view(&BreakTemplateConfig::default()))
@@ -5430,6 +5427,19 @@ mod tests {
         let output = build_status_output(&config, &stats);
 
         assert_eq!(output.blocked_sites_count, 2);
+    }
+
+    #[test]
+    fn build_status_output_trims_selected_break_template_name() {
+        let config = AppConfig {
+            selected_break_template: "  deep work  ".to_string(),
+            ..AppConfig::default()
+        };
+        let stats = FocusStats::default();
+
+        let output = build_status_output(&config, &stats);
+
+        assert_eq!(output.selected_break_template.name, "Deep Work");
     }
 
     #[test]
