@@ -947,37 +947,44 @@ impl App {
         loop {
             let source = self.stats.recent_task_labels(source_limit);
             let exhausted = source.len() < source_limit;
-            let mut recent = Vec::new();
-            let mut seen = BTreeSet::new();
+            let recent = self.collect_recent_selectable_labels(source, limit);
 
-            for label in source {
-                let Some(existing_index) = task_label_index(&self.task_labels, &label) else {
-                    continue;
-                };
-                let canonical = self.task_labels[existing_index].clone();
-                if self.is_task_label_archived(&canonical) {
-                    continue;
-                }
-                let key = canonical.to_ascii_lowercase();
-                if !seen.insert(key) {
-                    continue;
-                }
-                recent.push(canonical);
-                if recent.len() >= limit {
-                    return recent;
-                }
-            }
-
-            if exhausted {
+            if recent.len() >= limit || exhausted {
                 return recent;
             }
 
-            let next_limit = source_limit.saturating_mul(2);
-            if next_limit == source_limit {
+            let Some(next_limit) = source_limit.checked_mul(2) else {
                 return recent;
-            }
+            };
             source_limit = next_limit;
         }
+    }
+
+    fn collect_recent_selectable_labels(&self, source: Vec<String>, limit: usize) -> Vec<String> {
+        let mut recent = Vec::new();
+        let mut seen = BTreeSet::new();
+
+        for label in source {
+            let Some(canonical) = self.canonical_selectable_task_label(&label) else {
+                continue;
+            };
+            let key = canonical.to_ascii_lowercase();
+            if !seen.insert(key) {
+                continue;
+            }
+            recent.push(canonical);
+            if recent.len() >= limit {
+                break;
+            }
+        }
+
+        recent
+    }
+
+    fn canonical_selectable_task_label(&self, label: &str) -> Option<String> {
+        let existing_index = task_label_index(&self.task_labels, label)?;
+        let canonical = self.task_labels.get(existing_index)?.clone();
+        (!self.is_task_label_archived(&canonical)).then_some(canonical)
     }
 
     pub fn timer_state_for_cli(&self) -> (TimerPhase, TimerStatus, u64, u32) {
