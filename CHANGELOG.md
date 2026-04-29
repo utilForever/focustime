@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Profile-aware automation rules (#191):** automation settings (`notifications`, `auto_start`, `strict_mode`, and recurring schedule windows) are now stored and applied per timer profile across config, TUI profile editing, and CLI automation commands.
+
 ## [0.7.1] - 2026-04-28
 
 ### Added

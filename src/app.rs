@@ -14,8 +14,8 @@ use crate::blocker::{
 use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
     GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig,
-    ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig, WakatimeMetadataConfig,
-    WeeklyGoalConfig,
+    ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, WakatimeMetadataConfig, WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -460,6 +460,7 @@ pub struct App {
     pub phase_notification: Option<String>,
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
+    profile_automation: ProfileAutomationSettingsConfig,
     pub custom_profile: CustomProfileConfig,
     pub profile_selection_index: usize,
     pub profile_edit_active: bool,
@@ -511,14 +512,16 @@ impl App {
         let config = config.normalized();
         let selected_profile = config.selected_profile;
         let custom_profile = config.effective_custom_profile();
-        let notification_settings = config.notifications;
-        let auto_start = config.auto_start;
-        let recurring_schedule = config.recurring_schedule.clone();
+        let profile_automation = config.profile_automation.clone().unwrap_or_default();
+        let selected_automation = config.profile_automation_for(selected_profile);
+        let notification_settings = selected_automation.notifications;
+        let auto_start = selected_automation.auto_start;
+        let recurring_schedule = selected_automation.recurring_schedule.clone();
         let recurring_windows = compile_windows(&recurring_schedule.windows);
         let recurring_exception_dates =
             compile_exception_dates(&recurring_schedule.exception_dates);
         let one_time_windows = compile_one_time_windows(&recurring_schedule.one_time_windows);
-        let strict_mode = config.strict_mode;
+        let strict_mode = selected_automation.strict_mode;
         let break_glass_duration_secs = config.break_glass_duration_secs;
         let daily_goal = config.daily_goal;
         let weekly_goal = config.weekly_goal;
@@ -588,6 +591,7 @@ impl App {
                 language: wakatime_metadata.language.clone(),
             }),
             selected_profile,
+            profile_automation,
             custom_profile,
             profile_selection_index: profile_index(selected_profile),
             profile_edit_active: false,
@@ -2010,14 +2014,12 @@ impl App {
 
         self.selected_profile = snapshot.selected_profile;
         self.profile_selection_index = profile_index(snapshot.selected_profile);
+        self.load_automation_runtime_for_profile(snapshot.selected_profile);
+        self.current_frame_now = Local::now();
         self.timer = recovered_timer;
         self.selected_task_label = Some(selected_task_label);
         self.pending_timer_action = None;
         self.break_glass_expires_at = None;
-        self.schedule_armed_occurrence_key = None;
-        self.schedule_delayed_occurrence_key = None;
-        self.schedule_delay_until = None;
-        self.last_schedule_occurrence_key = None;
         self.active_focus_task_label = if self.timer.phase == TimerPhase::Focus {
             self.selected_task_label.clone()
         } else {
@@ -2111,6 +2113,9 @@ impl App {
             .get(active_index)
             .map(effective_blocked_sites_for_profile)
             .unwrap_or_default();
+        let mut profile_automation = self.profile_automation.clone();
+        profile_automation
+            .set_for_profile(self.selected_profile, self.selected_profile_automation());
         AppConfig {
             // Keep legacy fields aligned with the editable custom profile so
             // older releases retain user-configured values.
@@ -2126,6 +2131,7 @@ impl App {
             notifications: self.notification_settings,
             auto_start: self.auto_start,
             recurring_schedule: self.recurring_schedule.clone(),
+            profile_automation: Some(profile_automation),
             strict_mode: self.strict_mode,
             break_glass_duration_secs: self.break_glass_duration_secs,
             daily_goal: self.daily_goal,
@@ -3036,13 +3042,18 @@ impl App {
         self.wakatime_metadata = self.wakatime_metadata.normalized();
         if self.selected_profile == ProfileId::Custom {
             if custom_profile_changed {
+                let original_profile_automation = self.profile_automation.clone();
+                self.update_selected_profile_automation();
                 if !self.apply_profile(ProfileId::Custom) {
+                    self.profile_automation = original_profile_automation;
                     return;
                 }
             } else {
+                self.update_selected_profile_automation();
                 self.save_config();
             }
         } else {
+            self.update_selected_profile_automation();
             self.save_config();
         }
         self.sync_wakatime_metadata_to_tracker();
@@ -3197,6 +3208,43 @@ impl App {
         self.one_time_windows = compile_one_time_windows(&self.recurring_schedule.one_time_windows);
     }
 
+    fn selected_profile_automation(&self) -> ProfileAutomationConfig {
+        ProfileAutomationConfig {
+            notifications: self.notification_settings,
+            auto_start: self.auto_start,
+            strict_mode: self.strict_mode,
+            recurring_schedule: self.recurring_schedule.clone(),
+        }
+        .normalized()
+    }
+
+    fn update_selected_profile_automation(&mut self) {
+        self.profile_automation
+            .set_for_profile(self.selected_profile, self.selected_profile_automation());
+    }
+
+    fn load_automation_runtime_for_profile(&mut self, profile: ProfileId) {
+        let automation = self
+            .profile_automation
+            .for_profile(profile, &ProfileAutomationConfig::default());
+        self.notification_settings = automation.notifications;
+        self.auto_start = automation.auto_start;
+        self.strict_mode = automation.strict_mode;
+        self.recurring_schedule = automation.recurring_schedule;
+        self.rebuild_notifier();
+        self.rebuild_recurring_schedule_runtime();
+        self.schedule_armed_occurrence_key = None;
+        self.clear_schedule_delay_state();
+        self.last_schedule_occurrence_key = None;
+    }
+
+    fn apply_automation_for_profile(&mut self, profile: ProfileId) {
+        self.load_automation_runtime_for_profile(profile);
+        let now = Local::now();
+        self.current_frame_now = now;
+        self.sync_recurring_schedule(now);
+    }
+
     fn apply_profile(&mut self, profile: ProfileId) -> bool {
         if self.strict_mode_enforced_for_focus() {
             self.config_error = Some(
@@ -3217,6 +3265,7 @@ impl App {
         self.active_focus_profile = None;
         self.selected_profile = profile;
         self.profile_selection_index = profile_index(profile);
+        self.apply_automation_for_profile(profile);
         self.pending_timer_action = None;
         self.save_config();
         self.apply_blocking_for_phase();
@@ -5078,6 +5127,7 @@ mod tests {
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
             recurring_schedule: RecurringScheduleConfig::default(),
+            profile_automation: None,
             strict_mode: false,
             break_glass_duration_secs: 5 * 60,
             daily_goal: DailyGoalConfig::default(),
@@ -5092,6 +5142,94 @@ mod tests {
         assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
         assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
         assert_eq!(app.timer.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
+    }
+
+    #[test]
+    fn applying_profile_loads_profile_scoped_automation_rules() {
+        let classic_schedule = RecurringScheduleConfig::default();
+        let deep_work_schedule = RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["mon".to_string()],
+                start: "09:00".to_string(),
+                end: "11:00".to_string(),
+            }],
+            exception_dates: Vec::new(),
+            one_time_windows: Vec::new(),
+        };
+        let config = AppConfig {
+            selected_profile: ProfileId::Classic,
+            profile_automation: Some(ProfileAutomationSettingsConfig {
+                classic: Some(ProfileAutomationConfig {
+                    notifications: NotificationConfig {
+                        enabled: true,
+                        sound: false,
+                    },
+                    auto_start: AutoStartConfig {
+                        focus_to_break: false,
+                        break_to_focus: false,
+                    },
+                    strict_mode: false,
+                    recurring_schedule: classic_schedule.clone(),
+                }),
+                deep_work: Some(ProfileAutomationConfig {
+                    notifications: NotificationConfig {
+                        enabled: false,
+                        sound: false,
+                    },
+                    auto_start: AutoStartConfig {
+                        focus_to_break: true,
+                        break_to_focus: true,
+                    },
+                    strict_mode: true,
+                    recurring_schedule: deep_work_schedule.clone(),
+                }),
+                custom: None,
+            }),
+            ..AppConfig::default()
+        };
+        let mut app = App::from_config(config);
+
+        assert_eq!(app.recurring_schedule, classic_schedule);
+        assert!(!app.strict_mode);
+        assert!(!app.auto_start.focus_to_break);
+        assert!(app.apply_profile(ProfileId::DeepWork));
+        assert_eq!(app.selected_profile, ProfileId::DeepWork);
+        assert_eq!(app.recurring_schedule, deep_work_schedule);
+        assert!(app.strict_mode);
+        assert!(app.auto_start.focus_to_break);
+        assert!(app.auto_start.break_to_focus);
+        assert!(!app.notification_settings.enabled);
+    }
+
+    #[test]
+    fn applying_profile_with_missing_automation_uses_neutral_defaults() {
+        let mut app = App::default();
+        app.notification_settings = NotificationConfig {
+            enabled: false,
+            sound: true,
+        };
+        app.auto_start = AutoStartConfig {
+            focus_to_break: true,
+            break_to_focus: true,
+        };
+        app.strict_mode = true;
+        app.recurring_schedule = RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["mon".to_string()],
+                start: "09:00".to_string(),
+                end: "10:00".to_string(),
+            }],
+            exception_dates: vec!["2026-12-25".to_string()],
+            one_time_windows: Vec::new(),
+        };
+        app.profile_automation.deep_work = None;
+
+        assert!(app.apply_profile(ProfileId::DeepWork));
+        assert_eq!(app.selected_profile, ProfileId::DeepWork);
+        assert_eq!(app.notification_settings, NotificationConfig::default());
+        assert_eq!(app.auto_start, AutoStartConfig::default());
+        assert!(!app.strict_mode);
+        assert_eq!(app.recurring_schedule, RecurringScheduleConfig::default());
     }
 
     #[test]
@@ -7914,6 +8052,9 @@ mod tests {
             goal_carry_over: app.goal_carry_over,
             wakatime_metadata: app.wakatime_metadata.clone(),
         });
+        let original_profile_automation = app
+            .profile_automation
+            .for_profile(ProfileId::Custom, &ProfileAutomationConfig::default());
         app.custom_profile.focus_secs = app.custom_profile.focus_secs.saturating_add(60);
         app.notification_settings.enabled = false;
 
@@ -7925,6 +8066,11 @@ mod tests {
             app.config_error
                 .as_deref()
                 .is_some_and(|err| err.contains("strict focus active"))
+        );
+        assert_eq!(
+            app.profile_automation
+                .for_profile(ProfileId::Custom, &ProfileAutomationConfig::default()),
+            original_profile_automation
         );
 
         app.timer.remaining_secs = 1;
@@ -8980,6 +9126,59 @@ mod tests {
                 .as_deref()
                 .is_some_and(|message| message.contains("Recovered in-progress Focus session"))
         );
+    }
+
+    #[test]
+    fn startup_recovery_rehydrates_profile_automation_runtime_for_snapshot_profile() {
+        let deep_work_schedule = RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["mon".to_string()],
+                start: "09:00".to_string(),
+                end: "11:00".to_string(),
+            }],
+            exception_dates: vec!["2026-12-25".to_string()],
+            one_time_windows: Vec::new(),
+        };
+        let config = AppConfig {
+            selected_profile: ProfileId::Custom,
+            strict_mode: false,
+            profile_automation: Some(ProfileAutomationSettingsConfig {
+                classic: Some(ProfileAutomationConfig::default()),
+                deep_work: Some(ProfileAutomationConfig {
+                    notifications: NotificationConfig {
+                        enabled: false,
+                        sound: true,
+                    },
+                    auto_start: AutoStartConfig {
+                        focus_to_break: true,
+                        break_to_focus: true,
+                    },
+                    strict_mode: true,
+                    recurring_schedule: deep_work_schedule.clone(),
+                }),
+                custom: Some(ProfileAutomationConfig::default()),
+            }),
+            ..AppConfig::default()
+        };
+        session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
+            TimerPhase::Focus,
+            TimerStatus::Running,
+            42,
+            Some("Docs"),
+            ProfileId::DeepWork,
+        )));
+
+        let app = App::from_config(config);
+
+        assert_eq!(app.selected_profile, ProfileId::DeepWork);
+        assert_eq!(app.timer.phase, TimerPhase::Focus);
+        assert_eq!(app.timer.status, TimerStatus::Running);
+        assert!(!app.notification_settings.enabled);
+        assert!(app.notification_settings.sound);
+        assert!(app.auto_start.focus_to_break);
+        assert!(app.auto_start.break_to_focus);
+        assert!(app.strict_mode);
+        assert_eq!(app.recurring_schedule, deep_work_schedule);
     }
 
     #[test]

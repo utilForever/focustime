@@ -125,7 +125,7 @@ cargo run -- --goal-carry-weekly=on
 cargo run -- --goal-carry-monthly=off
 cargo run -- --goal-carry --json
 
-# Show or set strict mode
+# Show or set strict mode for the selected profile
 cargo run -- --strict
 cargo run -- --strict=on
 cargo run -- --strict --json
@@ -145,7 +145,7 @@ cargo run -- --allowlist-site-add "reddit.com"
 cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
 cargo run -- --allowlist-site-delete reddit.com
 
-# Show schedule (including overlap/conflict inspection) or replace recurring + one-time windows atomically from JSON
+# Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"16:00"}]}'
 cargo run -- --schedule --json
@@ -257,7 +257,8 @@ Open profile manager from timer view with **`p`**.
 - `e`: open profile/settings editor
 - In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values, `Type/Backspace` edits WakaTime project/language, `Enter` saves
 
-Profile selection and custom values are persisted in `config.toml`.
+Profile selection, custom durations, and profile-scoped automation settings are
+persisted in `config.toml`.
 
 ## Session planner
 
@@ -294,6 +295,7 @@ and interruption/completed-session history export fields.
 ```toml
 selected_profile = "custom"
 selected_blocklist_profile = "Work"
+# Legacy compatibility mirror for the selected profile's automation strict mode.
 strict_mode = false
 break_glass_duration_secs = 300
 
@@ -313,21 +315,21 @@ short_break_secs = 360
 long_break_secs = 900
 long_break_interval = 3
 
-[notifications]
+[profile_automation.custom.notifications]
 enabled = true
 sound = false
 
-[auto_start]
+[profile_automation.custom.auto_start]
 focus_to_break = false
 break_to_focus = false
 
-[recurring_schedule]
+[profile_automation.custom.recurring_schedule]
 exception_dates = ["2026-12-25", "2027-01-01"]
-[[recurring_schedule.windows]]
+[[profile_automation.custom.recurring_schedule.windows]]
 days = ["mon", "tue", "wed", "thu", "fri"]
 start = "09:00"
 end = "11:00"
-[[recurring_schedule.one_time_windows]]
+[[profile_automation.custom.recurring_schedule.one_time_windows]]
 date = "2026-05-02"
 start = "14:00"
 end = "16:00"
@@ -409,19 +411,19 @@ Notifications are delivered best-effort:
 
 - terminal notice in the timer view
 - desktop notification via platform-specific delivery (`winrt-toast-reborn` toast on Windows with a `msg` fallback, `osascript` on macOS, `notify-send` on Linux)
-- optional sound alert using platform audio capabilities when `notifications.sound = true`
+- optional sound alert using platform audio capabilities when `profile_automation.<profile>.notifications.sound = true`
 
 Natural, non-catchup phase transitions can also auto-start the next timer with safe defaults (`Off`):
 
-- `auto_start.focus_to_break` starts break timers automatically after focus completion on non-catchup ticks
-- `auto_start.break_to_focus` starts focus timers automatically after break completion on non-catchup ticks
+- `profile_automation.<profile>.auto_start.focus_to_break` starts break timers automatically after focus completion on non-catchup ticks
+- `profile_automation.<profile>.auto_start.break_to_focus` starts focus timers automatically after break completion on non-catchup ticks
 
 Recurring schedule windows can also trigger focus behavior at wall-clock times:
 
-- `recurring_schedule.windows[].days` accepts day tokens (`mon`..`sun`, case-insensitive)
-- `recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
-- `recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
-- `recurring_schedule.one_time_windows[]` accepts one-time date windows with `date` (`YYYY-MM-DD`) plus `start`/`end` (`HH:MM`)
+- `profile_automation.<profile>.recurring_schedule.windows[].days` accepts day tokens (`mon`..`sun`, case-insensitive)
+- `profile_automation.<profile>.recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
+- `profile_automation.<profile>.recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
+- `profile_automation.<profile>.recurring_schedule.one_time_windows[]` accepts one-time date windows with `date` (`YYYY-MM-DD`) plus `start`/`end` (`HH:MM`)
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
 - while a schedule window is active and focus is not already running, press `z` to delay the scheduled start by 10 minutes
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
@@ -433,6 +435,7 @@ You can configure notification and auto-start settings directly from the TUI:
 
 - open profile manager with `p`
 - press `e` to open the editor
+- automation and schedule edits apply to the currently selected profile only
 - the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **WakaTime**, **Schedule**) to keep settings easier to scan
 - use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily/Weekly/Monthly goal (minutes)**, **Daily/Weekly/Monthly goal (pomodoros)**, **WakaTime project/language**, or the **Schedule** fields
 - use `←/→` to adjust values (or toggle `Off`/`On` for boolean fields), use `Type/Backspace` for WakaTime text fields, then `Enter` to save

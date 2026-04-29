@@ -267,3 +267,93 @@ fn blocking_preview_json_emits_payload_on_stdout() {
     assert!(payload.get("effective_blocked_sites").is_some());
     assert!(payload.get("section").is_some());
 }
+
+#[test]
+fn strict_mode_is_profile_scoped_via_cli_commands() {
+    let env = TestEnv::new("strict-profile-scoped");
+
+    let select_deep_work = env.run(&["--profile", "deep-work", "--json"]);
+    assert_eq!(select_deep_work.status.code(), Some(0));
+    assert!(stderr_text(&select_deep_work).trim().is_empty());
+
+    let set_strict_on = env.run(&["--strict=on", "--json"]);
+    assert_eq!(set_strict_on.status.code(), Some(0));
+    assert!(stderr_text(&set_strict_on).trim().is_empty());
+    let set_payload: Value = serde_json::from_slice(&set_strict_on.stdout).unwrap();
+    assert_eq!(set_payload["updated"], true);
+    assert_eq!(set_payload["strict_mode"], true);
+
+    let select_custom = env.run(&["--profile", "custom", "--json"]);
+    assert_eq!(select_custom.status.code(), Some(0));
+    assert!(stderr_text(&select_custom).trim().is_empty());
+
+    let custom_strict = env.run(&["--strict", "--json"]);
+    assert_eq!(custom_strict.status.code(), Some(0));
+    assert!(stderr_text(&custom_strict).trim().is_empty());
+    let custom_payload: Value = serde_json::from_slice(&custom_strict.stdout).unwrap();
+    assert_eq!(custom_payload["strict_mode"], false);
+
+    let select_deep_work_again = env.run(&["--profile", "deep-work", "--json"]);
+    assert_eq!(select_deep_work_again.status.code(), Some(0));
+    assert!(stderr_text(&select_deep_work_again).trim().is_empty());
+
+    let deep_work_strict = env.run(&["--strict", "--json"]);
+    assert_eq!(deep_work_strict.status.code(), Some(0));
+    assert!(stderr_text(&deep_work_strict).trim().is_empty());
+    let deep_work_payload: Value = serde_json::from_slice(&deep_work_strict.stdout).unwrap();
+    assert_eq!(deep_work_payload["strict_mode"], true);
+}
+
+#[test]
+fn recurring_schedule_is_profile_scoped_via_cli_commands() {
+    let env = TestEnv::new("schedule-profile-scoped");
+
+    let select_deep_work = env.run(&["--profile", "deep-work", "--json"]);
+    assert_eq!(select_deep_work.status.code(), Some(0));
+    assert!(stderr_text(&select_deep_work).trim().is_empty());
+
+    let set_schedule = env.run(&[
+        "--schedule-set={\"windows\":[{\"days\":[\"mon\"],\"start\":\"09:00\",\"end\":\"11:00\"}],\"exception_dates\":[],\"one_time_windows\":[]}",
+        "--json",
+    ]);
+    assert_eq!(set_schedule.status.code(), Some(0));
+    assert!(stderr_text(&set_schedule).trim().is_empty());
+    let set_payload: Value = serde_json::from_slice(&set_schedule.stdout).unwrap();
+    assert_eq!(set_payload["updated"], true);
+    assert_eq!(
+        set_payload["schedule"]["windows"].as_array().unwrap().len(),
+        1
+    );
+
+    let select_custom = env.run(&["--profile", "custom", "--json"]);
+    assert_eq!(select_custom.status.code(), Some(0));
+    assert!(stderr_text(&select_custom).trim().is_empty());
+
+    let custom_schedule = env.run(&["--schedule", "--json"]);
+    assert_eq!(custom_schedule.status.code(), Some(0));
+    assert!(stderr_text(&custom_schedule).trim().is_empty());
+    let custom_payload: Value = serde_json::from_slice(&custom_schedule.stdout).unwrap();
+    assert_eq!(
+        custom_payload["schedule"]["windows"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+
+    let select_deep_work_again = env.run(&["--profile", "deep-work", "--json"]);
+    assert_eq!(select_deep_work_again.status.code(), Some(0));
+    assert!(stderr_text(&select_deep_work_again).trim().is_empty());
+
+    let deep_work_schedule = env.run(&["--schedule", "--json"]);
+    assert_eq!(deep_work_schedule.status.code(), Some(0));
+    assert!(stderr_text(&deep_work_schedule).trim().is_empty());
+    let deep_work_payload: Value = serde_json::from_slice(&deep_work_schedule.stdout).unwrap();
+    assert_eq!(
+        deep_work_payload["schedule"]["windows"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
