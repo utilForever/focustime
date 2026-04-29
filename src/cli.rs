@@ -14,9 +14,9 @@ use serde::Serialize;
 use crate::app::{App, SetupCheck, SetupCheckLevel, SetupDiagnostics};
 use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
-    AppConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig,
-    OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
-    WeeklyGoalConfig,
+    AppConfig, BlocklistProfileConfig, BreakTemplateConfig, CustomProfileConfig, DailyGoalConfig,
+    MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, WeeklyGoalConfig,
 };
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
@@ -372,10 +372,20 @@ struct ProfileView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct BreakTemplateView {
+    name: String,
+    short_break_secs: u64,
+    long_break_secs: u64,
+    long_break_interval: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct ProfileOutput {
     updated: bool,
     selected: ProfileView,
     available: Vec<ProfileView>,
+    selected_break_template: BreakTemplateView,
+    available_break_templates: Vec<BreakTemplateView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -438,6 +448,8 @@ struct LiveStatusOutput {
 struct StatusOutput {
     day: String,
     selected_profile: ProfileView,
+    selected_break_template: BreakTemplateView,
+    available_break_templates: Vec<BreakTemplateView>,
     selected_task_label: Option<String>,
     focus_intention: Option<String>,
     task_note: Option<String>,
@@ -2383,10 +2395,14 @@ fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Re
         .into_iter()
         .map(|candidate| profile_view(candidate, &custom))
         .collect();
+    let selected_break_template = selected_break_template_view(&config);
+    let available_break_templates = available_break_template_views(&config);
     let payload = ProfileOutput {
         updated,
         selected,
         available,
+        selected_break_template,
+        available_break_templates,
     };
 
     match output {
@@ -2801,6 +2817,8 @@ fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     StatusOutput {
         day,
         selected_profile: profile_view(config.selected_profile, &config.effective_custom_profile()),
+        selected_break_template: selected_break_template_view(config),
+        available_break_templates: available_break_template_views(config),
         selected_task_label,
         focus_intention,
         task_note,
@@ -3111,6 +3129,38 @@ fn profile_id(profile: ProfileId) -> &'static str {
         ProfileId::DeepWork => "deep-work",
         ProfileId::Custom => "custom",
     }
+}
+
+fn break_template_view(template: &BreakTemplateConfig) -> BreakTemplateView {
+    let template = template.normalized();
+    BreakTemplateView {
+        name: template.name,
+        short_break_secs: template.short_break_secs,
+        long_break_secs: template.long_break_secs,
+        long_break_interval: template.long_break_interval,
+    }
+}
+
+fn selected_break_template_view(config: &AppConfig) -> BreakTemplateView {
+    config
+        .break_templates
+        .iter()
+        .find(|template| {
+            template
+                .name
+                .eq_ignore_ascii_case(&config.selected_break_template)
+        })
+        .map(break_template_view)
+        .or_else(|| config.break_templates.first().map(break_template_view))
+        .unwrap_or_else(|| break_template_view(&BreakTemplateConfig::default()))
+}
+
+fn available_break_template_views(config: &AppConfig) -> Vec<BreakTemplateView> {
+    config
+        .break_templates
+        .iter()
+        .map(break_template_view)
+        .collect()
 }
 
 fn timer_phase_id(phase: TimerPhase) -> &'static str {
@@ -3444,6 +3494,23 @@ fn print_profile_output(payload: &ProfileOutput) {
         format_duration(payload.selected.long_break_secs),
         payload.selected.long_break_interval
     );
+    println!(
+        "Selected break template: {} ({}/{}, every {} focus)",
+        payload.selected_break_template.name,
+        format_duration(payload.selected_break_template.short_break_secs),
+        format_duration(payload.selected_break_template.long_break_secs),
+        payload.selected_break_template.long_break_interval
+    );
+    println!("Available break templates:");
+    for template in &payload.available_break_templates {
+        println!(
+            "  - {}: {}/{}, every {} focus",
+            template.name,
+            format_duration(template.short_break_secs),
+            format_duration(template.long_break_secs),
+            template.long_break_interval
+        );
+    }
     println!("Available profiles:");
     for profile in &payload.available {
         println!(
@@ -3589,6 +3656,13 @@ fn print_status_output(payload: &StatusOutput) {
     println!(
         "Selected profile: {} ({})",
         payload.selected_profile.label, payload.selected_profile.id
+    );
+    println!(
+        "Selected break template: {} ({}/{}, every {} focus)",
+        payload.selected_break_template.name,
+        format_duration(payload.selected_break_template.short_break_secs),
+        format_duration(payload.selected_break_template.long_break_secs),
+        payload.selected_break_template.long_break_interval
     );
     println!(
         "Task label: {}",
