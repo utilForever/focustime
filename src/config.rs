@@ -977,10 +977,7 @@ fn normalize_selected_break_template(
 ) -> String {
     let selected_name = selected_name.trim();
     if selected_name.is_empty() {
-        return templates
-            .first()
-            .map(|template| template.name.clone())
-            .unwrap_or_else(default_break_template_name);
+        return String::new();
     }
 
     if let Some(template) = templates
@@ -1331,7 +1328,7 @@ mod tests {
     }
 
     #[test]
-    fn normalize_break_templates_applies_defaults_when_empty() {
+    fn normalize_break_templates_preserves_empty_selection() {
         let cfg = AppConfig {
             break_templates: Vec::new(),
             selected_break_template: String::new(),
@@ -1340,7 +1337,7 @@ mod tests {
         .normalize();
 
         assert_eq!(cfg.break_templates.len(), 2);
-        assert_eq!(cfg.selected_break_template, "Classic");
+        assert_eq!(cfg.selected_break_template, "");
     }
 
     #[test]
