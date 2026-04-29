@@ -88,9 +88,9 @@ Options:
   --goal-carry          Show daily goal carry-over, or set on/off
   --goal-carry-weekly   Show weekly goal carry-over, or set on/off
   --goal-carry-monthly  Show monthly goal carry-over, or set on/off
-  --strict        Show strict mode, or set on/off
-  --schedule      Show recurring schedule with overlap/conflict inspection
-  --schedule-set  Replace schedule (recurring + one-time) from JSON payload
+  --strict        Show strict mode for selected profile, or set on/off
+  --schedule      Show selected profile schedule with overlap/conflict inspection
+  --schedule-set  Replace selected profile schedule (recurring + one-time) from JSON payload
   --blocklist-profile         Show active blocklist profile, or set active profile
   --blocklist-profile-create  Create a blocklist profile and select it
   --blocklist-profile-rename  Rename the active blocklist profile
@@ -2370,6 +2370,7 @@ fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Re
     let mut updated = false;
     if let Some(profile) = profile {
         config.selected_profile = profile;
+        config.align_legacy_automation_with_selected_profile();
         config
             .save()
             .map_err(|error| format!("Failed to save selected profile: {error}"))?;
@@ -2552,7 +2553,9 @@ fn execute_strict_command(enabled: Option<bool>, output: OutputMode) -> Result<(
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(enabled) = enabled {
-        config.strict_mode = enabled;
+        let mut automation = config.profile_automation_for(config.selected_profile);
+        automation.strict_mode = enabled;
+        config.set_profile_automation_for(config.selected_profile, automation);
         config
             .save()
             .map_err(|error| format!("Failed to save strict mode: {error}"))?;
@@ -2561,7 +2564,9 @@ fn execute_strict_command(enabled: Option<bool>, output: OutputMode) -> Result<(
 
     let payload = StrictCommandOutput {
         updated,
-        strict_mode: config.strict_mode,
+        strict_mode: config
+            .profile_automation_for(config.selected_profile)
+            .strict_mode,
     };
 
     match output {
@@ -2578,17 +2583,19 @@ fn execute_schedule_command(
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(schedule) = schedule {
-        config.recurring_schedule = schedule.normalized();
+        let mut automation = config.profile_automation_for(config.selected_profile);
+        automation.recurring_schedule = schedule.normalized();
+        config.set_profile_automation_for(config.selected_profile, automation);
         config
             .save()
             .map_err(|error| format!("Failed to save recurring schedule: {error}"))?;
         updated = true;
     }
-
-    let inspection = build_schedule_inspection_output(&config.recurring_schedule);
+    let selected_automation = config.profile_automation_for(config.selected_profile);
+    let inspection = build_schedule_inspection_output(&selected_automation.recurring_schedule);
     let payload = ScheduleCommandOutput {
         updated,
-        schedule: config.recurring_schedule,
+        schedule: selected_automation.recurring_schedule,
         inspection,
     };
 
