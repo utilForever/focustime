@@ -729,7 +729,7 @@ fn render_profile_manager(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1), // current profile
+            Constraint::Length(2), // current profile + break template
             Constraint::Length(6), // profile list
             Constraint::Length(editor_height),
             Constraint::Min(0),    // spacer
