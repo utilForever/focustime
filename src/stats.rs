@@ -556,6 +556,10 @@ struct PersistedStats {
     #[serde(default)]
     selected_task_label: Option<String>,
     #[serde(default)]
+    task_label_favorites: Vec<String>,
+    #[serde(default)]
+    task_label_archived: Vec<String>,
+    #[serde(default)]
     focus_sessions: Vec<FocusSessionRecord>,
     #[serde(default)]
     session_interruptions: Vec<SessionInterruptionEvent>,
@@ -573,6 +577,8 @@ pub struct FocusStats {
     monthly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
     task_labels: Vec<String>,
     selected_task_label: Option<String>,
+    task_label_favorites: BTreeSet<String>,
+    task_label_archived: BTreeSet<String>,
     focus_sessions: Vec<FocusSessionRecord>,
     session_interruptions: Vec<SessionInterruptionEvent>,
     break_glass_overrides: Vec<BreakGlassOverrideEvent>,
@@ -608,8 +614,13 @@ impl FocusStats {
     }
 
     fn from_persisted(persisted: PersistedStats) -> Self {
-        let (task_labels, selected_task_label) =
-            normalize_task_planner_state(persisted.task_labels, persisted.selected_task_label);
+        let (task_labels, selected_task_label, task_label_favorites, task_label_archived) =
+            normalize_task_planner_state(
+                persisted.task_labels,
+                persisted.selected_task_label,
+                persisted.task_label_favorites,
+                persisted.task_label_archived,
+            );
         let task_goal_targets = normalize_task_goal_targets(persisted.task_goal_targets);
         let mut focus_sessions = Vec::new();
         for session in persisted.focus_sessions {
@@ -668,6 +679,8 @@ impl FocusStats {
             monthly_goal_snapshots: persisted.monthly_goal_snapshots,
             task_labels,
             selected_task_label,
+            task_label_favorites,
+            task_label_archived,
             focus_sessions,
             session_interruptions,
             break_glass_overrides,
@@ -682,6 +695,14 @@ impl FocusStats {
             monthly_goal_snapshots: self.monthly_goal_snapshots.clone(),
             task_labels: self.task_labels.clone(),
             selected_task_label: self.selected_task_label.clone(),
+            task_label_favorites: planner_state_labels_for_keys(
+                &self.task_label_favorites,
+                &self.task_labels,
+            ),
+            task_label_archived: planner_state_labels_for_keys(
+                &self.task_label_archived,
+                &self.task_labels,
+            ),
             focus_sessions: self.focus_sessions.clone(),
             session_interruptions: self.session_interruptions.clone(),
             break_glass_overrides: self.break_glass_overrides.clone(),
@@ -976,6 +997,14 @@ impl FocusStats {
         (self.task_labels.clone(), self.selected_task_label.clone())
     }
 
+    pub fn task_label_favorites(&self) -> Vec<String> {
+        planner_state_labels_for_keys(&self.task_label_favorites, &self.task_labels)
+    }
+
+    pub fn task_label_archived(&self) -> Vec<String> {
+        planner_state_labels_for_keys(&self.task_label_archived, &self.task_labels)
+    }
+
     pub fn set_task_goal_target(
         &mut self,
         label: &str,
@@ -1095,18 +1124,41 @@ impl FocusStats {
         progress
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn update_task_planner_state(
         &mut self,
         labels: Vec<String>,
         selected: Option<String>,
     ) -> bool {
-        let (task_labels, selected_task_label) = normalize_task_planner_state(labels, selected);
-        if self.task_labels == task_labels && self.selected_task_label == selected_task_label {
+        self.update_task_planner_state_with_label_states(
+            labels,
+            selected,
+            self.task_label_favorites(),
+            self.task_label_archived(),
+        )
+    }
+
+    pub fn update_task_planner_state_with_label_states(
+        &mut self,
+        labels: Vec<String>,
+        selected: Option<String>,
+        favorites: Vec<String>,
+        archived: Vec<String>,
+    ) -> bool {
+        let (task_labels, selected_task_label, task_label_favorites, task_label_archived) =
+            normalize_task_planner_state(labels, selected, favorites, archived);
+        if self.task_labels == task_labels
+            && self.selected_task_label == selected_task_label
+            && self.task_label_favorites == task_label_favorites
+            && self.task_label_archived == task_label_archived
+        {
             return false;
         }
 
         self.task_labels = task_labels;
         self.selected_task_label = selected_task_label;
+        self.task_label_favorites = task_label_favorites;
+        self.task_label_archived = task_label_archived;
         true
     }
 
@@ -2070,7 +2122,14 @@ impl StatsExport {
 fn normalize_task_planner_state(
     labels: Vec<String>,
     selected: Option<String>,
-) -> (Vec<String>, Option<String>) {
+    favorites: Vec<String>,
+    archived: Vec<String>,
+) -> (
+    Vec<String>,
+    Option<String>,
+    BTreeSet<String>,
+    BTreeSet<String>,
+) {
     let mut normalized_labels = Vec::new();
     let mut seen = BTreeSet::new();
     for label in labels {
@@ -2083,7 +2142,7 @@ fn normalize_task_planner_state(
         }
     }
 
-    let normalized_selected = selected
+    let mut normalized_selected = selected
         .and_then(|value| normalize_task_label(&value))
         .map(|value| canonical_task_label(&normalized_labels, &value).unwrap_or(value));
     if let Some(selected_label) = normalized_selected.as_ref() {
@@ -2093,7 +2152,63 @@ fn normalize_task_planner_state(
         }
     }
 
-    (normalized_labels, normalized_selected)
+    let task_label_favorites =
+        normalize_task_label_state_keys(&mut normalized_labels, &mut seen, favorites);
+    let task_label_archived =
+        normalize_task_label_state_keys(&mut normalized_labels, &mut seen, archived);
+    if normalized_selected.as_ref().is_some_and(|selected_label| {
+        task_label_archived.contains(&selected_label.to_ascii_lowercase())
+    }) {
+        normalized_selected = None;
+    }
+
+    (
+        normalized_labels,
+        normalized_selected,
+        task_label_favorites,
+        task_label_archived,
+    )
+}
+
+fn normalize_task_label_state_keys(
+    normalized_labels: &mut Vec<String>,
+    seen: &mut BTreeSet<String>,
+    values: Vec<String>,
+) -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    for value in values {
+        let Some(normalized) = normalize_task_label(&value) else {
+            continue;
+        };
+        let canonical = canonical_task_label(normalized_labels, &normalized).unwrap_or(normalized);
+        let key = canonical.to_ascii_lowercase();
+        if seen.insert(key.clone()) {
+            normalized_labels.push(canonical);
+        }
+        keys.insert(key);
+    }
+    keys
+}
+
+fn planner_state_labels_for_keys(keys: &BTreeSet<String>, labels: &[String]) -> Vec<String> {
+    if keys.is_empty() {
+        return Vec::new();
+    }
+
+    let mut values = Vec::new();
+    let mut seen = BTreeSet::new();
+    for label in labels {
+        let key = label.to_ascii_lowercase();
+        if keys.contains(&key) && seen.insert(key.clone()) {
+            values.push(label.clone());
+        }
+    }
+    for key in keys {
+        if seen.insert(key.clone()) {
+            values.push(key.clone());
+        }
+    }
+    values
 }
 
 fn normalize_task_goal_targets(
@@ -2459,6 +2574,38 @@ mod tests {
         let (labels, selected) = stats.task_planner_state();
         assert_eq!(labels, vec!["Docs".to_string(), "Bugfix".to_string()]);
         assert_eq!(selected, Some("Docs".to_string()));
+    }
+
+    #[test]
+    fn task_planner_label_states_normalize_and_drop_archived_selection() {
+        let mut stats = FocusStats::default();
+        let changed = stats.update_task_planner_state_with_label_states(
+            vec!["  Docs ".to_string(), "Bugfix".to_string()],
+            Some("docs".to_string()),
+            vec![
+                " docs ".to_string(),
+                "Docs".to_string(),
+                "Planning".to_string(),
+            ],
+            vec![" DOCS ".to_string()],
+        );
+        assert!(changed);
+
+        let (labels, selected) = stats.task_planner_state();
+        assert_eq!(
+            labels,
+            vec![
+                "Docs".to_string(),
+                "Bugfix".to_string(),
+                "Planning".to_string()
+            ]
+        );
+        assert_eq!(selected, None);
+        assert_eq!(
+            stats.task_label_favorites(),
+            vec!["Docs".to_string(), "Planning".to_string()]
+        );
+        assert_eq!(stats.task_label_archived(), vec!["Docs".to_string()]);
     }
 
     #[test]
@@ -3168,6 +3315,25 @@ mod tests {
 
         assert_eq!(progress.task_label, "Project A");
         assert_eq!(progress.target, task_goal);
+    }
+
+    #[test]
+    fn persisted_stats_round_trip_preserves_task_label_states() {
+        let mut original = FocusStats::default();
+        let changed = original.update_task_planner_state_with_label_states(
+            vec!["Docs".to_string(), "Review".to_string()],
+            Some("Review".to_string()),
+            vec!["Review".to_string()],
+            vec!["Docs".to_string()],
+        );
+        assert!(changed);
+
+        let toml_str = toml::to_string_pretty(&original.to_persisted()).unwrap();
+        let restored = FocusStats::try_from_toml(&toml_str).unwrap();
+
+        assert_eq!(restored.task_label_favorites(), vec!["Review".to_string()]);
+        assert_eq!(restored.task_label_archived(), vec!["Docs".to_string()]);
+        assert_eq!(restored.task_planner_state().1, Some("Review".to_string()));
     }
 
     #[test]
