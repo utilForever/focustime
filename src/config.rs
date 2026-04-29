@@ -56,6 +56,12 @@ pub struct AppConfig {
     /// Recurring schedule windows for automatic focus startup.
     #[serde(default)]
     pub recurring_schedule: RecurringScheduleConfig,
+    /// Profile-scoped automation settings.
+    ///
+    /// When absent, legacy global automation fields are used as shared defaults
+    /// for all profiles during normalization.
+    #[serde(default)]
+    pub profile_automation: Option<ProfileAutomationSettingsConfig>,
     /// Whether strict focus mode is enabled.
     ///
     /// When enabled, active focus sessions disallow skip and require
@@ -177,6 +183,95 @@ impl RecurringScheduleConfig {
             windows,
             exception_dates,
             one_time_windows,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ProfileAutomationConfig {
+    #[serde(default)]
+    pub notifications: NotificationConfig,
+    #[serde(default)]
+    pub auto_start: AutoStartConfig,
+    #[serde(default)]
+    pub strict_mode: bool,
+    #[serde(default)]
+    pub recurring_schedule: RecurringScheduleConfig,
+}
+
+impl ProfileAutomationConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            notifications: self.notifications,
+            auto_start: self.auto_start,
+            strict_mode: self.strict_mode,
+            recurring_schedule: self.recurring_schedule.normalized(),
+        }
+    }
+
+    fn from_legacy(
+        notifications: NotificationConfig,
+        auto_start: AutoStartConfig,
+        strict_mode: bool,
+        recurring_schedule: RecurringScheduleConfig,
+    ) -> Self {
+        Self {
+            notifications,
+            auto_start,
+            strict_mode,
+            recurring_schedule,
+        }
+        .normalized()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ProfileAutomationSettingsConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub classic: Option<ProfileAutomationConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deep_work: Option<ProfileAutomationConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom: Option<ProfileAutomationConfig>,
+}
+
+impl ProfileAutomationSettingsConfig {
+    fn with_shared_defaults(shared: ProfileAutomationConfig) -> Self {
+        let shared = Some(shared.normalized());
+        Self {
+            classic: shared.clone(),
+            deep_work: shared.clone(),
+            custom: shared,
+        }
+    }
+
+    fn normalized_with_fallback(&self, fallback: &ProfileAutomationConfig) -> Self {
+        Self {
+            classic: Some(self.for_profile(ProfileId::Classic, fallback).normalized()),
+            deep_work: Some(self.for_profile(ProfileId::DeepWork, fallback).normalized()),
+            custom: Some(self.for_profile(ProfileId::Custom, fallback).normalized()),
+        }
+    }
+
+    pub fn for_profile(
+        &self,
+        profile: ProfileId,
+        fallback: &ProfileAutomationConfig,
+    ) -> ProfileAutomationConfig {
+        let configured = match profile {
+            ProfileId::Classic => self.classic.clone(),
+            ProfileId::DeepWork => self.deep_work.clone(),
+            ProfileId::Custom => self.custom.clone(),
+        };
+        configured.unwrap_or_else(|| fallback.clone()).normalized()
+    }
+
+    pub fn set_for_profile(&mut self, profile: ProfileId, config: ProfileAutomationConfig) {
+        let value = Some(config.normalized());
+        match profile {
+            ProfileId::Classic => self.classic = value,
+            ProfileId::DeepWork => self.deep_work = value,
+            ProfileId::Custom => self.custom = value,
         }
     }
 }
@@ -476,6 +571,7 @@ impl Default for AppConfig {
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
             recurring_schedule: RecurringScheduleConfig::default(),
+            profile_automation: None,
             strict_mode: false,
             break_glass_duration_secs: default_break_glass_duration_secs(),
             daily_goal: DailyGoalConfig::default(),
@@ -513,6 +609,49 @@ impl AppConfig {
                 long_break_interval: self.long_break_interval,
             })
             .normalized()
+    }
+
+    fn legacy_profile_automation(&self) -> ProfileAutomationConfig {
+        ProfileAutomationConfig::from_legacy(
+            self.notifications,
+            self.auto_start,
+            self.strict_mode,
+            self.recurring_schedule.clone(),
+        )
+    }
+
+    pub fn profile_automation_for(&self, profile: ProfileId) -> ProfileAutomationConfig {
+        let fallback = self.legacy_profile_automation();
+        self.profile_automation
+            .as_ref()
+            .map(|settings| settings.for_profile(profile, &fallback))
+            .unwrap_or(fallback)
+    }
+
+    pub fn set_profile_automation_for(
+        &mut self,
+        profile: ProfileId,
+        automation: ProfileAutomationConfig,
+    ) {
+        let fallback = self.legacy_profile_automation();
+        let mut settings = self
+            .profile_automation
+            .clone()
+            .unwrap_or_else(|| {
+                ProfileAutomationSettingsConfig::with_shared_defaults(fallback.clone())
+            })
+            .normalized_with_fallback(&fallback);
+        settings.set_for_profile(profile, automation);
+        self.profile_automation = Some(settings.normalized_with_fallback(&fallback));
+        self.align_legacy_automation_with_selected_profile();
+    }
+
+    pub(crate) fn align_legacy_automation_with_selected_profile(&mut self) {
+        let selected = self.profile_automation_for(self.selected_profile);
+        self.notifications = selected.notifications;
+        self.auto_start = selected.auto_start;
+        self.strict_mode = selected.strict_mode;
+        self.recurring_schedule = selected.recurring_schedule;
     }
 
     #[cfg_attr(test, allow(dead_code))]
@@ -583,6 +722,16 @@ impl AppConfig {
         );
         self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
         self.recurring_schedule = self.recurring_schedule.normalized();
+        let fallback_automation = self.legacy_profile_automation();
+        let normalized_profile_automation = self
+            .profile_automation
+            .clone()
+            .unwrap_or_else(|| {
+                ProfileAutomationSettingsConfig::with_shared_defaults(fallback_automation.clone())
+            })
+            .normalized_with_fallback(&fallback_automation);
+        self.profile_automation = Some(normalized_profile_automation);
+        self.align_legacy_automation_with_selected_profile();
         self.blocklist_profiles =
             normalize_blocklist_profiles(&self.blocklist_profiles, &self.blocked_sites);
         self.selected_blocklist_profile = normalize_selected_blocklist_profile(
@@ -838,6 +987,7 @@ mod tests {
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
+        assert!(cfg.profile_automation.is_none());
         assert!(!cfg.strict_mode);
         assert_eq!(
             cfg.break_glass_duration_secs,
@@ -899,6 +1049,50 @@ mod tests {
                     end: "15:00".to_string(),
                 }],
             },
+            profile_automation: Some(ProfileAutomationSettingsConfig {
+                classic: Some(ProfileAutomationConfig {
+                    notifications: NotificationConfig {
+                        enabled: true,
+                        sound: false,
+                    },
+                    auto_start: AutoStartConfig {
+                        focus_to_break: false,
+                        break_to_focus: false,
+                    },
+                    strict_mode: false,
+                    recurring_schedule: RecurringScheduleConfig::default(),
+                }),
+                deep_work: Some(ProfileAutomationConfig {
+                    notifications: NotificationConfig {
+                        enabled: true,
+                        sound: true,
+                    },
+                    auto_start: AutoStartConfig {
+                        focus_to_break: true,
+                        break_to_focus: false,
+                    },
+                    strict_mode: true,
+                    recurring_schedule: RecurringScheduleConfig {
+                        windows: vec![RecurringFocusWindowConfig {
+                            days: vec!["mon".to_string(), "wed".to_string()],
+                            start: "09:15".to_string(),
+                            end: "11:00".to_string(),
+                        }],
+                        exception_dates: vec!["2026-04-27".to_string(), "2026-05-05".to_string()],
+                        one_time_windows: vec![OneTimeFocusWindowConfig {
+                            date: "2026-05-10".to_string(),
+                            start: "14:00".to_string(),
+                            end: "15:00".to_string(),
+                        }],
+                    },
+                }),
+                custom: Some(ProfileAutomationConfig {
+                    notifications: NotificationConfig::default(),
+                    auto_start: AutoStartConfig::default(),
+                    strict_mode: false,
+                    recurring_schedule: RecurringScheduleConfig::default(),
+                }),
+            }),
             strict_mode: true,
             break_glass_duration_secs: 7 * 60,
             daily_goal: DailyGoalConfig {
@@ -940,6 +1134,7 @@ mod tests {
         assert_eq!(parsed.notifications, original.notifications);
         assert_eq!(parsed.auto_start, original.auto_start);
         assert_eq!(parsed.recurring_schedule, original.recurring_schedule);
+        assert_eq!(parsed.profile_automation, original.profile_automation);
         assert_eq!(parsed.strict_mode, original.strict_mode);
         assert_eq!(
             parsed.break_glass_duration_secs,
@@ -968,6 +1163,7 @@ mod tests {
         assert_eq!(cfg.notifications, NotificationConfig::default());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
+        assert!(cfg.profile_automation.is_none());
         assert!(!cfg.strict_mode);
         assert_eq!(
             cfg.break_glass_duration_secs,
@@ -1217,6 +1413,7 @@ long_break_interval = 3
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
             recurring_schedule: RecurringScheduleConfig::default(),
+            profile_automation: None,
             strict_mode: false,
             break_glass_duration_secs: default_break_glass_duration_secs(),
             daily_goal: DailyGoalConfig::default(),
@@ -1269,6 +1466,7 @@ long_break_interval = 3
         assert!(cfg.blocklist_profiles.is_empty());
         assert_eq!(cfg.auto_start, AutoStartConfig::default());
         assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
+        assert!(cfg.profile_automation.is_none());
         assert!(!cfg.strict_mode);
         assert_eq!(
             cfg.break_glass_duration_secs,
@@ -1415,5 +1613,114 @@ language = ""
         .normalize();
 
         assert_eq!(cfg.blocked_sites, vec!["a.com".to_string()]);
+    }
+
+    #[test]
+    fn normalize_migrates_legacy_automation_into_per_profile_settings() {
+        let legacy_schedule = RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["mon".to_string(), "tue".to_string()],
+                start: "09:00".to_string(),
+                end: "10:30".to_string(),
+            }],
+            exception_dates: vec!["2026-12-25".to_string()],
+            one_time_windows: vec![OneTimeFocusWindowConfig {
+                date: "2026-05-02".to_string(),
+                start: "14:00".to_string(),
+                end: "16:00".to_string(),
+            }],
+        };
+        let cfg = AppConfig {
+            selected_profile: ProfileId::DeepWork,
+            notifications: NotificationConfig {
+                enabled: true,
+                sound: true,
+            },
+            auto_start: AutoStartConfig {
+                focus_to_break: true,
+                break_to_focus: true,
+            },
+            recurring_schedule: legacy_schedule.clone(),
+            profile_automation: None,
+            strict_mode: true,
+            ..AppConfig::default()
+        }
+        .normalize();
+
+        let expected = ProfileAutomationConfig::from_legacy(
+            NotificationConfig {
+                enabled: true,
+                sound: true,
+            },
+            AutoStartConfig {
+                focus_to_break: true,
+                break_to_focus: true,
+            },
+            true,
+            legacy_schedule,
+        );
+        assert_eq!(cfg.profile_automation_for(ProfileId::Classic), expected);
+        assert_eq!(cfg.profile_automation_for(ProfileId::DeepWork), expected);
+        assert_eq!(cfg.profile_automation_for(ProfileId::Custom), expected);
+        assert_eq!(cfg.notifications, expected.notifications);
+        assert_eq!(cfg.auto_start, expected.auto_start);
+        assert_eq!(cfg.strict_mode, expected.strict_mode);
+        assert_eq!(cfg.recurring_schedule, expected.recurring_schedule);
+    }
+
+    #[test]
+    fn normalize_selected_profile_automation_updates_legacy_view() {
+        let classic = ProfileAutomationConfig {
+            notifications: NotificationConfig {
+                enabled: true,
+                sound: false,
+            },
+            auto_start: AutoStartConfig {
+                focus_to_break: true,
+                break_to_focus: false,
+            },
+            strict_mode: false,
+            recurring_schedule: RecurringScheduleConfig::default(),
+        };
+        let deep_work = ProfileAutomationConfig {
+            notifications: NotificationConfig {
+                enabled: false,
+                sound: false,
+            },
+            auto_start: AutoStartConfig {
+                focus_to_break: false,
+                break_to_focus: true,
+            },
+            strict_mode: true,
+            recurring_schedule: RecurringScheduleConfig {
+                windows: vec![RecurringFocusWindowConfig {
+                    days: vec!["fri".to_string()],
+                    start: "13:00".to_string(),
+                    end: "15:00".to_string(),
+                }],
+                exception_dates: Vec::new(),
+                one_time_windows: Vec::new(),
+            },
+        };
+
+        let cfg = AppConfig {
+            selected_profile: ProfileId::DeepWork,
+            notifications: NotificationConfig::default(),
+            auto_start: AutoStartConfig::default(),
+            recurring_schedule: RecurringScheduleConfig::default(),
+            strict_mode: false,
+            profile_automation: Some(ProfileAutomationSettingsConfig {
+                classic: Some(classic),
+                deep_work: Some(deep_work.clone()),
+                custom: None,
+            }),
+            ..AppConfig::default()
+        }
+        .normalize();
+
+        assert_eq!(cfg.notifications, deep_work.notifications);
+        assert_eq!(cfg.auto_start, deep_work.auto_start);
+        assert_eq!(cfg.strict_mode, deep_work.strict_mode);
+        assert_eq!(cfg.recurring_schedule, deep_work.recurring_schedule);
     }
 }
