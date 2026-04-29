@@ -3042,16 +3042,20 @@ impl App {
         self.custom_profile = self.custom_profile.normalized();
         self.recurring_schedule = normalized_schedule;
         self.wakatime_metadata = self.wakatime_metadata.normalized();
-        self.update_selected_profile_automation();
         if self.selected_profile == ProfileId::Custom {
             if custom_profile_changed {
+                let original_profile_automation = self.profile_automation.clone();
+                self.update_selected_profile_automation();
                 if !self.apply_profile(ProfileId::Custom) {
+                    self.profile_automation = original_profile_automation;
                     return;
                 }
             } else {
+                self.update_selected_profile_automation();
                 self.save_config();
             }
         } else {
+            self.update_selected_profile_automation();
             self.save_config();
         }
         self.sync_wakatime_metadata_to_tracker();
@@ -8046,6 +8050,9 @@ mod tests {
             goal_carry_over: app.goal_carry_over,
             wakatime_metadata: app.wakatime_metadata.clone(),
         });
+        let original_profile_automation = app
+            .profile_automation
+            .for_profile(ProfileId::Custom, &ProfileAutomationConfig::default());
         app.custom_profile.focus_secs = app.custom_profile.focus_secs.saturating_add(60);
         app.notification_settings.enabled = false;
 
@@ -8057,6 +8064,11 @@ mod tests {
             app.config_error
                 .as_deref()
                 .is_some_and(|err| err.contains("strict focus active"))
+        );
+        assert_eq!(
+            app.profile_automation
+                .for_profile(ProfileId::Custom, &ProfileAutomationConfig::default()),
+            original_profile_automation
         );
 
         app.timer.remaining_secs = 1;
