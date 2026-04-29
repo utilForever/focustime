@@ -91,6 +91,7 @@ cargo run -- --next --json
 # Select task label (creates label if it does not exist yet)
 cargo run -- --task "Write docs"
 cargo run -- --task=Write-docs --json
+# Archived labels are rejected by --task and cannot be used to start focus.
 
 # Show or set cumulative goal targets for a task label
 cargo run -- --task-goal "Write docs"
