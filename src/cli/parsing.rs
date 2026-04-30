@@ -1,0 +1,719 @@
+use super::*;
+
+pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
+    let show_help = tokens
+        .iter()
+        .any(|token| matches!(token, ParsedToken::Help));
+    if show_help {
+        return Ok((true, OutputMode::Text));
+    }
+
+    let mut output = OutputMode::Text;
+    for token in tokens {
+        match token {
+            ParsedToken::Help => {}
+            ParsedToken::Json => output = OutputMode::Json,
+            ParsedToken::UnknownOption(option) => {
+                return Err(invalid_usage(&format!("Unknown option `{option}`.")));
+            }
+            ParsedToken::Positional(value) => {
+                return Err(invalid_usage(&format!(
+                    "Unexpected positional argument `{value}`."
+                )));
+            }
+            ParsedToken::Start
+            | ParsedToken::Pause
+            | ParsedToken::Resume
+            | ParsedToken::Stop
+            | ParsedToken::Next
+            | ParsedToken::Task(_)
+            | ParsedToken::TaskGoal { .. }
+            | ParsedToken::Status
+            | ParsedToken::Watch(_)
+            | ParsedToken::Profile(_)
+            | ParsedToken::Goal(_)
+            | ParsedToken::GoalWeekly(_)
+            | ParsedToken::GoalMonthly(_)
+            | ParsedToken::GoalCarry(_)
+            | ParsedToken::GoalCarryWeekly(_)
+            | ParsedToken::GoalCarryMonthly(_)
+            | ParsedToken::Strict(_)
+            | ParsedToken::Schedule
+            | ParsedToken::ScheduleSet(_)
+            | ParsedToken::Diagnostics
+            | ParsedToken::BlockingPreview
+            | ParsedToken::Export(_)
+            | ParsedToken::BlocklistProfile(_)
+            | ParsedToken::BlocklistProfileCreate(_)
+            | ParsedToken::BlocklistProfileRename(_)
+            | ParsedToken::BlocklistProfileDelete
+            | ParsedToken::BlocklistSites
+            | ParsedToken::AllowlistSites
+            | ParsedToken::BlocklistSiteAdd(_)
+            | ParsedToken::AllowlistSiteAdd(_)
+            | ParsedToken::BlocklistSiteEdit(_)
+            | ParsedToken::AllowlistSiteEdit(_)
+            | ParsedToken::BlocklistSiteDelete(_)
+            | ParsedToken::AllowlistSiteDelete(_) => {}
+        }
+    }
+    Ok((show_help, output))
+}
+
+pub(super) fn parse_primary_command(
+    tokens: &[ParsedToken],
+) -> Result<Option<PrimaryCommand>, String> {
+    let mut primary: Option<PrimaryCommand> = None;
+    for token in tokens {
+        match token {
+            ParsedToken::Start => set_primary_command(&mut primary, PrimaryCommand::Start)?,
+            ParsedToken::Pause => set_primary_command(&mut primary, PrimaryCommand::Pause)?,
+            ParsedToken::Resume => set_primary_command(&mut primary, PrimaryCommand::Resume)?,
+            ParsedToken::Stop => set_primary_command(&mut primary, PrimaryCommand::Stop)?,
+            ParsedToken::Next => set_primary_command(&mut primary, PrimaryCommand::Next)?,
+            ParsedToken::Task(label) => {
+                set_primary_command(&mut primary, PrimaryCommand::Task(label.clone()))?
+            }
+            ParsedToken::TaskGoal { label, goal } => set_primary_command(
+                &mut primary,
+                PrimaryCommand::TaskGoal {
+                    label: label.clone(),
+                    goal: *goal,
+                },
+            )?,
+            ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
+            ParsedToken::Watch(_) => {}
+            ParsedToken::Profile(profile) => {
+                set_primary_command(&mut primary, PrimaryCommand::Profile(*profile))?
+            }
+            ParsedToken::Goal(goal) => {
+                set_primary_command(&mut primary, PrimaryCommand::Goal(*goal))?
+            }
+            ParsedToken::GoalWeekly(goal) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalWeekly(*goal))?
+            }
+            ParsedToken::GoalMonthly(goal) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalMonthly(*goal))?
+            }
+            ParsedToken::GoalCarry(enabled) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalCarry(*enabled))?
+            }
+            ParsedToken::GoalCarryWeekly(enabled) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalCarryWeekly(*enabled))?
+            }
+            ParsedToken::GoalCarryMonthly(enabled) => {
+                set_primary_command(&mut primary, PrimaryCommand::GoalCarryMonthly(*enabled))?
+            }
+            ParsedToken::Strict(enabled) => {
+                set_primary_command(&mut primary, PrimaryCommand::Strict(*enabled))?
+            }
+            ParsedToken::Schedule => set_primary_command(&mut primary, PrimaryCommand::Schedule)?,
+            ParsedToken::ScheduleSet(schedule) => {
+                set_primary_command(&mut primary, PrimaryCommand::ScheduleSet(schedule.clone()))?
+            }
+            ParsedToken::Diagnostics => {
+                set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
+            }
+            ParsedToken::BlockingPreview => {
+                set_primary_command(&mut primary, PrimaryCommand::BlockingPreview)?
+            }
+            ParsedToken::Export(dir) => {
+                set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
+            }
+            ParsedToken::BlocklistProfile(profile) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistProfile(profile.clone()),
+            )?,
+            ParsedToken::BlocklistProfileCreate(name) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistProfileCreate(name.clone()),
+            )?,
+            ParsedToken::BlocklistProfileRename(name) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistProfileRename(name.clone()),
+            )?,
+            ParsedToken::BlocklistProfileDelete => {
+                set_primary_command(&mut primary, PrimaryCommand::BlocklistProfileDelete)?
+            }
+            ParsedToken::BlocklistSites => {
+                set_primary_command(&mut primary, PrimaryCommand::BlocklistSites)?
+            }
+            ParsedToken::AllowlistSites => {
+                set_primary_command(&mut primary, PrimaryCommand::AllowlistSites)?
+            }
+            ParsedToken::BlocklistSiteAdd(input) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistSiteAdd(input.clone()),
+            )?,
+            ParsedToken::AllowlistSiteAdd(input) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::AllowlistSiteAdd(input.clone()),
+            )?,
+            ParsedToken::BlocklistSiteEdit(value) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistSiteEdit(value.clone()),
+            )?,
+            ParsedToken::AllowlistSiteEdit(value) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::AllowlistSiteEdit(value.clone()),
+            )?,
+            ParsedToken::BlocklistSiteDelete(site) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::BlocklistSiteDelete(site.clone()),
+            )?,
+            ParsedToken::AllowlistSiteDelete(site) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::AllowlistSiteDelete(site.clone()),
+            )?,
+            ParsedToken::Help
+            | ParsedToken::Json
+            | ParsedToken::UnknownOption(_)
+            | ParsedToken::Positional(_) => {}
+        }
+    }
+    Ok(primary)
+}
+
+pub(super) fn finalize_cli_action(
+    show_help: bool,
+    output: OutputMode,
+    primary: Option<PrimaryCommand>,
+    watch_interval_secs: Option<u64>,
+) -> Result<CliAction, String> {
+    if show_help {
+        return Ok(CliAction::ShowHelp);
+    }
+
+    if watch_interval_secs.is_some() && !matches!(primary, Some(PrimaryCommand::Status)) {
+        return Err(invalid_usage("`--watch` is only valid with `--status`."));
+    }
+
+    match primary {
+        None => {
+            if output == OutputMode::Json {
+                return Err(invalid_usage(
+                    "`--json` is only valid with non-interactive commands.",
+                ));
+            }
+            Ok(CliAction::RunTui {
+                start_immediately: false,
+            })
+        }
+        Some(PrimaryCommand::Start) => {
+            if output == OutputMode::Json {
+                return Err(invalid_usage("`--json` is not supported with `--start`."));
+            }
+            Ok(CliAction::RunTui {
+                start_immediately: true,
+            })
+        }
+        Some(PrimaryCommand::Profile(profile)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Profile { profile },
+            output,
+        })),
+        Some(PrimaryCommand::Goal(goal)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Goal { goal },
+            output,
+        })),
+        Some(PrimaryCommand::GoalWeekly(goal)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalWeekly { goal },
+            output,
+        })),
+        Some(PrimaryCommand::GoalMonthly(goal)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalMonthly { goal },
+            output,
+        })),
+        Some(PrimaryCommand::GoalCarry(enabled)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalCarry { enabled },
+            output,
+        })),
+        Some(PrimaryCommand::GoalCarryWeekly(enabled)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalCarryWeekly { enabled },
+            output,
+        })),
+        Some(PrimaryCommand::GoalCarryMonthly(enabled)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::GoalCarryMonthly { enabled },
+            output,
+        })),
+        Some(PrimaryCommand::Strict(enabled)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Strict { enabled },
+            output,
+        })),
+        Some(PrimaryCommand::Schedule) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Schedule { schedule: None },
+            output,
+        })),
+        Some(PrimaryCommand::ScheduleSet(schedule)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Schedule {
+                schedule: Some(schedule),
+            },
+            output,
+        })),
+        Some(PrimaryCommand::Diagnostics) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Diagnostics,
+            output,
+        })),
+        Some(PrimaryCommand::BlockingPreview) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlockingPreview,
+            output,
+        })),
+        Some(PrimaryCommand::Pause) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Pause,
+            output,
+        })),
+        Some(PrimaryCommand::Resume) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Resume,
+            output,
+        })),
+        Some(PrimaryCommand::Stop) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Stop,
+            output,
+        })),
+        Some(PrimaryCommand::Next) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Next,
+            output,
+        })),
+        Some(PrimaryCommand::Task(label)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Task { label },
+            output,
+        })),
+        Some(PrimaryCommand::TaskGoal { label, goal }) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::TaskGoal { label, goal },
+            output,
+        })),
+        Some(PrimaryCommand::Status) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Status {
+                watch_interval_secs,
+            },
+            output,
+        })),
+        Some(PrimaryCommand::Export(dir)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Export { dir },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistProfile(profile)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistProfile {
+                command: BlocklistProfileCommandKind::Select { profile },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistProfileCreate(name)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistProfile {
+                    command: BlocklistProfileCommandKind::Create { name },
+                },
+                output,
+            }))
+        }
+        Some(PrimaryCommand::BlocklistProfileRename(name)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::BlocklistProfile {
+                    command: BlocklistProfileCommandKind::Rename { name },
+                },
+                output,
+            }))
+        }
+        Some(PrimaryCommand::BlocklistProfileDelete) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistProfile {
+                command: BlocklistProfileCommandKind::Delete,
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistSites) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Blocklist,
+                command: BlocklistSiteCommandKind::List,
+            },
+            output,
+        })),
+        Some(PrimaryCommand::AllowlistSites) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Allowlist,
+                command: BlocklistSiteCommandKind::List,
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistSiteAdd(input)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Blocklist,
+                command: BlocklistSiteCommandKind::Add { input },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::AllowlistSiteAdd(input)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Allowlist,
+                command: BlocklistSiteCommandKind::Add { input },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistSiteEdit(value)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Blocklist,
+                command: BlocklistSiteCommandKind::Edit { value },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::AllowlistSiteEdit(value)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Allowlist,
+                command: BlocklistSiteCommandKind::Edit { value },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::BlocklistSiteDelete(site)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Blocklist,
+                command: BlocklistSiteCommandKind::Delete { site },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::AllowlistSiteDelete(site)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BlocklistSites {
+                target: SiteListTarget::Allowlist,
+                command: BlocklistSiteCommandKind::Delete { site },
+            },
+            output,
+        })),
+    }
+}
+
+pub(super) fn parse_profile_id(value: &str) -> Result<ProfileId, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "classic" => Ok(ProfileId::Classic),
+        "deep-work" | "deep_work" | "deepwork" => Ok(ProfileId::DeepWork),
+        "custom" => Ok(ProfileId::Custom),
+        _ => Err(invalid_usage(&format!(
+            "Invalid profile `{value}`. Use `classic`, `deep-work`, or `custom`."
+        ))),
+    }
+}
+
+pub(super) fn parse_task_goal_value(
+    value: &str,
+) -> Result<(String, Option<DailyGoalConfig>), String> {
+    let trimmed = value.trim();
+    if let Some((label_raw, goal_raw)) = trimmed.rsplit_once(':')
+        && goal_raw.contains(',')
+    {
+        let label =
+            require_nonempty_key_value(label_raw, "Task goal requires a task label before `:`.")?
+                .to_string();
+        let (minutes, pomodoros) = parse_goal_components(goal_raw, "--task-goal")?;
+        return Ok((label, Some(DailyGoalConfig { minutes, pomodoros })));
+    }
+
+    let label = require_nonempty_key_value(
+        trimmed,
+        "`--task-goal` requires `LABEL` or `LABEL:MINUTES,POMODOROS`.",
+    )?
+    .to_string();
+    Ok((label, None))
+}
+
+pub(super) fn parse_goal_value(value: &str) -> Result<DailyGoalConfig, String> {
+    let (minutes, pomodoros) = parse_goal_components(value, "--goal")?;
+    Ok(DailyGoalConfig { minutes, pomodoros })
+}
+
+pub(super) fn parse_weekly_goal_value(value: &str) -> Result<WeeklyGoalConfig, String> {
+    let (minutes, pomodoros) = parse_goal_components(value, "--goal-weekly")?;
+    Ok(WeeklyGoalConfig { minutes, pomodoros })
+}
+
+pub(super) fn parse_monthly_goal_value(value: &str) -> Result<MonthlyGoalConfig, String> {
+    let (minutes, pomodoros) = parse_goal_components(value, "--goal-monthly")?;
+    Ok(MonthlyGoalConfig { minutes, pomodoros })
+}
+
+fn parse_goal_components(value: &str, flag: &str) -> Result<(u64, u32), String> {
+    let trimmed = value.trim();
+    let (minutes_raw, pomodoros_raw) = trimmed.split_once(',').ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid goal `{value}`. Use `{flag}=MINUTES,POMODOROS` (for example `{flag}=120,4`)."
+        ))
+    })?;
+    let minutes = minutes_raw.trim().parse::<u64>().map_err(|_| {
+        invalid_usage(&format!(
+            "Invalid goal minutes in `{value}` for `{flag}`. Use a non-negative integer."
+        ))
+    })?;
+    let pomodoros = pomodoros_raw.trim().parse::<u32>().map_err(|_| {
+        invalid_usage(&format!(
+            "Invalid goal pomodoros in `{value}` for `{flag}`. Use a non-negative integer."
+        ))
+    })?;
+    Ok((minutes, pomodoros))
+}
+
+pub(super) fn parse_strict_value(value: &str) -> Result<bool, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        _ => Err(invalid_usage(&format!(
+            "Invalid strict mode `{value}`. Use `--strict=on` or `--strict=off`."
+        ))),
+    }
+}
+
+pub(super) fn parse_goal_carry_value(value: &str) -> Result<bool, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        _ => Err(invalid_usage(&format!(
+            "Invalid goal carry-over `{value}`. Use `on` or `off`."
+        ))),
+    }
+}
+
+pub(super) fn parse_site_edit_value(value: &str) -> Result<SiteEditValue, String> {
+    let trimmed = value.trim();
+    let (previous, next) = trimmed.split_once('=').ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid site edit `{value}`. Use `OLD=NEW` (for example `--blocklist-site-edit=old.com=new.com`)."
+        ))
+    })?;
+    let previous = previous.trim();
+    let next = next.trim();
+    if previous.is_empty() || next.is_empty() {
+        return Err(invalid_usage(
+            "Site edit values must include both `OLD` and `NEW` hostnames.",
+        ));
+    }
+    Ok(SiteEditValue {
+        previous: previous.to_string(),
+        next: next.to_string(),
+    })
+}
+
+pub(super) fn parse_schedule_value(value: &str) -> Result<RecurringScheduleConfig, String> {
+    let schedule = serde_json::from_str::<RecurringScheduleConfig>(value).map_err(|error| {
+        invalid_usage(&format!(
+            "Invalid schedule JSON payload: {error}. Use `--schedule-set='{{\"windows\":[...],\"exception_dates\":[...],\"one_time_windows\":[...]}}'`."
+        ))
+    })?;
+    validate_schedule_value(&schedule)?;
+    Ok(schedule)
+}
+
+fn validate_schedule_value(schedule: &RecurringScheduleConfig) -> Result<(), String> {
+    for (index, window) in schedule.windows.iter().enumerate() {
+        validate_schedule_window(window, index)?;
+    }
+    for (index, date) in schedule.exception_dates.iter().enumerate() {
+        validate_schedule_exception_date(date, index)?;
+    }
+    for (index, window) in schedule.one_time_windows.iter().enumerate() {
+        validate_one_time_schedule_window(window, index)?;
+    }
+    Ok(())
+}
+
+fn validate_schedule_window(
+    window: &RecurringFocusWindowConfig,
+    index: usize,
+) -> Result<(), String> {
+    if window.days.is_empty() {
+        return Err(invalid_usage(&format!(
+            "Invalid schedule window at index {index}: `days` must include at least one weekday."
+        )));
+    }
+    for day in &window.days {
+        if !is_valid_schedule_weekday(day) {
+            return Err(invalid_usage(&format!(
+                "Invalid schedule window at index {index}: unknown weekday `{day}`."
+            )));
+        }
+    }
+
+    let start_minutes = parse_schedule_minutes(&window.start).ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid schedule window at index {index}: start `{}` must be HH:MM in 24-hour format.",
+            window.start
+        ))
+    })?;
+    let end_minutes = parse_schedule_minutes(&window.end).ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid schedule window at index {index}: end `{}` must be HH:MM in 24-hour format.",
+            window.end
+        ))
+    })?;
+
+    if start_minutes >= end_minutes {
+        return Err(invalid_usage(&format!(
+            "Invalid schedule window at index {index}: start must be earlier than end."
+        )));
+    }
+    Ok(())
+}
+
+fn validate_schedule_exception_date(value: &str, index: usize) -> Result<(), String> {
+    NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").map_err(|_| {
+        invalid_usage(&format!(
+            "Invalid exception date at index {index}: `{value}` must be YYYY-MM-DD."
+        ))
+    })?;
+    Ok(())
+}
+
+fn validate_one_time_schedule_window(
+    window: &OneTimeFocusWindowConfig,
+    index: usize,
+) -> Result<(), String> {
+    NaiveDate::parse_from_str(window.date.trim(), "%Y-%m-%d").map_err(|_| {
+        invalid_usage(&format!(
+            "Invalid one-time window at index {index}: date `{}` must be YYYY-MM-DD.",
+            window.date
+        ))
+    })?;
+
+    let start_minutes = parse_schedule_minutes(&window.start).ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid one-time window at index {index}: start `{}` must be HH:MM in 24-hour format.",
+            window.start
+        ))
+    })?;
+    let end_minutes = parse_schedule_minutes(&window.end).ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid one-time window at index {index}: end `{}` must be HH:MM in 24-hour format.",
+            window.end
+        ))
+    })?;
+
+    if start_minutes >= end_minutes {
+        return Err(invalid_usage(&format!(
+            "Invalid one-time window at index {index}: start must be earlier than end."
+        )));
+    }
+
+    Ok(())
+}
+
+fn is_valid_schedule_weekday(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "mon"
+            | "monday"
+            | "tue"
+            | "tues"
+            | "tuesday"
+            | "wed"
+            | "wednesday"
+            | "thu"
+            | "thurs"
+            | "thursday"
+            | "fri"
+            | "friday"
+            | "sat"
+            | "saturday"
+            | "sun"
+            | "sunday"
+    )
+}
+
+fn parse_schedule_minutes(value: &str) -> Option<u16> {
+    let trimmed = value.trim();
+    let (hours, minutes) = trimmed.split_once(':')?;
+    if hours.len() != 2 || minutes.len() != 2 {
+        return None;
+    }
+    let hours = hours.parse::<u16>().ok()?;
+    let minutes = minutes.parse::<u16>().ok()?;
+    if hours > 23 || minutes > 59 {
+        return None;
+    }
+    Some(hours * 60 + minutes)
+}
+
+fn set_primary_command(
+    primary: &mut Option<PrimaryCommand>,
+    next: PrimaryCommand,
+) -> Result<(), String> {
+    if let Some(existing) = primary {
+        return Err(invalid_usage(&format!(
+            "Multiple primary commands are not supported (`{}` and `{}`).",
+            primary_name(existing),
+            primary_name(&next)
+        )));
+    }
+    *primary = Some(next);
+    Ok(())
+}
+
+fn primary_name(command: &PrimaryCommand) -> &'static str {
+    match command {
+        PrimaryCommand::Start => "--start",
+        PrimaryCommand::Pause => "--pause",
+        PrimaryCommand::Resume => "--resume",
+        PrimaryCommand::Stop => "--stop",
+        PrimaryCommand::Next => "--next",
+        PrimaryCommand::Task(_) => "--task",
+        PrimaryCommand::TaskGoal { .. } => "--task-goal",
+        PrimaryCommand::Profile(_) => "--profile",
+        PrimaryCommand::Goal(_) => "--goal",
+        PrimaryCommand::GoalWeekly(_) => "--goal-weekly",
+        PrimaryCommand::GoalMonthly(_) => "--goal-monthly",
+        PrimaryCommand::GoalCarry(_) => "--goal-carry",
+        PrimaryCommand::GoalCarryWeekly(_) => "--goal-carry-weekly",
+        PrimaryCommand::GoalCarryMonthly(_) => "--goal-carry-monthly",
+        PrimaryCommand::Strict(_) => "--strict",
+        PrimaryCommand::Schedule => "--schedule",
+        PrimaryCommand::ScheduleSet(_) => "--schedule-set",
+        PrimaryCommand::Diagnostics => "--diagnostics",
+        PrimaryCommand::BlockingPreview => "--blocking-preview",
+        PrimaryCommand::Status => "--status",
+        PrimaryCommand::Export(_) => "--export",
+        PrimaryCommand::BlocklistProfile(_) => "--blocklist-profile",
+        PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
+        PrimaryCommand::BlocklistProfileRename(_) => "--blocklist-profile-rename",
+        PrimaryCommand::BlocklistProfileDelete => "--blocklist-profile-delete",
+        PrimaryCommand::BlocklistSites => "--blocklist-sites",
+        PrimaryCommand::AllowlistSites => "--allowlist-sites",
+        PrimaryCommand::BlocklistSiteAdd(_) => "--blocklist-site-add",
+        PrimaryCommand::AllowlistSiteAdd(_) => "--allowlist-site-add",
+        PrimaryCommand::BlocklistSiteEdit(_) => "--blocklist-site-edit",
+        PrimaryCommand::AllowlistSiteEdit(_) => "--allowlist-site-edit",
+        PrimaryCommand::BlocklistSiteDelete(_) => "--blocklist-site-delete",
+        PrimaryCommand::AllowlistSiteDelete(_) => "--allowlist-site-delete",
+    }
+}
+
+pub(super) fn invalid_usage(message: &str) -> String {
+    format!("{message}\n\n{USAGE_TEXT}")
+}
+
+pub(super) fn parse_watch_interval_option(tokens: &[ParsedToken]) -> Result<Option<u64>, String> {
+    let mut interval: Option<u64> = None;
+    for token in tokens {
+        if let ParsedToken::Watch(value) = token {
+            if interval.is_some() {
+                return Err(invalid_usage("`--watch` can only be specified once."));
+            }
+            interval = Some(value.unwrap_or(DEFAULT_WATCH_INTERVAL_SECS));
+        }
+    }
+    Ok(interval)
+}
+
+pub(super) fn parse_watch_interval_secs(value: &str) -> Result<u64, String> {
+    let trimmed = value.trim();
+    let secs = trimmed
+        .parse::<u64>()
+        .map_err(|_| invalid_usage("`--watch` requires a positive whole number of seconds."))?;
+    if secs == 0 {
+        return Err(invalid_usage(
+            "`--watch` requires a positive whole number of seconds.",
+        ));
+    }
+    Ok(secs)
+}
+
+pub(super) fn require_nonempty_key_value<'a>(
+    value: &'a str,
+    message: &str,
+) -> Result<&'a str, String> {
+    if value.trim().is_empty() {
+        return Err(invalid_usage(message));
+    }
+    Ok(value)
+}

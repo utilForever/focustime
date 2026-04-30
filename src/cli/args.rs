@@ -693,13 +693,3 @@ fn parse_allowlist_site_delete_key_value_arg(arg: &str) -> Result<Option<ParsedT
     }
     Ok(None)
 }
-
-pub(super) fn require_nonempty_key_value<'a>(
-    value: &'a str,
-    message: &str,
-) -> Result<&'a str, String> {
-    if value.trim().is_empty() {
-        return Err(invalid_usage(message));
-    }
-    Ok(value)
-}
