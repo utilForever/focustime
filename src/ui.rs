@@ -17,17 +17,29 @@ use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
 
 mod history;
-use history::*;
+#[cfg(test)]
+use history::{
+    format_history_goal_streak_line, format_history_interruption_line, format_month_label,
+    format_task_goal_progress_summary,
+};
+use history::{readable_goal_streak_text, render_stats_history};
 mod profile_manager;
-use profile_manager::*;
+use profile_manager::render_profile_manager;
 mod session_planner;
-use session_planner::*;
+use session_planner::render_session_planner;
 mod site_manager;
-use site_manager::*;
+use site_manager::render_site_manager;
 mod setup;
-use setup::*;
+#[cfg(test)]
+use setup::render_setup_check;
+use setup::render_setup_diagnostics;
 mod timer;
-use timer::*;
+use timer::{format_duration_label, format_wakatime_heartbeat_timestamp, render_timer};
+#[cfg(test)]
+use timer::{
+    timer_primary_hint, timer_secondary_hint, timer_status_text, timer_tertiary_hint,
+    wakatime_status_line,
+};
 
 const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
 const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
