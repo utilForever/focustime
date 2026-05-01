@@ -149,6 +149,35 @@ fn task_planner_label_states_normalize_and_drop_archived_selection() {
 }
 
 #[test]
+fn setting_task_goal_target_does_not_reselect_archived_label() {
+    let mut stats = FocusStats::default();
+    stats.update_task_planner_state_with_label_states(
+        vec!["Docs".to_string(), "Review".to_string()],
+        Some("Review".to_string()),
+        Vec::new(),
+        vec!["Docs".to_string()],
+    );
+
+    let target = DailyGoalSnapshot {
+        minutes: 30,
+        pomodoros: 1,
+    };
+    let canonical = stats
+        .set_task_goal_target("Docs", target)
+        .expect("task goal should be set");
+
+    assert_eq!(canonical, "Docs");
+    assert_eq!(stats.task_planner_state().1, Some("Review".to_string()));
+    assert_eq!(
+        stats
+            .task_goal_progress_for_label("Docs")
+            .expect("progress should be available")
+            .target,
+        target
+    );
+}
+
+#[test]
 fn recent_task_labels_returns_newest_first_unique_labels() {
     let mut stats = FocusStats::default();
     let goal = DailyGoalSnapshot {

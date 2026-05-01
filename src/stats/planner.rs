@@ -41,8 +41,10 @@ impl FocusStats {
         if task_label_index(&self.task_labels, &canonical).is_none() {
             self.task_labels.push(canonical.clone());
         }
-        self.selected_task_label = Some(canonical.clone());
         let key = canonical.to_ascii_lowercase();
+        if !self.task_label_archived.contains(&key) {
+            self.selected_task_label = Some(canonical.clone());
+        }
         if target.has_any_target() {
             self.task_goal_targets.insert(key, target);
         } else {
