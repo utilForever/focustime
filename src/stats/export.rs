@@ -312,6 +312,7 @@ impl StatsExport {
                 task_label: Some(session.task_label.clone()),
                 focus_intention: Some(session.focus_intention.clone()),
                 task_note: Some(session.task_note.clone()),
+                profile_name: session.profile.map(|profile| profile.label().to_string()),
                 ..Self::csv_row_defaults("focus_session")
             });
         }
@@ -325,6 +326,9 @@ impl StatsExport {
                 interruption_remaining_secs: Some(interruption.remaining_secs),
                 focus_intention: interruption.focus_intention.clone(),
                 task_note: interruption.task_note.clone(),
+                profile_name: interruption
+                    .profile
+                    .map(|profile| profile.label().to_string()),
                 ..Self::csv_row_defaults("session_interruption")
             });
         }

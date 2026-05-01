@@ -1339,6 +1339,16 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     assert_eq!(profile_effectiveness[0]["focus_share_pct"], 100);
 
     let csv = fs::read_to_string(&exported.csv_path).unwrap();
+    let focus_session_line = csv
+        .lines()
+        .find(|line| line.contains(",focus_session,"))
+        .expect("focus session row should be present");
+    assert!(focus_session_line.contains(",Classic,"));
+    let interruption_line = csv
+        .lines()
+        .find(|line| line.contains(",session_interruption,"))
+        .expect("session interruption row should be present");
+    assert!(interruption_line.contains(",Classic,"));
     assert!(csv.contains("schema_version,record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,interruption_timestamp_epoch_secs,interruption_reason,interruption_remaining_secs,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes,profile_name,sessions_completed,active_days,consistency_score_pct,completion_score_pct,focus_score_pct,average_focused_minutes_per_session,focus_share_pct"));
     assert!(csv.contains(&format!("{},daily,{labeled_day}", EXPORT_SCHEMA_VERSION)));
     assert!(csv.contains(&format!("{},weekly,,", EXPORT_SCHEMA_VERSION)));
