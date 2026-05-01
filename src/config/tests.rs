@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(not(target_os = "windows"))]
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(target_os = "windows")]
@@ -650,6 +652,27 @@ fn config_dir_returns_none_when_home_is_blank_and_xdg_is_unset() {
         _ => None,
     });
     assert!(dir.is_none());
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn config_dir_ignores_relative_xdg_config_home_and_falls_back_to_home() {
+    let dir = config_dir_from_env(|key| match key {
+        "XDG_CONFIG_HOME" => Some(OsString::from("relative-config")),
+        "HOME" => Some(OsString::from("/tmp/home")),
+        _ => None,
+    });
+    assert_eq!(dir, Some(PathBuf::from("/tmp/home/.config")));
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn config_dir_uses_absolute_xdg_config_home_when_set() {
+    let dir = config_dir_from_env(|key| match key {
+        "XDG_CONFIG_HOME" => Some(OsString::from("/tmp/xdg")),
+        _ => None,
+    });
+    assert_eq!(dir, Some(PathBuf::from("/tmp/xdg")));
 }
 
 #[cfg(target_os = "windows")]

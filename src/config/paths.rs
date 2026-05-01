@@ -16,9 +16,14 @@ pub(super) fn config_dir_from_env(
     {
         // Honour XDG_CONFIG_HOME if set, otherwise fall back to ~/.config.
         if let Some(xdg) = get_var("XDG_CONFIG_HOME").and_then(env_path_from_value) {
-            return Some(xdg);
+            if xdg.is_absolute() {
+                return Some(xdg);
+            }
         }
         let home = get_var("HOME").and_then(env_path_from_value)?;
+        if !home.is_absolute() {
+            return None;
+        }
         Some(home.join(".config"))
     }
 }
