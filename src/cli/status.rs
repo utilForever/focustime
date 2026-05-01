@@ -7,7 +7,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let today = stats.daily_for(&day);
     let week = stats.weekly_for_day(day_date);
     let month = stats.monthly_for_day(day_date);
-    let session = stats.session();
     let (_, selected_task_label) = stats.task_planner_state();
     let (selected_task_label, focus_intention, task_note) =
         mirror_metadata_from_task_label(selected_task_label);
@@ -28,6 +27,7 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         .map(|profile| effective_blocked_sites_for_profile(profile).len())
         .unwrap_or_default();
     let live = build_live_status_output(config, selected_task_label.clone());
+    let session = build_session_output(&live);
     let latest_interruption = stats.latest_session_interruption();
     let consistency_score_pct = stats
         .weekly_focus_score_for_day(day_date)
@@ -81,7 +81,7 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         },
         selected_task_goal,
         session: SessionOutput {
-            focused_minutes: session.focused_minutes(),
+            focused_minutes: session.focused_minutes,
             pomodoros_completed: session.pomodoros_completed,
         },
         today: TodayOutput {
@@ -96,6 +96,30 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
             completion_score_pct,
         },
         live,
+    }
+}
+
+fn build_session_output(live: &LiveStatusOutput) -> SessionOutput {
+    if !live.in_progress {
+        return SessionOutput {
+            focused_minutes: 0,
+            pomodoros_completed: 0,
+        };
+    }
+
+    let mut focused_seconds =
+        u64::from(live.pomodoros_completed).saturating_mul(live.selected_profile.focus_secs);
+    if live.phase == "focus" && (live.status == "running" || live.status == "paused") {
+        focused_seconds = focused_seconds.saturating_add(
+            live.selected_profile
+                .focus_secs
+                .saturating_sub(live.remaining_secs),
+        );
+    }
+
+    SessionOutput {
+        focused_minutes: focused_seconds / 60,
+        pomodoros_completed: live.pomodoros_completed,
     }
 }
 
