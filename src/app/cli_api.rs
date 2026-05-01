@@ -1,4 +1,7 @@
-use crate::app::*;
+use crate::app::{
+    App, BlockingPreview, ProfileId, SessionInterruptionReason, TimerPhase, TimerState,
+    TimerStatus, normalize_task_label, task_label_index,
+};
 
 impl App {
     pub fn start_focus_for_cli(&mut self) -> Result<(), String> {
