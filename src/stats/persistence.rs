@@ -1,4 +1,11 @@
-use crate::stats::*;
+#[cfg(not(test))]
+use crate::stats::fs;
+use crate::stats::{
+    BreakGlassOverrideEvent, FocusSessionRecord, FocusStats, PersistedStats, STATS_FILE_NAME,
+    SessionInterruptionEvent, SessionStats, io, normalize_session_metadata_text,
+    normalize_task_goal_targets, normalize_task_label, normalize_task_planner_state,
+    planner_state_labels_for_keys, write_atomic_bytes,
+};
 
 impl FocusStats {
     #[cfg(test)]
