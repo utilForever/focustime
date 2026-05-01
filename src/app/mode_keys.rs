@@ -11,57 +11,14 @@ impl App {
             return;
         }
 
-        if self.strict_reset_confirmation_pending() {
-            if key.code == KeyCode::Char('s') {
-                self.pending_timer_action = None;
-                self.update_timer_and_sync_with_reason(
-                    TimerState::reset,
-                    Some(SessionInterruptionReason::ManualStop),
-                );
-                return;
-            }
-            self.pending_timer_action = None;
-        }
-
-        if self.break_glass_confirmation_pending() {
-            if key.code == KeyCode::Char('u') {
-                self.confirm_break_glass_override();
-                return;
-            }
-            self.pending_timer_action = None;
+        if self.handle_pending_timer_confirmations(key.code) {
+            return;
         }
 
         match key.code {
-            KeyCode::Char(' ') => {
-                if self.timer.phase == TimerPhase::Focus
-                    && self.timer.status == TimerStatus::Idle
-                    && !self.has_selectable_task_label_for_focus()
-                {
-                    self.phase_notification =
-                        Some("Select a task label with [t] before starting focus.".to_string());
-                    return;
-                }
-                self.update_timer_and_sync(TimerState::toggle_pause);
-            }
-            KeyCode::Char('s') => {
-                if self.strict_mode_enforced_for_focus() {
-                    self.pending_timer_action = Some(PendingTimerAction::Reset);
-                    return;
-                }
-                self.update_timer_and_sync_with_reason(
-                    TimerState::reset,
-                    Some(SessionInterruptionReason::ManualStop),
-                );
-            }
-            KeyCode::Char('n') => {
-                if self.strict_mode_enforced_for_focus() {
-                    return;
-                }
-                self.update_timer_and_sync_with_reason(
-                    TimerState::next_phase,
-                    Some(SessionInterruptionReason::ManualSkip),
-                );
-            }
+            KeyCode::Char(' ') => self.handle_timer_toggle_pause_key(),
+            KeyCode::Char('s') => self.handle_timer_stop_reset_key(),
+            KeyCode::Char('n') => self.handle_timer_next_phase_key(),
             KeyCode::Char('b') => {
                 self.open_site_manager();
             }
@@ -91,6 +48,63 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn handle_pending_timer_confirmations(&mut self, key_code: KeyCode) -> bool {
+        if self.strict_reset_confirmation_pending() {
+            if key_code == KeyCode::Char('s') {
+                self.pending_timer_action = None;
+                self.update_timer_and_sync_with_reason(
+                    TimerState::reset,
+                    Some(SessionInterruptionReason::ManualStop),
+                );
+                return true;
+            }
+            self.pending_timer_action = None;
+        }
+
+        if self.break_glass_confirmation_pending() {
+            if key_code == KeyCode::Char('u') {
+                self.confirm_break_glass_override();
+                return true;
+            }
+            self.pending_timer_action = None;
+        }
+
+        false
+    }
+
+    fn handle_timer_toggle_pause_key(&mut self) {
+        if self.timer.phase == TimerPhase::Focus
+            && self.timer.status == TimerStatus::Idle
+            && !self.has_selectable_task_label_for_focus()
+        {
+            self.phase_notification =
+                Some("Select a task label with [t] before starting focus.".to_string());
+            return;
+        }
+        self.update_timer_and_sync(TimerState::toggle_pause);
+    }
+
+    fn handle_timer_stop_reset_key(&mut self) {
+        if self.strict_mode_enforced_for_focus() {
+            self.pending_timer_action = Some(PendingTimerAction::Reset);
+            return;
+        }
+        self.update_timer_and_sync_with_reason(
+            TimerState::reset,
+            Some(SessionInterruptionReason::ManualStop),
+        );
+    }
+
+    fn handle_timer_next_phase_key(&mut self) {
+        if self.strict_mode_enforced_for_focus() {
+            return;
+        }
+        self.update_timer_and_sync_with_reason(
+            TimerState::next_phase,
+            Some(SessionInterruptionReason::ManualSkip),
+        );
     }
 
     fn start_timer_note_input(&mut self) {
