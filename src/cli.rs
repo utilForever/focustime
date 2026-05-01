@@ -32,16 +32,37 @@ mod execute;
 mod output;
 mod parsing;
 mod status;
-use args::*;
+#[cfg(test)]
+use args::classify_key_value_arg;
+use args::{classify_args, infer_output_mode_from_os_args};
 use execute::execute_cli_command;
 #[cfg(test)]
 use execute::{
     apply_blocklist_profile_command, apply_site_add_command, apply_site_delete_command,
     apply_site_edit_command,
 };
-use output::*;
-use parsing::*;
-use status::*;
+use output::{
+    build_blocking_preview_command_output, build_diagnostics_command_output,
+    build_schedule_inspection_output, display_input_value, effective_blocked_sites_for_profile,
+    flush_stdout, print_blocking_preview_command_output, print_blocklist_profile_command_output,
+    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
+    print_goal_command_output, print_json, print_json_compact, print_profile_output,
+    print_schedule_command_output, print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output, print_timer_state_output,
+};
+use parsing::{
+    finalize_cli_action, invalid_usage, parse_global_tokens, parse_goal_carry_value,
+    parse_goal_value, parse_monthly_goal_value, parse_primary_command, parse_profile_id,
+    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
+    parse_watch_interval_option, parse_watch_interval_secs, parse_weekly_goal_value,
+    require_nonempty_key_value,
+};
+use status::{
+    available_break_template_views, build_status_output, build_task_goal_output,
+    mirror_metadata_from_task_label, profile_id, profile_view, selected_break_template_view,
+    timer_phase_id, timer_status_id,
+};
 
 const USAGE_TEXT: &str = r#"Usage:
   focustime
