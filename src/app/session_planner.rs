@@ -1,4 +1,8 @@
-use crate::app::*;
+use crate::app::{
+    App, AppMode, KeyCode, KeyEvent, PLANNER_RECENT_LABEL_LIMIT, PlannerFeedbackLevel,
+    PlannerInputMode, normalize_task_label, task_label_index, task_label_key,
+    task_label_state_labels,
+};
 
 impl App {
     pub(super) fn handle_key_session_planner(&mut self, key: KeyEvent) {
