@@ -21,6 +21,8 @@ impl App {
                 others.push(label.clone());
             }
         }
+        favorites.sort_unstable();
+        others.sort_unstable();
         favorites.extend(others);
         favorites
     }
