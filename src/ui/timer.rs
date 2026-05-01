@@ -1,4 +1,9 @@
-use crate::ui::*;
+use crate::ui::{
+    Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Gauge, Layout, Line,
+    Local, Modifier, Paragraph, Rect, Style, TimeZone, TimerPhase, TimerStatus,
+    WakatimeRuntimeState, Wrap, centered_rect, format_timer_goal_streak_line,
+    readable_goal_streak_text, render_hint_lines,
+};
 
 pub(super) fn render_timer(frame: &mut Frame, app: &App) {
     let area = frame.area();
