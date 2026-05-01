@@ -10,7 +10,12 @@ pub(super) fn config_dir_from_env(
 ) -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
-        env_path_from_value(get_var("APPDATA")?)
+        let appdata = env_path_from_value(get_var("APPDATA")?)?;
+        if appdata.is_absolute() {
+            Some(appdata)
+        } else {
+            None
+        }
     }
     #[cfg(not(target_os = "windows"))]
     {

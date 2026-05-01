@@ -1,5 +1,4 @@
 use crate::config::*;
-#[cfg(not(target_os = "windows"))]
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -683,6 +682,26 @@ fn config_dir_returns_none_when_appdata_is_blank() {
         _ => None,
     });
     assert!(dir.is_none());
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn config_dir_returns_none_when_appdata_is_relative() {
+    let dir = config_dir_from_env(|key| match key {
+        "APPDATA" => Some(OsString::from("AppData\\Roaming")),
+        _ => None,
+    });
+    assert!(dir.is_none());
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn config_dir_uses_absolute_appdata_when_set() {
+    let dir = config_dir_from_env(|key| match key {
+        "APPDATA" => Some(OsString::from(r"C:\Users\test\AppData\Roaming")),
+        _ => None,
+    });
+    assert_eq!(dir, Some(PathBuf::from(r"C:\Users\test\AppData\Roaming")));
 }
 
 #[cfg(unix)]
