@@ -8,7 +8,9 @@ use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Deserializer, Serialize};
 
 mod paths;
-use paths::*;
+use paths::app_dir_with_env;
+#[cfg(test)]
+use paths::config_dir_from_env;
 
 /// Persistent application configuration stored as TOML.
 ///
