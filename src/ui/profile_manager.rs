@@ -191,7 +191,7 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
             } else {
                 "Profiles: [↑/↓] Move  [Enter] Apply  [e] Edit"
             }),
-            Line::from("Templates: [[ ] Cycle break template"),
+            Line::from("Templates: '[' previous  ']' next break template"),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 "View: [p/Esc] Back  [q] Quit (Locked)"
             } else {
