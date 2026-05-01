@@ -216,25 +216,44 @@ impl FocusStats {
         self.daily.insert(day_key.to_string(), stats);
     }
 
+    #[cfg(test)]
     pub fn goal_streak(
         &self,
         today: chrono::NaiveDate,
         current_goal: DailyGoalSnapshot,
         today_stats: DailyStats,
     ) -> GoalStreak {
-        let completed_days = self.completed_goal_days(today, current_goal, today_stats);
+        self.goal_streak_with_day_goal(today, current_goal, today_stats, |_| current_goal)
+    }
+
+    pub(crate) fn goal_streak_with_day_goal<F>(
+        &self,
+        today: chrono::NaiveDate,
+        current_goal: DailyGoalSnapshot,
+        today_stats: DailyStats,
+        mut goal_for_day: F,
+    ) -> GoalStreak
+    where
+        F: FnMut(chrono::NaiveDate) -> DailyGoalSnapshot,
+    {
+        let completed_days =
+            self.completed_goal_days(today, current_goal, today_stats, &mut goal_for_day);
         GoalStreak {
             current: current_goal_streak(&completed_days, today, current_goal, today_stats),
             best: best_goal_streak(&completed_days),
         }
     }
 
-    fn completed_goal_days(
+    fn completed_goal_days<F>(
         &self,
         today: chrono::NaiveDate,
         current_goal: DailyGoalSnapshot,
         today_stats: DailyStats,
-    ) -> BTreeSet<chrono::NaiveDate> {
+        goal_for_day: &mut F,
+    ) -> BTreeSet<chrono::NaiveDate>
+    where
+        F: FnMut(chrono::NaiveDate) -> DailyGoalSnapshot,
+    {
         let mut completed_days = BTreeSet::new();
 
         for (day_key, stats) in &self.daily {
@@ -245,9 +264,10 @@ impl FocusStats {
                 continue;
             }
 
-            let snapshot = stats
-                .goal
-                .or(current_goal.has_any_target().then_some(current_goal));
+            let snapshot = stats.goal.or_else(|| {
+                let fallback = goal_for_day(day);
+                fallback.has_any_target().then_some(fallback)
+            });
             if snapshot.is_some_and(|goal| goal.is_met_by(*stats)) {
                 completed_days.insert(day);
             }

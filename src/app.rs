@@ -838,8 +838,12 @@ impl App {
         };
 
         let current_goal = self.effective_daily_goal_snapshot_for_day(day);
-        self.stats
-            .goal_streak(day, current_goal, self.stats.daily_for(day_key))
+        self.stats.goal_streak_with_day_goal(
+            day,
+            current_goal,
+            self.stats.daily_for(day_key),
+            |day| self.effective_daily_goal_snapshot_for_day(day),
+        )
     }
 
     #[allow(dead_code)]

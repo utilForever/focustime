@@ -1541,6 +1541,50 @@ fn goal_streak_counts_yesterday_until_today_is_missed() {
 }
 
 #[test]
+fn goal_streak_uses_per_day_goal_fallback_for_legacy_history_entries() {
+    let config = AppConfig {
+        daily_goal: DailyGoalConfig {
+            minutes: 60,
+            pomodoros: 0,
+        },
+        goal_carry_over: GoalCarryOverConfig {
+            daily: true,
+            ..GoalCarryOverConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    let today = chrono::Local::now().date_naive();
+    let legacy_day = today
+        .checked_sub_signed(chrono::Duration::days(3))
+        .expect("legacy day should be representable");
+    let yesterday = today.pred_opt().expect("yesterday should be representable");
+    app.stats.insert_daily_for_tests(
+        &legacy_day.format("%Y-%m-%d").to_string(),
+        DailyStats {
+            pomodoros_completed: 1,
+            focused_seconds: 70 * 60,
+            goal: None,
+        },
+    );
+    app.stats.insert_daily_for_tests(
+        &yesterday.format("%Y-%m-%d").to_string(),
+        DailyStats {
+            pomodoros_completed: 0,
+            focused_seconds: 0,
+            goal: Some(DailyGoalSnapshot {
+                minutes: 120,
+                pomodoros: 0,
+            }),
+        },
+    );
+
+    let streak = app.goal_streak();
+    assert_eq!(streak.best, 1);
+}
+
+#[test]
 fn committing_goal_edit_updates_today_goal_snapshot() {
     let config = AppConfig {
         daily_goal: DailyGoalConfig {
