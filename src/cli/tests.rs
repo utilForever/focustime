@@ -1591,18 +1591,19 @@ fn build_status_output_applies_carry_over_to_goal_targets_when_enabled() {
     assert_eq!(output.goal.pomodoros_target, 4);
     assert!(output.goal.carry_over);
 
-    stats.sync_monthly_goal_snapshot(
+    let mut monthly_stats = FocusStats::default();
+    monthly_stats.sync_monthly_goal_snapshot(
         previous_month_day,
         DailyGoalSnapshot {
             minutes: 200,
             pomodoros: 6,
         },
     );
-    stats.record_focus_elapsed(&previous_month_key, 120 * 60, base_daily_goal);
+    monthly_stats.record_focus_elapsed(&previous_month_key, 120 * 60, base_daily_goal);
     for _ in 0..4 {
-        stats.record_completed_pomodoro(&previous_month_key, base_daily_goal);
+        monthly_stats.record_completed_pomodoro(&previous_month_key, base_daily_goal);
     }
-    let output = build_status_output(&config, &stats);
+    let output = build_status_output(&config, &monthly_stats);
     assert_eq!(output.monthly_goal.minutes_target, 380);
     assert_eq!(output.monthly_goal.pomodoros_target, 12);
     assert!(output.monthly_goal.carry_over);

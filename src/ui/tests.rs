@@ -428,8 +428,15 @@ fn history_view_renders_monthly_heatmap_profile_and_task_panels() {
     let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
     let mut app = App::default();
     app.mode = AppMode::StatsHistory;
+    let today = NaiveDate::parse_from_str(&current_day_key(), "%Y-%m-%d")
+        .expect("current day key should parse as a date");
+    let month_label = format_month_label(today.year(), today.month());
+    let first_entry = NaiveDate::from_ymd_opt(today.year(), today.month(), 6)
+        .expect("date should be valid for any month");
+    let second_entry = NaiveDate::from_ymd_opt(today.year(), today.month(), 8)
+        .expect("date should be valid for any month");
     app.insert_daily_stats_for_tests(
-        "2026-04-06",
+        &first_entry.format("%Y-%m-%d").to_string(),
         crate::stats::DailyStats {
             pomodoros_completed: 1,
             focused_seconds: 30 * 60,
@@ -437,7 +444,7 @@ fn history_view_renders_monthly_heatmap_profile_and_task_panels() {
         },
     );
     app.insert_daily_stats_for_tests(
-        "2026-04-08",
+        &second_entry.format("%Y-%m-%d").to_string(),
         crate::stats::DailyStats {
             pomodoros_completed: 2,
             focused_seconds: 45 * 60,
@@ -452,13 +459,13 @@ fn history_view_renders_monthly_heatmap_profile_and_task_panels() {
     let text = terminal_text(&terminal, width, height);
     let text_lower = text.to_ascii_lowercase();
     assert!(text.contains("Monthly Trend"));
-    assert!(text.contains("Heatmap 2026-04"));
+    assert!(text.contains(&format!("Heatmap {month_label}")));
     assert!(text_lower.contains("profile effect"));
     assert!(text.contains("Task Totals"));
     assert!(text.contains("Task Trends"));
     assert!(text.contains("Break-glass Audit"));
     assert!(text_lower.contains("focus score"));
-    assert!(text.contains(&format_month_label(2026, 4)));
+    assert!(text.contains(&month_label));
 }
 
 #[test]
