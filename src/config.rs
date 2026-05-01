@@ -11,6 +11,8 @@ mod paths;
 use paths::app_dir_with_env;
 #[cfg(test)]
 use paths::config_dir_from_env;
+#[cfg(all(test, not(target_os = "windows")))]
+use paths::env_path_from_value;
 
 /// Persistent application configuration stored as TOML.
 ///
