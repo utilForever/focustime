@@ -1,4 +1,9 @@
-use crate::ui::*;
+use crate::ui::{
+    Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, HistoryFeedbackLevel,
+    Layout, Line, List, ListItem, Modifier, Paragraph, Rect, Span, Style, Wrap, centered_rect,
+    format_duration_label, format_goal_period_progress, format_wakatime_heartbeat_timestamp,
+    render_hint_lines,
+};
 
 pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
     let area = frame.area();
