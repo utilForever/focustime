@@ -4173,6 +4173,7 @@ fn session_planner_toggle_favorite_updates_display_order() {
     );
 }
 
+#[test]
 fn session_planner_archive_blocks_selecting_archived_label() {
     let mut app = App::default();
     app.task_labels = vec!["Docs".to_string(), "Review".to_string()];

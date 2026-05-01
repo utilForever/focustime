@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeSet, HashSet},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 use chrono::{DateTime, Datelike, Local, NaiveDate};
@@ -1462,12 +1462,6 @@ fn permission_remediation_guidance() -> &'static str {
     } else {
         "Run focustime with elevated privileges (e.g. sudo), verify hosts-file permissions, then press [r] Refresh."
     }
-}
-
-fn current_epoch_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs())
 }
 
 impl Drop for App {

@@ -169,12 +169,6 @@ impl App {
             .get(self.profile_edit_one_time_window)
     }
 
-    fn selected_one_time_window_mut(&mut self) -> Option<&mut OneTimeFocusWindowConfig> {
-        self.recurring_schedule
-            .one_time_windows
-            .get_mut(self.profile_edit_one_time_window)
-    }
-
     fn selected_schedule_day_token(&self) -> &'static str {
         SCHEDULE_DAY_TOKENS[self
             .profile_edit_schedule_day
