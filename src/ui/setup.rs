@@ -1,4 +1,8 @@
-use crate::ui::*;
+use crate::ui::{
+    Alignment, App, Block, BlockingPreviewAction, Borders, Color, Constraint, Direction, Frame,
+    Layout, Line, Modifier, Paragraph, Rect, SetupCheck, SetupCheckLevel, Span, Style, Wrap,
+    centered_rect, render_hint_lines,
+};
 
 pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
     let area = frame.area();
