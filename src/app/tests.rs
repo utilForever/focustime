@@ -1367,6 +1367,46 @@ fn sync_goal_snapshot_for_day_keeps_weekly_and_monthly_carry_across_idle_boundar
 }
 
 #[test]
+fn sync_goal_snapshot_for_day_uses_persisted_weekly_and_monthly_base_for_historical_days() {
+    let config = AppConfig {
+        weekly_goal: WeeklyGoalConfig {
+            minutes: 100,
+            pomodoros: 2,
+        },
+        monthly_goal: MonthlyGoalConfig {
+            minutes: 300,
+            pomodoros: 6,
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    let historical_day =
+        chrono::NaiveDate::from_ymd_opt(2026, 4, 15).expect("historical day should be valid");
+
+    app.sync_goal_snapshot_for_day(historical_day);
+
+    app.weekly_goal.minutes = 240;
+    app.weekly_goal.pomodoros = 8;
+    app.monthly_goal.minutes = 900;
+    app.monthly_goal.pomodoros = 30;
+
+    assert_eq!(
+        app.effective_weekly_goal_snapshot_for_day(historical_day),
+        DailyGoalSnapshot {
+            minutes: 100,
+            pomodoros: 2,
+        }
+    );
+    assert_eq!(
+        app.effective_monthly_goal_snapshot_for_day(historical_day),
+        DailyGoalSnapshot {
+            minutes: 300,
+            pomodoros: 6,
+        }
+    );
+}
+
+#[test]
 fn sync_goal_snapshot_for_day_persists_idle_daily_snapshots_for_next_day_carry_over() {
     let config = AppConfig {
         daily_goal: DailyGoalConfig {

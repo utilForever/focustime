@@ -124,10 +124,10 @@ impl App {
         &self,
         day: NaiveDate,
     ) -> DailyGoalSnapshot {
-        let base = DailyGoalSnapshot {
-            minutes: self.weekly_goal.minutes,
-            pomodoros: self.weekly_goal.pomodoros,
-        };
+        let base = self
+            .stats
+            .weekly_goal_snapshot_for_day(day)
+            .unwrap_or_else(|| self.current_week_goal_snapshot());
         let previous =
             day.checked_sub_signed(chrono::Duration::weeks(1))
                 .and_then(|previous_week_day| {
@@ -149,10 +149,10 @@ impl App {
         &self,
         day: NaiveDate,
     ) -> DailyGoalSnapshot {
-        let base = DailyGoalSnapshot {
-            minutes: self.monthly_goal.minutes,
-            pomodoros: self.monthly_goal.pomodoros,
-        };
+        let base = self
+            .stats
+            .monthly_goal_snapshot_for_day(day)
+            .unwrap_or_else(|| self.current_month_goal_snapshot());
         let previous = previous_month_reference_day(day).and_then(|previous_month_day| {
             self.stats
                 .monthly_goal_snapshot_for_day(previous_month_day)
