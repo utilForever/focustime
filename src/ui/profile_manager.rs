@@ -1,4 +1,4 @@
-use super::*;
+use crate::ui::*;
 
 pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();

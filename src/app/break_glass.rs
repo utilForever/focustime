@@ -1,4 +1,4 @@
-use super::*;
+use crate::app::*;
 
 impl App {
     pub fn break_glass_confirmation_pending(&self) -> bool {

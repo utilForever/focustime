@@ -1,4 +1,4 @@
-use super::*;
+use crate::config::*;
 
 pub(super) fn app_dir_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Option<PathBuf> {
     let config_dir = config_dir_from_env(get_var)?;

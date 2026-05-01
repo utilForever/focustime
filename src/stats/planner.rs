@@ -1,4 +1,4 @@
-use super::*;
+use crate::stats::*;
 
 impl FocusStats {
     pub fn session(&self) -> SessionStats {

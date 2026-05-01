@@ -1,4 +1,4 @@
-use super::*;
+use crate::app::*;
 
 impl App {
     pub fn on_tick(&mut self, is_catchup: bool) {

@@ -1,4 +1,4 @@
-use super::*;
+use crate::stats::*;
 
 impl FocusStats {
     pub fn export_to_dir(&self, dir: &Path) -> io::Result<ExportedStatsFiles> {

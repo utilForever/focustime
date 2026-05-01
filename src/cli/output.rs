@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::*;
+use crate::cli::*;
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
     if payload.updated {

@@ -1,4 +1,4 @@
-use super::*;
+use crate::app::*;
 
 impl App {
     pub fn start_focus_for_cli(&mut self) -> Result<(), String> {

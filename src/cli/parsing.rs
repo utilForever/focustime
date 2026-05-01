@@ -1,4 +1,4 @@
-use super::*;
+use crate::cli::*;
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
     let show_help = tokens

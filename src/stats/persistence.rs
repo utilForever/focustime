@@ -1,4 +1,4 @@
-use super::*;
+use crate::stats::*;
 
 impl FocusStats {
     #[cfg(test)]

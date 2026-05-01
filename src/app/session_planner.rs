@@ -1,4 +1,4 @@
-use super::*;
+use crate::app::*;
 
 impl App {
     pub(super) fn handle_key_session_planner(&mut self, key: KeyEvent) {

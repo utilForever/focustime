@@ -1,4 +1,4 @@
-use super::*;
+use crate::ui::*;
 use chrono::{Datelike, Duration, NaiveDate};
 use ratatui::{Terminal, backend::TestBackend};
 

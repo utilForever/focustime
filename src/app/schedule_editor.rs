@@ -1,4 +1,4 @@
-use super::*;
+use crate::app::*;
 
 impl App {
     pub(super) fn profile_edit_schedule_field_value(&self, field_index: usize) -> String {

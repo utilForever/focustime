@@ -1,4 +1,4 @@
-use super::*;
+use crate::stats::*;
 
 impl FocusStats {
     pub fn recent_task_labels(&self, limit: usize) -> Vec<String> {

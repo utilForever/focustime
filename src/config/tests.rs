@@ -1,4 +1,4 @@
-use super::*;
+use crate::config::*;
 #[cfg(not(target_os = "windows"))]
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};

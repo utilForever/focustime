@@ -178,7 +178,7 @@ fn command_succeeded(result: std::io::Result<ExitStatus>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::notifications::*;
 
     #[test]
     fn windows_notification_fallback_runs_when_toast_fails() {

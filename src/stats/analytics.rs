@@ -1,4 +1,4 @@
-use super::*;
+use crate::stats::*;
 
 impl FocusStats {
     pub fn weekly_for_day(&self, day: chrono::NaiveDate) -> WeeklyStats {

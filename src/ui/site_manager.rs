@@ -1,4 +1,4 @@
-use super::*;
+use crate::ui::*;
 
 pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();

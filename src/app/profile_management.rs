@@ -1,4 +1,4 @@
-use super::*;
+use crate::app::*;
 
 impl App {
     pub(super) fn rebuild_recurring_schedule_runtime(&mut self) {

@@ -1,4 +1,4 @@
-use super::*;
+use crate::app::*;
 
 impl App {
     pub fn recurring_schedule_display_texts(&self) -> (String, String) {

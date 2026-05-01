@@ -1,4 +1,4 @@
-use super::*;
+use crate::cli::*;
 
 pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let day = current_day_key();

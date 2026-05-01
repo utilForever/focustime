@@ -1,4 +1,4 @@
-use super::*;
+use crate::cli::*;
 
 pub(super) fn infer_output_mode_from_os_args(args: &[OsString]) -> OutputMode {
     let parsed_args: Vec<String> = args

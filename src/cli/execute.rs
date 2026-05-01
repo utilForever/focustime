@@ -2,7 +2,7 @@ use std::{env, thread, time::Duration};
 
 use crate::app::App;
 
-use super::*;
+use crate::cli::*;
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
     match cli_command.kind {

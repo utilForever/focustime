@@ -1,4 +1,4 @@
-use super::*;
+use crate::app::*;
 use crate::session_recovery::{self, InProgressSessionSnapshot};
 
 impl App {

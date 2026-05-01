@@ -1,4 +1,4 @@
-use super::*;
+use crate::ui::*;
 
 pub(super) fn render_timer(frame: &mut Frame, app: &App) {
     let area = frame.area();

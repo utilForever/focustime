@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use super::*;
+use crate::app::*;
 
 impl App {
     pub fn is_task_label_favorite(&self, label: &str) -> bool {
