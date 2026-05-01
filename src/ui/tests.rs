@@ -119,6 +119,14 @@ fn goal_streak_lines_show_off_when_all_goals_disabled() {
 }
 
 #[test]
+fn readable_goal_streak_text_normalizes_off_state() {
+    assert_eq!(
+        readable_goal_streak_text("Goals: Off   Streaks: Off"),
+        "Goals: off | Streak: off"
+    );
+}
+
+#[test]
 fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
     let mut app = App::default();
     app.handle_key(crossterm::event::KeyEvent::new(

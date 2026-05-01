@@ -228,6 +228,7 @@ pub(super) fn readable_goal_streak_text(text: &str) -> String {
         .replace("Off (set via [p] -> [e])", "off (set in Profiles)")
         .replace("Goals: Off", "Goals: off")
         .replace("Streaks: Off", "Streak: off")
+        .replace("Streak: Off", "Streak: off")
 }
 
 pub(super) fn readable_focus_score_text(text: &str) -> String {
