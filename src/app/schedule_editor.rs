@@ -349,6 +349,7 @@ impl App {
     }
 
     pub(super) fn adjust_selected_schedule_exception_date(&mut self, increase: bool) {
+        let selected_index = self.profile_edit_schedule_exception;
         let Some(current_value) = self.selected_schedule_exception_date().cloned() else {
             return;
         };
@@ -361,10 +362,25 @@ impl App {
             current_date.pred_opt().unwrap_or(current_date)
         };
         let next_value = next_date.format("%Y-%m-%d").to_string();
+        if let Some(existing_position) = self
+            .recurring_schedule
+            .exception_dates
+            .iter()
+            .position(|value| value == &next_value)
+        {
+            if existing_position != selected_index {
+                self.recurring_schedule
+                    .exception_dates
+                    .remove(selected_index);
+                self.profile_edit_schedule_exception =
+                    adjusted_index_after_removal(selected_index, existing_position);
+            }
+            return;
+        }
         if let Some(target) = self
             .recurring_schedule
             .exception_dates
-            .get_mut(self.profile_edit_schedule_exception)
+            .get_mut(selected_index)
         {
             *target = next_value.clone();
         }
@@ -380,6 +396,7 @@ impl App {
     }
 
     pub(super) fn adjust_selected_one_time_date(&mut self, increase: bool) {
+        let selected_index = self.profile_edit_one_time_window;
         let Some(current_window) = self.selected_one_time_window().cloned() else {
             return;
         };
@@ -396,10 +413,29 @@ impl App {
             start: current_window.start,
             end: current_window.end,
         };
+        if let Some(existing_position) =
+            self.recurring_schedule
+                .one_time_windows
+                .iter()
+                .position(|candidate| {
+                    candidate.date == updated.date
+                        && candidate.start == updated.start
+                        && candidate.end == updated.end
+                })
+        {
+            if existing_position != selected_index {
+                self.recurring_schedule
+                    .one_time_windows
+                    .remove(selected_index);
+                self.profile_edit_one_time_window =
+                    adjusted_index_after_removal(selected_index, existing_position);
+            }
+            return;
+        }
         if let Some(target) = self
             .recurring_schedule
             .one_time_windows
-            .get_mut(self.profile_edit_one_time_window)
+            .get_mut(selected_index)
         {
             *target = updated.clone();
         }
@@ -419,44 +455,67 @@ impl App {
     }
 
     pub(super) fn adjust_selected_one_time_time(&mut self, is_start: bool, increase: bool) {
-        let updated = {
-            let Some(window) = self.selected_one_time_window_mut() else {
-                return;
-            };
-
-            let mut start = parse_hhmm_minutes(&window.start).unwrap_or(9 * 60);
-            let mut end = parse_hhmm_minutes(&window.end).unwrap_or(10 * 60);
-            if end <= start {
-                end = start.saturating_add(1).min(23 * 60 + 59);
-            }
-
-            if is_start {
-                if increase {
-                    start = start
-                        .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
-                        .min(end.saturating_sub(1));
-                } else {
-                    start = start.saturating_sub(SCHEDULE_TIME_STEP_MINUTES);
-                }
-            } else if increase {
-                end = end
-                    .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
-                    .min(23 * 60 + 59)
-                    .max(start.saturating_add(1));
-            } else {
-                end = end
-                    .saturating_sub(SCHEDULE_TIME_STEP_MINUTES)
-                    .max(start.saturating_add(1));
-            }
-
-            let updated = OneTimeFocusWindowConfig {
-                date: window.date.clone(),
-                start: format_hhmm(start),
-                end: format_hhmm(end),
-            };
-            *window = updated.clone();
-            updated
+        let selected_index = self.profile_edit_one_time_window;
+        let Some(current_window) = self.selected_one_time_window().cloned() else {
+            return;
         };
+
+        let mut start = parse_hhmm_minutes(&current_window.start).unwrap_or(9 * 60);
+        let mut end = parse_hhmm_minutes(&current_window.end).unwrap_or(10 * 60);
+        if end <= start {
+            end = start.saturating_add(1).min(23 * 60 + 59);
+        }
+
+        if is_start {
+            if increase {
+                start = start
+                    .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                    .min(end.saturating_sub(1));
+            } else {
+                start = start.saturating_sub(SCHEDULE_TIME_STEP_MINUTES);
+            }
+        } else if increase {
+            end = end
+                .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                .min(23 * 60 + 59)
+                .max(start.saturating_add(1));
+        } else {
+            end = end
+                .saturating_sub(SCHEDULE_TIME_STEP_MINUTES)
+                .max(start.saturating_add(1));
+        }
+
+        let updated = OneTimeFocusWindowConfig {
+            date: current_window.date,
+            start: format_hhmm(start),
+            end: format_hhmm(end),
+        };
+        if let Some(existing_position) =
+            self.recurring_schedule
+                .one_time_windows
+                .iter()
+                .position(|candidate| {
+                    candidate.date == updated.date
+                        && candidate.start == updated.start
+                        && candidate.end == updated.end
+                })
+        {
+            if existing_position != selected_index {
+                self.recurring_schedule
+                    .one_time_windows
+                    .remove(selected_index);
+                self.profile_edit_one_time_window =
+                    adjusted_index_after_removal(selected_index, existing_position);
+            }
+            return;
+        }
+        if let Some(target) = self
+            .recurring_schedule
+            .one_time_windows
+            .get_mut(selected_index)
+        {
+            *target = updated.clone();
+        }
         sort_one_time_windows(&mut self.recurring_schedule.one_time_windows);
         if let Some(position) =
             self.recurring_schedule
@@ -580,5 +639,13 @@ impl App {
             .one_time_windows
             .remove(self.profile_edit_one_time_window);
         self.clamp_profile_edit_schedule_selection();
+    }
+}
+
+fn adjusted_index_after_removal(removed_index: usize, target_index: usize) -> usize {
+    if removed_index < target_index {
+        target_index.saturating_sub(1)
+    } else {
+        target_index
     }
 }

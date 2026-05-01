@@ -2580,6 +2580,81 @@ fn recurring_schedule_status_text_shows_ready_for_upcoming_window() {
 }
 
 #[test]
+fn adjusting_schedule_exception_date_to_existing_entry_deduplicates_and_selects_existing() {
+    let mut app = App::default();
+    app.recurring_schedule.exception_dates =
+        vec!["2026-05-10".to_string(), "2026-05-11".to_string()];
+    app.profile_edit_schedule_exception = 0;
+
+    app.adjust_selected_schedule_exception_date(true);
+
+    assert_eq!(app.recurring_schedule.exception_dates, vec!["2026-05-11"]);
+    assert_eq!(app.profile_edit_schedule_exception, 0);
+}
+
+#[test]
+fn adjusting_one_time_date_to_existing_entry_deduplicates_and_selects_existing() {
+    let mut app = App::default();
+    app.recurring_schedule.one_time_windows = vec![
+        OneTimeFocusWindowConfig {
+            date: "2026-05-10".to_string(),
+            start: "09:00".to_string(),
+            end: "10:00".to_string(),
+        },
+        OneTimeFocusWindowConfig {
+            date: "2026-05-11".to_string(),
+            start: "09:00".to_string(),
+            end: "10:00".to_string(),
+        },
+    ];
+    app.profile_edit_one_time_window = 0;
+
+    app.adjust_selected_one_time_date(true);
+
+    assert_eq!(app.recurring_schedule.one_time_windows.len(), 1);
+    assert_eq!(
+        app.recurring_schedule.one_time_windows[0],
+        OneTimeFocusWindowConfig {
+            date: "2026-05-11".to_string(),
+            start: "09:00".to_string(),
+            end: "10:00".to_string(),
+        }
+    );
+    assert_eq!(app.profile_edit_one_time_window, 0);
+}
+
+#[test]
+fn adjusting_one_time_start_to_existing_entry_deduplicates_and_selects_existing() {
+    let mut app = App::default();
+    app.recurring_schedule.one_time_windows = vec![
+        OneTimeFocusWindowConfig {
+            date: "2026-05-10".to_string(),
+            start: "09:00".to_string(),
+            end: "10:00".to_string(),
+        },
+        OneTimeFocusWindowConfig {
+            date: "2026-05-10".to_string(),
+            start: "09:15".to_string(),
+            end: "10:00".to_string(),
+        },
+    ];
+    app.profile_edit_one_time_window = 0;
+
+    app.adjust_selected_one_time_time(true, true);
+
+    assert_eq!(app.recurring_schedule.one_time_windows.len(), 1);
+    assert_eq!(
+        app.recurring_schedule.one_time_windows[0],
+        OneTimeFocusWindowConfig {
+            date: "2026-05-10".to_string(),
+            start: "09:15".to_string(),
+            end: "10:00".to_string(),
+        }
+    );
+    assert_eq!(app.profile_edit_one_time_window, 0);
+}
+
+#[test]
 fn profile_edit_schedule_conflict_summary_reports_overlap() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {
@@ -4098,7 +4173,6 @@ fn session_planner_toggle_favorite_updates_display_order() {
     );
 }
 
-#[test]
 fn session_planner_archive_blocks_selecting_archived_label() {
     let mut app = App::default();
     app.task_labels = vec!["Docs".to_string(), "Review".to_string()];
