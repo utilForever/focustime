@@ -55,7 +55,15 @@ pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
         )
         .highlight_symbol("▶ ");
     let mut list_state = ListState::default();
-    list_state.select(Some(app.profile_selection_index.min(PROFILE_IDS.len() - 1)));
+    let selected_index = if PROFILE_IDS.is_empty() {
+        None
+    } else {
+        Some(
+            app.profile_selection_index
+                .min(PROFILE_IDS.len().saturating_sub(1)),
+        )
+    };
+    list_state.select(selected_index);
     frame.render_stateful_widget(list, inner[1], &mut list_state);
 
     let editor_block = profile_editor_block(app);
