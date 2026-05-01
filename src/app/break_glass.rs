@@ -1,6 +1,5 @@
 use crate::app::{
-    App, Duration, Instant, PendingTimerAction, ceil_duration_secs, current_day_key,
-    current_epoch_secs, format_duration_label,
+    App, Duration, Instant, Local, PendingTimerAction, ceil_duration_secs, format_duration_label,
 };
 
 impl App {
@@ -99,14 +98,16 @@ impl App {
     }
 
     fn record_break_glass_override_event(&mut self) {
-        let day_key = current_day_key();
+        let now = Local::now();
+        let day_key = now.format("%Y-%m-%d").to_string();
+        let epoch_secs = now.timestamp().max(0) as u64;
         let task_label = self
             .active_focus_task_label
             .as_deref()
             .or(self.selected_task_label.as_deref());
         self.stats.record_break_glass_override_event(
             &day_key,
-            current_epoch_secs(),
+            epoch_secs,
             task_label,
             self.break_glass_duration_secs,
         );
