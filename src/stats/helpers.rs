@@ -252,7 +252,7 @@ pub(super) fn write_atomic_bytes(path: &Path, content: &[u8]) -> io::Result<()> 
 
     let (tmp_path, mut tmp_file) = create_unique_temp_file(path)?;
     tmp_file.write_all(content)?;
-    tmp_file.flush()?;
+    tmp_file.sync_all()?;
     drop(tmp_file);
 
     #[cfg(target_os = "windows")]
