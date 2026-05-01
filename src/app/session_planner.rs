@@ -337,6 +337,13 @@ impl App {
             self.set_planner_feedback(PlannerFeedbackLevel::Warning, "No task labels available");
             return;
         };
+        if self.is_task_label_archived(&existing_label) {
+            self.set_planner_feedback(
+                PlannerFeedbackLevel::Warning,
+                format!("`{existing_label}` is archived; unarchive it with [x] before selecting"),
+            );
+            return;
+        }
         if let Some(display_index) = self.planner_display_index_for_label(&existing_label) {
             self.planner_selection_index = display_index;
         }
