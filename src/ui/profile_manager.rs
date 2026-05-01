@@ -1,4 +1,8 @@
-use crate::ui::*;
+use crate::ui::{
+    Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
+    ListItem, ListState, Modifier, PROFILE_EDIT_GROUPS, PROFILE_IDS, Paragraph, Span, Style, Wrap,
+    centered_rect, render_centered_error, render_hint_lines,
+};
 
 pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();
