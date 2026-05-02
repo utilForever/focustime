@@ -649,7 +649,7 @@ fn flush_dns_cache() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::blocker::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]

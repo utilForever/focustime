@@ -203,7 +203,7 @@ impl Default for TimerState {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::timer::*;
 
     #[test]
     fn new_timer_is_idle_focus() {

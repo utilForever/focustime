@@ -319,7 +319,7 @@ fn normalize_metadata_text(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::session_recovery::*;
 
     #[test]
     fn snapshot_validation_rejects_idle_status() {

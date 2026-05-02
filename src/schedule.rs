@@ -624,7 +624,7 @@ fn find_recurring_one_time_conflicts(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::schedule::*;
 
     fn local_datetime(date: NaiveDate, hour: u32, minute: u32) -> DateTime<Local> {
         match Local.with_ymd_and_hms(date.year(), date.month(), date.day(), hour, minute, 0) {

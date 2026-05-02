@@ -636,7 +636,7 @@ fn config_diagnostics_from_read_result(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::wakatime::*;
 
     fn tracker_with(
         api_key: Option<&str>,
