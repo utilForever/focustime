@@ -13,11 +13,18 @@ use crate::app::{
     PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX,
     PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, PROFILE_IDS,
-    ProfileAutomationConfig, ProfileEditSnapshot, ProfileId, TimerState, WakatimeHeartbeatMetadata,
-    adjust_daily_goal_minutes, adjust_daily_goal_pomodoros, adjust_duration_minutes,
-    compile_exception_dates, compile_one_time_windows, compile_windows, profile_for_index,
-    profile_index, profile_spec_for,
+    ProfileAutomationConfig, ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState,
+    WakatimeHeartbeatMetadata, adjust_daily_goal_minutes, adjust_daily_goal_pomodoros,
+    adjust_duration_minutes, compile_exception_dates, compile_one_time_windows, compile_windows,
+    profile_for_index, profile_index, profile_spec_for,
 };
+
+const PROFILE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 4] = [
+    ShortcutAction::BackProfileManager,
+    ShortcutAction::ProfileEdit,
+    ShortcutAction::SelectPreviousBreakTemplate,
+    ShortcutAction::SelectNextBreakTemplate,
+];
 
 impl App {
     pub(super) fn rebuild_recurring_schedule_runtime(&mut self) {
@@ -124,47 +131,49 @@ impl App {
 
     pub(super) fn handle_key_profile_manager(&mut self, key: KeyEvent) {
         if self.profile_edit_active {
-            if self.handle_quit_key(&key, false) {
-                return;
-            }
-
-            if self.handle_profile_edit_metadata_input(&key) {
-                return;
-            }
-
-            match key.code {
-                KeyCode::Esc => {
-                    self.cancel_profile_edit();
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    self.profile_edit_field = self.profile_edit_field.saturating_sub(1);
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    self.profile_edit_field = (self.profile_edit_field + 1)
-                        .min(PROFILE_EDIT_FIELD_LABELS.len().saturating_sub(1));
-                }
-                KeyCode::Left | KeyCode::Char('h') => {
-                    self.adjust_profile_edit_field(false);
-                }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    self.adjust_profile_edit_field(true);
-                }
-                KeyCode::Enter => {
-                    self.commit_profile_edit();
-                }
-                _ => {}
-            }
+            self.handle_key_profile_manager_edit_mode(&key);
             return;
         }
 
-        if self.handle_quit_key(&key, false) {
+        self.handle_key_profile_manager_selection_mode(&key);
+    }
+
+    fn handle_key_profile_manager_edit_mode(&mut self, key: &KeyEvent) {
+        if self.handle_quit_key(key, false) {
+            return;
+        }
+
+        if self.handle_profile_edit_metadata_input(key) {
             return;
         }
 
         match key.code {
-            KeyCode::Esc | KeyCode::Char('p') => {
-                self.exit_profile_manager();
+            KeyCode::Esc => self.cancel_profile_edit(),
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.profile_edit_field = self.profile_edit_field.saturating_sub(1);
             }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.profile_edit_field = (self.profile_edit_field + 1)
+                    .min(PROFILE_EDIT_FIELD_LABELS.len().saturating_sub(1));
+            }
+            KeyCode::Left | KeyCode::Char('h') => {
+                self.adjust_profile_edit_field(false);
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                self.adjust_profile_edit_field(true);
+            }
+            KeyCode::Enter => self.commit_profile_edit(),
+            _ => {}
+        }
+    }
+
+    fn handle_key_profile_manager_selection_mode(&mut self, key: &KeyEvent) {
+        if self.handle_quit_key(key, false) {
+            return;
+        }
+
+        match key.code {
+            KeyCode::Esc => self.exit_profile_manager(),
             KeyCode::Up | KeyCode::Char('k') => {
                 self.profile_selection_index = self.profile_selection_index.saturating_sub(1);
             }
@@ -178,15 +187,26 @@ impl App {
                     self.exit_profile_manager();
                 }
             }
-            KeyCode::Char('e') => {
-                self.begin_profile_edit();
-            }
-            KeyCode::Char('[') => {
-                self.select_previous_break_template();
-            }
-            KeyCode::Char(']') => {
-                self.select_next_break_template();
-            }
+            _ => self.handle_profile_manager_shortcut_action(key),
+        }
+    }
+
+    fn profile_manager_shortcut_action(&self, key: &KeyEvent) -> Option<ShortcutAction> {
+        PROFILE_MANAGER_SHORTCUT_ACTIONS
+            .into_iter()
+            .find(|action| self.shortcut_matches(*action, key))
+    }
+
+    fn handle_profile_manager_shortcut_action(&mut self, key: &KeyEvent) {
+        let Some(action) = self.profile_manager_shortcut_action(key) else {
+            return;
+        };
+
+        match action {
+            ShortcutAction::BackProfileManager => self.exit_profile_manager(),
+            ShortcutAction::ProfileEdit => self.begin_profile_edit(),
+            ShortcutAction::SelectPreviousBreakTemplate => self.select_previous_break_template(),
+            ShortcutAction::SelectNextBreakTemplate => self.select_next_break_template(),
             _ => {}
         }
     }

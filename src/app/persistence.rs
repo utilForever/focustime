@@ -199,6 +199,7 @@ impl App {
             monthly_goal: self.monthly_goal,
             goal_carry_over: self.goal_carry_over,
             wakatime: self.wakatime_metadata.clone(),
+            shortcuts: self.shortcuts.to_config(),
         }
     }
 

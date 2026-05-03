@@ -1,3 +1,4 @@
+use crate::config::{AppConfig, ShortcutConfig};
 use crate::ui::*;
 use chrono::{Datelike, Duration, NaiveDate};
 use ratatui::{Terminal, backend::TestBackend};
@@ -27,6 +28,21 @@ fn timer_secondary_hint_includes_setup_shortcut() {
 fn timer_secondary_hint_includes_planner_shortcut() {
     let app = App::default();
     assert!(timer_secondary_hint(&app).contains("[t] Planner"));
+}
+
+#[test]
+fn timer_secondary_hint_uses_custom_history_shortcut() {
+    let app = App::from_config_for_tests(AppConfig {
+        shortcuts: ShortcutConfig {
+            open_stats_history: "y".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    });
+
+    let hint = timer_secondary_hint(&app);
+    assert!(hint.contains("[y] History"));
+    assert!(!hint.contains("[h] History"));
 }
 
 #[test]

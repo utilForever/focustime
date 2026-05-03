@@ -1,5 +1,6 @@
 use crate::app::*;
 use crate::blocker;
+use crate::config::ShortcutConfig;
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -122,6 +123,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         monthly_goal: MonthlyGoalConfig::default(),
         goal_carry_over: GoalCarryOverConfig::default(),
         wakatime: WakatimeMetadataConfig::default(),
+        shortcuts: ShortcutConfig::default(),
     };
     let app = App::from_config(config);
     assert_eq!(app.selected_profile, ProfileId::Classic);
@@ -1927,6 +1929,27 @@ fn site_manager_paste_targets_blocklist_profile_input_when_active() {
 }
 
 #[test]
+fn site_manager_ctrl_c_quits_during_text_input_modes() {
+    let mut app = App::default();
+    app.handle_key(key(KeyCode::Char('b')));
+    app.handle_key(key(KeyCode::Char('a')));
+    assert!(app.site_input_active);
+
+    app.handle_key(ctrl_key(KeyCode::Char('c')));
+
+    assert!(app.should_quit);
+
+    let mut app = App::default();
+    app.handle_key(key(KeyCode::Char('b')));
+    app.handle_key(key(KeyCode::Char('n')));
+    assert!(app.blocklist_profile_input_active);
+
+    app.handle_key(ctrl_key(KeyCode::Char('c')));
+
+    assert!(app.should_quit);
+}
+
+#[test]
 fn timer_note_paste_sanitizes_multiline_and_control_characters() {
     let mut app = App::default();
     app.task_labels = vec!["Docs".to_string()];
@@ -3401,6 +3424,30 @@ fn strict_mode_blocks_quit_keys_during_active_focus() {
 }
 
 #[test]
+fn strict_mode_blocks_custom_c_quit_key_during_active_focus() {
+    let config = AppConfig {
+        strict_mode: true,
+        shortcuts: ShortcutConfig {
+            quit: "c".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+
+    app.handle_key(key(KeyCode::Char('c')));
+
+    assert!(!app.should_quit);
+    assert!(
+        app.phase_notification
+            .as_deref()
+            .is_some_and(|msg| msg.contains("Strict mode active"))
+    );
+}
+
+#[test]
 fn strict_mode_allows_quit_when_focus_not_active() {
     let config = AppConfig {
         strict_mode: true,
@@ -3411,6 +3458,25 @@ fn strict_mode_allows_quit_when_focus_not_active() {
     app.timer.status = TimerStatus::Idle;
 
     app.handle_key(key(KeyCode::Char('q')));
+
+    assert!(app.should_quit);
+}
+
+#[test]
+fn custom_c_quit_key_allows_quit_when_focus_not_active() {
+    let config = AppConfig {
+        strict_mode: true,
+        shortcuts: ShortcutConfig {
+            quit: "c".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Idle;
+
+    app.handle_key(key(KeyCode::Char('c')));
 
     assert!(app.should_quit);
 }
@@ -3602,6 +3668,42 @@ fn history_view_toggles_from_timer_mode() {
 
     app.handle_key(key(KeyCode::Esc));
     assert_eq!(app.mode, AppMode::Timer);
+}
+
+#[test]
+fn custom_history_shortcut_opens_history_view() {
+    let config = AppConfig {
+        shortcuts: ShortcutConfig {
+            open_stats_history: "y".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.handle_key(key(KeyCode::Char('h')));
+    assert_eq!(app.mode, AppMode::Timer);
+
+    app.handle_key(key(KeyCode::Char('y')));
+    assert_eq!(app.mode, AppMode::StatsHistory);
+}
+
+#[test]
+fn custom_quit_shortcut_replaces_default_quit_char() {
+    let config = AppConfig {
+        shortcuts: ShortcutConfig {
+            quit: "x".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.handle_key(key(KeyCode::Char('q')));
+    assert!(!app.should_quit);
+
+    app.handle_key(key(KeyCode::Char('x')));
+    assert!(app.should_quit);
 }
 
 #[test]

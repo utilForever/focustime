@@ -107,6 +107,277 @@ pub struct AppConfig {
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
     pub wakatime: WakatimeMetadataConfig,
+    /// User-configurable keyboard shortcuts for core TUI command actions.
+    #[serde(default)]
+    pub shortcuts: ShortcutConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ShortcutConfig {
+    #[serde(default = "default_shortcut_quit")]
+    pub quit: String,
+    #[serde(default = "default_shortcut_timer_toggle_pause")]
+    pub timer_toggle_pause: String,
+    #[serde(default = "default_shortcut_timer_stop_reset")]
+    pub timer_stop_reset: String,
+    #[serde(default = "default_shortcut_timer_next_phase")]
+    pub timer_next_phase: String,
+    #[serde(default = "default_shortcut_open_site_manager")]
+    pub open_site_manager: String,
+    #[serde(default = "default_shortcut_open_profile_manager")]
+    pub open_profile_manager: String,
+    #[serde(default = "default_shortcut_open_session_planner")]
+    pub open_session_planner: String,
+    #[serde(default = "default_shortcut_open_stats_history")]
+    pub open_stats_history: String,
+    #[serde(default = "default_shortcut_open_setup_diagnostics")]
+    pub open_setup_diagnostics: String,
+    #[serde(default = "default_shortcut_timer_edit_note")]
+    pub timer_edit_note: String,
+    #[serde(default = "default_shortcut_break_glass_override")]
+    pub break_glass_override: String,
+    #[serde(default = "default_shortcut_delay_schedule_start")]
+    pub delay_schedule_start: String,
+    #[serde(default = "default_shortcut_back_site_manager")]
+    pub back_site_manager: String,
+    #[serde(default = "default_shortcut_toggle_site_list_mode")]
+    pub toggle_site_list_mode: String,
+    #[serde(default = "default_shortcut_site_add")]
+    pub site_add: String,
+    #[serde(default = "default_shortcut_site_edit")]
+    pub site_edit: String,
+    #[serde(default = "default_shortcut_site_delete")]
+    pub site_delete: String,
+    #[serde(default = "default_shortcut_select_previous_blocklist_profile")]
+    pub select_previous_blocklist_profile: String,
+    #[serde(default = "default_shortcut_select_next_blocklist_profile")]
+    pub select_next_blocklist_profile: String,
+    #[serde(default = "default_shortcut_create_blocklist_profile")]
+    pub create_blocklist_profile: String,
+    #[serde(default = "default_shortcut_rename_blocklist_profile")]
+    pub rename_blocklist_profile: String,
+    #[serde(default = "default_shortcut_delete_blocklist_profile")]
+    pub delete_blocklist_profile: String,
+    #[serde(default = "default_shortcut_back_session_planner")]
+    pub back_session_planner: String,
+    #[serde(default = "default_shortcut_planner_add")]
+    pub planner_add: String,
+    #[serde(default = "default_shortcut_planner_rename")]
+    pub planner_rename: String,
+    #[serde(default = "default_shortcut_planner_favorite")]
+    pub planner_favorite: String,
+    #[serde(default = "default_shortcut_planner_archive")]
+    pub planner_archive: String,
+    #[serde(default = "default_shortcut_planner_delete")]
+    pub planner_delete: String,
+    #[serde(default = "default_shortcut_planner_select_recent")]
+    pub planner_select_recent: String,
+    #[serde(default = "default_shortcut_back_profile_manager")]
+    pub back_profile_manager: String,
+    #[serde(default = "default_shortcut_profile_edit")]
+    pub profile_edit: String,
+    #[serde(default = "default_shortcut_select_previous_break_template")]
+    pub select_previous_break_template: String,
+    #[serde(default = "default_shortcut_select_next_break_template")]
+    pub select_next_break_template: String,
+    #[serde(default = "default_shortcut_back_stats_history")]
+    pub back_stats_history: String,
+    #[serde(default = "default_shortcut_export_stats_history")]
+    pub export_stats_history: String,
+    #[serde(default = "default_shortcut_back_setup_diagnostics")]
+    pub back_setup_diagnostics: String,
+    #[serde(default = "default_shortcut_refresh_setup_diagnostics")]
+    pub refresh_setup_diagnostics: String,
+}
+
+impl ShortcutConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            quit: normalize_shortcut_token(&self.quit, &default_shortcut_quit()),
+            timer_toggle_pause: normalize_shortcut_token(
+                &self.timer_toggle_pause,
+                &default_shortcut_timer_toggle_pause(),
+            ),
+            timer_stop_reset: normalize_shortcut_token(
+                &self.timer_stop_reset,
+                &default_shortcut_timer_stop_reset(),
+            ),
+            timer_next_phase: normalize_shortcut_token(
+                &self.timer_next_phase,
+                &default_shortcut_timer_next_phase(),
+            ),
+            open_site_manager: normalize_shortcut_token(
+                &self.open_site_manager,
+                &default_shortcut_open_site_manager(),
+            ),
+            open_profile_manager: normalize_shortcut_token(
+                &self.open_profile_manager,
+                &default_shortcut_open_profile_manager(),
+            ),
+            open_session_planner: normalize_shortcut_token(
+                &self.open_session_planner,
+                &default_shortcut_open_session_planner(),
+            ),
+            open_stats_history: normalize_shortcut_token(
+                &self.open_stats_history,
+                &default_shortcut_open_stats_history(),
+            ),
+            open_setup_diagnostics: normalize_shortcut_token(
+                &self.open_setup_diagnostics,
+                &default_shortcut_open_setup_diagnostics(),
+            ),
+            timer_edit_note: normalize_shortcut_token(
+                &self.timer_edit_note,
+                &default_shortcut_timer_edit_note(),
+            ),
+            break_glass_override: normalize_shortcut_token(
+                &self.break_glass_override,
+                &default_shortcut_break_glass_override(),
+            ),
+            delay_schedule_start: normalize_shortcut_token(
+                &self.delay_schedule_start,
+                &default_shortcut_delay_schedule_start(),
+            ),
+            back_site_manager: normalize_shortcut_token(
+                &self.back_site_manager,
+                &default_shortcut_back_site_manager(),
+            ),
+            toggle_site_list_mode: normalize_shortcut_token(
+                &self.toggle_site_list_mode,
+                &default_shortcut_toggle_site_list_mode(),
+            ),
+            site_add: normalize_shortcut_token(&self.site_add, &default_shortcut_site_add()),
+            site_edit: normalize_shortcut_token(&self.site_edit, &default_shortcut_site_edit()),
+            site_delete: normalize_shortcut_token(
+                &self.site_delete,
+                &default_shortcut_site_delete(),
+            ),
+            select_previous_blocklist_profile: normalize_shortcut_token(
+                &self.select_previous_blocklist_profile,
+                &default_shortcut_select_previous_blocklist_profile(),
+            ),
+            select_next_blocklist_profile: normalize_shortcut_token(
+                &self.select_next_blocklist_profile,
+                &default_shortcut_select_next_blocklist_profile(),
+            ),
+            create_blocklist_profile: normalize_shortcut_token(
+                &self.create_blocklist_profile,
+                &default_shortcut_create_blocklist_profile(),
+            ),
+            rename_blocklist_profile: normalize_shortcut_token(
+                &self.rename_blocklist_profile,
+                &default_shortcut_rename_blocklist_profile(),
+            ),
+            delete_blocklist_profile: normalize_shortcut_token(
+                &self.delete_blocklist_profile,
+                &default_shortcut_delete_blocklist_profile(),
+            ),
+            back_session_planner: normalize_shortcut_token(
+                &self.back_session_planner,
+                &default_shortcut_back_session_planner(),
+            ),
+            planner_add: normalize_shortcut_token(
+                &self.planner_add,
+                &default_shortcut_planner_add(),
+            ),
+            planner_rename: normalize_shortcut_token(
+                &self.planner_rename,
+                &default_shortcut_planner_rename(),
+            ),
+            planner_favorite: normalize_shortcut_token(
+                &self.planner_favorite,
+                &default_shortcut_planner_favorite(),
+            ),
+            planner_archive: normalize_shortcut_token(
+                &self.planner_archive,
+                &default_shortcut_planner_archive(),
+            ),
+            planner_delete: normalize_shortcut_token(
+                &self.planner_delete,
+                &default_shortcut_planner_delete(),
+            ),
+            planner_select_recent: normalize_shortcut_token(
+                &self.planner_select_recent,
+                &default_shortcut_planner_select_recent(),
+            ),
+            back_profile_manager: normalize_shortcut_token(
+                &self.back_profile_manager,
+                &default_shortcut_back_profile_manager(),
+            ),
+            profile_edit: normalize_shortcut_token(
+                &self.profile_edit,
+                &default_shortcut_profile_edit(),
+            ),
+            select_previous_break_template: normalize_shortcut_token(
+                &self.select_previous_break_template,
+                &default_shortcut_select_previous_break_template(),
+            ),
+            select_next_break_template: normalize_shortcut_token(
+                &self.select_next_break_template,
+                &default_shortcut_select_next_break_template(),
+            ),
+            back_stats_history: normalize_shortcut_token(
+                &self.back_stats_history,
+                &default_shortcut_back_stats_history(),
+            ),
+            export_stats_history: normalize_shortcut_token(
+                &self.export_stats_history,
+                &default_shortcut_export_stats_history(),
+            ),
+            back_setup_diagnostics: normalize_shortcut_token(
+                &self.back_setup_diagnostics,
+                &default_shortcut_back_setup_diagnostics(),
+            ),
+            refresh_setup_diagnostics: normalize_shortcut_token(
+                &self.refresh_setup_diagnostics,
+                &default_shortcut_refresh_setup_diagnostics(),
+            ),
+        }
+    }
+}
+
+impl Default for ShortcutConfig {
+    fn default() -> Self {
+        Self {
+            quit: default_shortcut_quit(),
+            timer_toggle_pause: default_shortcut_timer_toggle_pause(),
+            timer_stop_reset: default_shortcut_timer_stop_reset(),
+            timer_next_phase: default_shortcut_timer_next_phase(),
+            open_site_manager: default_shortcut_open_site_manager(),
+            open_profile_manager: default_shortcut_open_profile_manager(),
+            open_session_planner: default_shortcut_open_session_planner(),
+            open_stats_history: default_shortcut_open_stats_history(),
+            open_setup_diagnostics: default_shortcut_open_setup_diagnostics(),
+            timer_edit_note: default_shortcut_timer_edit_note(),
+            break_glass_override: default_shortcut_break_glass_override(),
+            delay_schedule_start: default_shortcut_delay_schedule_start(),
+            back_site_manager: default_shortcut_back_site_manager(),
+            toggle_site_list_mode: default_shortcut_toggle_site_list_mode(),
+            site_add: default_shortcut_site_add(),
+            site_edit: default_shortcut_site_edit(),
+            site_delete: default_shortcut_site_delete(),
+            select_previous_blocklist_profile: default_shortcut_select_previous_blocklist_profile(),
+            select_next_blocklist_profile: default_shortcut_select_next_blocklist_profile(),
+            create_blocklist_profile: default_shortcut_create_blocklist_profile(),
+            rename_blocklist_profile: default_shortcut_rename_blocklist_profile(),
+            delete_blocklist_profile: default_shortcut_delete_blocklist_profile(),
+            back_session_planner: default_shortcut_back_session_planner(),
+            planner_add: default_shortcut_planner_add(),
+            planner_rename: default_shortcut_planner_rename(),
+            planner_favorite: default_shortcut_planner_favorite(),
+            planner_archive: default_shortcut_planner_archive(),
+            planner_delete: default_shortcut_planner_delete(),
+            planner_select_recent: default_shortcut_planner_select_recent(),
+            back_profile_manager: default_shortcut_back_profile_manager(),
+            profile_edit: default_shortcut_profile_edit(),
+            select_previous_break_template: default_shortcut_select_previous_break_template(),
+            select_next_break_template: default_shortcut_select_next_break_template(),
+            back_stats_history: default_shortcut_back_stats_history(),
+            export_stats_history: default_shortcut_export_stats_history(),
+            back_setup_diagnostics: default_shortcut_back_setup_diagnostics(),
+            refresh_setup_diagnostics: default_shortcut_refresh_setup_diagnostics(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -479,6 +750,154 @@ fn default_break_template_name() -> String {
     "Classic".to_string()
 }
 
+fn default_shortcut_quit() -> String {
+    "q".to_string()
+}
+
+fn default_shortcut_timer_toggle_pause() -> String {
+    "space".to_string()
+}
+
+fn default_shortcut_timer_stop_reset() -> String {
+    "s".to_string()
+}
+
+fn default_shortcut_timer_next_phase() -> String {
+    "n".to_string()
+}
+
+fn default_shortcut_open_site_manager() -> String {
+    "b".to_string()
+}
+
+fn default_shortcut_open_profile_manager() -> String {
+    "p".to_string()
+}
+
+fn default_shortcut_open_session_planner() -> String {
+    "t".to_string()
+}
+
+fn default_shortcut_open_stats_history() -> String {
+    "h".to_string()
+}
+
+fn default_shortcut_open_setup_diagnostics() -> String {
+    "d".to_string()
+}
+
+fn default_shortcut_timer_edit_note() -> String {
+    "m".to_string()
+}
+
+fn default_shortcut_break_glass_override() -> String {
+    "u".to_string()
+}
+
+fn default_shortcut_delay_schedule_start() -> String {
+    "z".to_string()
+}
+
+fn default_shortcut_back_site_manager() -> String {
+    "b".to_string()
+}
+
+fn default_shortcut_toggle_site_list_mode() -> String {
+    "m".to_string()
+}
+
+fn default_shortcut_site_add() -> String {
+    "a".to_string()
+}
+
+fn default_shortcut_site_edit() -> String {
+    "e".to_string()
+}
+
+fn default_shortcut_site_delete() -> String {
+    "d".to_string()
+}
+
+fn default_shortcut_select_previous_blocklist_profile() -> String {
+    "[".to_string()
+}
+
+fn default_shortcut_select_next_blocklist_profile() -> String {
+    "]".to_string()
+}
+
+fn default_shortcut_create_blocklist_profile() -> String {
+    "n".to_string()
+}
+
+fn default_shortcut_rename_blocklist_profile() -> String {
+    "r".to_string()
+}
+
+fn default_shortcut_delete_blocklist_profile() -> String {
+    "x".to_string()
+}
+
+fn default_shortcut_back_session_planner() -> String {
+    "t".to_string()
+}
+
+fn default_shortcut_planner_add() -> String {
+    "a".to_string()
+}
+
+fn default_shortcut_planner_rename() -> String {
+    "e".to_string()
+}
+
+fn default_shortcut_planner_favorite() -> String {
+    "f".to_string()
+}
+
+fn default_shortcut_planner_archive() -> String {
+    "x".to_string()
+}
+
+fn default_shortcut_planner_delete() -> String {
+    "d".to_string()
+}
+
+fn default_shortcut_planner_select_recent() -> String {
+    "r".to_string()
+}
+
+fn default_shortcut_back_profile_manager() -> String {
+    "p".to_string()
+}
+
+fn default_shortcut_profile_edit() -> String {
+    "e".to_string()
+}
+
+fn default_shortcut_select_previous_break_template() -> String {
+    "[".to_string()
+}
+
+fn default_shortcut_select_next_break_template() -> String {
+    "]".to_string()
+}
+
+fn default_shortcut_back_stats_history() -> String {
+    "h".to_string()
+}
+
+fn default_shortcut_export_stats_history() -> String {
+    "e".to_string()
+}
+
+fn default_shortcut_back_setup_diagnostics() -> String {
+    "d".to_string()
+}
+
+fn default_shortcut_refresh_setup_diagnostics() -> String {
+    "r".to_string()
+}
+
 fn default_break_templates() -> Vec<BreakTemplateConfig> {
     vec![
         BreakTemplateConfig {
@@ -658,6 +1077,7 @@ impl Default for AppConfig {
             monthly_goal: MonthlyGoalConfig::default(),
             goal_carry_over: GoalCarryOverConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
+            shortcuts: ShortcutConfig::default(),
         }
     }
 }
@@ -831,6 +1251,7 @@ impl AppConfig {
             .map(effective_blocked_sites_for_profile)
             .unwrap_or_default();
         self.wakatime = self.wakatime.normalized();
+        self.shortcuts = self.shortcuts.normalized();
         self
     }
 
@@ -869,6 +1290,38 @@ fn normalize_nonempty_or_default_string(value: &str, default: &str) -> String {
         default.to_string()
     } else {
         trimmed.to_string()
+    }
+}
+
+fn parse_shortcut_char(value: &str) -> Option<char> {
+    let token = value.trim();
+    if token.eq_ignore_ascii_case("space") {
+        return Some(' ');
+    }
+
+    let mut chars = token.chars();
+    let candidate = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+
+    if candidate.is_ascii_alphabetic() {
+        Some(candidate.to_ascii_lowercase())
+    } else {
+        Some(candidate)
+    }
+}
+
+fn normalize_shortcut_token(value: &str, default: &str) -> String {
+    let Some(parsed) = parse_shortcut_char(value) else {
+        return default.to_string();
+    };
+    if parsed == ' ' {
+        "space".to_string()
+    } else if parsed.is_ascii_alphabetic() {
+        parsed.to_ascii_lowercase().to_string()
+    } else {
+        parsed.to_string()
     }
 }
 

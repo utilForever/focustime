@@ -1,47 +1,30 @@
 use crate::app::{
     App, AppMode, BlocklistProfileConfig, BlocklistProfileInputMode, BulkAddResult, EditSiteResult,
-    KeyCode, KeyEvent, SiteBlocker, SiteFeedbackLevel, SiteInputMode, SiteListMode,
-    display_input_value, effective_blocked_sites_for_profile, format_count,
+    KeyCode, KeyEvent, KeyModifiers, ShortcutAction, SiteBlocker, SiteFeedbackLevel, SiteInputMode,
+    SiteListMode, display_input_value, effective_blocked_sites_for_profile, format_count,
     summarize_invalid_inputs,
 };
 
+const SITE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 10] = [
+    ShortcutAction::BackSiteManager,
+    ShortcutAction::ToggleSiteListMode,
+    ShortcutAction::SiteAdd,
+    ShortcutAction::SiteEdit,
+    ShortcutAction::SiteDelete,
+    ShortcutAction::SelectPreviousBlocklistProfile,
+    ShortcutAction::SelectNextBlocklistProfile,
+    ShortcutAction::CreateBlocklistProfile,
+    ShortcutAction::RenameBlocklistProfile,
+    ShortcutAction::DeleteBlocklistProfile,
+];
+
 impl App {
     pub(super) fn handle_key_site_manager(&mut self, key: KeyEvent) {
-        if self.blocklist_profile_input_active {
-            match key.code {
-                KeyCode::Enter => {
-                    self.commit_blocklist_profile_input();
-                }
-                KeyCode::Esc => {
-                    self.cancel_blocklist_profile_input();
-                }
-                KeyCode::Backspace => {
-                    self.blocklist_profile_input.pop();
-                }
-                KeyCode::Char(c) => {
-                    self.blocklist_profile_input.push(c);
-                }
-                _ => {}
-            }
+        if self.handle_blocklist_profile_input_key(&key) {
             return;
         }
 
-        if self.site_input_active {
-            match key.code {
-                KeyCode::Enter => {
-                    self.commit_site_input();
-                }
-                KeyCode::Esc => {
-                    self.cancel_site_input();
-                }
-                KeyCode::Backspace => {
-                    self.site_input.pop();
-                }
-                KeyCode::Char(c) => {
-                    self.site_input.push(c);
-                }
-                _ => {}
-            }
+        if self.handle_site_input_key(&key) {
             return;
         }
 
@@ -49,44 +32,119 @@ impl App {
             return;
         }
 
+        if self.handle_site_manager_navigation_key(&key) {
+            return;
+        }
+
+        if key.code == KeyCode::Delete {
+            self.remove_selected_site();
+            return;
+        }
+
+        self.handle_site_manager_shortcut_action(&key);
+    }
+
+    fn handle_blocklist_profile_input_key(&mut self, key: &KeyEvent) -> bool {
+        if !self.blocklist_profile_input_active {
+            return false;
+        }
+
         match key.code {
-            KeyCode::Esc | KeyCode::Char('b') => {
-                self.mode = AppMode::Timer;
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => false,
+            KeyCode::Enter => {
+                self.commit_blocklist_profile_input();
+                true
             }
+            KeyCode::Esc => {
+                self.cancel_blocklist_profile_input();
+                true
+            }
+            KeyCode::Backspace => {
+                self.blocklist_profile_input.pop();
+                true
+            }
+            KeyCode::Char(c) => {
+                self.blocklist_profile_input.push(c);
+                true
+            }
+            _ => true,
+        }
+    }
+
+    fn handle_site_input_key(&mut self, key: &KeyEvent) -> bool {
+        if !self.site_input_active {
+            return false;
+        }
+
+        match key.code {
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => false,
+            KeyCode::Enter => {
+                self.commit_site_input();
+                true
+            }
+            KeyCode::Esc => {
+                self.cancel_site_input();
+                true
+            }
+            KeyCode::Backspace => {
+                self.site_input.pop();
+                true
+            }
+            KeyCode::Char(c) => {
+                self.site_input.push(c);
+                true
+            }
+            _ => true,
+        }
+    }
+
+    fn handle_site_manager_navigation_key(&mut self, key: &KeyEvent) -> bool {
+        match key.code {
             KeyCode::Down | KeyCode::Char('j') if !self.active_policy_sites().is_empty() => {
                 self.selected_site =
                     (self.selected_site + 1).min(self.active_policy_sites().len() - 1);
+                true
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 self.selected_site = self.selected_site.saturating_sub(1);
+                true
             }
-            KeyCode::Char('m') => {
-                self.toggle_site_list_mode();
+            KeyCode::Esc => {
+                self.mode = AppMode::Timer;
+                true
             }
-            KeyCode::Char('a') => {
-                self.start_site_input(SiteInputMode::Add);
+            _ => false,
+        }
+    }
+
+    fn site_manager_shortcut_action(&self, key: &KeyEvent) -> Option<ShortcutAction> {
+        SITE_MANAGER_SHORTCUT_ACTIONS
+            .into_iter()
+            .find(|action| self.shortcut_matches(*action, key))
+    }
+
+    fn handle_site_manager_shortcut_action(&mut self, key: &KeyEvent) {
+        let Some(action) = self.site_manager_shortcut_action(key) else {
+            return;
+        };
+
+        match action {
+            ShortcutAction::BackSiteManager => self.mode = AppMode::Timer,
+            ShortcutAction::ToggleSiteListMode => self.toggle_site_list_mode(),
+            ShortcutAction::SiteAdd => self.start_site_input(SiteInputMode::Add),
+            ShortcutAction::SiteEdit => self.start_site_input(SiteInputMode::Edit),
+            ShortcutAction::SiteDelete => self.remove_selected_site(),
+            ShortcutAction::SelectPreviousBlocklistProfile => {
+                self.select_previous_blocklist_profile()
             }
-            KeyCode::Char('e') => {
-                self.start_site_input(SiteInputMode::Edit);
+            ShortcutAction::SelectNextBlocklistProfile => self.select_next_blocklist_profile(),
+            ShortcutAction::CreateBlocklistProfile => {
+                self.start_blocklist_profile_input(BlocklistProfileInputMode::Create)
             }
-            KeyCode::Char('d') | KeyCode::Delete => {
-                self.remove_selected_site();
+            ShortcutAction::RenameBlocklistProfile => {
+                self.start_blocklist_profile_input(BlocklistProfileInputMode::Rename)
             }
-            KeyCode::Char('[') => {
-                self.select_previous_blocklist_profile();
-            }
-            KeyCode::Char(']') => {
-                self.select_next_blocklist_profile();
-            }
-            KeyCode::Char('n') => {
-                self.start_blocklist_profile_input(BlocklistProfileInputMode::Create);
-            }
-            KeyCode::Char('r') => {
-                self.start_blocklist_profile_input(BlocklistProfileInputMode::Rename);
-            }
-            KeyCode::Char('x') => {
-                self.delete_active_blocklist_profile();
-            }
+            ShortcutAction::DeleteBlocklistProfile => self.delete_active_blocklist_profile(),
             _ => {}
         }
     }
