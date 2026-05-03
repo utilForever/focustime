@@ -35,6 +35,7 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
+    assert_eq!(cfg.shortcuts, ShortcutConfig::default());
 }
 
 #[test]
@@ -168,6 +169,14 @@ fn round_trip_full_config() {
             project: "Team Focus".to_string(),
             language: "Focus Session".to_string(),
         },
+        shortcuts: ShortcutConfig {
+            timer_toggle_pause: "space".to_string(),
+            timer_stop_reset: "x".to_string(),
+            open_stats_history: "y".to_string(),
+            back_stats_history: "y".to_string(),
+            quit: "v".to_string(),
+            ..ShortcutConfig::default()
+        },
     };
     let toml_str = toml::to_string_pretty(&original).unwrap();
     let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
@@ -202,6 +211,7 @@ fn round_trip_full_config() {
     assert_eq!(parsed.monthly_goal, original.monthly_goal);
     assert_eq!(parsed.goal_carry_over, original.goal_carry_over);
     assert_eq!(parsed.wakatime, original.wakatime);
+    assert_eq!(parsed.shortcuts, original.shortcuts);
 }
 
 #[test]
@@ -233,6 +243,7 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
+    assert_eq!(cfg.shortcuts, ShortcutConfig::default());
 }
 
 #[test]
@@ -298,6 +309,44 @@ fn normalize_break_templates_deduplicates_names_and_clamps_values() {
     );
     assert_eq!(cfg.break_templates[1].name, "recovery (2)");
     assert_eq!(cfg.selected_break_template, "Recovery");
+}
+
+#[test]
+fn shortcut_config_normalizes_invalid_tokens_to_defaults() {
+    let cfg = AppConfig {
+        shortcuts: ShortcutConfig {
+            quit: "qq".to_string(),
+            timer_toggle_pause: "    ".to_string(),
+            site_add: "Add".to_string(),
+            planner_select_recent: "".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(cfg.shortcuts.quit, "q");
+    assert_eq!(cfg.shortcuts.timer_toggle_pause, "space");
+    assert_eq!(cfg.shortcuts.site_add, "a");
+    assert_eq!(cfg.shortcuts.planner_select_recent, "r");
+}
+
+#[test]
+fn shortcut_config_normalizes_space_and_uppercase_tokens() {
+    let cfg: AppConfig = toml::from_str(
+        r#"
+[shortcuts]
+timer_toggle_pause = "SPACE"
+open_stats_history = "Y"
+select_previous_blocklist_profile = "["
+"#,
+    )
+    .unwrap();
+    let normalized = cfg.normalize();
+
+    assert_eq!(normalized.shortcuts.timer_toggle_pause, "space");
+    assert_eq!(normalized.shortcuts.open_stats_history, "y");
+    assert_eq!(normalized.shortcuts.select_previous_blocklist_profile, "[");
 }
 
 #[test]
@@ -568,6 +617,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         monthly_goal: MonthlyGoalConfig::default(),
         goal_carry_over: GoalCarryOverConfig::default(),
         wakatime: WakatimeMetadataConfig::default(),
+        shortcuts: ShortcutConfig::default(),
     };
     let custom = cfg.effective_custom_profile();
     assert_eq!(custom.focus_secs, 40 * 60);

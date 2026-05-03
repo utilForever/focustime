@@ -48,8 +48,11 @@ mod profile_management;
 mod schedule_editor;
 mod schedule_runtime;
 mod session_planner;
+mod shortcuts;
 mod site_manager;
 mod timer_flow;
+pub use shortcuts::ShortcutAction;
+use shortcuts::ShortcutBindings;
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
@@ -553,6 +556,7 @@ pub struct App {
     stats: FocusStats,
     stats_dirty: bool,
     stats_has_unsaved_elapsed: bool,
+    shortcuts: ShortcutBindings,
 }
 
 impl App {
@@ -591,6 +595,7 @@ impl App {
         let active_blocklist_profile =
             blocklist_profile_index(&blocklist_profiles, &config.selected_blocklist_profile);
         let break_templates = config.break_templates.clone();
+        let shortcuts = ShortcutBindings::from_config(&config.shortcuts);
         let active_break_template = resolve_active_break_template(
             &break_templates,
             &config.selected_break_template,
@@ -692,6 +697,7 @@ impl App {
             stats,
             stats_dirty: false,
             stats_has_unsaved_elapsed: false,
+            shortcuts,
         };
         app.clamp_break_template_selection();
         app.recompute_blocker_sites_from_active_profile();
@@ -702,6 +708,11 @@ impl App {
         app.refresh_setup_diagnostics();
         app.sync_today_goal_snapshot();
         app
+    }
+
+    #[cfg(test)]
+    pub fn from_config_for_tests(config: AppConfig) -> Self {
+        Self::from_config(config)
     }
 
     /// Advance WakaTime tracking by `elapsed_secs` simulated seconds.
@@ -756,6 +767,18 @@ impl App {
 
     pub fn timer_note_input_active(&self) -> bool {
         self.timer_note_input_active
+    }
+
+    pub(super) fn shortcut_matches(&self, action: ShortcutAction, key: &KeyEvent) -> bool {
+        self.shortcuts.matches(action, key)
+    }
+
+    pub fn shortcut_hint(&self, action: ShortcutAction) -> String {
+        self.shortcuts.hint(action)
+    }
+
+    pub fn shortcut_label(&self, action: ShortcutAction) -> String {
+        self.shortcuts.label(action)
     }
 
     pub fn timer_note_input_value(&self) -> &str {
@@ -1150,10 +1173,11 @@ impl App {
     }
 
     fn handle_quit_key(&mut self, key: &KeyEvent, esc_quits: bool) -> bool {
-        let is_quit_key = matches!(
-            key.code,
-            KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('c')
-        ) && (key.code != KeyCode::Esc || esc_quits)
+        let is_quit_char = self.shortcut_matches(ShortcutAction::Quit, key);
+        let is_ctrl_c =
+            matches!(key.code, KeyCode::Char('c')) && key.modifiers.contains(KeyModifiers::CONTROL);
+        let is_quit_key = (is_quit_char || key.code == KeyCode::Esc || is_ctrl_c)
+            && (key.code != KeyCode::Esc || esc_quits)
             && (key.code != KeyCode::Char('c') || key.modifiers.contains(KeyModifiers::CONTROL));
         if is_quit_key && self.strict_mode_enforced_for_focus() {
             self.phase_notification =
@@ -1161,20 +1185,21 @@ impl App {
             return true;
         }
 
-        match key.code {
-            KeyCode::Char('q') => {
-                self.should_quit = true;
-                true
+        if is_quit_char {
+            self.should_quit = true;
+            true
+        } else {
+            match key.code {
+                KeyCode::Esc if esc_quits => {
+                    self.should_quit = true;
+                    true
+                }
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.should_quit = true;
+                    true
+                }
+                _ => false,
             }
-            KeyCode::Esc if esc_quits => {
-                self.should_quit = true;
-                true
-            }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.should_quit = true;
-                true
-            }
-            _ => false,
         }
     }
 
