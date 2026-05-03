@@ -3403,6 +3403,30 @@ fn strict_mode_blocks_quit_keys_during_active_focus() {
 }
 
 #[test]
+fn strict_mode_blocks_custom_c_quit_key_during_active_focus() {
+    let config = AppConfig {
+        strict_mode: true,
+        shortcuts: ShortcutConfig {
+            quit: "c".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+
+    app.handle_key(key(KeyCode::Char('c')));
+
+    assert!(!app.should_quit);
+    assert!(
+        app.phase_notification
+            .as_deref()
+            .is_some_and(|msg| msg.contains("Strict mode active"))
+    );
+}
+
+#[test]
 fn strict_mode_allows_quit_when_focus_not_active() {
     let config = AppConfig {
         strict_mode: true,
@@ -3413,6 +3437,25 @@ fn strict_mode_allows_quit_when_focus_not_active() {
     app.timer.status = TimerStatus::Idle;
 
     app.handle_key(key(KeyCode::Char('q')));
+
+    assert!(app.should_quit);
+}
+
+#[test]
+fn custom_c_quit_key_allows_quit_when_focus_not_active() {
+    let config = AppConfig {
+        strict_mode: true,
+        shortcuts: ShortcutConfig {
+            quit: "c".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Idle;
+
+    app.handle_key(key(KeyCode::Char('c')));
 
     assert!(app.should_quit);
 }

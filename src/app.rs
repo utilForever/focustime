@@ -1174,32 +1174,21 @@ impl App {
 
     fn handle_quit_key(&mut self, key: &KeyEvent, esc_quits: bool) -> bool {
         let is_quit_char = self.shortcut_matches(ShortcutAction::Quit, key);
+        let is_esc_quit = key.code == KeyCode::Esc && esc_quits;
         let is_ctrl_c =
             matches!(key.code, KeyCode::Char('c')) && key.modifiers.contains(KeyModifiers::CONTROL);
-        let is_quit_key = (is_quit_char || key.code == KeyCode::Esc || is_ctrl_c)
-            && (key.code != KeyCode::Esc || esc_quits)
-            && (key.code != KeyCode::Char('c') || key.modifiers.contains(KeyModifiers::CONTROL));
+        let is_quit_key = is_quit_char || is_esc_quit || is_ctrl_c;
         if is_quit_key && self.strict_mode_enforced_for_focus() {
             self.phase_notification =
                 Some("Strict mode active. Finish or stop focus before quitting.".to_string());
             return true;
         }
 
-        if is_quit_char {
+        if is_quit_char || is_esc_quit || is_ctrl_c {
             self.should_quit = true;
             true
         } else {
-            match key.code {
-                KeyCode::Esc if esc_quits => {
-                    self.should_quit = true;
-                    true
-                }
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.should_quit = true;
-                    true
-                }
-                _ => false,
-            }
+            false
         }
     }
 
