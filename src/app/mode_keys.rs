@@ -4,6 +4,20 @@ use crate::app::{
     format_duration_label, occurrence_key,
 };
 
+const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 11] = [
+    ShortcutAction::TimerTogglePause,
+    ShortcutAction::TimerStopReset,
+    ShortcutAction::TimerNextPhase,
+    ShortcutAction::OpenSiteManager,
+    ShortcutAction::OpenProfileManager,
+    ShortcutAction::OpenSessionPlanner,
+    ShortcutAction::OpenStatsHistory,
+    ShortcutAction::OpenSetupDiagnostics,
+    ShortcutAction::TimerEditNote,
+    ShortcutAction::BreakGlassOverride,
+    ShortcutAction::DelayScheduleStart,
+];
+
 impl App {
     pub(super) fn handle_key_timer(&mut self, key: KeyEvent) {
         if self.timer_note_input_active {
@@ -19,31 +33,36 @@ impl App {
             return;
         }
 
-        if self.shortcut_matches(ShortcutAction::TimerTogglePause, &key) {
-            self.handle_timer_toggle_pause_key();
-        } else if self.shortcut_matches(ShortcutAction::TimerStopReset, &key) {
-            self.handle_timer_stop_reset_key();
-        } else if self.shortcut_matches(ShortcutAction::TimerNextPhase, &key) {
-            self.handle_timer_next_phase_key();
-        } else if self.shortcut_matches(ShortcutAction::OpenSiteManager, &key) {
-            self.open_site_manager();
-        } else if self.shortcut_matches(ShortcutAction::OpenProfileManager, &key) {
-            if self.strict_mode_enforced_for_focus() {
-                return;
+        if let Some(action) = self.timer_shortcut_action(&key) {
+            self.execute_timer_shortcut_action(action);
+        }
+    }
+
+    fn timer_shortcut_action(&self, key: &KeyEvent) -> Option<ShortcutAction> {
+        TIMER_SHORTCUT_ACTIONS
+            .into_iter()
+            .find(|action| self.shortcut_matches(*action, key))
+    }
+
+    fn execute_timer_shortcut_action(&mut self, action: ShortcutAction) {
+        match action {
+            ShortcutAction::TimerTogglePause => self.handle_timer_toggle_pause_key(),
+            ShortcutAction::TimerStopReset => self.handle_timer_stop_reset_key(),
+            ShortcutAction::TimerNextPhase => self.handle_timer_next_phase_key(),
+            ShortcutAction::OpenSiteManager => self.open_site_manager(),
+            ShortcutAction::OpenProfileManager => {
+                if self.strict_mode_enforced_for_focus() {
+                    return;
+                }
+                self.open_profile_manager();
             }
-            self.open_profile_manager();
-        } else if self.shortcut_matches(ShortcutAction::OpenSessionPlanner, &key) {
-            self.open_session_planner();
-        } else if self.shortcut_matches(ShortcutAction::OpenStatsHistory, &key) {
-            self.open_stats_history();
-        } else if self.shortcut_matches(ShortcutAction::OpenSetupDiagnostics, &key) {
-            self.open_setup_diagnostics();
-        } else if self.shortcut_matches(ShortcutAction::TimerEditNote, &key) {
-            self.start_timer_note_input();
-        } else if self.shortcut_matches(ShortcutAction::BreakGlassOverride, &key) {
-            self.handle_break_glass_key();
-        } else if self.shortcut_matches(ShortcutAction::DelayScheduleStart, &key) {
-            self.delay_active_schedule_start();
+            ShortcutAction::OpenSessionPlanner => self.open_session_planner(),
+            ShortcutAction::OpenStatsHistory => self.open_stats_history(),
+            ShortcutAction::OpenSetupDiagnostics => self.open_setup_diagnostics(),
+            ShortcutAction::TimerEditNote => self.start_timer_note_input(),
+            ShortcutAction::BreakGlassOverride => self.handle_break_glass_key(),
+            ShortcutAction::DelayScheduleStart => self.delay_active_schedule_start(),
+            _ => {}
         }
     }
 
