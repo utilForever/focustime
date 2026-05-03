@@ -99,6 +99,11 @@ const SETUP_SCOPE_ACTIONS: [ShortcutAction; 2] = [
     ShortcutAction::RefreshSetupDiagnostics,
 ];
 
+const FALLBACK_SHORTCUT_KEYS: [char; 36] = [
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'i', 'j', 'k', 'l', 'o', 'q', 'v', 'w', 'y', '1', '2', '3',
+    '4', '5', '6', '7', '8', '9', '0', '[', ']', ';', ',', '.', '/', '-', '=', '`', '\\',
+];
+
 #[derive(Debug, Clone)]
 pub struct ShortcutBindings {
     keys: BTreeMap<ShortcutAction, char>,
@@ -203,6 +208,10 @@ fn resolve_scope(
 ) {
     let mut used = HashSet::new();
     used.insert(quit_key);
+    let scope_defaults: Vec<char> = actions
+        .iter()
+        .map(|action| default_shortcut_char(*action))
+        .collect();
 
     for action in actions {
         let requested = requested_shortcut_char(config, *action);
@@ -211,12 +220,25 @@ fn resolve_scope(
             requested
         } else if !used.contains(&default) {
             default
+        } else if let Some(scope_fallback) = scope_defaults
+            .iter()
+            .copied()
+            .find(|key| !used.contains(key))
+        {
+            scope_fallback
         } else {
-            requested
+            fallback_shortcut_key(&used).unwrap_or(default)
         };
         keys.insert(*action, resolved);
         used.insert(resolved);
     }
+}
+
+fn fallback_shortcut_key(used: &HashSet<char>) -> Option<char> {
+    FALLBACK_SHORTCUT_KEYS
+        .iter()
+        .copied()
+        .find(|key| !used.contains(key))
 }
 
 fn requested_shortcut_char(config: &ShortcutConfig, action: ShortcutAction) -> char {
@@ -330,5 +352,54 @@ fn key_token(value: char) -> String {
         value.to_ascii_lowercase().to_string()
     } else {
         value.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ShortcutAction, ShortcutBindings};
+    use crate::config::ShortcutConfig;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    #[test]
+    fn resolve_scope_keeps_quit_unique_when_quit_is_c() {
+        let bindings = ShortcutBindings::from_config(&ShortcutConfig {
+            quit: "c".to_string(),
+            timer_toggle_pause: "c".to_string(),
+            timer_stop_reset: "c".to_string(),
+            ..ShortcutConfig::default()
+        });
+
+        assert!(bindings.matches(
+            ShortcutAction::Quit,
+            &KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE)
+        ));
+        assert!(!bindings.matches(
+            ShortcutAction::TimerTogglePause,
+            &KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE)
+        ));
+        assert!(!bindings.matches(
+            ShortcutAction::TimerStopReset,
+            &KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE)
+        ));
+    }
+
+    #[test]
+    fn resolve_scope_avoids_duplicates_when_requested_and_default_collide() {
+        let bindings = ShortcutBindings::from_config(&ShortcutConfig {
+            quit: "a".to_string(),
+            timer_stop_reset: "a".to_string(),
+            timer_next_phase: "s".to_string(),
+            ..ShortcutConfig::default()
+        });
+
+        assert!(!bindings.matches(
+            ShortcutAction::TimerStopReset,
+            &KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE)
+        ));
+        assert!(!bindings.matches(
+            ShortcutAction::TimerNextPhase,
+            &KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE)
+        ));
     }
 }
