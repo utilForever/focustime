@@ -544,27 +544,29 @@ so downstream consumers can handle versioned contracts explicitly.
 
 ## The way the system works
 
-`focustime` is a single-binary Rust TUI app composed of seven modules in `src/`:
+`focustime` is a single-binary Rust app organized around top-level facade modules
+with focused submodules (updated in #240):
 
-- `src/main.rs`: terminal lifecycle and event loop.
-- `src/app.rs`: application state and orchestration.
-- `src/timer.rs`: Pomodoro timer state machine.
-- `src/blocker.rs`: hosts-file site blocking and unblocking.
-- `src/wakatime.rs`: heartbeat tracking integration.
-- `src/notifications.rs`: phase transition notifications and optional sound.
-- `src/ui.rs`: Ratatui rendering for timer, session planner, site manager, profile, history, and setup diagnostics views.
+- `src/main.rs`: composition root, CLI/TUI dispatch, terminal lifecycle, and event loop.
+- `src/app.rs` + `src/app/*.rs`: runtime state/orchestration split by domain (timer flow, planner, profiles, site manager, schedule, persistence, diagnostics, CLI API).
+- `src/cli.rs` + `src/cli/*.rs`: CLI args/parsing/execution/status/output pipeline.
+- `src/stats.rs` + `src/stats/*.rs`: stats persistence, analytics, trends, recording, planner state, and exports.
+- `src/ui.rs` + `src/ui/*.rs`: Ratatui rendering split by screen (timer, session planner, site manager, profile manager, history, setup diagnostics).
+- `src/config.rs` + `src/config/paths.rs`: config schema/normalization and environment-aware path resolution.
+- Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, `src/wakatime.rs`, and `src/notifications.rs`.
 
 WakaTime tracking is optional and activates only when an API key is configured
 (read from `~/.wakatime.cfg`).
 
 Runtime flow (high-level):
 
-1. The main loop renders UI and reads keyboard input.
-2. `App` handles key events (`start/pause`, `stop`, `next`, session planner actions, site manager actions).
-3. Timer ticks advance every elapsed second while running.
-4. Phase-completion notifications are dispatched asynchronously.
-5. Blocking is applied during focus phases and removed outside focus.
-6. WakaTime tracking stays in sync with focus-running state and applies async
+1. `main` parses CLI args and either runs a CLI command path or starts the TUI loop.
+2. In TUI mode, each frame renders UI and reads keyboard/paste input.
+3. `App` handles key events (`start/pause`, `stop`, `next`, session planner actions, site manager actions).
+4. Timer ticks advance every elapsed second while running.
+5. Phase-completion notifications are dispatched asynchronously.
+6. Blocking is applied during focus phases and removed outside focus.
+7. WakaTime tracking stays in sync with focus-running state and applies async
    heartbeat outcomes without blocking timer flow.
 
 ### WakaTime reliability behavior

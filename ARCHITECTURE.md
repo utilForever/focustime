@@ -1,50 +1,70 @@
 # Architecture
 
-`focustime` is a single-binary Rust TUI application with seven modules in `src/`:
-timer logic, app state/orchestration, site blocking, WakaTime tracking, phase
-notifications, UI rendering, and the main event loop.
+`focustime` is a single-binary Rust TUI application organized around stable
+top-level facades (`app.rs`, `cli.rs`, `stats.rs`, `ui.rs`) plus focused
+submodules introduced in **#240**. The refactor kept runtime behavior and public
+entry points stable while splitting large files by responsibility.
 
 ## Visual overview
 
 ```mermaid
 flowchart LR
-    M["main.rs<br/>event loop + terminal lifecycle"]
-    A["app.rs<br/>state + orchestration"]
-    T["timer.rs<br/>Pomodoro state machine"]
-    B["blocker.rs<br/>hosts file blocking"]
-    W["wakatime.rs<br/>heartbeat tracking"]
-    N["notifications.rs<br/>phase notifications"]
-    U["ui.rs<br/>Ratatui rendering"]
-    OS["OS / hosts file / DNS cache"]
+    M["main.rs<br/>entrypoint + terminal lifecycle"]
+    CLI["cli.rs + cli/*<br/>CLI contract/parsing/execution/output"]
+    APP["app.rs + app/*<br/>runtime orchestration + state transitions"]
+    UI["ui.rs + ui/*<br/>screen rendering"]
+    ST["stats.rs + stats/*<br/>persistence/analytics/export"]
+    CFG["config.rs + config/paths.rs<br/>config model + path resolution"]
+    TM["timer.rs<br/>Pomodoro state machine"]
+    BL["blocker.rs<br/>hosts-file blocking"]
+    WK["wakatime.rs<br/>heartbeat tracking"]
+    NT["notifications.rs<br/>phase notifications"]
+    SCH["schedule.rs<br/>window compilation/selection"]
+    REC["session_recovery.rs<br/>runtime snapshot I/O"]
+    TL["task_labels.rs<br/>task label normalization/indexing"]
+    OS["OS / filesystem / hosts / notifications"]
     API["WakaTime API"]
 
-    M -->|"handle key + tick"| A
-    M -->|"render(frame, &app)"| U
-    A --> T
-    A --> B
-    A --> W
-    A --> N
-    A -->|"state read by ui"| U
-    B --> OS
-    W --> API
-    N --> OS
+    M --> CLI
+    M --> APP
+    M --> UI
+    APP --> CFG
+    APP --> TM
+    APP --> BL
+    APP --> WK
+    APP --> NT
+    APP --> SCH
+    APP --> ST
+    APP --> TL
+    APP --> REC
+    CLI --> APP
+    CLI --> CFG
+    CLI --> ST
+    UI --> APP
+    BL --> OS
+    NT --> OS
+    WK --> API
 ```
 
 ## Module map
 
 | Module | Responsibility | Main collaborators |
 | --- | --- | --- |
-| `main.rs` | Entry point, terminal setup/teardown, event loop cadence, key event polling | `app`, `ui`, `crossterm`, `ratatui` |
-| `app.rs` | Application state, mode switching, key handling, coordination between timer/blocker/WakaTime/notifications | `timer`, `blocker`, `wakatime`, `notifications` |
-| `timer.rs` | Pomodoro domain model and transitions (`Focus`, `ShortBreak`, `LongBreak`) | `app` |
-| `blocker.rs` | Hosts-file based site blocking/unblocking and DNS cache flush integration | `app`, OS commands/filesystem |
+| `main.rs` | Composition root, CLI vs TUI dispatch, terminal setup/teardown, frame/tick loop | `cli`, `app`, `ui`, `crossterm`, `ratatui` |
+| `app.rs` + `app/*` | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`) | `timer`, `blocker`, `wakatime`, `notifications`, `schedule`, `stats`, `config` |
+| `cli.rs` + `cli/*` | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output` | `app`, `config`, `stats`, `blocker` |
+| `stats.rs` + `stats/*` | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers | `app`, `task_labels`, filesystem |
+| `ui.rs` + `ui/*` | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup` | `app`, `timer`, `wakatime` |
+| `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution | `app`, `cli`, filesystem/env |
+| `timer.rs` | Pomodoro timer domain model and phase transitions | `app`, `ui` |
+| `blocker.rs` | Hosts-file blocking/unblocking and diagnostics | `app`, `cli`, OS/filesystem |
+| `schedule.rs` | Recurring/one-time schedule compile and conflict/occurrence logic | `app`, `cli`, `config` |
+| `session_recovery.rs` | Runtime recovery snapshot read/write and reconciliation helpers | `app`, `cli`, filesystem |
+| `task_labels.rs` | Task-label normalization, canonicalization, and index helpers | `app`, `stats`, `cli` |
 | `wakatime.rs` | WakaTime config parsing and heartbeat scheduling/sending | `app`, HTTP (`ureq`) |
 | `notifications.rs` | Phase completion notifications and optional sound alerts | `app`, OS notification commands |
-| `ui.rs` | Ratatui rendering for Timer, Site Manager, Profile, History, and Setup Diagnostics screens | `app`, `timer` |
 
-## Related explanation
-
-### Runtime flow (timer mode)
+## Runtime flow (timer mode)
 
 ```mermaid
 sequenceDiagram
@@ -60,14 +80,14 @@ sequenceDiagram
         Main->>App: poll_wakatime_status()
         App->>Waka: poll_events()
         Main->>UI: render(frame, &app)
-        Main->>App: handle_key(key) (if input)
+        Main->>App: handle_key/handle_paste (if input)
         Main->>App: on_tick() (when 1s elapsed)
         App->>Timer: tick()
         alt phase changed
             App->>Blocker: block()/unblock()
             App->>Notify: notify_phase_completion()
         end
-        Main->>App: on_wakatime_elapsed(elapsed_secs) (when >=1s)
+        Main->>App: on_wakatime_elapsed(elapsed_secs)
         alt Focus + Running
             App->>Waka: tick_elapsed(elapsed_secs)
         end
@@ -75,47 +95,35 @@ sequenceDiagram
     end
 ```
 
-1. `main` creates `App`, initializes terminal state, and enters a loop.
-2. Each loop iteration first polls async WakaTime heartbeat outcomes, then draws
-   UI from current state (`ui::render(frame, &app)`).
-3. Key events are routed to `App::handle_key`, which updates timer state, mode,
-   site list, and quit intent.
-4. A 100ms tick cadence accumulates elapsed time; every elapsed second while the
-   timer is running triggers `App::on_tick()`, which advances timer state and
-   reapplies block/unblock policy when phase transitions occur.
-5. WakaTime tracking is synchronized by `App`: focus-running state starts/stops
-   tracking, accumulated elapsed focus seconds (when at least 1s has passed) are
-   fed to `WakatimeTracker::tick_elapsed(elapsed_secs)`, and async heartbeat
-   outcomes are polled once per frame to surface `sending`/`retrying`/`error`
-   status in UI without blocking timer flow. `WakatimeTracker` retries transient
-   failures with bounded backoff to improve reliability while preserving
-   best-effort semantics.
-6. Phase notifications are dispatched asynchronously on natural phase completions
-   (not manual skips), with optional sound and platform-specific desktop delivery.
-7. Blocking policy is phase-aware: blocking is active only during focus sessions
-   (running or paused), and removed for break/idle phases.
+1. `main` parses CLI arguments and either executes a CLI command path (`cli`) or
+   boots the interactive TUI loop (`app` + `ui`).
+2. Each TUI frame polls async WakaTime outcomes, renders via `ui::render`, then
+   processes keyboard/paste input through `App` key handlers.
+3. A 100ms cadence accumulates elapsed time; each elapsed second advances
+   `App::on_tick()` and applies phase-driven side effects.
+4. `App` keeps blocking, notifications, scheduling, and WakaTime in sync with
+   timer state; side effects are isolated in dedicated modules.
 
 ## Visibility rules
 
-- Keep modules private to the binary crate via `mod ...` declarations in `main.rs`.
-- Expose only cross-module API with `pub` (examples: `App`, `TimerState`,
-  `SiteBlocker`, `WakatimeTracker`, `ui::render`).
-- Keep implementation details private (`fn`) unless tests or same-crate use requires
-  broader access.
-- Use `pub(crate)` for crate-internal helpers that should not be externally visible
-  (example: `SiteBlocker::strip_block_section`).
-- Prefer private struct fields by default; make fields public only when direct
-  read/write across modules is part of the intended state model.
+- Keep top-level modules crate-private via `mod ...` declarations in `main.rs`.
+- Use root facade modules (`app.rs`, `cli.rs`, `stats.rs`, `ui.rs`) as stable
+  integration points; keep submodule details internal by default.
+- Expose only cross-module API with `pub`/`pub(crate)` when required by
+  collaborators or tests.
+- Prefer private fields/functions unless cross-module mutation is intentional.
 
 ## File conventions
 
-- One top-level module per file in `src/` (`app.rs`, `timer.rs`, `blocker.rs`,
-  `ui.rs`, `wakatime.rs`, `notifications.rs`), with `main.rs` as the composition
-  root.
-- Keep domain logic (`timer`, `blocker`, `wakatime`) separate from presentation
-  (`ui`) and orchestration (`app`).
-- Place module tests in the same file using `#[cfg(test)] mod tests`.
-- Keep platform-specific behavior explicit with `#[cfg(...)]` blocks in the module
-  that owns that behavior.
-- Use descriptive naming that reflects behavior (`on_tick`, `next_phase`,
-  `apply_blocking_for_phase`, `send_heartbeat_async`) rather than generic helpers.
+- Use a **facade + submodule** pattern for large domains:
+  - `src/app.rs` with `src/app/*.rs`
+  - `src/cli.rs` with `src/cli/*.rs`
+  - `src/stats.rs` with `src/stats/*.rs`
+  - `src/ui.rs` with `src/ui/*.rs`
+  - `src/config.rs` with `src/config/paths.rs`
+- Keep behavior grouped by domain responsibility (timer flow, planner, schedule,
+  CLI parsing, export logic, screen rendering) rather than by utility type.
+- Place domain test suites in colocated `tests.rs` submodules where it improves
+  readability and keeps facades focused.
+- Keep platform-specific behavior explicit with `#[cfg(...)]` in the module that
+  owns it.
