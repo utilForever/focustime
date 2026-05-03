@@ -242,6 +242,30 @@ consistent screen structure:
 - **Command legends** use short grouped lines so common actions are easier to
   scan quickly during focus sessions.
 
+## Keyboard shortcut customization
+
+Core command shortcuts are configurable in `config.toml` under `[shortcuts]`.
+This first pass covers command actions (timer controls, view switching, manager
+actions, export/refresh, and quit).
+
+For safety and editing ergonomics, these keys remain fixed in this version:
+
+- `Enter`, `Esc`, arrow keys, `Delete`
+- text-entry behavior (`Type`, `Backspace`, paste)
+- `Ctrl-C` as a quit fallback
+
+Example:
+
+```toml
+[shortcuts]
+open_stats_history = "y"
+open_session_planner = "g"
+back_stats_history = "y"
+timer_stop_reset = "x"
+quit = "q"
+timer_toggle_pause = "space"
+```
+
 ## Pomodoro profiles
 
 `focustime` now supports selectable Pomodoro profiles:
@@ -300,6 +324,13 @@ selected_blocklist_profile = "Work"
 # Legacy compatibility mirror for the selected profile's automation strict mode.
 strict_mode = false
 break_glass_duration_secs = 300
+
+[shortcuts]
+timer_toggle_pause = "space"
+timer_stop_reset = "s"
+open_session_planner = "t"
+open_stats_history = "h"
+quit = "q"
 
 [[break_templates]]
 name = "Classic"
