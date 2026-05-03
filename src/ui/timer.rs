@@ -1,6 +1,6 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Gauge, Layout, Line,
-    Local, Modifier, Paragraph, Rect, Style, TimeZone, TimerPhase, TimerStatus,
+    Local, Modifier, Paragraph, Rect, ShortcutAction, Style, TimeZone, TimerPhase, TimerStatus,
     WakatimeRuntimeState, Wrap, centered_rect, format_timer_goal_streak_line,
     readable_goal_streak_text, render_hint_lines,
 };
@@ -136,7 +136,10 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
         )
     } else {
         (
-            "🎯 Task: not selected ([t] Planner)".to_string(),
+            format!(
+                "🎯 Task: not selected ({} Planner)",
+                app.shortcut_hint(ShortcutAction::OpenSessionPlanner)
+            ),
             Style::default().fg(Color::Yellow),
         )
     };
@@ -145,7 +148,10 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
         (format!("📝 Note: {note}"), Style::default().fg(Color::Cyan))
     } else if can_edit_session_note {
         (
-            "📝 Note: none yet ([m] Edit note)".to_string(),
+            format!(
+                "📝 Note: none yet ({} Edit note)",
+                app.shortcut_hint(ShortcutAction::TimerEditNote)
+            ),
             Style::default().fg(Color::DarkGray),
         )
     } else {
@@ -200,7 +206,10 @@ pub(super) fn timer_status_text(app: &App) -> (String, String, String) {
         TimerStatus::Idle => "📍 Status: ⏹ Idle".to_string(),
     };
     let strict_text = if app.strict_reset_confirmation_pending() {
-        "🔒 Strict: confirm reset [s]".to_string()
+        format!(
+            "🔒 Strict: confirm reset {}",
+            app.shortcut_hint(ShortcutAction::TimerStopReset)
+        )
     } else if app.strict_mode_enforced_for_focus() {
         "🔒 Strict: active (skip/quit locked)".to_string()
     } else if app.strict_mode {
@@ -209,7 +218,10 @@ pub(super) fn timer_status_text(app: &App) -> (String, String, String) {
         "🔓 Strict: off".to_string()
     };
     let break_glass_text = if app.break_glass_confirmation_pending() {
-        "🚨 Break-glass: confirm [u]".to_string()
+        format!(
+            "🚨 Break-glass: confirm {}",
+            app.shortcut_hint(ShortcutAction::BreakGlassOverride)
+        )
     } else if let Some(remaining_secs) = app.break_glass_override_remaining_secs() {
         format!(
             "🚨 Break-glass: active ({})",
@@ -346,39 +358,67 @@ fn render_timer_hints(frame: &mut Frame, app: &App, area: Rect) {
     );
 }
 
-pub(super) fn timer_primary_hint(app: &App) -> &'static str {
+pub(super) fn timer_primary_hint(app: &App) -> String {
+    let timer_toggle = app.shortcut_hint(ShortcutAction::TimerTogglePause);
+    let timer_stop = app.shortcut_hint(ShortcutAction::TimerStopReset);
+    let timer_next = app.shortcut_hint(ShortcutAction::TimerNextPhase);
+    let timer_note = app.shortcut_hint(ShortcutAction::TimerEditNote);
+    let timer_unblock = app.shortcut_hint(ShortcutAction::BreakGlassOverride);
+    let timer_delay = app.shortcut_hint(ShortcutAction::DelayScheduleStart);
+
     if app.timer_note_input_active() {
-        "Note: Type text  [Enter] Save  [Esc] Cancel"
+        "Note: Type text  [Enter] Save  [Esc] Cancel".to_string()
     } else if app.break_glass_confirmation_pending() {
-        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [m] Note  [u] Confirm unblock  [z] Delay 10m"
+        format!(
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note  {timer_unblock} Confirm unblock  {timer_delay} Delay 10m"
+        )
     } else if app.strict_reset_confirmation_pending() {
-        "Timer: [Space] Run/Pause  [s] Confirm reset  [n] Next (Locked)  [m] Note  [u] Unblock  [z] Delay 10m"
+        format!(
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Confirm reset  {timer_next} Next (Locked)  {timer_note} Note  {timer_unblock} Unblock  {timer_delay} Delay 10m"
+        )
     } else if app.strict_mode_enforced_for_focus() {
-        "Timer: [Space] Run/Pause  [s] Stop/Reset (Confirm)  [n] Next (Locked)  [m] Note  [u] Unblock  [z] Delay 10m"
+        format!(
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset (Confirm)  {timer_next} Next (Locked)  {timer_note} Note  {timer_unblock} Unblock  {timer_delay} Delay 10m"
+        )
     } else if app.can_edit_session_note() {
-        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [m] Note  [u] Unblock  [z] Delay 10m"
+        format!(
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note  {timer_unblock} Unblock  {timer_delay} Delay 10m"
+        )
     } else {
-        "Timer: [Space] Run/Pause  [s] Stop/Reset  [n] Next  [m] Note (Focus only)  [u] Unblock  [z] Delay 10m"
+        format!(
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note (Focus only)  {timer_unblock} Unblock  {timer_delay} Delay 10m"
+        )
     }
 }
 
-pub(super) fn timer_secondary_hint(app: &App) -> &'static str {
+pub(super) fn timer_secondary_hint(app: &App) -> String {
+    let planner = app.shortcut_hint(ShortcutAction::OpenSessionPlanner);
+    let history = app.shortcut_hint(ShortcutAction::OpenStatsHistory);
+    let sites = app.shortcut_hint(ShortcutAction::OpenSiteManager);
+    let profiles = app.shortcut_hint(ShortcutAction::OpenProfileManager);
+    let setup = app.shortcut_hint(ShortcutAction::OpenSetupDiagnostics);
+
     if app.timer_note_input_active() {
-        "Views: shortcuts paused while editing note"
+        "Views: shortcuts paused while editing note".to_string()
     } else if app.strict_mode_enforced_for_focus() {
-        "Views: [t] Planner  [h] History  [b] Sites  [p] Profiles (Locked)  [d] Setup"
+        format!(
+            "Views: {planner} Planner  {history} History  {sites} Sites  {profiles} Profiles (Locked)  {setup} Setup"
+        )
     } else {
-        "Views: [t] Planner  [h] History  [b] Sites  [p] Profiles  [d] Setup"
+        format!(
+            "Views: {planner} Planner  {history} History  {sites} Sites  {profiles} Profiles  {setup} Setup"
+        )
     }
 }
 
-pub(super) fn timer_tertiary_hint(app: &App) -> &'static str {
+pub(super) fn timer_tertiary_hint(app: &App) -> String {
+    let quit = app.shortcut_label(ShortcutAction::Quit);
     if app.timer_note_input_active() {
-        "Note edit: [Esc] Cancel"
+        "Note edit: [Esc] Cancel".to_string()
     } else if app.strict_mode_enforced_for_focus() {
-        "Navigate: [q/Esc] Quit (Locked during active focus)"
+        format!("Navigate: [{quit}/Esc] Quit (Locked during active focus)")
     } else {
-        "Navigate: [q/Esc] Quit"
+        format!("Navigate: [{quit}/Esc] Quit")
     }
 }
 

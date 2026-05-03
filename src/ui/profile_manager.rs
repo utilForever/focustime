@@ -1,7 +1,7 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
-    ListItem, ListState, Modifier, PROFILE_EDIT_GROUPS, PROFILE_IDS, Paragraph, Span, Style, Wrap,
-    centered_rect, render_centered_error, render_hint_lines,
+    ListItem, ListState, Modifier, PROFILE_EDIT_GROUPS, PROFILE_IDS, Paragraph, ShortcutAction,
+    Span, Style, Wrap, centered_rect, render_centered_error, render_hint_lines,
 };
 
 pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
@@ -94,9 +94,12 @@ fn profile_list_items(app: &App) -> Vec<ListItem<'static>> {
 
 fn profile_editor_block(app: &App) -> Block<'static> {
     let editor_title = if app.profile_edit_active {
-        " Settings editor "
+        " Settings editor ".to_string()
     } else {
-        " Settings ([e] to edit) "
+        format!(
+            " Settings ({} to edit) ",
+            app.shortcut_hint(ShortcutAction::ProfileEdit)
+        )
     };
     Block::default()
         .borders(Borders::ALL)
@@ -179,23 +182,47 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
             Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule"),
             Line::from("Edit: [↑/↓] Field  [←/→] Change value  [Type/Backspace] WakaTime text"),
             Line::from(if app.strict_mode_enforced_for_focus() {
-                "[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit (Locked)"
+                format!(
+                    "[Enter] Save  [Esc] Cancel  [{}/Ctrl-C] Quit (Locked)",
+                    app.shortcut_label(ShortcutAction::Quit)
+                )
             } else {
-                "[Enter] Save  [Esc] Cancel  [q/Ctrl-C] Quit"
+                format!(
+                    "[Enter] Save  [Esc] Cancel  [{}/Ctrl-C] Quit",
+                    app.shortcut_label(ShortcutAction::Quit)
+                )
             }),
         ]
     } else {
         vec![
             Line::from(if app.strict_mode_enforced_for_focus() {
-                "Profiles: [↑/↓] Move  [Enter] Apply (Locked)  [e] Edit"
+                format!(
+                    "Profiles: [↑/↓] Move  [Enter] Apply (Locked)  {} Edit",
+                    app.shortcut_hint(ShortcutAction::ProfileEdit)
+                )
             } else {
-                "Profiles: [↑/↓] Move  [Enter] Apply  [e] Edit"
+                format!(
+                    "Profiles: [↑/↓] Move  [Enter] Apply  {} Edit",
+                    app.shortcut_hint(ShortcutAction::ProfileEdit)
+                )
             }),
-            Line::from("Templates: '[' previous  ']' next break template"),
+            Line::from(format!(
+                "Templates: '{}' previous  '{}' next break template",
+                app.shortcut_label(ShortcutAction::SelectPreviousBreakTemplate),
+                app.shortcut_label(ShortcutAction::SelectNextBreakTemplate),
+            )),
             Line::from(if app.strict_mode_enforced_for_focus() {
-                "View: [p/Esc] Back  [q] Quit (Locked)"
+                format!(
+                    "View: [{}/Esc] Back  [{}] Quit (Locked)",
+                    app.shortcut_label(ShortcutAction::BackProfileManager),
+                    app.shortcut_label(ShortcutAction::Quit),
+                )
             } else {
-                "View: [p/Esc] Back  [q] Quit"
+                format!(
+                    "View: [{}/Esc] Back  [{}] Quit",
+                    app.shortcut_label(ShortcutAction::BackProfileManager),
+                    app.shortcut_label(ShortcutAction::Quit),
+                )
             }),
         ]
     }

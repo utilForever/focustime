@@ -10,7 +10,7 @@ use ratatui::{
 use crate::app::{
     App, AppMode, BlocklistProfileInputMode, DailyGoalProgress, HistoryFeedbackLevel,
     PLANNER_RECENT_LABEL_LIMIT, PROFILE_IDS, PlannerFeedbackLevel, PlannerInputMode, SetupCheck,
-    SetupCheckLevel, SiteFeedbackLevel, SiteInputMode, SiteListMode,
+    SetupCheckLevel, ShortcutAction, SiteFeedbackLevel, SiteInputMode, SiteListMode,
 };
 use crate::blocker::BlockingPreviewAction;
 use crate::timer::{TimerPhase, TimerStatus};

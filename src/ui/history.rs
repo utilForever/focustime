@@ -1,8 +1,8 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, HistoryFeedbackLevel,
-    Layout, Line, List, ListItem, Modifier, Paragraph, Rect, Span, Style, Wrap, centered_rect,
-    format_duration_label, format_goal_period_progress, format_wakatime_heartbeat_timestamp,
-    render_hint_lines,
+    Layout, Line, List, ListItem, Modifier, Paragraph, Rect, ShortcutAction, Span, Style, Wrap,
+    centered_rect, format_duration_label, format_goal_period_progress,
+    format_wakatime_heartbeat_timestamp, render_hint_lines,
 };
 
 pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
@@ -217,11 +217,22 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         frame,
         inner[3],
         vec![
-            Line::from("History: [e] Export CSV + JSON"),
+            Line::from(format!(
+                "History: {} Export CSV + JSON",
+                app.shortcut_hint(ShortcutAction::ExportStatsHistory)
+            )),
             Line::from(if app.strict_mode_enforced_for_focus() {
-                "View: [h/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+                format!(
+                    "View: [{}/Esc] Back  [{}/Ctrl-C] Quit (Locked)",
+                    app.shortcut_label(ShortcutAction::BackStatsHistory),
+                    app.shortcut_label(ShortcutAction::Quit),
+                )
             } else {
-                "View: [h/Esc] Back  [q/Ctrl-C] Quit"
+                format!(
+                    "View: [{}/Esc] Back  [{}/Ctrl-C] Quit",
+                    app.shortcut_label(ShortcutAction::BackStatsHistory),
+                    app.shortcut_label(ShortcutAction::Quit),
+                )
             }),
         ],
     );

@@ -1,7 +1,7 @@
 use crate::ui::{
     Alignment, App, Block, BlockingPreviewAction, Borders, Color, Constraint, Direction, Frame,
-    Layout, Line, Modifier, Paragraph, Rect, SetupCheck, SetupCheckLevel, Span, Style, Wrap,
-    centered_rect, render_hint_lines,
+    Layout, Line, Modifier, Paragraph, Rect, SetupCheck, SetupCheckLevel, ShortcutAction, Span,
+    Style, Wrap, centered_rect, render_hint_lines,
 };
 
 pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
@@ -111,11 +111,22 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         frame,
         inner[7],
         vec![
-            Line::from("Diagnostics: [r] Refresh checks + preview"),
+            Line::from(format!(
+                "Diagnostics: {} Refresh checks + preview",
+                app.shortcut_hint(ShortcutAction::RefreshSetupDiagnostics)
+            )),
             Line::from(if app.strict_mode_enforced_for_focus() {
-                "View: [d/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+                format!(
+                    "View: [{}/Esc] Back  [{}/Ctrl-C] Quit (Locked)",
+                    app.shortcut_label(ShortcutAction::BackSetupDiagnostics),
+                    app.shortcut_label(ShortcutAction::Quit),
+                )
             } else {
-                "View: [d/Esc] Back  [q/Ctrl-C] Quit"
+                format!(
+                    "View: [{}/Esc] Back  [{}/Ctrl-C] Quit",
+                    app.shortcut_label(ShortcutAction::BackSetupDiagnostics),
+                    app.shortcut_label(ShortcutAction::Quit),
+                )
             }),
         ],
     );

@@ -1,8 +1,8 @@
 use crate::ui::{
     Alignment, App, Block, BlocklistProfileInputMode, Borders, Color, Constraint, Direction, Frame,
-    Layout, Line, List, ListItem, ListState, Modifier, Paragraph, Rect, SiteFeedbackLevel,
-    SiteInputMode, SiteListMode, Span, Style, TimerPhase, TimerStatus, centered_rect,
-    format_duration_label, render_centered_error, render_hint_lines,
+    Layout, Line, List, ListItem, ListState, Modifier, Paragraph, Rect, ShortcutAction,
+    SiteFeedbackLevel, SiteInputMode, SiteListMode, Span, Style, TimerPhase, TimerStatus,
+    centered_rect, format_duration_label, render_centered_error, render_hint_lines,
 };
 
 pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
@@ -67,15 +67,15 @@ pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
     let input_mode = app.site_input_mode();
     let profile_input_mode = app.blocklist_profile_input_mode();
     let (list_title_label, empty_text, idle_input_text) =
-        site_manager_copy_for_mode(site_list_mode);
-    render_site_manager_site_list(frame, app, inner[2], list_title_label, empty_text);
+        site_manager_copy_for_mode(app, site_list_mode);
+    render_site_manager_site_list(frame, app, inner[2], &list_title_label, &empty_text);
     render_site_manager_input(
         frame,
         app,
         inner[3],
         input_mode,
         site_list_mode,
-        idle_input_text,
+        &idle_input_text,
     );
     render_site_manager_profile_input(frame, app, inner[4], profile_input_mode);
     render_site_manager_feedback_line(frame, app, inner[5]);
@@ -110,7 +110,10 @@ fn site_manager_status_span(app: &App) -> Span<'static> {
     if focus_session_active {
         if app.block_error.is_some() {
             return Span::styled(
-                "Focus session active — blocking unavailable (permission/setup issue; open [d] Setup)",
+                format!(
+                    "Focus session active — blocking unavailable (permission/setup issue; open {} Setup)",
+                    app.shortcut_hint(ShortcutAction::OpenSetupDiagnostics)
+                ),
                 Style::default().fg(Color::Yellow),
             );
         }
@@ -121,7 +124,10 @@ fn site_manager_status_span(app: &App) -> Span<'static> {
             );
         }
         return Span::styled(
-            "Focus session active — blocking unavailable (open [d] Setup)",
+            format!(
+                "Focus session active — blocking unavailable (open {} Setup)",
+                app.shortcut_hint(ShortcutAction::OpenSetupDiagnostics)
+            ),
             Style::default().fg(Color::Yellow),
         );
     }
@@ -132,19 +138,31 @@ fn site_manager_status_span(app: &App) -> Span<'static> {
     )
 }
 
-fn site_manager_copy_for_mode(
-    site_list_mode: SiteListMode,
-) -> (&'static str, &'static str, &'static str) {
+fn site_manager_copy_for_mode(app: &App, site_list_mode: SiteListMode) -> (String, String, String) {
     match site_list_mode {
         SiteListMode::Blocklist => (
-            "Blocklist Sites",
-            "  No blocked sites yet. Press [a] to add one.",
-            "Press [a] to add/import blocked sites or [e] to edit selected",
+            "Blocklist Sites".to_string(),
+            format!(
+                "  No blocked sites yet. Press {} to add one.",
+                app.shortcut_hint(ShortcutAction::SiteAdd)
+            ),
+            format!(
+                "Press {} to add/import blocked sites or {} to edit selected",
+                app.shortcut_hint(ShortcutAction::SiteAdd),
+                app.shortcut_hint(ShortcutAction::SiteEdit)
+            ),
         ),
         SiteListMode::Allowlist => (
-            "Allowlist Exceptions",
-            "  No allowlist exceptions yet. Press [a] to add one.",
-            "Press [a] to add/import allowlist exceptions or [e] to edit selected",
+            "Allowlist Exceptions".to_string(),
+            format!(
+                "  No allowlist exceptions yet. Press {} to add one.",
+                app.shortcut_hint(ShortcutAction::SiteAdd)
+            ),
+            format!(
+                "Press {} to add/import allowlist exceptions or {} to edit selected",
+                app.shortcut_hint(ShortcutAction::SiteAdd),
+                app.shortcut_hint(ShortcutAction::SiteEdit)
+            ),
         ),
     }
 }
@@ -254,8 +272,15 @@ fn render_site_manager_profile_input(
     let profile_input_text = if app.blocklist_profile_input_active {
         format!("{}_", app.blocklist_profile_input)
     } else {
-        "Use [m] to toggle blocklist/allowlist, [n] create, [r] rename, [x] delete, [[ ] switch"
-            .to_string()
+        format!(
+            "Use {} to toggle blocklist/allowlist, {} create, {} rename, {} delete, [{} {}] switch",
+            app.shortcut_hint(ShortcutAction::ToggleSiteListMode),
+            app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
+            app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
+            app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
+            app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
+            app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
+        )
     };
     frame.render_widget(
         Paragraph::new(profile_input_text)
@@ -280,7 +305,10 @@ fn render_site_manager_feedback_line(frame: &mut Frame, app: &App, area: Rect) {
         render_centered_error(
             frame,
             area,
-            format!("⚠  {err}{privilege_hint} · open [d] Setup for remediation"),
+            format!(
+                "⚠  {err}{privilege_hint} · open {} Setup for remediation",
+                app.shortcut_hint(ShortcutAction::OpenSetupDiagnostics)
+            ),
         );
         return;
     }
@@ -332,22 +360,45 @@ fn site_manager_hint_lines(
     if app.strict_mode_enforced_for_focus() {
         return vec![
             Line::from(format!(
-                "Mode: [m] Toggle ({})  Sites: [a] Add  [e] Edit  [d/Del] Remove  [↑/↓] Move",
-                site_list_mode.label()
+                "Mode: {} Toggle ({})  Sites: {} Add  {} Edit  {}/Del Remove  [↑/↓] Move",
+                app.shortcut_hint(ShortcutAction::ToggleSiteListMode),
+                site_list_mode.label(),
+                app.shortcut_hint(ShortcutAction::SiteAdd),
+                app.shortcut_hint(ShortcutAction::SiteEdit),
+                app.shortcut_hint(ShortcutAction::SiteDelete),
             )),
-            Line::from(
-                "Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [b/Esc] Back  [q] Quit (Locked)",
-            ),
+            Line::from(format!(
+                "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/Esc] Back  [{}] Quit (Locked)",
+                app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
+                app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
+                app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
+                app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
+                app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
+                app.shortcut_label(ShortcutAction::BackSiteManager),
+                app.shortcut_label(ShortcutAction::Quit),
+            )),
             Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
         ];
     }
 
     vec![
         Line::from(format!(
-            "Mode: [m] Toggle ({})  Sites: [a] Add  [e] Edit  [d/Del] Remove  [↑/↓] Move",
-            site_list_mode.label()
+            "Mode: {} Toggle ({})  Sites: {} Add  {} Edit  {}/Del Remove  [↑/↓] Move",
+            app.shortcut_hint(ShortcutAction::ToggleSiteListMode),
+            site_list_mode.label(),
+            app.shortcut_hint(ShortcutAction::SiteAdd),
+            app.shortcut_hint(ShortcutAction::SiteEdit),
+            app.shortcut_hint(ShortcutAction::SiteDelete),
         )),
-        Line::from("Profiles: [[ ] Switch  [n] New  [r] Rename  [x] Delete  [b/Esc] Back"),
+        Line::from(format!(
+            "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/Esc] Back",
+            app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
+            app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
+            app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
+            app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
+            app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
+            app.shortcut_label(ShortcutAction::BackSiteManager),
+        )),
         Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
     ]
 }

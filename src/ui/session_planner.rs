@@ -1,7 +1,7 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
     ListItem, ListState, Modifier, PLANNER_RECENT_LABEL_LIMIT, Paragraph, PlannerFeedbackLevel,
-    PlannerInputMode, Rect, Style, Wrap, centered_rect, render_hint_lines,
+    PlannerInputMode, Rect, ShortcutAction, Style, Wrap, centered_rect, render_hint_lines,
 };
 
 pub(super) fn render_session_planner(frame: &mut Frame, app: &App) {
@@ -114,16 +114,29 @@ fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
 fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
     let input_title = if app.planner_input_active {
         match app.planner_input_mode {
-            Some(PlannerInputMode::Rename) => " Rename task label ",
-            _ => " Add task label ",
+            Some(PlannerInputMode::Rename) => " Rename task label ".to_string(),
+            _ => " Add task label ".to_string(),
         }
     } else {
-        " Task label input ([a] add / [e] rename / [f] favorite / [x] archive) "
+        format!(
+            " Task label input ({} add / {} rename / {} favorite / {} archive) ",
+            app.shortcut_hint(ShortcutAction::PlannerAdd),
+            app.shortcut_hint(ShortcutAction::PlannerRename),
+            app.shortcut_hint(ShortcutAction::PlannerFavorite),
+            app.shortcut_hint(ShortcutAction::PlannerArchive),
+        )
     };
     let input_text = if app.planner_input_active {
         format!("{}|", app.planner_input)
     } else {
-        "Use [a] add, [e] rename, [f] favorite, [x] archive, [d/Del] delete highlighted".to_string()
+        format!(
+            "Use {} add, {} rename, {} favorite, {} archive, {}/Del delete highlighted",
+            app.shortcut_hint(ShortcutAction::PlannerAdd),
+            app.shortcut_hint(ShortcutAction::PlannerRename),
+            app.shortcut_hint(ShortcutAction::PlannerFavorite),
+            app.shortcut_hint(ShortcutAction::PlannerArchive),
+            app.shortcut_hint(ShortcutAction::PlannerDelete),
+        )
     };
     frame.render_widget(
         Paragraph::new(input_text)
@@ -162,7 +175,10 @@ fn planner_recent_quick_pick_text(app: &App) -> String {
     let mut parts = Vec::new();
     for (index, label) in recent.iter().enumerate() {
         if index == 0 {
-            parts.push(format!("[r/1] {label}"));
+            parts.push(format!(
+                "[{}/1] {label}",
+                app.shortcut_label(ShortcutAction::PlannerSelectRecent)
+            ));
         } else {
             parts.push(format!("[{}] {label}", index + 1));
         }
@@ -180,24 +196,43 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
             Line::from(commit_line),
             Line::from("Input: [Esc] Cancel"),
             Line::from(if app.strict_mode_enforced_for_focus() {
-                "View: [q/Ctrl-C] Quit (Locked)"
+                format!(
+                    "View: [{}/Ctrl-C] Quit (Locked)",
+                    app.shortcut_label(ShortcutAction::Quit)
+                )
             } else {
-                "View: [q/Ctrl-C] Quit"
+                format!(
+                    "View: [{}/Ctrl-C] Quit",
+                    app.shortcut_label(ShortcutAction::Quit)
+                )
             }),
         ]
     } else {
         vec![
-            Line::from(
-                "Planner: [↑/↓] Move  [Enter] Select  [a] Add  [e] Rename  [f] Favorite  [x] Archive  [d/Del] Delete",
-            ),
+            Line::from(format!(
+                "Planner: [↑/↓] Move  [Enter] Select  {} Add  {} Rename  {} Favorite  {} Archive  {}/Del Delete",
+                app.shortcut_hint(ShortcutAction::PlannerAdd),
+                app.shortcut_hint(ShortcutAction::PlannerRename),
+                app.shortcut_hint(ShortcutAction::PlannerFavorite),
+                app.shortcut_hint(ShortcutAction::PlannerArchive),
+                app.shortcut_hint(ShortcutAction::PlannerDelete),
+            )),
             Line::from(format!(
                 "{}  |  Archived labels stay visible and cannot be selected",
                 planner_recent_quick_pick_text(app)
             )),
             Line::from(if app.strict_mode_enforced_for_focus() {
-                "View: [t/Esc] Back  [q/Ctrl-C] Quit (Locked)"
+                format!(
+                    "View: [{}/Esc] Back  [{}/Ctrl-C] Quit (Locked)",
+                    app.shortcut_label(ShortcutAction::BackSessionPlanner),
+                    app.shortcut_label(ShortcutAction::Quit),
+                )
             } else {
-                "View: [t/Esc] Back  [q/Ctrl-C] Quit"
+                format!(
+                    "View: [{}/Esc] Back  [{}/Ctrl-C] Quit",
+                    app.shortcut_label(ShortcutAction::BackSessionPlanner),
+                    app.shortcut_label(ShortcutAction::Quit),
+                )
             }),
         ]
     };
