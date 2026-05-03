@@ -1,6 +1,6 @@
 use crate::app::{
     App, AppMode, KeyCode, KeyEvent, PLANNER_RECENT_LABEL_LIMIT, PlannerFeedbackLevel,
-    PlannerInputMode, normalize_task_label, task_label_index, task_label_key,
+    PlannerInputMode, ShortcutAction, normalize_task_label, task_label_index, task_label_key,
     task_label_state_labels,
 };
 
@@ -26,7 +26,7 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Esc | KeyCode::Char('t') => {
+            KeyCode::Esc => {
                 self.mode = AppMode::Timer;
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -36,18 +36,30 @@ impl App {
                 self.planner_selection_index = (self.planner_selection_index + 1)
                     .min(self.planner_labels_for_display().len().saturating_sub(1));
             }
-            KeyCode::Char('a') => self.start_planner_input(),
-            KeyCode::Char('e') => self.start_planner_rename_input(),
-            KeyCode::Char('f') => self.toggle_planner_favorite(),
-            KeyCode::Char('x') => self.toggle_planner_archive(),
-            KeyCode::Char('d') | KeyCode::Delete => self.remove_planner_label(),
-            KeyCode::Char('r') => self.select_recent_planner_label(0),
             KeyCode::Char(c @ '1'..='9') => {
                 let index = (c as usize).saturating_sub('1' as usize);
                 self.select_recent_planner_label(index);
             }
             KeyCode::Enter => self.select_planner_label(),
-            _ => {}
+            _ => {
+                if self.shortcut_matches(ShortcutAction::BackSessionPlanner, &key) {
+                    self.mode = AppMode::Timer;
+                } else if self.shortcut_matches(ShortcutAction::PlannerAdd, &key) {
+                    self.start_planner_input();
+                } else if self.shortcut_matches(ShortcutAction::PlannerRename, &key) {
+                    self.start_planner_rename_input();
+                } else if self.shortcut_matches(ShortcutAction::PlannerFavorite, &key) {
+                    self.toggle_planner_favorite();
+                } else if self.shortcut_matches(ShortcutAction::PlannerArchive, &key) {
+                    self.toggle_planner_archive();
+                } else if key.code == KeyCode::Delete
+                    || self.shortcut_matches(ShortcutAction::PlannerDelete, &key)
+                {
+                    self.remove_planner_label();
+                } else if self.shortcut_matches(ShortcutAction::PlannerSelectRecent, &key) {
+                    self.select_recent_planner_label(0);
+                }
+            }
         }
     }
 
@@ -118,7 +130,8 @@ impl App {
                 self.set_planner_feedback(
                     PlannerFeedbackLevel::Warning,
                     format!(
-                        "`{existing_label}` is archived; unarchive it with [x] before selecting"
+                        "`{existing_label}` is archived; unarchive it with {} before selecting",
+                        self.shortcut_hint(ShortcutAction::PlannerArchive)
                     ),
                 );
                 return;
@@ -344,7 +357,10 @@ impl App {
         if self.is_task_label_archived(&existing_label) {
             self.set_planner_feedback(
                 PlannerFeedbackLevel::Warning,
-                format!("`{existing_label}` is archived; unarchive it with [x] before selecting"),
+                format!(
+                    "`{existing_label}` is archived; unarchive it with {} before selecting",
+                    self.shortcut_hint(ShortcutAction::PlannerArchive)
+                ),
             );
             return;
         }

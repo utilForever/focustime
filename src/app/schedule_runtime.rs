@@ -1,8 +1,16 @@
 use crate::app::{
-    App, DateTime, Local, ScheduleDisplayState, TimerPhase, TimerState, TimerStatus,
-    WindowOccurrence, active_occurrence, active_one_time_occurrence, next_occurrence_after,
-    next_one_time_occurrence_after, occurrence_key, pick_active_occurrence, pick_next_occurrence,
+    App, DateTime, Local, ScheduleDisplayState, ShortcutAction, TimerPhase, TimerState,
+    TimerStatus, WindowOccurrence, active_occurrence, active_one_time_occurrence,
+    next_occurrence_after, next_one_time_occurrence_after, occurrence_key, pick_active_occurrence,
+    pick_next_occurrence,
 };
+
+struct ScheduleShortcutLabels {
+    planner: String,
+    toggle_pause: String,
+    next_phase: String,
+    delay: String,
+}
 
 impl App {
     pub fn recurring_schedule_display_texts(&self) -> (String, String) {
@@ -11,9 +19,15 @@ impl App {
 
     pub(super) fn recurring_schedule_texts_at(&self, now: DateTime<Local>) -> (String, String) {
         let state = self.schedule_display_state_at(now);
+        let labels = ScheduleShortcutLabels {
+            planner: self.shortcut_hint(ShortcutAction::OpenSessionPlanner),
+            toggle_pause: self.shortcut_hint(ShortcutAction::TimerTogglePause),
+            next_phase: self.shortcut_hint(ShortcutAction::TimerNextPhase),
+            delay: self.shortcut_hint(ShortcutAction::DelayScheduleStart),
+        };
         (
             schedule_next_window_text_from_state(&state, now),
-            schedule_status_text_from_state(&state),
+            schedule_status_text_from_state(&state, &labels),
         )
     }
 
@@ -158,11 +172,18 @@ impl App {
 
     fn schedule_arm_notification(&self) -> String {
         if !self.has_selectable_task_label_for_focus() {
-            "Scheduled window started. Select a task label with [t], then press [Space] to start focus or [z] to delay 10m."
-                .to_string()
+            format!(
+                "Scheduled window started. Select a task label with {}, then press {} to start focus or {} to delay 10m.",
+                self.shortcut_hint(ShortcutAction::OpenSessionPlanner),
+                self.shortcut_hint(ShortcutAction::TimerTogglePause),
+                self.shortcut_hint(ShortcutAction::DelayScheduleStart),
+            )
         } else {
-            "Scheduled window started. Press [Space] to start focus or [z] to delay 10m."
-                .to_string()
+            format!(
+                "Scheduled window started. Press {} to start focus or {} to delay 10m.",
+                self.shortcut_hint(ShortcutAction::TimerTogglePause),
+                self.shortcut_hint(ShortcutAction::DelayScheduleStart),
+            )
         }
     }
 }
@@ -199,21 +220,24 @@ fn schedule_next_window_text_from_state(
     "🗓  Next schedule: no upcoming window".to_string()
 }
 
-fn schedule_status_text_from_state(state: &ScheduleDisplayState) -> String {
+fn schedule_status_text_from_state(
+    state: &ScheduleDisplayState,
+    labels: &ScheduleShortcutLabels,
+) -> String {
     if !state.has_schedule_windows {
         return "⚙  Schedule status: off".to_string();
     }
 
     if let Some(delayed_until) = state.delayed_until.as_ref() {
-        return schedule_delayed_status_text(*delayed_until, state.has_selected_task);
+        return schedule_delayed_status_text(*delayed_until, state.has_selected_task, labels);
     }
 
     if state.active_window.is_some() {
-        return schedule_active_window_status_text(state);
+        return schedule_active_window_status_text(state, labels);
     }
 
     if state.is_armed {
-        return schedule_armed_status_text(state.has_selected_task);
+        return schedule_armed_status_text(state.has_selected_task, labels);
     }
 
     if state.is_exception_today {
@@ -223,51 +247,86 @@ fn schedule_status_text_from_state(state: &ScheduleDisplayState) -> String {
     "⚙  Schedule status: ready for next window".to_string()
 }
 
-fn schedule_active_window_status_text(state: &ScheduleDisplayState) -> String {
+fn schedule_active_window_status_text(
+    state: &ScheduleDisplayState,
+    labels: &ScheduleShortcutLabels,
+) -> String {
     if state.timer_phase != TimerPhase::Focus {
-        return "⚙  Schedule status: window active; press [n] to switch to focus".to_string();
+        return format!(
+            "⚙  Schedule status: window active; press {} to switch to focus",
+            labels.next_phase
+        );
     }
 
     match state.timer_status {
         TimerStatus::Running => "⚙  Schedule status: in window; focus running".to_string(),
-        TimerStatus::Paused => {
-            "⚙  Schedule status: window active; press [Space] to resume focus".to_string()
-        }
+        TimerStatus::Paused => format!(
+            "⚙  Schedule status: window active; press {} to resume focus",
+            labels.toggle_pause
+        ),
         TimerStatus::Idle => {
-            schedule_idle_focus_status_text(state.has_selected_task, state.is_armed)
+            schedule_idle_focus_status_text(state.has_selected_task, state.is_armed, labels)
         }
     }
 }
 
-fn schedule_delayed_status_text(delayed_until: DateTime<Local>, has_selected_task: bool) -> String {
+fn schedule_delayed_status_text(
+    delayed_until: DateTime<Local>,
+    has_selected_task: bool,
+    labels: &ScheduleShortcutLabels,
+) -> String {
     if has_selected_task {
         format!(
-            "⚙  Schedule status: delayed until {}; press [Space] to start now or [z] to delay 10m",
-            delayed_until.format("%H:%M")
+            "⚙  Schedule status: delayed until {}; press {} to start now or {} to delay 10m",
+            delayed_until.format("%H:%M"),
+            labels.toggle_pause,
+            labels.delay,
         )
     } else {
         format!(
-            "⚙  Schedule status: delayed until {}; select [t] then [Space], or press [z] to delay 10m",
-            delayed_until.format("%H:%M")
+            "⚙  Schedule status: delayed until {}; select {} then {}, or press {} to delay 10m",
+            delayed_until.format("%H:%M"),
+            labels.planner,
+            labels.toggle_pause,
+            labels.delay,
         )
     }
 }
 
-fn schedule_idle_focus_status_text(has_selected_task: bool, is_armed: bool) -> String {
+fn schedule_idle_focus_status_text(
+    has_selected_task: bool,
+    is_armed: bool,
+    labels: &ScheduleShortcutLabels,
+) -> String {
     if !has_selected_task {
-        "⚙  Schedule status: window active; select [t], then press [Space]".to_string()
+        format!(
+            "⚙  Schedule status: window active; select {}, then press {}",
+            labels.planner, labels.toggle_pause
+        )
     } else if is_armed {
-        "⚙  Schedule status: armed; press [Space] to start focus".to_string()
+        format!(
+            "⚙  Schedule status: armed; press {} to start focus",
+            labels.toggle_pause
+        )
     } else {
-        "⚙  Schedule status: window active; press [Space] to start focus".to_string()
+        format!(
+            "⚙  Schedule status: window active; press {} to start focus",
+            labels.toggle_pause
+        )
     }
 }
 
-fn schedule_armed_status_text(has_selected_task: bool) -> String {
+fn schedule_armed_status_text(has_selected_task: bool, labels: &ScheduleShortcutLabels) -> String {
     if has_selected_task {
-        "⚙  Schedule status: armed; press [Space] to start focus".to_string()
+        format!(
+            "⚙  Schedule status: armed; press {} to start focus",
+            labels.toggle_pause
+        )
     } else {
-        "⚙  Schedule status: armed; select [t], then press [Space]".to_string()
+        format!(
+            "⚙  Schedule status: armed; select {}, then press {}",
+            labels.planner, labels.toggle_pause
+        )
     }
 }
 

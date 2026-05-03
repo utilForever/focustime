@@ -1,5 +1,6 @@
 use crate::app::*;
 use crate::blocker;
+use crate::config::ShortcutConfig;
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -122,6 +123,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         monthly_goal: MonthlyGoalConfig::default(),
         goal_carry_over: GoalCarryOverConfig::default(),
         wakatime: WakatimeMetadataConfig::default(),
+        shortcuts: ShortcutConfig::default(),
     };
     let app = App::from_config(config);
     assert_eq!(app.selected_profile, ProfileId::Classic);
@@ -3602,6 +3604,42 @@ fn history_view_toggles_from_timer_mode() {
 
     app.handle_key(key(KeyCode::Esc));
     assert_eq!(app.mode, AppMode::Timer);
+}
+
+#[test]
+fn custom_history_shortcut_opens_history_view() {
+    let config = AppConfig {
+        shortcuts: ShortcutConfig {
+            open_stats_history: "y".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.handle_key(key(KeyCode::Char('h')));
+    assert_eq!(app.mode, AppMode::Timer);
+
+    app.handle_key(key(KeyCode::Char('y')));
+    assert_eq!(app.mode, AppMode::StatsHistory);
+}
+
+#[test]
+fn custom_quit_shortcut_replaces_default_quit_char() {
+    let config = AppConfig {
+        shortcuts: ShortcutConfig {
+            quit: "x".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.handle_key(key(KeyCode::Char('q')));
+    assert!(!app.should_quit);
+
+    app.handle_key(key(KeyCode::Char('x')));
+    assert!(app.should_quit);
 }
 
 #[test]

@@ -1,5 +1,6 @@
 use crate::app::{
-    App, Duration, Instant, Local, PendingTimerAction, ceil_duration_secs, format_duration_label,
+    App, Duration, Instant, Local, PendingTimerAction, ShortcutAction, ceil_duration_secs,
+    format_duration_label,
 };
 
 impl App {
@@ -55,7 +56,8 @@ impl App {
 
         self.pending_timer_action = Some(PendingTimerAction::BreakGlassOverride);
         self.phase_notification = Some(format!(
-            "Confirm break-glass with [u] to unblock for {}.",
+            "Confirm break-glass with {} to unblock for {}.",
+            self.shortcut_hint(ShortcutAction::BreakGlassOverride),
             format_duration_label(self.break_glass_duration_secs)
         ));
     }

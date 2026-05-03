@@ -1,7 +1,7 @@
 use crate::app::{
     App, AppMode, KeyCode, KeyEvent, KeyModifiers, PendingTimerAction, SCHEDULE_DELAY_SECS,
-    SessionInterruptionReason, TimerPhase, TimerState, TimerStatus, format_duration_label,
-    occurrence_key,
+    SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
+    format_duration_label, occurrence_key,
 };
 
 impl App {
@@ -15,48 +15,41 @@ impl App {
             return;
         }
 
-        if self.handle_pending_timer_confirmations(key.code) {
+        if self.handle_pending_timer_confirmations(&key) {
             return;
         }
 
-        match key.code {
-            KeyCode::Char(' ') => self.handle_timer_toggle_pause_key(),
-            KeyCode::Char('s') => self.handle_timer_stop_reset_key(),
-            KeyCode::Char('n') => self.handle_timer_next_phase_key(),
-            KeyCode::Char('b') => {
-                self.open_site_manager();
+        if self.shortcut_matches(ShortcutAction::TimerTogglePause, &key) {
+            self.handle_timer_toggle_pause_key();
+        } else if self.shortcut_matches(ShortcutAction::TimerStopReset, &key) {
+            self.handle_timer_stop_reset_key();
+        } else if self.shortcut_matches(ShortcutAction::TimerNextPhase, &key) {
+            self.handle_timer_next_phase_key();
+        } else if self.shortcut_matches(ShortcutAction::OpenSiteManager, &key) {
+            self.open_site_manager();
+        } else if self.shortcut_matches(ShortcutAction::OpenProfileManager, &key) {
+            if self.strict_mode_enforced_for_focus() {
+                return;
             }
-            KeyCode::Char('p') => {
-                if self.strict_mode_enforced_for_focus() {
-                    return;
-                }
-                self.open_profile_manager();
-            }
-            KeyCode::Char('t') => {
-                self.open_session_planner();
-            }
-            KeyCode::Char('h') => {
-                self.open_stats_history();
-            }
-            KeyCode::Char('d') => {
-                self.open_setup_diagnostics();
-            }
-            KeyCode::Char('m') => {
-                self.start_timer_note_input();
-            }
-            KeyCode::Char('u') => {
-                self.handle_break_glass_key();
-            }
-            KeyCode::Char('z') => {
-                self.delay_active_schedule_start();
-            }
-            _ => {}
+            self.open_profile_manager();
+        } else if self.shortcut_matches(ShortcutAction::OpenSessionPlanner, &key) {
+            self.open_session_planner();
+        } else if self.shortcut_matches(ShortcutAction::OpenStatsHistory, &key) {
+            self.open_stats_history();
+        } else if self.shortcut_matches(ShortcutAction::OpenSetupDiagnostics, &key) {
+            self.open_setup_diagnostics();
+        } else if self.shortcut_matches(ShortcutAction::TimerEditNote, &key) {
+            self.start_timer_note_input();
+        } else if self.shortcut_matches(ShortcutAction::BreakGlassOverride, &key) {
+            self.handle_break_glass_key();
+        } else if self.shortcut_matches(ShortcutAction::DelayScheduleStart, &key) {
+            self.delay_active_schedule_start();
         }
     }
 
-    fn handle_pending_timer_confirmations(&mut self, key_code: KeyCode) -> bool {
+    fn handle_pending_timer_confirmations(&mut self, key: &KeyEvent) -> bool {
         if self.strict_reset_confirmation_pending() {
-            if key_code == KeyCode::Char('s') {
+            if self.shortcut_matches(ShortcutAction::TimerStopReset, key) {
                 self.pending_timer_action = None;
                 self.update_timer_and_sync_with_reason(
                     TimerState::reset,
@@ -68,7 +61,7 @@ impl App {
         }
 
         if self.break_glass_confirmation_pending() {
-            if key_code == KeyCode::Char('u') {
+            if self.shortcut_matches(ShortcutAction::BreakGlassOverride, key) {
                 self.confirm_break_glass_override();
                 return true;
             }
@@ -83,8 +76,10 @@ impl App {
             && self.timer.status == TimerStatus::Idle
             && !self.has_selectable_task_label_for_focus()
         {
-            self.phase_notification =
-                Some("Select a task label with [t] before starting focus.".to_string());
+            self.phase_notification = Some(format!(
+                "Select a task label with {} before starting focus.",
+                self.shortcut_hint(ShortcutAction::OpenSessionPlanner)
+            ));
             return;
         }
         self.update_timer_and_sync(TimerState::toggle_pause);
@@ -225,14 +220,11 @@ impl App {
             return;
         }
 
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('h') => {
-                self.mode = AppMode::Timer;
-            }
-            KeyCode::Char('e') => {
-                self.export_stats_history();
-            }
-            _ => {}
+        if key.code == KeyCode::Esc || self.shortcut_matches(ShortcutAction::BackStatsHistory, &key)
+        {
+            self.mode = AppMode::Timer;
+        } else if self.shortcut_matches(ShortcutAction::ExportStatsHistory, &key) {
+            self.export_stats_history();
         }
     }
 
@@ -241,14 +233,12 @@ impl App {
             return;
         }
 
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('d') => {
-                self.mode = AppMode::Timer;
-            }
-            KeyCode::Char('r') => {
-                self.refresh_setup_diagnostics();
-            }
-            _ => {}
+        if key.code == KeyCode::Esc
+            || self.shortcut_matches(ShortcutAction::BackSetupDiagnostics, &key)
+        {
+            self.mode = AppMode::Timer;
+        } else if self.shortcut_matches(ShortcutAction::RefreshSetupDiagnostics, &key) {
+            self.refresh_setup_diagnostics();
         }
     }
 }

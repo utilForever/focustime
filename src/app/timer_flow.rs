@@ -1,5 +1,6 @@
 use crate::app::{
-    App, SessionInterruptionReason, TimerPhase, TimerState, TimerStatus, current_day_key,
+    App, SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
+    current_day_key,
 };
 
 impl App {
@@ -105,8 +106,10 @@ impl App {
                 .notify_phase_completion(completed_phase, self.timer.phase);
         }
         if blocked_focus_autostart {
-            self.phase_notification =
-                Some("Select a task label with [t] before starting focus.".to_string());
+            self.phase_notification = Some(format!(
+                "Select a task label with {} before starting focus.",
+                self.shortcut_hint(ShortcutAction::OpenSessionPlanner)
+            ));
         }
     }
 

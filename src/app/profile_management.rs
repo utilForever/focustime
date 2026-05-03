@@ -13,10 +13,10 @@ use crate::app::{
     PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX,
     PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, PROFILE_IDS,
-    ProfileAutomationConfig, ProfileEditSnapshot, ProfileId, TimerState, WakatimeHeartbeatMetadata,
-    adjust_daily_goal_minutes, adjust_daily_goal_pomodoros, adjust_duration_minutes,
-    compile_exception_dates, compile_one_time_windows, compile_windows, profile_for_index,
-    profile_index, profile_spec_for,
+    ProfileAutomationConfig, ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState,
+    WakatimeHeartbeatMetadata, adjust_daily_goal_minutes, adjust_daily_goal_pomodoros,
+    adjust_duration_minutes, compile_exception_dates, compile_one_time_windows, compile_windows,
+    profile_for_index, profile_index, profile_spec_for,
 };
 
 impl App {
@@ -162,7 +162,7 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Esc | KeyCode::Char('p') => {
+            KeyCode::Esc => {
                 self.exit_profile_manager();
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -178,16 +178,17 @@ impl App {
                     self.exit_profile_manager();
                 }
             }
-            KeyCode::Char('e') => {
-                self.begin_profile_edit();
+            _ => {
+                if self.shortcut_matches(ShortcutAction::BackProfileManager, &key) {
+                    self.exit_profile_manager();
+                } else if self.shortcut_matches(ShortcutAction::ProfileEdit, &key) {
+                    self.begin_profile_edit();
+                } else if self.shortcut_matches(ShortcutAction::SelectPreviousBreakTemplate, &key) {
+                    self.select_previous_break_template();
+                } else if self.shortcut_matches(ShortcutAction::SelectNextBreakTemplate, &key) {
+                    self.select_next_break_template();
+                }
             }
-            KeyCode::Char('[') => {
-                self.select_previous_break_template();
-            }
-            KeyCode::Char(']') => {
-                self.select_next_break_template();
-            }
-            _ => {}
         }
     }
 

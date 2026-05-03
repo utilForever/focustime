@@ -1,6 +1,6 @@
 use crate::app::{
     App, AppMode, BlocklistProfileConfig, BlocklistProfileInputMode, BulkAddResult, EditSiteResult,
-    KeyCode, KeyEvent, SiteBlocker, SiteFeedbackLevel, SiteInputMode, SiteListMode,
+    KeyCode, KeyEvent, ShortcutAction, SiteBlocker, SiteFeedbackLevel, SiteInputMode, SiteListMode,
     display_input_value, effective_blocked_sites_for_profile, format_count,
     summarize_invalid_inputs,
 };
@@ -50,9 +50,6 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Esc | KeyCode::Char('b') => {
-                self.mode = AppMode::Timer;
-            }
             KeyCode::Down | KeyCode::Char('j') if !self.active_policy_sites().is_empty() => {
                 self.selected_site =
                     (self.selected_site + 1).min(self.active_policy_sites().len() - 1);
@@ -60,34 +57,34 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.selected_site = self.selected_site.saturating_sub(1);
             }
-            KeyCode::Char('m') => {
-                self.toggle_site_list_mode();
+            KeyCode::Esc => self.mode = AppMode::Timer,
+            _ => {
+                if self.shortcut_matches(ShortcutAction::BackSiteManager, &key) {
+                    self.mode = AppMode::Timer;
+                } else if self.shortcut_matches(ShortcutAction::ToggleSiteListMode, &key) {
+                    self.toggle_site_list_mode();
+                } else if self.shortcut_matches(ShortcutAction::SiteAdd, &key) {
+                    self.start_site_input(SiteInputMode::Add);
+                } else if self.shortcut_matches(ShortcutAction::SiteEdit, &key) {
+                    self.start_site_input(SiteInputMode::Edit);
+                } else if key.code == KeyCode::Delete
+                    || self.shortcut_matches(ShortcutAction::SiteDelete, &key)
+                {
+                    self.remove_selected_site();
+                } else if self
+                    .shortcut_matches(ShortcutAction::SelectPreviousBlocklistProfile, &key)
+                {
+                    self.select_previous_blocklist_profile();
+                } else if self.shortcut_matches(ShortcutAction::SelectNextBlocklistProfile, &key) {
+                    self.select_next_blocklist_profile();
+                } else if self.shortcut_matches(ShortcutAction::CreateBlocklistProfile, &key) {
+                    self.start_blocklist_profile_input(BlocklistProfileInputMode::Create);
+                } else if self.shortcut_matches(ShortcutAction::RenameBlocklistProfile, &key) {
+                    self.start_blocklist_profile_input(BlocklistProfileInputMode::Rename);
+                } else if self.shortcut_matches(ShortcutAction::DeleteBlocklistProfile, &key) {
+                    self.delete_active_blocklist_profile();
+                }
             }
-            KeyCode::Char('a') => {
-                self.start_site_input(SiteInputMode::Add);
-            }
-            KeyCode::Char('e') => {
-                self.start_site_input(SiteInputMode::Edit);
-            }
-            KeyCode::Char('d') | KeyCode::Delete => {
-                self.remove_selected_site();
-            }
-            KeyCode::Char('[') => {
-                self.select_previous_blocklist_profile();
-            }
-            KeyCode::Char(']') => {
-                self.select_next_blocklist_profile();
-            }
-            KeyCode::Char('n') => {
-                self.start_blocklist_profile_input(BlocklistProfileInputMode::Create);
-            }
-            KeyCode::Char('r') => {
-                self.start_blocklist_profile_input(BlocklistProfileInputMode::Rename);
-            }
-            KeyCode::Char('x') => {
-                self.delete_active_blocklist_profile();
-            }
-            _ => {}
         }
     }
 

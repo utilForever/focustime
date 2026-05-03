@@ -1,6 +1,6 @@
 use crate::app::{
-    App, BlockingPreview, ProfileId, SessionInterruptionReason, TimerPhase, TimerState,
-    TimerStatus, normalize_task_label, task_label_index,
+    App, BlockingPreview, ProfileId, SessionInterruptionReason, ShortcutAction, TimerPhase,
+    TimerState, TimerStatus, normalize_task_label, task_label_index,
 };
 
 impl App {
@@ -9,10 +9,10 @@ impl App {
             return Err("Cannot start focus: timer is not idle in focus phase.".to_string());
         }
         if !self.has_selectable_task_label_for_focus() {
-            return Err(
-                "Cannot start focus: select a task label first (run TUI and press [t])."
-                    .to_string(),
-            );
+            return Err(format!(
+                "Cannot start focus: select a task label first (run TUI and press {}).",
+                self.shortcut_hint(ShortcutAction::OpenSessionPlanner)
+            ));
         }
         self.update_timer_and_sync(TimerState::toggle_pause);
         Ok(())
