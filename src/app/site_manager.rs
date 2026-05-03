@@ -1,7 +1,7 @@
 use crate::app::{
     App, AppMode, BlocklistProfileConfig, BlocklistProfileInputMode, BulkAddResult, EditSiteResult,
-    KeyCode, KeyEvent, ShortcutAction, SiteBlocker, SiteFeedbackLevel, SiteInputMode, SiteListMode,
-    display_input_value, effective_blocked_sites_for_profile, format_count,
+    KeyCode, KeyEvent, KeyModifiers, ShortcutAction, SiteBlocker, SiteFeedbackLevel, SiteInputMode,
+    SiteListMode, display_input_value, effective_blocked_sites_for_profile, format_count,
     summarize_invalid_inputs,
 };
 
@@ -50,15 +50,25 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Enter => self.commit_blocklist_profile_input(),
-            KeyCode::Esc => self.cancel_blocklist_profile_input(),
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => false,
+            KeyCode::Enter => {
+                self.commit_blocklist_profile_input();
+                true
+            }
+            KeyCode::Esc => {
+                self.cancel_blocklist_profile_input();
+                true
+            }
             KeyCode::Backspace => {
                 self.blocklist_profile_input.pop();
+                true
             }
-            KeyCode::Char(c) => self.blocklist_profile_input.push(c),
-            _ => {}
+            KeyCode::Char(c) => {
+                self.blocklist_profile_input.push(c);
+                true
+            }
+            _ => true,
         }
-        true
     }
 
     fn handle_site_input_key(&mut self, key: &KeyEvent) -> bool {
@@ -67,15 +77,25 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Enter => self.commit_site_input(),
-            KeyCode::Esc => self.cancel_site_input(),
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => false,
+            KeyCode::Enter => {
+                self.commit_site_input();
+                true
+            }
+            KeyCode::Esc => {
+                self.cancel_site_input();
+                true
+            }
             KeyCode::Backspace => {
                 self.site_input.pop();
+                true
             }
-            KeyCode::Char(c) => self.site_input.push(c),
-            _ => {}
+            KeyCode::Char(c) => {
+                self.site_input.push(c);
+                true
+            }
+            _ => true,
         }
-        true
     }
 
     fn handle_site_manager_navigation_key(&mut self, key: &KeyEvent) -> bool {

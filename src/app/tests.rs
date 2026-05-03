@@ -1929,6 +1929,27 @@ fn site_manager_paste_targets_blocklist_profile_input_when_active() {
 }
 
 #[test]
+fn site_manager_ctrl_c_quits_during_text_input_modes() {
+    let mut app = App::default();
+    app.handle_key(key(KeyCode::Char('b')));
+    app.handle_key(key(KeyCode::Char('a')));
+    assert!(app.site_input_active);
+
+    app.handle_key(ctrl_key(KeyCode::Char('c')));
+
+    assert!(app.should_quit);
+
+    let mut app = App::default();
+    app.handle_key(key(KeyCode::Char('b')));
+    app.handle_key(key(KeyCode::Char('n')));
+    assert!(app.blocklist_profile_input_active);
+
+    app.handle_key(ctrl_key(KeyCode::Char('c')));
+
+    assert!(app.should_quit);
+}
+
+#[test]
 fn timer_note_paste_sanitizes_multiline_and_control_characters() {
     let mut app = App::default();
     app.task_labels = vec!["Docs".to_string()];
