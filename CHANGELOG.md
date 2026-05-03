@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-03
+
 ### Added
 
-- **Profile-aware automation rules (#191):** automation settings (`notifications`, `auto_start`, `strict_mode`, and recurring schedule windows) are now stored and applied per timer profile across config, TUI profile editing, and CLI automation commands.
+- **Task label favorites and archive workflow (#234):** added favorite/archive controls for planner task labels, with persisted state and archived-label safeguards across planner and schedule flows.
+- **Profile-aware automation rules (#235):** automation settings (`notifications`, `auto_start`, `strict_mode`, and recurring schedule windows) are now stored and applied per timer profile across config, TUI profile editing, and CLI automation commands.
+- **Configurable break templates (#237):** added selectable break templates with profile-manager workflow and CLI output visibility, aligned with custom break timing behavior.
+
+### Changed
+
+- **Codebase refactor and reliability hardening (#240):** reorganized app/UI/CLI/stats modules for maintainability and fixed edge-case behavior in planner selection, archived-label handling, config path normalization, schedule edit deduplication, export durability, and history/streak presentation.
+- **CI dependency maintenance (#241):** updated release-quality workflow dependencies by bumping SonarQube scan action to v8 and typos tooling to 1.46.0.
 
 ## [0.7.1] - 2026-04-28
 
@@ -200,7 +209,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/utilForever/focustime/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/utilForever/focustime/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/utilForever/focustime/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/utilForever/focustime/compare/v0.6.1...v0.6.2

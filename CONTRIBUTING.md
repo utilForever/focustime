@@ -32,6 +32,10 @@ cargo audit
 
 `focustime` is a Rust TUI application that combines a Pomodoro timer, site blocking, and WakaTime tracking.
 
+- Facade modules at `src/app.rs`, `src/cli.rs`, `src/stats.rs`, and `src/ui.rs`.
+- Focused domain submodules under `src/app/*.rs`, `src/cli/*.rs`, `src/stats/*.rs`, and `src/ui/*.rs`.
+- Config path/environment helpers in `src/config/paths.rs`.
+
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the module map, component interactions,
 visibility rules, and file conventions.
 
@@ -40,7 +44,10 @@ visibility rules, and file conventions.
 - Run `cargo fmt --all` before committing.
 - Treat Clippy warnings as errors: `cargo clippy --all-targets -- -D warnings`.
 - Keep changes focused and avoid unrelated refactors.
+- For `app`/`cli`/`stats`/`ui`, keep facade files focused and place domain logic in the matching submodule files.
+- Prefer explicit imports over wildcard imports.
 - Add or update tests when changing behavior.
+- For split domains, place shared module tests in colocated `tests.rs` files.
 - Prefer clear, small functions and explicit error handling.
 
 ## Pull Requests

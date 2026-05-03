@@ -22,17 +22,45 @@ The project is in early-stage development.
 
 ## Repository Structure
 
-```
+```text
 focustime/
 ├── src/
-│   └── main.rs        # Application entry point
-├── Cargo.toml         # Package manifest and dependencies
-├── Cargo.lock         # Locked dependency versions
-├── .github/
-│   └── workflows/
-│       └── rust.yml   # CI pipeline (check, lint, test, audit)
+│   ├── main.rs                 # Composition root and TUI runtime loop
+│   ├── app.rs                  # App facade
+│   ├── app/                    # App domain modules (timer flow, planner, schedule, etc.)
+│   ├── cli.rs                  # CLI facade
+│   ├── cli/                    # CLI args/parsing/execution/output modules
+│   ├── stats.rs                # Stats facade
+│   ├── stats/                  # Stats persistence/analytics/export modules
+│   ├── ui.rs                   # UI facade
+│   ├── ui/                     # Screen render modules (timer/history/setup/etc.)
+│   ├── config.rs               # Config facade and schema
+│   ├── config/                 # Config helpers (including paths.rs)
+│   ├── timer.rs                # Pomodoro timer state machine
+│   ├── blocker.rs              # Hosts-file blocking integration
+│   ├── schedule.rs             # Schedule compile/occurrence logic
+│   ├── session_recovery.rs     # Runtime recovery snapshot helpers
+│   ├── task_labels.rs          # Task-label normalization/indexing
+│   ├── wakatime.rs             # WakaTime tracking integration
+│   └── notifications.rs        # Desktop notifications and sound
+├── Cargo.toml                  # Package manifest and dependencies
+├── Cargo.lock                  # Locked dependency versions
+├── .github/workflows/rust.yml  # CI pipeline (check, lint, test, audit)
+├── ARCHITECTURE.md             # Detailed module map and interaction diagrams
+├── CONTRIBUTING.md             # Contributor workflow and quality bar
 └── README.md
 ```
+
+## Architecture Conventions
+
+- Use a **facade + submodule** pattern for large domains:
+  - `src/app.rs` + `src/app/*.rs`
+  - `src/cli.rs` + `src/cli/*.rs`
+  - `src/stats.rs` + `src/stats/*.rs`
+  - `src/ui.rs` + `src/ui/*.rs`
+- Keep facade modules focused on shared types/API boundaries; place feature logic in domain submodules.
+- Prefer explicit imports over wildcard imports.
+- For split domains, place shared module tests in colocated `tests.rs` files.
 
 ## Common Commands
 
@@ -94,6 +122,6 @@ All CI jobs must pass before merging a pull request.
 
 - Keep code formatted with `cargo fmt` before committing.
 - Fix all `cargo clippy` warnings — the CI enforces `-D warnings`.
-- Add tests for new functionality in the relevant module or in `#[cfg(test)]` blocks.
+- Add tests for new functionality in the relevant module; for split domains, prefer colocated `tests.rs`.
 - Keep commits focused and write clear commit messages.
 - Open a pull request targeting the `main` branch.
