@@ -103,6 +103,11 @@ cargo run -- --profile
 cargo run -- --profile deep-work
 cargo run -- --profile --json
 
+# Show or set the active theme preset
+cargo run -- --theme
+cargo run -- --theme high-contrast
+cargo run -- --theme deuteranopia-friendly --json
+
 # Show or set daily goal targets (minutes,pomodoros)
 cargo run -- --goal
 cargo run -- --goal=120,4
@@ -280,10 +285,10 @@ Open profile manager from timer view with **`p`**.
 - `Enter`: apply selected profile
 - `e`: open profile/settings editor
 - `[` / `]`: cycle the active break template for fast short/long break switching
-- In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values, `Type/Backspace` edits WakaTime project/language, `Enter` saves
+- In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values (including **Theme preset**), `Type/Backspace` edits WakaTime project/language, `Enter` saves
 
-Profile selection, break template selection, custom durations, and profile-scoped
-automation settings are persisted in `config.toml`.
+Profile selection, break template selection, theme preset selection, custom durations,
+and profile-scoped automation settings are persisted in `config.toml`.
 
 ## Session planner
 
@@ -320,6 +325,7 @@ and interruption/completed-session history export fields.
 ```toml
 selected_profile = "custom"
 selected_break_template = "Classic"
+selected_theme_preset = "classic"
 selected_blocklist_profile = "Work"
 # Legacy compatibility mirror for the selected profile's automation strict mode.
 strict_mode = false
@@ -481,8 +487,8 @@ You can configure notification and auto-start settings directly from the TUI:
 - open profile manager with `p`
 - press `e` to open the editor
 - automation and schedule edits apply to the currently selected profile only
-- the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **WakaTime**, **Schedule**) to keep settings easier to scan
-- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily/Weekly/Monthly goal (minutes)**, **Daily/Weekly/Monthly goal (pomodoros)**, **WakaTime project/language**, or the **Schedule** fields
+- the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **Appearance**, **WakaTime**, **Schedule**) to keep settings easier to scan
+- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily/Weekly/Monthly goal (minutes)**, **Daily/Weekly/Monthly goal (pomodoros)**, **Theme preset**, **WakaTime project/language**, or the **Schedule** fields
 - use `←/→` to adjust values (or toggle `Off`/`On` for boolean fields), use `Type/Backspace` for WakaTime text fields, then `Enter` to save
 - schedule editing is in-app:
   - **Schedule add/remove**: `→` adds a window, `←` removes selected window

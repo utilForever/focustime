@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Theme presets with accessibility options (#194):** added global theme preset selection (`classic`, `high-contrast`, `deuteranopia-friendly`) across config persistence, TUI appearance rendering, profile editor controls, and CLI `--theme` management/status outputs.
+
 ## [0.8.0] - 2026-05-03
 
 ### Added
