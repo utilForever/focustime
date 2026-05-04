@@ -1,7 +1,7 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Gauge, Layout, Line,
     Local, Modifier, Paragraph, Rect, ShortcutAction, Style, TimeZone, TimerPhase, TimerStatus,
-    WakatimeRuntimeState, Wrap, centered_rect, format_timer_goal_streak_line,
+    WakatimeRuntimeState, Wrap, app_color, centered_rect, format_timer_goal_streak_line,
     readable_goal_streak_text, render_hint_lines,
 };
 
@@ -13,7 +13,7 @@ pub(super) fn render_timer(frame: &mut Frame, app: &App) {
         .borders(Borders::ALL)
         .title(" focustime ")
         .title_alignment(Alignment::Center)
-        .style(Style::default().fg(phase_color(app.timer.phase)));
+        .style(Style::default().fg(phase_color(app, app.timer.phase)));
     frame.render_widget(block, outer);
 
     let inner = Layout::default()
@@ -50,7 +50,7 @@ fn render_timer_phase_header(frame: &mut Frame, app: &App, area: Rect) {
         .alignment(Alignment::Center)
         .style(
             Style::default()
-                .fg(phase_color(app.timer.phase))
+                .fg(phase_color(app, app.timer.phase))
                 .add_modifier(Modifier::BOLD),
         );
     frame.render_widget(phase_widget, area);
@@ -65,7 +65,7 @@ fn render_timer_countdown(frame: &mut Frame, app: &App, area: Rect) {
         .alignment(Alignment::Center)
         .style(
             Style::default()
-                .fg(Color::White)
+                .fg(app_color(app, Color::White))
                 .add_modifier(Modifier::BOLD),
         );
     frame.render_widget(time_widget, area);
@@ -102,7 +102,7 @@ fn render_timer_progress_bar(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(
         Paragraph::new("⏳ Progress")
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::DarkGray)),
+            .style(Style::default().fg(app_color(app, Color::DarkGray))),
         layout[0],
     );
 
@@ -111,8 +111,8 @@ fn render_timer_progress_bar(frame: &mut Frame, app: &App, area: Rect) {
         .block(Block::default().borders(Borders::NONE))
         .gauge_style(
             Style::default()
-                .fg(phase_color(app.timer.phase))
-                .bg(Color::DarkGray),
+                .fg(phase_color(app, app.timer.phase))
+                .bg(app_color(app, Color::DarkGray)),
         )
         .ratio(elapsed_ratio);
     frame.render_widget(gauge, layout[2]);
@@ -132,7 +132,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let (task_text, task_style) = if let Some(label) = app.current_task_label() {
         (
             format!("🎯 Task: {label}"),
-            Style::default().fg(Color::LightYellow),
+            Style::default().fg(app_color(app, Color::LightYellow)),
         )
     } else {
         (
@@ -140,24 +140,27 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
                 "🎯 Task: not selected ({} Planner)",
                 app.shortcut_hint(ShortcutAction::OpenSessionPlanner)
             ),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(app_color(app, Color::Yellow)),
         )
     };
     let can_edit_session_note = app.can_edit_session_note();
     let (note_text, note_style) = if let Some(note) = app.current_task_note() {
-        (format!("📝 Note: {note}"), Style::default().fg(Color::Cyan))
+        (
+            format!("📝 Note: {note}"),
+            Style::default().fg(app_color(app, Color::Cyan)),
+        )
     } else if can_edit_session_note {
         (
             format!(
                 "📝 Note: none yet ({} Edit note)",
                 app.shortcut_hint(ShortcutAction::TimerEditNote)
             ),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         )
     } else {
         (
             "📝 Note: unavailable (start or resume focus to edit)".to_string(),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         )
     };
     let (stats_text, stats_style) = timer_stats_line(app);
@@ -169,31 +172,43 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let mut lines = vec![
         Line::styled(task_text, task_style),
         Line::styled(note_text, note_style),
-        Line::styled(status_text, Style::default().fg(Color::Gray)),
-        Line::styled(profile_line, Style::default().fg(Color::DarkGray)),
-        Line::styled(schedule_next_text, Style::default().fg(Color::DarkGray)),
-        Line::styled(schedule_status_text, Style::default().fg(Color::DarkGray)),
+        Line::styled(
+            status_text,
+            Style::default().fg(app_color(app, Color::Gray)),
+        ),
+        Line::styled(
+            profile_line,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
+        Line::styled(
+            schedule_next_text,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
+        Line::styled(
+            schedule_status_text,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
         Line::styled(format!("📈 {stats_text}"), stats_style),
     ];
     if let Some((goals, streak)) = goal_text.split_once(" | Streak: ") {
         lines.push(Line::styled(
             format!("🔥 {goals}"),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         ));
         lines.push(Line::styled(
             format!("🔥 Streak: {streak}"),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         ));
     } else {
         lines.push(Line::styled(
             format!("🔥 {goal_text}"),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         ));
     }
     lines.push(Line::styled(waka_text, Style::default().fg(waka_color)));
     lines.push(Line::styled(
         strict_and_break_glass,
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(app_color(app, Color::DarkGray)),
     ));
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
@@ -247,16 +262,19 @@ fn phase_notice_line(app: &App) -> (String, Style) {
         let draft = if draft.is_empty() { "<empty>" } else { draft };
         return (
             format!("📝 Note: {draft}   [Enter] Save   [Esc] Cancel"),
-            Style::default().fg(Color::Cyan),
+            Style::default().fg(app_color(app, Color::Cyan)),
         );
     }
 
     if let Some(message) = app.phase_notification.as_ref() {
-        (format!("🔔 {message}"), Style::default().fg(Color::Yellow))
+        (
+            format!("🔔 {message}"),
+            Style::default().fg(app_color(app, Color::Yellow)),
+        )
     } else {
         (
             "🔔 Waiting for next completed phase".to_string(),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         )
     }
 }
@@ -265,7 +283,7 @@ fn timer_stats_line(app: &App) -> (String, Style) {
     if let Some(err) = app.stats_error.as_ref() {
         (
             format!("⚠ Stats persistence warning: {err}"),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(app_color(app, Color::Yellow)),
         )
     } else {
         let session_stats = app.session_stats();
@@ -278,7 +296,7 @@ fn timer_stats_line(app: &App) -> (String, Style) {
                 today_stats.pomodoros_completed,
                 today_stats.focused_minutes()
             ),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         )
     }
 }
@@ -286,14 +304,22 @@ fn timer_stats_line(app: &App) -> (String, Style) {
 pub(super) fn wakatime_status_line(app: &App) -> (String, Color) {
     let runtime_state = app.wakatime.runtime_state();
     let (status_text, status_color) = match &runtime_state {
-        WakatimeRuntimeState::NotConfigured => {
-            ("⏱  WakaTime: not configured".to_string(), Color::DarkGray)
-        }
-        WakatimeRuntimeState::Idle => ("⏱  WakaTime: idle".to_string(), Color::DarkGray),
-        WakatimeRuntimeState::Tracking => ("⏱  WakaTime: tracking".to_string(), Color::Green),
-        WakatimeRuntimeState::Sending => {
-            ("⏱  WakaTime: sending heartbeat...".to_string(), Color::Cyan)
-        }
+        WakatimeRuntimeState::NotConfigured => (
+            "⏱  WakaTime: not configured".to_string(),
+            app_color(app, Color::DarkGray),
+        ),
+        WakatimeRuntimeState::Idle => (
+            "⏱  WakaTime: idle".to_string(),
+            app_color(app, Color::DarkGray),
+        ),
+        WakatimeRuntimeState::Tracking => (
+            "⏱  WakaTime: tracking".to_string(),
+            app_color(app, Color::Green),
+        ),
+        WakatimeRuntimeState::Sending => (
+            "⏱  WakaTime: sending heartbeat...".to_string(),
+            app_color(app, Color::Cyan),
+        ),
         WakatimeRuntimeState::Retrying {
             attempt,
             max_attempts,
@@ -303,9 +329,12 @@ pub(super) fn wakatime_status_line(app: &App) -> (String, Color) {
             format!(
                 "⏱  WakaTime: retrying ({attempt}/{max_attempts}) in {next_backoff_secs}s ({error})"
             ),
-            Color::Yellow,
+            app_color(app, Color::Yellow),
         ),
-        WakatimeRuntimeState::Error(error) => (format!("⏱  WakaTime: error ({error})"), Color::Red),
+        WakatimeRuntimeState::Error(error) => (
+            format!("⏱  WakaTime: error ({error})"),
+            app_color(app, Color::Red),
+        ),
     };
 
     if matches!(runtime_state, WakatimeRuntimeState::NotConfigured) {
@@ -349,6 +378,7 @@ pub(super) fn format_duration_label(duration_secs: u64) -> String {
 fn render_timer_hints(frame: &mut Frame, app: &App, area: Rect) {
     render_hint_lines(
         frame,
+        app,
         area,
         vec![
             Line::from(timer_primary_hint(app)),
@@ -422,10 +452,10 @@ pub(super) fn timer_tertiary_hint(app: &App) -> String {
     }
 }
 
-fn phase_color(phase: TimerPhase) -> Color {
+fn phase_color(app: &App, phase: TimerPhase) -> Color {
     match phase {
-        TimerPhase::Focus => Color::Red,
-        TimerPhase::ShortBreak => Color::Green,
-        TimerPhase::LongBreak => Color::Cyan,
+        TimerPhase::Focus => app_color(app, Color::Red),
+        TimerPhase::ShortBreak => app_color(app, Color::Green),
+        TimerPhase::LongBreak => app_color(app, Color::Cyan),
     }
 }

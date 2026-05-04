@@ -14,7 +14,8 @@ use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, BreakTemplateConfig, CustomProfileConfig,
     DailyGoalConfig, GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig,
     OneTimeFocusWindowConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, WakatimeMetadataConfig, WeeklyGoalConfig,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, ThemePreset, WakatimeMetadataConfig,
+    WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -56,7 +57,7 @@ use shortcuts::ShortcutBindings;
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 35] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 36] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -92,6 +93,7 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 35] = [
     "One-time end",
     "One-time add/remove",
     "Schedule conflicts",
+    "Theme preset",
 ];
 const PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX: usize = 9;
 const PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX: usize = 10;
@@ -119,6 +121,7 @@ const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 31;
 const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 32;
 const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 33;
 const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 34;
+const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 35;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
@@ -257,6 +260,7 @@ struct ProfileEditSnapshot {
     weekly_goal: WeeklyGoalConfig,
     monthly_goal: MonthlyGoalConfig,
     goal_carry_over: GoalCarryOverConfig,
+    selected_theme_preset: ThemePreset,
     wakatime_metadata: WakatimeMetadataConfig,
 }
 
@@ -522,6 +526,7 @@ pub struct App {
     pub phase_notification: Option<String>,
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
+    selected_theme_preset: ThemePreset,
     profile_automation: ProfileAutomationSettingsConfig,
     pub custom_profile: CustomProfileConfig,
     pub profile_selection_index: usize,
@@ -574,6 +579,7 @@ impl App {
     fn from_config(config: AppConfig) -> Self {
         let config = config.normalized();
         let selected_profile = config.selected_profile;
+        let selected_theme_preset = config.selected_theme_preset;
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
         let selected_automation = config.profile_automation_for(selected_profile);
@@ -663,6 +669,7 @@ impl App {
                 language: wakatime_metadata.language.clone(),
             }),
             selected_profile,
+            selected_theme_preset,
             profile_automation,
             custom_profile,
             profile_selection_index: profile_index(selected_profile),
@@ -739,6 +746,10 @@ impl App {
 
     pub fn selected_profile_name(&self) -> &'static str {
         self.selected_profile.label()
+    }
+
+    pub fn selected_theme_preset(&self) -> ThemePreset {
+        self.selected_theme_preset
     }
 
     pub fn current_task_label(&self) -> Option<&str> {
@@ -978,6 +989,7 @@ impl App {
             PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX => {
                 bool_label(self.goal_carry_over.monthly).to_string()
             }
+            PROFILE_EDIT_THEME_PRESET_INDEX => self.selected_theme_preset.label().to_string(),
             PROFILE_EDIT_WAKATIME_PROJECT_INDEX => self.wakatime_metadata.project.clone(),
             PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => self.wakatime_metadata.language.clone(),
             _ => String::new(),

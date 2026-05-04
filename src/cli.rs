@@ -14,7 +14,7 @@ use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, Si
 use crate::config::{
     AppConfig, BlocklistProfileConfig, BreakTemplateConfig, CustomProfileConfig, DailyGoalConfig,
     MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, WeeklyGoalConfig,
+    RecurringScheduleConfig, ThemePreset, WeeklyGoalConfig,
 };
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
@@ -49,19 +49,20 @@ use output::{
     print_goal_command_output, print_json, print_json_compact, print_profile_output,
     print_schedule_command_output, print_site_add_command_output, print_site_delete_command_output,
     print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output, print_timer_state_output,
+    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
+    print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, invalid_usage, parse_global_tokens, parse_goal_carry_value,
     parse_goal_value, parse_monthly_goal_value, parse_primary_command, parse_profile_id,
     parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
-    parse_watch_interval_option, parse_watch_interval_secs, parse_weekly_goal_value,
-    require_nonempty_key_value,
+    parse_theme_preset, parse_watch_interval_option, parse_watch_interval_secs,
+    parse_weekly_goal_value, require_nonempty_key_value,
 };
 use status::{
-    available_break_template_views, build_status_output, build_task_goal_output,
-    mirror_metadata_from_task_label, profile_id, profile_view, selected_break_template_view,
-    timer_phase_id, timer_status_id,
+    available_break_template_views, available_theme_preset_views, build_status_output,
+    build_task_goal_output, mirror_metadata_from_task_label, profile_id, profile_view,
+    selected_break_template_view, theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const USAGE_TEXT: &str = r#"Usage:
@@ -75,6 +76,7 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --task-goal [LABEL|LABEL:MINUTES,POMODOROS] [--json]
   focustime --task-goal=LABEL[:MINUTES,POMODOROS] [--json]
   focustime --profile [classic|deep-work|custom] [--json]
+  focustime --theme [classic|high-contrast|deuteranopia-friendly] [--json]
   focustime --goal [--json]
   focustime --goal=MINUTES,POMODOROS [--json]
   focustime --goal-weekly [--json]
@@ -117,6 +119,7 @@ Options:
   --task          Select task label (auto-creates unknown labels)
   --task-goal     Show or set per-task cumulative goal targets
   --profile       Show current profile, or set it when value is provided
+  --theme         Show current theme preset, or set it when value is provided
   --goal          Show current daily goal, or set minutes/pomodoros targets
   --goal-weekly   Show current weekly goal, or set minutes/pomodoros targets
   --goal-monthly  Show current monthly goal, or set minutes/pomodoros targets
@@ -208,6 +211,9 @@ pub enum CommandKind {
     Profile {
         profile: Option<ProfileId>,
     },
+    Theme {
+        preset: Option<ThemePreset>,
+    },
     Goal {
         goal: Option<DailyGoalConfig>,
     },
@@ -275,6 +281,7 @@ enum PrimaryCommand {
         goal: Option<DailyGoalConfig>,
     },
     Profile(Option<ProfileId>),
+    Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
     GoalWeekly(Option<WeeklyGoalConfig>),
     GoalMonthly(Option<MonthlyGoalConfig>),
@@ -319,6 +326,7 @@ enum ParsedToken {
     Status,
     Watch(Option<u64>),
     Profile(Option<ProfileId>),
+    Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
     GoalWeekly(Option<WeeklyGoalConfig>),
     GoalMonthly(Option<MonthlyGoalConfig>),
@@ -415,12 +423,20 @@ struct BreakTemplateView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ThemePresetView {
+    id: &'static str,
+    label: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct ProfileOutput {
     updated: bool,
     selected: ProfileView,
     available: Vec<ProfileView>,
     selected_break_template: BreakTemplateView,
     available_break_templates: Vec<BreakTemplateView>,
+    selected_theme_preset: ThemePresetView,
+    available_theme_presets: Vec<ThemePresetView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -485,6 +501,7 @@ struct StatusOutput {
     selected_profile: ProfileView,
     selected_break_template: BreakTemplateView,
     available_break_templates: Vec<BreakTemplateView>,
+    selected_theme_preset: ThemePresetView,
     selected_task_label: Option<String>,
     focus_intention: Option<String>,
     task_note: Option<String>,
@@ -565,6 +582,13 @@ struct GoalCarryCommandOutput {
 struct StrictCommandOutput {
     updated: bool,
     strict_mode: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ThemeCommandOutput {
+    updated: bool,
+    selected_theme_preset: ThemePresetView,
+    available_theme_presets: Vec<ThemePresetView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

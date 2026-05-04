@@ -1,7 +1,7 @@
 use crate::ui::{
     Alignment, App, Block, BlockingPreviewAction, Borders, Color, Constraint, Direction, Frame,
     Layout, Line, Modifier, Paragraph, Rect, SetupCheck, SetupCheckLevel, ShortcutAction, Span,
-    Style, Wrap, centered_rect, render_hint_lines,
+    Style, Wrap, app_color, centered_rect, render_hint_lines,
 };
 
 pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
@@ -12,7 +12,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         .borders(Borders::ALL)
         .title(" Setup Diagnostics ")
         .title_alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Cyan));
+        .style(Style::default().fg(app_color(app, Color::Cyan)));
     frame.render_widget(block, outer);
 
     let inner = Layout::default()
@@ -34,23 +34,26 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         "Hosts file: {}",
         app.setup_diagnostics.hosts_file_path
     ))
-    .style(Style::default().fg(Color::DarkGray));
+    .style(Style::default().fg(app_color(app, Color::DarkGray)));
     frame.render_widget(hosts_path, inner[0]);
 
     render_setup_check(
         frame,
+        app,
         inner[2],
         "Blocking permissions",
         &app.setup_diagnostics.blocking_permissions,
     );
     render_setup_check(
         frame,
+        app,
         inner[3],
         "Hosts write capability",
         &app.setup_diagnostics.hosts_write_capability,
     );
     render_setup_check(
         frame,
+        app,
         inner[4],
         "WakaTime config status",
         &app.setup_diagnostics.wakatime_config,
@@ -60,7 +63,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
     {
         (
             format!("Preview unavailable: {error}"),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(app_color(app, Color::Yellow)),
         )
     } else {
         let action = match app.blocking_preview.action {
@@ -78,7 +81,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
                 },
                 app.blocking_preview.effective_blocked_sites_count
             ),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         )
     };
     frame.render_widget(
@@ -102,13 +105,14 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
                     .borders(Borders::ALL)
                     .title(" Blocking preview (focustime section) "),
             )
-            .style(Style::default().fg(Color::Gray))
+            .style(Style::default().fg(app_color(app, Color::Gray)))
             .wrap(Wrap { trim: false }),
         inner[6],
     );
 
     render_hint_lines(
         frame,
+        app,
         inner[7],
         vec![
             Line::from(format!(
@@ -132,10 +136,16 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
     );
 }
 
-pub(super) fn render_setup_check(frame: &mut Frame, area: Rect, label: &str, check: &SetupCheck) {
+pub(super) fn render_setup_check(
+    frame: &mut Frame,
+    app: &App,
+    area: Rect,
+    label: &str,
+    check: &SetupCheck,
+) {
     let (icon, status_color) = match check.level {
-        SetupCheckLevel::Ok => ("✓", Color::Green),
-        SetupCheckLevel::Warning => ("⚠", Color::Yellow),
+        SetupCheckLevel::Ok => ("✓", app_color(app, Color::Green)),
+        SetupCheckLevel::Warning => ("⚠", app_color(app, Color::Yellow)),
     };
     let line = Line::from(vec![
         Span::styled(
@@ -144,7 +154,10 @@ pub(super) fn render_setup_check(frame: &mut Frame, area: Rect, label: &str, che
                 .fg(status_color)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(check.message.as_str(), Style::default().fg(Color::Gray)),
+        Span::styled(
+            check.message.as_str(),
+            Style::default().fg(app_color(app, Color::Gray)),
+        ),
     ]);
     frame.render_widget(Paragraph::new(line).wrap(Wrap { trim: true }), area);
 }

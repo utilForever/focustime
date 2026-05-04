@@ -11,18 +11,20 @@ use crate::cli::{
     RecurringScheduleConfig, ScheduleCommandOutput, SiteAddCommandOutput, SiteBlocker,
     SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
     SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
-    TaskGoalOutput, TimerCommandOutput, TimerStateOutput, WeeklyGoalConfig,
-    available_break_template_views, build_blocking_preview_command_output,
-    build_diagnostics_command_output, build_schedule_inspection_output, build_status_output,
-    build_task_goal_output, display_input_value, effective_blocked_sites_for_profile, flush_stdout,
+    TaskGoalOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput,
+    WeeklyGoalConfig, available_break_template_views, available_theme_preset_views,
+    build_blocking_preview_command_output, build_diagnostics_command_output,
+    build_schedule_inspection_output, build_status_output, build_task_goal_output,
+    display_input_value, effective_blocked_sites_for_profile, flush_stdout,
     mirror_metadata_from_task_label, print_blocking_preview_command_output,
     print_blocklist_profile_command_output, print_diagnostics_command_output, print_export_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
     print_profile_output, print_schedule_command_output, print_site_add_command_output,
     print_site_delete_command_output, print_site_edit_command_output,
     print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_timer_state_output, profile_id, profile_view,
-    selected_break_template_view, timer_phase_id, timer_status_id,
+    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
+    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
+    timer_status_id,
 };
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
@@ -36,6 +38,7 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
             execute_task_goal_command(label, goal, cli_command.output)
         }
         CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
+        CommandKind::Theme { preset } => execute_theme_command(preset, cli_command.output),
         CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
         CommandKind::GoalWeekly { goal } => execute_weekly_goal_command(goal, cli_command.output),
         CommandKind::GoalMonthly { goal } => execute_monthly_goal_command(goal, cli_command.output),
@@ -639,16 +642,44 @@ fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Re
         .collect();
     let selected_break_template = selected_break_template_view(&config);
     let available_break_templates = available_break_template_views(&config);
+    let selected_theme_preset = theme_preset_view(config.selected_theme_preset);
+    let available_theme_presets = available_theme_preset_views();
     let payload = ProfileOutput {
         updated,
         selected,
         available,
         selected_break_template,
         available_break_templates,
+        selected_theme_preset,
+        available_theme_presets,
     };
 
     match output {
         OutputMode::Text => print_profile_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_theme_command(preset: Option<ThemePreset>, output: OutputMode) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(preset) = preset {
+        config.selected_theme_preset = preset;
+        config
+            .save()
+            .map_err(|error| format!("Failed to save theme preset: {error}"))?;
+        updated = true;
+    }
+
+    let payload = ThemeCommandOutput {
+        updated,
+        selected_theme_preset: theme_preset_view(config.selected_theme_preset),
+        available_theme_presets: available_theme_preset_views(),
+    };
+
+    match output {
+        OutputMode::Text => print_theme_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

@@ -2,7 +2,7 @@ use crate::ui::{
     Alignment, App, Block, BlocklistProfileInputMode, Borders, Color, Constraint, Direction, Frame,
     Layout, Line, List, ListItem, ListState, Modifier, Paragraph, Rect, ShortcutAction,
     SiteFeedbackLevel, SiteInputMode, SiteListMode, Span, Style, TimerPhase, TimerStatus,
-    centered_rect, format_duration_label, render_centered_error, render_hint_lines,
+    app_color, centered_rect, format_duration_label, render_centered_error, render_hint_lines,
 };
 
 pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
@@ -10,9 +10,9 @@ pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
     let outer = centered_rect(70, 82, area);
 
     let block_color = if app.blocker.is_blocking {
-        Color::Red
+        app_color(app, Color::Red)
     } else {
-        Color::Green
+        app_color(app, Color::Green)
     };
 
     let title = if app.blocker.is_blocking {
@@ -60,7 +60,7 @@ pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
     frame.render_widget(
         Paragraph::new(profile_text)
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Cyan)),
+            .style(Style::default().fg(app_color(app, Color::Cyan))),
         inner[1],
     );
 
@@ -81,6 +81,7 @@ pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
     render_site_manager_feedback_line(frame, app, inner[5]);
     render_hint_lines(
         frame,
+        app,
         inner[6],
         site_manager_hint_lines(app, site_list_mode, input_mode),
     );
@@ -92,7 +93,9 @@ fn site_manager_status_span(app: &App) -> Span<'static> {
     if app.blocker.is_blocking {
         return Span::styled(
             "Blocking is ACTIVE during this focus session",
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(app_color(app, Color::Red))
+                .add_modifier(Modifier::BOLD),
         );
     }
 
@@ -103,7 +106,7 @@ fn site_manager_status_span(app: &App) -> Span<'static> {
                 "Break-glass override active — blocking paused ({} left)",
                 format_duration_label(remaining_secs)
             ),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(app_color(app, Color::Yellow)),
         );
     }
 
@@ -114,13 +117,13 @@ fn site_manager_status_span(app: &App) -> Span<'static> {
                     "Focus session active — blocking unavailable (permission/setup issue; open {} Setup)",
                     app.shortcut_hint(ShortcutAction::OpenSetupDiagnostics)
                 ),
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(app_color(app, Color::Yellow)),
             );
         }
         if app.effective_blocked_site_count() == 0 {
             return Span::styled(
                 "Focus session active — blocking inactive (effective blocked set is empty)",
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(app_color(app, Color::Yellow)),
             );
         }
         return Span::styled(
@@ -128,13 +131,13 @@ fn site_manager_status_span(app: &App) -> Span<'static> {
                 "Focus session active — blocking unavailable (open {} Setup)",
                 app.shortcut_hint(ShortcutAction::OpenSetupDiagnostics)
             ),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(app_color(app, Color::Yellow)),
         );
     }
 
     Span::styled(
         "Blocking will activate when a focus session starts",
-        Style::default().fg(Color::Gray),
+        Style::default().fg(app_color(app, Color::Gray)),
     )
 }
 
@@ -182,11 +185,11 @@ fn render_site_manager_site_list(
     let list_block = Block::default()
         .borders(Borders::ALL)
         .title(list_title)
-        .style(Style::default().fg(Color::Gray));
+        .style(Style::default().fg(app_color(app, Color::Gray)));
 
     if app.active_policy_sites().is_empty() {
         let empty = Paragraph::new(empty_text)
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(app_color(app, Color::DarkGray)))
             .block(list_block);
         frame.render_widget(empty, area);
         return;
@@ -201,8 +204,8 @@ fn render_site_manager_site_list(
         .block(list_block)
         .highlight_style(
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::White)
+                .fg(app_color(app, Color::Black))
+                .bg(app_color(app, Color::White))
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("▶ ");
@@ -230,9 +233,9 @@ fn render_site_manager_input(
         },
     };
     let active_style = if app.site_input_active {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(app_color(app, Color::Yellow))
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(app_color(app, Color::DarkGray))
     };
     let input_text = if app.site_input_active {
         format!("{}_", app.site_input)
@@ -265,9 +268,9 @@ fn render_site_manager_profile_input(
         None => " Blocklist Profiles ",
     };
     let active_style = if app.blocklist_profile_input_active {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(app_color(app, Color::Yellow))
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(app_color(app, Color::DarkGray))
     };
     let profile_input_text = if app.blocklist_profile_input_active {
         format!("{}_", app.blocklist_profile_input)
@@ -304,6 +307,7 @@ fn render_site_manager_feedback_line(frame: &mut Frame, app: &App, area: Rect) {
         };
         render_centered_error(
             frame,
+            app,
             area,
             format!(
                 "⚠  {err}{privilege_hint} · open {} Setup for remediation",
@@ -314,14 +318,14 @@ fn render_site_manager_feedback_line(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     if let Some(err) = app.config_error.as_ref() {
-        render_centered_error(frame, area, format!("⚠  {err}"));
+        render_centered_error(frame, app, area, format!("⚠  {err}"));
         return;
     }
 
     if let Some(feedback) = app.site_feedback.as_ref() {
         let (prefix, color) = match feedback.level {
-            SiteFeedbackLevel::Success => ("✓", Color::Green),
-            SiteFeedbackLevel::Warning => ("⚠", Color::Yellow),
+            SiteFeedbackLevel::Success => ("✓", app_color(app, Color::Green)),
+            SiteFeedbackLevel::Warning => ("⚠", app_color(app, Color::Yellow)),
         };
         let feedback_widget = Paragraph::new(format!("{prefix}  {}", feedback.message))
             .alignment(Alignment::Center)

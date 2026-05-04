@@ -248,6 +248,46 @@ fn parse_profile_with_equals_sets_profile() {
 }
 
 #[test]
+fn parse_theme_without_value_reads_current_theme() {
+    let parsed = parse(&["--theme"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Theme { preset: None },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_theme_with_value_sets_theme() {
+    let parsed = parse(&["--theme", "high-contrast"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Theme {
+                preset: Some(ThemePreset::HighContrast)
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_theme_with_equals_sets_theme() {
+    let parsed = parse(&["--theme=deuteranopia-friendly"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Theme {
+                preset: Some(ThemePreset::DeuteranopiaFriendly)
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
 fn parse_goal_without_value_reads_current_goal() {
     let parsed = parse(&["--goal"]).unwrap();
     assert_eq!(
@@ -681,6 +721,15 @@ fn classify_key_value_arg_accepts_profile_equals_value() {
 }
 
 #[test]
+fn classify_key_value_arg_accepts_theme_equals_value() {
+    let parsed = classify_key_value_arg("--theme=high_contrast").unwrap();
+    assert_eq!(
+        parsed,
+        Some(ParsedToken::Theme(Some(ThemePreset::HighContrast)))
+    );
+}
+
+#[test]
 fn classify_key_value_arg_accepts_task_equals_value() {
     let parsed = classify_key_value_arg("--task=Docs").unwrap();
     assert_eq!(parsed, Some(ParsedToken::Task("Docs".to_string())));
@@ -723,6 +772,12 @@ fn classify_key_value_arg_rejects_empty_task_equals_value() {
 fn classify_key_value_arg_rejects_empty_profile_equals_value() {
     let error = classify_key_value_arg("--profile=").unwrap_err();
     assert!(error.contains("`--profile=` requires a profile value."));
+}
+
+#[test]
+fn classify_key_value_arg_rejects_empty_theme_equals_value() {
+    let error = classify_key_value_arg("--theme=").unwrap_err();
+    assert!(error.contains("`--theme=` requires a theme value."));
 }
 
 #[test]
@@ -900,6 +955,12 @@ fn parse_rejects_task_goal_with_blank_label() {
 fn parse_rejects_task_goal_with_non_numeric_pomodoros_suffix() {
     let error = parse(&["--task-goal=Docs:120,abc"]).unwrap_err();
     assert!(error.contains("Invalid goal pomodoros"));
+}
+
+#[test]
+fn parse_rejects_theme_with_unknown_value() {
+    let error = parse(&["--theme=solarized"]).unwrap_err();
+    assert!(error.contains("Invalid theme preset"));
 }
 
 #[test]
@@ -1354,6 +1415,20 @@ fn build_status_output_trims_selected_break_template_name() {
     let output = build_status_output(&config, &stats);
 
     assert_eq!(output.selected_break_template.name, "Deep Work");
+}
+
+#[test]
+fn build_status_output_includes_selected_theme_preset() {
+    let config = AppConfig {
+        selected_theme_preset: ThemePreset::DeuteranopiaFriendly,
+        ..AppConfig::default()
+    };
+    let stats = FocusStats::default();
+
+    let output = build_status_output(&config, &stats);
+
+    assert_eq!(output.selected_theme_preset.id, "deuteranopia-friendly");
+    assert_eq!(output.selected_theme_preset.label, "Deuteranopia Friendly");
 }
 
 #[test]

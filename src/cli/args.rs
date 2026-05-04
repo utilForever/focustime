@@ -2,7 +2,8 @@ use crate::cli::{
     KeyValueParser, OsString, OutputMode, ParsedToken, PathBuf, ValueArgParser, invalid_usage,
     parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_profile_id,
     parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
-    parse_watch_interval_secs, parse_weekly_goal_value, require_nonempty_key_value,
+    parse_theme_preset, parse_watch_interval_secs, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 
 pub(super) fn infer_output_mode_from_os_args(args: &[OsString]) -> OutputMode {
@@ -54,10 +55,11 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 22] = [
+    let parsers: [(&str, ValueArgParser); 23] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--profile", classify_profile_arg),
+        ("--theme", classify_theme_arg),
         ("--goal", classify_goal_arg),
         ("--goal-weekly", classify_goal_weekly_arg),
         ("--goal-monthly", classify_goal_monthly_arg),
@@ -166,6 +168,16 @@ fn classify_profile_arg(args: &[String], index: usize) -> Result<(ParsedToken, u
         return Ok((ParsedToken::Profile(Some(selected)), 2));
     }
     Ok((ParsedToken::Profile(None), 1))
+}
+
+fn classify_theme_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let selected = parse_theme_preset(next)?;
+        return Ok((ParsedToken::Theme(Some(selected)), 2));
+    }
+    Ok((ParsedToken::Theme(None), 1))
 }
 
 fn classify_export_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
@@ -442,10 +454,11 @@ fn classify_schedule_set_arg(
 }
 
 pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 22] = [
+    let parsers: [KeyValueParser; 23] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_profile_key_value_arg,
+        parse_theme_key_value_arg,
         parse_goal_key_value_arg,
         parse_goal_weekly_key_value_arg,
         parse_goal_monthly_key_value_arg,
@@ -503,6 +516,14 @@ fn parse_profile_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String>
     if let Some(value) = arg.strip_prefix("--profile=") {
         let value = require_nonempty_key_value(value, "`--profile=` requires a profile value.")?;
         return Ok(Some(ParsedToken::Profile(Some(parse_profile_id(value)?))));
+    }
+    Ok(None)
+}
+
+fn parse_theme_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--theme=") {
+        let value = require_nonempty_key_value(value, "`--theme=` requires a theme value.")?;
+        return Ok(Some(ParsedToken::Theme(Some(parse_theme_preset(value)?))));
     }
     Ok(None)
 }

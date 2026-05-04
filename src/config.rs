@@ -60,6 +60,9 @@ pub struct AppConfig {
     /// Name of the active break template.
     #[serde(default)]
     pub selected_break_template: String,
+    /// Selected UI theme preset.
+    #[serde(default)]
+    pub selected_theme_preset: ThemePreset,
     /// Notification preferences for phase transitions.
     #[serde(default)]
     pub notifications: NotificationConfig,
@@ -953,6 +956,73 @@ impl<'de> Deserialize<'de> for ProfileId {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum ThemePreset {
+    #[default]
+    Classic,
+    HighContrast,
+    DeuteranopiaFriendly,
+}
+
+impl ThemePreset {
+    fn from_config_value(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "classic" => Self::Classic,
+            "high-contrast" | "high_contrast" | "highcontrast" => Self::HighContrast,
+            "deuteranopia-friendly"
+            | "deuteranopia_friendly"
+            | "deuteranopiafriendly"
+            | "colorblind-friendly"
+            | "colorblind_friendly"
+            | "colorblindfriendly" => Self::DeuteranopiaFriendly,
+            _ => Self::Classic,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Classic => "classic",
+            Self::HighContrast => "high-contrast",
+            Self::DeuteranopiaFriendly => "deuteranopia-friendly",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Classic => "Classic",
+            Self::HighContrast => "High Contrast",
+            Self::DeuteranopiaFriendly => "Deuteranopia Friendly",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Classic => Self::HighContrast,
+            Self::HighContrast => Self::DeuteranopiaFriendly,
+            Self::DeuteranopiaFriendly => Self::Classic,
+        }
+    }
+
+    pub fn previous(self) -> Self {
+        match self {
+            Self::Classic => Self::DeuteranopiaFriendly,
+            Self::HighContrast => Self::Classic,
+            Self::DeuteranopiaFriendly => Self::HighContrast,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ThemePreset {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_config_value(&value))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CustomProfileConfig {
     #[serde(default = "default_focus_secs")]
@@ -1066,6 +1136,7 @@ impl Default for AppConfig {
             custom_profile: None,
             break_templates: default_break_templates(),
             selected_break_template: default_break_template_name(),
+            selected_theme_preset: ThemePreset::default(),
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
             recurring_schedule: RecurringScheduleConfig::default(),

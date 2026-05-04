@@ -7,8 +7,8 @@ use crate::cli::{
     ScheduleCommandOutput, ScheduleInspectionOutput, Serialize, SetupCheck, SetupCheckLevel,
     SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
     SiteEditCommandOutput, SiteListCommandOutput, StatusOutput, StrictCommandOutput,
-    TaskGoalCommandOutput, TaskGoalOutput, TimerStateOutput, Write, format_schedule_conflict,
-    inspect_schedule_conflicts_from_config, io,
+    TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, TimerStateOutput, Write,
+    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -33,6 +33,10 @@ pub(super) fn print_profile_output(payload: &ProfileOutput) {
         format_duration(payload.selected_break_template.long_break_secs),
         payload.selected_break_template.long_break_interval
     );
+    println!(
+        "Selected theme preset: {} ({})",
+        payload.selected_theme_preset.label, payload.selected_theme_preset.id
+    );
     println!("Available break templates:");
     for template in &payload.available_break_templates {
         println!(
@@ -54,6 +58,24 @@ pub(super) fn print_profile_output(payload: &ProfileOutput) {
             format_duration(profile.long_break_secs),
             profile.long_break_interval
         );
+    }
+    println!("Available theme presets:");
+    for preset in &payload.available_theme_presets {
+        println!("  - {} ({})", preset.label, preset.id);
+    }
+}
+
+pub(super) fn print_theme_command_output(payload: &ThemeCommandOutput) {
+    if payload.updated {
+        println!("Theme preset updated.");
+    }
+    println!(
+        "Selected theme preset: {} ({})",
+        payload.selected_theme_preset.label, payload.selected_theme_preset.id
+    );
+    println!("Available theme presets:");
+    for preset in &payload.available_theme_presets {
+        println!("  - {} ({})", preset.label, preset.id);
     }
 }
 
@@ -195,6 +217,10 @@ pub(super) fn print_status_output(payload: &StatusOutput) {
         format_duration(payload.selected_break_template.short_break_secs),
         format_duration(payload.selected_break_template.long_break_secs),
         payload.selected_break_template.long_break_interval
+    );
+    println!(
+        "Selected theme preset: {} ({})",
+        payload.selected_theme_preset.label, payload.selected_theme_preset.id
     );
     println!(
         "Task label: {}",

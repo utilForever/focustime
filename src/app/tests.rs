@@ -122,6 +122,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         weekly_goal: WeeklyGoalConfig::default(),
         monthly_goal: MonthlyGoalConfig::default(),
         goal_carry_over: GoalCarryOverConfig::default(),
+        selected_theme_preset: ThemePreset::Classic,
         wakatime: WakatimeMetadataConfig::default(),
         shortcuts: ShortcutConfig::default(),
     };
@@ -3326,6 +3327,7 @@ fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
         weekly_goal: app.weekly_goal,
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
+        selected_theme_preset: app.selected_theme_preset,
         wakatime_metadata: app.wakatime_metadata.clone(),
     });
     let original_profile_automation = app
@@ -3379,6 +3381,7 @@ fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_res
         weekly_goal: app.weekly_goal,
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
+        selected_theme_preset: app.selected_theme_preset,
         wakatime_metadata: app.wakatime_metadata.clone(),
     });
 

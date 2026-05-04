@@ -1,7 +1,7 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
     ListItem, ListState, Modifier, PROFILE_EDIT_GROUPS, PROFILE_IDS, Paragraph, ShortcutAction,
-    Span, Style, Wrap, centered_rect, render_centered_error, render_hint_lines,
+    Span, Style, Wrap, app_color, centered_rect, render_centered_error, render_hint_lines,
 };
 
 pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
@@ -13,7 +13,7 @@ pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
         .borders(Borders::ALL)
         .title(" Pomodoro Profiles ")
         .title_alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Cyan));
+        .style(Style::default().fg(app_color(app, Color::Cyan)));
     frame.render_widget(block, outer);
 
     let inner = Layout::default()
@@ -37,7 +37,7 @@ pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
     ))
     .style(
         Style::default()
-            .fg(Color::White)
+            .fg(app_color(app, Color::White))
             .add_modifier(Modifier::BOLD),
     )
     .wrap(Wrap { trim: true });
@@ -49,8 +49,8 @@ pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
         .block(Block::default().borders(Borders::ALL).title(" Profiles "))
         .highlight_style(
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::White)
+                .fg(app_color(app, Color::Black))
+                .bg(app_color(app, Color::White))
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("▶ ");
@@ -71,10 +71,10 @@ pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
     frame.render_widget(Paragraph::new(lines).block(editor_block), inner[2]);
 
     if let Some(err) = app.config_error.as_ref() {
-        render_centered_error(frame, inner[4], format!("⚠  {err}"));
+        render_centered_error(frame, app, inner[4], format!("⚠  {err}"));
     }
 
-    render_hint_lines(frame, inner[5], profile_manager_hints(app));
+    render_hint_lines(frame, app, inner[5], profile_manager_hints(app));
 }
 
 fn profile_list_items(app: &App) -> Vec<ListItem<'static>> {
@@ -105,9 +105,9 @@ fn profile_editor_block(app: &App) -> Block<'static> {
         .borders(Borders::ALL)
         .title(editor_title)
         .style(if app.profile_edit_active {
-            Style::default().fg(Color::Yellow)
+            Style::default().fg(app_color(app, Color::Yellow))
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(app_color(app, Color::DarkGray))
         })
 }
 
@@ -115,7 +115,7 @@ fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
     if !app.profile_edit_active {
         return vec![
             Line::from("Press [e] to edit the selected profile."),
-            Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule"),
+            Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule · Appearance"),
             Line::from("Editor is compact for smaller terminals."),
         ];
     }
@@ -141,13 +141,13 @@ fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
             fields.len()
         ),
         Style::default()
-            .fg(Color::Cyan)
+            .fg(app_color(app, Color::Cyan))
             .add_modifier(Modifier::BOLD),
     ));
     if start > 0 {
         lines.push(Line::styled(
             "… ↑ more fields",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         ));
     }
     for index in &fields[start..end] {
@@ -156,11 +156,11 @@ fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
         let mut line = Line::from(format!("{label:<18} {value}"));
         if *index == app.profile_edit_field {
             line = Line::from(vec![
-                Span::styled("> ", Style::default().fg(Color::Yellow)),
+                Span::styled("> ", Style::default().fg(app_color(app, Color::Yellow))),
                 Span::styled(
                     format!("{label:<18} {value}"),
                     Style::default()
-                        .fg(Color::Yellow)
+                        .fg(app_color(app, Color::Yellow))
                         .add_modifier(Modifier::BOLD),
                 ),
             ]);
@@ -170,7 +170,7 @@ fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
     if end < fields.len() {
         lines.push(Line::styled(
             "… ↓ more fields",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         ));
     }
     lines
@@ -179,7 +179,7 @@ fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
 fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
     if app.profile_edit_active {
         vec![
-            Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule"),
+            Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule · Appearance"),
             Line::from("Edit: [↑/↓] Field  [←/→] Change value  [Type/Backspace] WakaTime text"),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
@@ -265,6 +265,7 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         32 => "One-time end",
         33 => "One-time add/remove",
         34 => "Conflict inspector",
+        35 => "Theme preset",
         _ => "",
     }
 }
