@@ -188,6 +188,7 @@ impl App {
             custom_profile: Some(custom_profile),
             break_templates: self.break_templates.clone(),
             selected_break_template: self.selected_break_template_for_persistence(),
+            selected_theme_preset: self.selected_theme_preset,
             notifications: self.notification_settings,
             auto_start: self.auto_start,
             recurring_schedule: self.recurring_schedule.clone(),

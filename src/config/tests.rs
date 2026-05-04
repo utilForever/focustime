@@ -17,6 +17,7 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.selected_profile, ProfileId::Custom);
     assert!(cfg.custom_profile.is_none());
     assert_eq!(cfg.selected_break_template, "Classic");
+    assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
     assert_eq!(cfg.break_templates.len(), 2);
     assert!(cfg.blocked_sites.is_empty());
     assert_eq!(cfg.selected_blocklist_profile, "Default");
@@ -81,6 +82,7 @@ fn round_trip_full_config() {
             },
         ],
         selected_break_template: "Recovery".to_string(),
+        selected_theme_preset: ThemePreset::HighContrast,
         notifications: NotificationConfig {
             enabled: true,
             sound: true,
@@ -197,6 +199,7 @@ fn round_trip_full_config() {
         parsed.selected_break_template,
         original.selected_break_template
     );
+    assert_eq!(parsed.selected_theme_preset, original.selected_theme_preset);
     assert_eq!(parsed.notifications, original.notifications);
     assert_eq!(parsed.auto_start, original.auto_start);
     assert_eq!(parsed.recurring_schedule, original.recurring_schedule);
@@ -225,6 +228,7 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.selected_profile, ProfileId::Custom);
     assert!(cfg.custom_profile.is_none());
     assert_eq!(cfg.selected_break_template, "");
+    assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
     assert_eq!(cfg.break_templates.len(), 2);
     assert!(cfg.blocked_sites.is_empty());
     assert!(cfg.blocklist_profiles.is_empty());
@@ -381,6 +385,20 @@ fn normalize_selected_break_template_clears_unknown_when_no_template_matches_cus
     .normalize();
 
     assert_eq!(cfg.selected_break_template, "");
+}
+
+#[test]
+fn theme_preset_deserializes_aliases_and_falls_back_to_classic() {
+    let alias_cfg: AppConfig = toml::from_str("selected_theme_preset = \"colorblind-friendly\"")
+        .expect("theme alias should parse");
+    assert_eq!(
+        alias_cfg.selected_theme_preset,
+        ThemePreset::DeuteranopiaFriendly
+    );
+
+    let unknown_cfg: AppConfig =
+        toml::from_str("selected_theme_preset = \"unknown\"").expect("config should parse");
+    assert_eq!(unknown_cfg.selected_theme_preset, ThemePreset::Classic);
 }
 
 #[test]
@@ -606,6 +624,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         }),
         break_templates: default_break_templates(),
         selected_break_template: default_break_template_name(),
+        selected_theme_preset: ThemePreset::Classic,
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),

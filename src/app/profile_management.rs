@@ -10,13 +10,14 @@ use crate::app::{
     PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
     PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX,
     PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
-    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX,
-    PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
-    PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, PROFILE_IDS,
-    ProfileAutomationConfig, ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState,
-    WakatimeHeartbeatMetadata, adjust_daily_goal_minutes, adjust_daily_goal_pomodoros,
-    adjust_duration_minutes, compile_exception_dates, compile_one_time_windows, compile_windows,
-    profile_for_index, profile_index, profile_spec_for,
+    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX,
+    PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX, PROFILE_EDIT_WAKATIME_PROJECT_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, PROFILE_IDS, ProfileAutomationConfig,
+    ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState, WakatimeHeartbeatMetadata,
+    adjust_daily_goal_minutes, adjust_daily_goal_pomodoros, adjust_duration_minutes,
+    compile_exception_dates, compile_one_time_windows, compile_windows, profile_for_index,
+    profile_index, profile_spec_for,
 };
 
 const PROFILE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 4] = [
@@ -222,6 +223,7 @@ impl App {
             weekly_goal: self.weekly_goal,
             monthly_goal: self.monthly_goal,
             goal_carry_over: self.goal_carry_over,
+            selected_theme_preset: self.selected_theme_preset,
             wakatime_metadata: self.wakatime_metadata.clone(),
         });
         self.profile_edit_active = true;
@@ -244,6 +246,7 @@ impl App {
             self.weekly_goal = snapshot.weekly_goal;
             self.monthly_goal = snapshot.monthly_goal;
             self.goal_carry_over = snapshot.goal_carry_over;
+            self.selected_theme_preset = snapshot.selected_theme_preset;
             self.wakatime_metadata = snapshot.wakatime_metadata;
             self.sync_wakatime_metadata_to_tracker();
             self.rebuild_notifier();
@@ -391,6 +394,13 @@ impl App {
             }
             PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX => {
                 self.goal_carry_over.monthly = increase;
+            }
+            PROFILE_EDIT_THEME_PRESET_INDEX => {
+                self.selected_theme_preset = if increase {
+                    self.selected_theme_preset.next()
+                } else {
+                    self.selected_theme_preset.previous()
+                };
             }
             PROFILE_EDIT_SCHEDULE_WINDOW_INDEX => {
                 self.cycle_schedule_window(increase);
