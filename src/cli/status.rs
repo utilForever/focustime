@@ -3,8 +3,8 @@ use crate::cli::{
     DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS,
     DailyGoalSnapshot, Datelike, FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput,
     NaiveDate, ProfileId, ProfileSpec, ProfileView, SessionOutput, StatusOutput, TaskGoalOutput,
-    TimerPhase, TimerStatus, TodayOutput, carry_over_goal_target, current_day_key,
-    effective_blocked_sites_for_profile, session_recovery,
+    ThemePreset, ThemePresetView, TimerPhase, TimerStatus, TodayOutput, carry_over_goal_target,
+    current_day_key, effective_blocked_sites_for_profile, session_recovery,
 };
 
 pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
@@ -57,6 +57,7 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         selected_profile: profile_view(config.selected_profile, &config.effective_custom_profile()),
         selected_break_template: selected_break_template_view(config),
         available_break_templates: available_break_template_views(config),
+        selected_theme_preset: theme_preset_view(config.selected_theme_preset),
         selected_task_label,
         focus_intention,
         task_note,
@@ -460,6 +461,24 @@ pub(super) fn available_break_template_views(config: &AppConfig) -> Vec<BreakTem
         .iter()
         .map(break_template_view)
         .collect()
+}
+
+pub(super) fn theme_preset_view(preset: ThemePreset) -> ThemePresetView {
+    ThemePresetView {
+        id: preset.id(),
+        label: preset.label(),
+    }
+}
+
+pub(super) fn available_theme_preset_views() -> Vec<ThemePresetView> {
+    [
+        ThemePreset::Classic,
+        ThemePreset::HighContrast,
+        ThemePreset::DeuteranopiaFriendly,
+    ]
+    .into_iter()
+    .map(theme_preset_view)
+    .collect()
 }
 
 pub(super) fn timer_phase_id(phase: TimerPhase) -> &'static str {

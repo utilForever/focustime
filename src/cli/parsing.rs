@@ -2,8 +2,8 @@ use crate::cli::{
     BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind,
     DEFAULT_WATCH_INTERVAL_SECS, DailyGoalConfig, MonthlyGoalConfig, NaiveDate,
     OneTimeFocusWindowConfig, OutputMode, ParsedToken, PrimaryCommand, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, SiteEditValue, SiteListTarget, USAGE_TEXT,
-    WeeklyGoalConfig,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, SiteEditValue, SiteListTarget,
+    ThemePreset, USAGE_TEXT, WeeklyGoalConfig,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -37,6 +37,7 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Status
             | ParsedToken::Watch(_)
             | ParsedToken::Profile(_)
+            | ParsedToken::Theme(_)
             | ParsedToken::Goal(_)
             | ParsedToken::GoalWeekly(_)
             | ParsedToken::GoalMonthly(_)
@@ -91,6 +92,9 @@ pub(super) fn parse_primary_command(
             ParsedToken::Watch(_) => {}
             ParsedToken::Profile(profile) => {
                 set_primary_command(&mut primary, PrimaryCommand::Profile(*profile))?
+            }
+            ParsedToken::Theme(preset) => {
+                set_primary_command(&mut primary, PrimaryCommand::Theme(*preset))?
             }
             ParsedToken::Goal(goal) => {
                 set_primary_command(&mut primary, PrimaryCommand::Goal(*goal))?
@@ -215,6 +219,10 @@ pub(super) fn finalize_cli_action(
         }
         Some(PrimaryCommand::Profile(profile)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Profile { profile },
+            output,
+        })),
+        Some(PrimaryCommand::Theme(preset)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Theme { preset },
             output,
         })),
         Some(PrimaryCommand::Goal(goal)) => Ok(CliAction::RunCommand(CliCommand {
@@ -391,6 +399,22 @@ pub(super) fn parse_profile_id(value: &str) -> Result<ProfileId, String> {
         "custom" => Ok(ProfileId::Custom),
         _ => Err(invalid_usage(&format!(
             "Invalid profile `{value}`. Use `classic`, `deep-work`, or `custom`."
+        ))),
+    }
+}
+
+pub(super) fn parse_theme_preset(value: &str) -> Result<ThemePreset, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "classic" => Ok(ThemePreset::Classic),
+        "high-contrast" | "high_contrast" | "highcontrast" => Ok(ThemePreset::HighContrast),
+        "deuteranopia-friendly"
+        | "deuteranopia_friendly"
+        | "deuteranopiafriendly"
+        | "colorblind-friendly"
+        | "colorblind_friendly"
+        | "colorblindfriendly" => Ok(ThemePreset::DeuteranopiaFriendly),
+        _ => Err(invalid_usage(&format!(
+            "Invalid theme preset `{value}`. Use `classic`, `high-contrast`, or `deuteranopia-friendly`."
         ))),
     }
 }
@@ -656,6 +680,7 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Task(_) => "--task",
         PrimaryCommand::TaskGoal { .. } => "--task-goal",
         PrimaryCommand::Profile(_) => "--profile",
+        PrimaryCommand::Theme(_) => "--theme",
         PrimaryCommand::Goal(_) => "--goal",
         PrimaryCommand::GoalWeekly(_) => "--goal-weekly",
         PrimaryCommand::GoalMonthly(_) => "--goal-monthly",
