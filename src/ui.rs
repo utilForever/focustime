@@ -13,6 +13,7 @@ use crate::app::{
     SetupCheckLevel, ShortcutAction, SiteFeedbackLevel, SiteInputMode, SiteListMode,
 };
 use crate::blocker::BlockingPreviewAction;
+use crate::config::ThemePreset;
 use crate::timer::{TimerPhase, TimerStatus};
 use crate::wakatime::WakatimeRuntimeState;
 
@@ -47,12 +48,14 @@ const PROFILE_EDIT_GROUP_GOALS: [usize; 9] = [9, 10, 11, 12, 13, 14, 15, 16, 17]
 const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [18, 19];
 const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 15] =
     [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34];
-const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
+const PROFILE_EDIT_GROUP_APPEARANCE: [usize; 1] = [35];
+const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 6] = [
     ("Timer", &PROFILE_EDIT_GROUP_TIMER),
     ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
     ("Goals", &PROFILE_EDIT_GROUP_GOALS),
     ("WakaTime", &PROFILE_EDIT_GROUP_WAKATIME),
     ("Schedule", &PROFILE_EDIT_GROUP_SCHEDULE),
+    ("Appearance", &PROFILE_EDIT_GROUP_APPEARANCE),
 ];
 
 pub fn render(frame: &mut Frame, app: &App) {
@@ -66,11 +69,11 @@ pub fn render(frame: &mut Frame, app: &App) {
     }
 }
 
-fn render_hint_lines(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>) {
+fn render_hint_lines(frame: &mut Frame, app: &App, area: Rect, lines: Vec<Line<'static>>) {
     frame.render_widget(
         Paragraph::new(lines)
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(app_color(app, Color::DarkGray)))
             .wrap(Wrap { trim: true }),
         area,
     );
@@ -131,11 +134,40 @@ fn format_timer_goal_streak_line(app: &App) -> String {
     }
 }
 
-fn render_centered_error(frame: &mut Frame, area: Rect, message: String) {
+fn render_centered_error(frame: &mut Frame, app: &App, area: Rect, message: String) {
     let err_widget = Paragraph::new(message)
         .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Red));
+        .style(Style::default().fg(app_color(app, Color::Red)));
     frame.render_widget(err_widget, area);
+}
+
+pub(super) fn app_color(app: &App, color: Color) -> Color {
+    themed_color(color, Some(app.selected_theme_preset()))
+}
+
+fn themed_color(color: Color, preset: Option<ThemePreset>) -> Color {
+    let preset = preset.unwrap_or(ThemePreset::Classic);
+    match preset {
+        ThemePreset::Classic => color,
+        ThemePreset::HighContrast => match color {
+            Color::DarkGray | Color::Gray => Color::White,
+            Color::Yellow => Color::LightYellow,
+            Color::Cyan => Color::LightCyan,
+            Color::Green => Color::LightGreen,
+            Color::Red => Color::LightRed,
+            Color::Black => Color::White,
+            _ => color,
+        },
+        ThemePreset::DeuteranopiaFriendly => match color {
+            Color::Red => Color::Blue,
+            Color::LightRed => Color::LightBlue,
+            Color::Green => Color::Cyan,
+            Color::LightGreen => Color::LightCyan,
+            Color::Cyan => Color::Magenta,
+            Color::LightYellow => Color::Yellow,
+            _ => color,
+        },
+    }
 }
 
 /// Returns a centered rectangle of given percentage of the parent rect.

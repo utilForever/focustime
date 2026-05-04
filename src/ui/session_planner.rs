@@ -1,7 +1,8 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
     ListItem, ListState, Modifier, PLANNER_RECENT_LABEL_LIMIT, Paragraph, PlannerFeedbackLevel,
-    PlannerInputMode, Rect, ShortcutAction, Style, Wrap, centered_rect, render_hint_lines,
+    PlannerInputMode, Rect, ShortcutAction, Style, Wrap, app_color, centered_rect,
+    render_hint_lines,
 };
 
 pub(super) fn render_session_planner(frame: &mut Frame, app: &App) {
@@ -12,7 +13,7 @@ pub(super) fn render_session_planner(frame: &mut Frame, app: &App) {
         .borders(Borders::ALL)
         .title(" Session Planner ")
         .title_alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Cyan));
+        .style(Style::default().fg(app_color(app, Color::Cyan)));
     frame.render_widget(block, outer);
 
     let inner = Layout::default()
@@ -41,7 +42,7 @@ fn render_session_planner_selected_task(frame: &mut Frame, app: &App, area: Rect
     );
     frame.render_widget(
         Paragraph::new(Line::from(selected_text))
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(app_color(app, Color::White)))
             .wrap(Wrap { trim: true }),
         area,
     );
@@ -51,7 +52,7 @@ fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
     if app.task_labels.is_empty() {
         frame.render_widget(
             Paragraph::new("No task labels yet. Press [a] to add one.")
-                .style(Style::default().fg(Color::DarkGray))
+                .style(Style::default().fg(app_color(app, Color::DarkGray)))
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
@@ -98,8 +99,8 @@ fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
         )
         .highlight_style(
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::White)
+                .fg(app_color(app, Color::Black))
+                .bg(app_color(app, Color::White))
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("▶ ");
@@ -141,9 +142,9 @@ fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(
         Paragraph::new(input_text)
             .style(if app.planner_input_active {
-                Style::default().fg(Color::White)
+                Style::default().fg(app_color(app, Color::White))
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(app_color(app, Color::DarkGray))
             })
             .block(Block::default().borders(Borders::ALL).title(input_title)),
         area,
@@ -153,8 +154,8 @@ fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
 fn render_session_planner_feedback(frame: &mut Frame, app: &App, area: Rect) {
     if let Some(feedback) = app.planner_feedback.as_ref() {
         let (prefix, color) = match feedback.level {
-            PlannerFeedbackLevel::Success => ("✓", Color::Green),
-            PlannerFeedbackLevel::Warning => ("⚠", Color::Yellow),
+            PlannerFeedbackLevel::Success => ("✓", app_color(app, Color::Green)),
+            PlannerFeedbackLevel::Warning => ("⚠", app_color(app, Color::Yellow)),
         };
         frame.render_widget(
             Paragraph::new(format!("{prefix}  {}", feedback.message))
@@ -236,5 +237,5 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
             }),
         ]
     };
-    render_hint_lines(frame, area, hints);
+    render_hint_lines(frame, app, area, hints);
 }

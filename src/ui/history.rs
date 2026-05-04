@@ -1,7 +1,7 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, HistoryFeedbackLevel,
     Layout, Line, List, ListItem, Modifier, Paragraph, Rect, ShortcutAction, Span, Style, Wrap,
-    centered_rect, format_duration_label, format_goal_period_progress,
+    app_color, centered_rect, format_duration_label, format_goal_period_progress,
     format_wakatime_heartbeat_timestamp, render_hint_lines,
 };
 
@@ -13,7 +13,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .borders(Borders::ALL)
         .title(" Focus History ")
         .title_alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Cyan));
+        .style(Style::default().fg(app_color(app, Color::Cyan)));
     frame.render_widget(block, outer);
 
     let inner = Layout::default()
@@ -47,16 +47,25 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
                 today_stats.focused_minutes()
             ),
             Style::default()
-                .fg(Color::White)
+                .fg(app_color(app, Color::White))
                 .add_modifier(Modifier::BOLD),
         ),
-        Line::styled(focus_score_line, Style::default().fg(Color::DarkGray)),
-        Line::styled(goals_line, Style::default().fg(Color::DarkGray)),
+        Line::styled(
+            focus_score_line,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
+        Line::styled(
+            goals_line,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
         Line::styled(
             format!("Active days (7d): {recent_active_days}"),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app_color(app, Color::DarkGray)),
         ),
-        Line::styled(interruption_line, Style::default().fg(Color::DarkGray)),
+        Line::styled(
+            interruption_line,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
     ])
     .block(Block::default().borders(Borders::ALL).title(" Overview "))
     .wrap(Wrap { trim: true });
@@ -104,6 +113,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
+        app,
         left_sections[0],
         " Task Totals ",
         task_total_items,
@@ -124,6 +134,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
+        app,
         left_sections[1],
         " Task Trends (7d vs prev 7d) ",
         task_trend_items,
@@ -144,6 +155,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
+        app,
         right_sections[0],
         " Profile Effect ",
         profile_items,
@@ -166,6 +178,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
+        app,
         left_sections[2],
         " Break-glass Audit ",
         override_items,
@@ -186,6 +199,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .collect();
     render_history_panel(
         frame,
+        app,
         right_sections[1],
         " Monthly Trend ",
         monthly_items,
@@ -196,8 +210,8 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
 
     if let Some(feedback) = app.history_feedback.as_ref() {
         let (prefix, color) = match feedback.level {
-            HistoryFeedbackLevel::Success => ("✓", Color::Green),
-            HistoryFeedbackLevel::Warning => ("⚠", Color::Yellow),
+            HistoryFeedbackLevel::Success => ("✓", app_color(app, Color::Green)),
+            HistoryFeedbackLevel::Warning => ("⚠", app_color(app, Color::Yellow)),
         };
         let message = format!("{prefix}  {}", feedback.message);
         let feedback_widget = Paragraph::new(message)
@@ -208,13 +222,14 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
     } else if let Some(err) = app.stats_error.as_ref() {
         let error_widget = Paragraph::new(format!("⚠  {err}"))
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Red))
+            .style(Style::default().fg(app_color(app, Color::Red)))
             .wrap(Wrap { trim: true });
         frame.render_widget(error_widget, inner[2]);
     }
 
     render_hint_lines(
         frame,
+        app,
         inner[3],
         vec![
             Line::from(format!(
@@ -263,6 +278,7 @@ pub(super) fn readable_focus_score_text(text: &str) -> String {
 
 fn render_history_panel(
     frame: &mut Frame,
+    app: &App,
     area: Rect,
     title: &'static str,
     items: Vec<ListItem>,
@@ -270,13 +286,13 @@ fn render_history_panel(
 ) {
     if items.is_empty() {
         let empty = Paragraph::new(empty_message)
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(app_color(app, Color::DarkGray)))
             .block(Block::default().borders(Borders::ALL).title(title));
         frame.render_widget(empty, area);
     } else {
         let list = List::new(items)
             .block(Block::default().borders(Borders::ALL).title(title))
-            .style(Style::default().fg(Color::Gray));
+            .style(Style::default().fg(app_color(app, Color::Gray)));
         frame.render_widget(list, area);
     }
 }
@@ -289,7 +305,7 @@ fn render_monthly_heatmap_panel(frame: &mut Frame, area: Rect, app: &App) {
     );
     let mut lines: Vec<Line> = vec![Line::styled(
         "  Mo Tu We Th Fr Sa Su",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(app_color(app, Color::DarkGray)),
     )];
 
     let mut weekday = heatmap.first_weekday_monday0 as usize;
@@ -299,7 +315,7 @@ fn render_monthly_heatmap_panel(frame: &mut Frame, area: Rect, app: &App) {
     }
     for day in heatmap.days {
         let (symbol, color) =
-            heatmap_cell_symbol(day.focused_minutes(), heatmap.max_focused_minutes);
+            heatmap_cell_symbol(app, day.focused_minutes(), heatmap.max_focused_minutes);
         week_spans.push(Span::styled(
             format!("{symbol}  "),
             Style::default().fg(color),
@@ -321,12 +337,12 @@ fn render_monthly_heatmap_panel(frame: &mut Frame, area: Rect, app: &App) {
 
     lines.push(Line::styled(
         "  None  .   Low  :  *  O  #  High",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(app_color(app, Color::DarkGray)),
     ));
 
     let widget = Paragraph::new(lines)
         .block(Block::default().borders(Borders::ALL).title(title))
-        .style(Style::default().fg(Color::Gray))
+        .style(Style::default().fg(app_color(app, Color::Gray)))
         .wrap(Wrap { trim: false });
     frame.render_widget(widget, area);
 }
@@ -405,19 +421,19 @@ pub(super) fn format_task_goal_progress_summary(
     }
 }
 
-fn heatmap_cell_symbol(focused_minutes: u64, max_focused_minutes: u64) -> (char, Color) {
+fn heatmap_cell_symbol(app: &App, focused_minutes: u64, max_focused_minutes: u64) -> (char, Color) {
     if focused_minutes == 0 || max_focused_minutes == 0 {
-        return ('.', Color::DarkGray);
+        return ('.', app_color(app, Color::DarkGray));
     }
 
     let scaled = (focused_minutes.saturating_mul(4))
         .saturating_add(max_focused_minutes.saturating_sub(1))
         / max_focused_minutes;
     match scaled.clamp(1, 4) {
-        1 => (':', Color::Green),
-        2 => ('*', Color::Yellow),
-        3 => ('O', Color::LightRed),
-        _ => ('#', Color::Red),
+        1 => (':', app_color(app, Color::Green)),
+        2 => ('*', app_color(app, Color::Yellow)),
+        3 => ('O', app_color(app, Color::LightRed)),
+        _ => ('#', app_color(app, Color::Red)),
     }
 }
 

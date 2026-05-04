@@ -1,6 +1,7 @@
-use crate::config::{AppConfig, ShortcutConfig};
+use crate::config::{AppConfig, ShortcutConfig, ThemePreset};
 use crate::ui::*;
 use chrono::{Datelike, Duration, NaiveDate};
+use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
 
 use crate::stats::current_day_key;
@@ -55,6 +56,28 @@ fn timer_primary_hint_includes_break_glass_shortcut() {
 fn timer_primary_hint_includes_note_shortcut() {
     let app = App::default();
     assert!(timer_primary_hint(&app).contains("[m] Note"));
+}
+
+#[test]
+fn app_color_uses_high_contrast_preset_mapping() {
+    let app = App::from_config_for_tests(AppConfig {
+        selected_theme_preset: ThemePreset::HighContrast,
+        ..AppConfig::default()
+    });
+
+    assert_eq!(app_color(&app, Color::DarkGray), Color::White);
+    assert_eq!(app_color(&app, Color::Cyan), Color::LightCyan);
+}
+
+#[test]
+fn app_color_uses_deuteranopia_friendly_mapping() {
+    let app = App::from_config_for_tests(AppConfig {
+        selected_theme_preset: ThemePreset::DeuteranopiaFriendly,
+        ..AppConfig::default()
+    });
+
+    assert_eq!(app_color(&app, Color::Red), Color::Blue);
+    assert_eq!(app_color(&app, Color::Green), Color::Cyan);
 }
 
 #[test]
@@ -343,9 +366,10 @@ fn render_setup_check_wraps_long_warning_message() {
         level: SetupCheckLevel::Warning,
         message: "wrapped output should include TAIL-END".to_string(),
     };
+    let app = App::default();
 
     terminal
-        .draw(|frame| render_setup_check(frame, frame.area(), "Check", &check))
+        .draw(|frame| render_setup_check(frame, &app, frame.area(), "Check", &check))
         .expect("render should succeed");
 
     let text = terminal_text(&terminal, width, height);
