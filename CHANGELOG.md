@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-05-04
+
 ### Added
 
-- **Theme presets with accessibility options (#194):** added global theme preset selection (`classic`, `high-contrast`, `deuteranopia-friendly`) across config persistence, TUI appearance rendering, profile editor controls, and CLI `--theme` management/status outputs.
+- **Keyboard shortcut customization for command actions (#243):** added configurable `[shortcuts]` bindings for timer controls, view switching, manager actions, export/refresh, and quit command routing across config, runtime action dispatch, and UI command legends.
+- **Theme presets with accessibility options (#244):** added global theme preset selection (`classic`, `high-contrast`, `deuteranopia-friendly`) across config persistence, TUI appearance rendering, profile editor controls, and CLI `--theme` management/status outputs.
+
+### Changed
+
+- **Shortcut input handling hardening (#243):** prevented quit-key collisions and preserved `Ctrl-C` fallback behavior during text-entry workflows, including site manager editing.
 
 ## [0.8.0] - 2026-05-03
 
@@ -213,7 +220,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/utilForever/focustime/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/utilForever/focustime/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/utilForever/focustime/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/utilForever/focustime/compare/v0.6.2...v0.7.0
