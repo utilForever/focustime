@@ -1,4 +1,4 @@
-use std::{env, fs, path::Path, thread, time::Duration};
+use std::{env, fs, io, path::Path, thread, time::Duration};
 
 use crate::app::App;
 
@@ -1046,9 +1046,59 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
 
     let config_restored_path = app_data_file_path(CONFIG_FILE_NAME)?;
     let stats_restored_path = app_data_file_path(STATS_FILE_NAME)?;
+    let staged_config_path = temp_restore_path(&config_restored_path, "staged");
+    let staged_stats_path = temp_restore_path(&stats_restored_path, "staged");
+    copy_file_with_context(
+        &source_config,
+        &staged_config_path,
+        "stage restore config.toml",
+    )?;
+    copy_file_with_context(
+        &source_stats,
+        &staged_stats_path,
+        "stage restore stats.toml",
+    )?;
 
-    copy_file_with_context(&source_config, &config_restored_path, "restore config.toml")?;
-    copy_file_with_context(&source_stats, &stats_restored_path, "restore stats.toml")?;
+    let original_config_snapshot = snapshot_existing_file(
+        &config_restored_path,
+        "snapshot existing config.toml for rollback",
+    )?;
+    let original_stats_snapshot = snapshot_existing_file(
+        &stats_restored_path,
+        "snapshot existing stats.toml for rollback",
+    )?;
+
+    replace_file_atomically(
+        &staged_config_path,
+        &config_restored_path,
+        "restore config.toml",
+    )?;
+    if let Err(error) = replace_file_atomically(
+        &staged_stats_path,
+        &stats_restored_path,
+        "restore stats.toml",
+    ) {
+        if let Some(snapshot) = original_config_snapshot.as_deref() {
+            let _ = replace_file_atomically(
+                snapshot,
+                &config_restored_path,
+                "roll back restored config.toml",
+            );
+        } else {
+            let _ = remove_file_if_exists(&config_restored_path);
+        }
+        let _ = remove_file_if_exists(&staged_stats_path);
+        if let Some(snapshot) = original_stats_snapshot.as_deref() {
+            let _ = remove_file_if_exists(snapshot);
+        }
+        return Err(error);
+    }
+    if let Some(snapshot) = original_config_snapshot.as_deref() {
+        remove_file_if_exists(snapshot)?;
+    }
+    if let Some(snapshot) = original_stats_snapshot.as_deref() {
+        remove_file_if_exists(snapshot)?;
+    }
 
     let payload = RestoreOutput {
         restore_dir,
@@ -1096,6 +1146,92 @@ fn ensure_backup_source_file(path: &Path, file_name: &str) -> Result<(), String>
         ));
     }
     Ok(())
+}
+
+fn snapshot_existing_file(path: &Path, context: &str) -> Result<Option<PathBuf>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "Failed to {context}: `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    let snapshot = temp_restore_path(path, "original");
+    fs::copy(path, &snapshot).map_err(|error| {
+        format!(
+            "Failed to {context}: `{}` -> `{}`: {error}",
+            path.display(),
+            snapshot.display()
+        )
+    })?;
+    Ok(Some(snapshot))
+}
+
+fn temp_restore_path(path: &Path, marker: &str) -> PathBuf {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let target_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("focustime-restore");
+    let pid = std::process::id();
+    parent.join(format!(".{target_name}.{pid}.{marker}.tmp"))
+}
+
+fn replace_file_atomically(
+    staged_path: &Path,
+    destination: &Path,
+    context: &str,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        match fs::rename(staged_path, destination) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                fs::remove_file(destination).map_err(|remove_error| {
+                    format!(
+                        "Failed to {context}: could not replace `{}`: {remove_error}",
+                        destination.display()
+                    )
+                })?;
+                fs::rename(staged_path, destination).map_err(|rename_error| {
+                    format!(
+                        "Failed to {context}: `{}` -> `{}`: {rename_error}",
+                        staged_path.display(),
+                        destination.display()
+                    )
+                })
+            }
+            Err(error) => {
+                let _ = remove_file_if_exists(staged_path);
+                Err(format!(
+                    "Failed to {context}: `{}` -> `{}`: {error}",
+                    staged_path.display(),
+                    destination.display()
+                ))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        fs::rename(staged_path, destination).map_err(|error| {
+            let _ = remove_file_if_exists(staged_path);
+            format!(
+                "Failed to {context}: `{}` -> `{}`: {error}",
+                staged_path.display(),
+                destination.display()
+            )
+        })
+    }
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    fs::remove_file(path).map_err(|error| format!("Failed to remove `{}`: {error}", path.display()))
 }
 
 fn app_data_file_path(file_name: &str) -> Result<PathBuf, String> {
