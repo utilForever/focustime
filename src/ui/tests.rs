@@ -805,6 +805,36 @@ fn wakatime_status_line_shows_last_success_time_after_success_event() {
 }
 
 #[test]
+fn wakatime_status_line_shows_offline_queue_backlog() {
+    let mut app = App::default();
+    app.wakatime = WakatimeTracker::new_configured_for_tests();
+    app.wakatime.set_pending_heartbeats_for_tests(3);
+
+    let (text, color) = wakatime_status_line(&app);
+
+    assert_eq!(
+        text,
+        "⏱  WakaTime: queued offline (3 pending) · last success not yet sent"
+    );
+    assert_eq!(color, Color::Yellow);
+}
+
+#[test]
+fn wakatime_status_line_shows_replaying_queue_backlog() {
+    let mut app = App::default();
+    app.wakatime = WakatimeTracker::new_configured_for_tests();
+    app.wakatime.set_replaying_heartbeats_for_tests(2);
+
+    let (text, color) = wakatime_status_line(&app);
+
+    assert_eq!(
+        text,
+        "⏱  WakaTime: resending queued heartbeats (2 pending) · last success not yet sent"
+    );
+    assert_eq!(color, Color::Cyan);
+}
+
+#[test]
 fn wakatime_status_line_for_not_configured_omits_last_success_suffix() {
     let mut app = App::default();
     app.wakatime = WakatimeTracker::new_unconfigured_for_tests();
