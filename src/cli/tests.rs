@@ -598,6 +598,18 @@ fn parse_backup_accepts_optional_directory() {
 }
 
 #[test]
+fn parse_backup_without_value_uses_default_directory() {
+    let parsed = parse(&["--backup"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Backup { dir: None },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
 fn parse_backup_with_equals_accepts_directory() {
     let parsed = parse(&["--backup=reports"]).unwrap();
     assert_eq!(
@@ -620,6 +632,18 @@ fn parse_restore_accepts_optional_directory() {
             kind: CommandKind::Restore {
                 dir: Some(PathBuf::from("reports"))
             },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_restore_without_value_uses_default_directory() {
+    let parsed = parse(&["--restore"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Restore { dir: None },
             output: OutputMode::Text
         })
     );
@@ -1168,6 +1192,18 @@ fn parse_rejects_watch_without_status() {
 fn parse_rejects_watch_with_non_status_command() {
     let error = parse(&["--export", "--watch"]).unwrap_err();
     assert!(error.contains("`--watch` is only valid with `--status`"));
+}
+
+#[test]
+fn parse_rejects_backup_with_blank_positional_value() {
+    let error = parse(&["--backup", "   "]).unwrap_err();
+    assert!(error.contains("`--backup` requires a target directory."));
+}
+
+#[test]
+fn parse_rejects_restore_with_blank_positional_value() {
+    let error = parse(&["--restore", "   "]).unwrap_err();
+    assert!(error.contains("`--restore` requires a source directory."));
 }
 
 #[test]
