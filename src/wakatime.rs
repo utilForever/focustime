@@ -429,6 +429,9 @@ impl WakatimeTracker {
     fn set_tracking_state(&mut self, tracking: bool) {
         self.tracking = tracking;
         self.secs_since_last_heartbeat = 0;
+        if !tracking {
+            self.pending_immediate_heartbeat = false;
+        }
     }
 
     /// Captures a heartbeat request and either dispatches immediately or queues it.
@@ -945,9 +948,11 @@ mod tests {
     #[test]
     fn on_focus_stop_clears_tracking() {
         let mut tracker = tracker_with(None, true, 60);
+        tracker.pending_immediate_heartbeat = true;
         tracker.on_focus_stop();
         assert!(!tracker.is_tracking());
         assert_eq!(tracker.secs_since_last_heartbeat, 0);
+        assert!(!tracker.pending_immediate_heartbeat);
     }
 
     #[test]
