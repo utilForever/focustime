@@ -544,6 +544,7 @@ fn persisted_config_preserves_wakatime_metadata() {
         wakatime: WakatimeMetadataConfig {
             project: "Team Focus".to_string(),
             language: "Deep Work".to_string(),
+            ..WakatimeMetadataConfig::default()
         },
         ..AppConfig::default()
     };
@@ -555,6 +556,7 @@ fn persisted_config_preserves_wakatime_metadata() {
         WakatimeMetadataConfig {
             project: "Team Focus".to_string(),
             language: "Deep Work".to_string(),
+            ..WakatimeMetadataConfig::default()
         }
     );
 }
@@ -922,6 +924,7 @@ fn editing_wakatime_metadata_fields_updates_and_persists_settings() {
         wakatime: WakatimeMetadataConfig {
             project: "A".to_string(),
             language: "B".to_string(),
+            ..WakatimeMetadataConfig::default()
         },
         ..AppConfig::default()
     };
@@ -949,6 +952,7 @@ fn editing_wakatime_metadata_fields_updates_and_persists_settings() {
         WakatimeMetadataConfig {
             project: "Team Focus".to_string(),
             language: "Deep Work".to_string(),
+            ..WakatimeMetadataConfig::default()
         }
     );
     assert_eq!(
@@ -966,6 +970,7 @@ fn editing_wakatime_metadata_blank_values_fall_back_to_defaults() {
         wakatime: WakatimeMetadataConfig {
             project: "A".to_string(),
             language: "B".to_string(),
+            ..WakatimeMetadataConfig::default()
         },
         ..AppConfig::default()
     };
@@ -987,6 +992,114 @@ fn editing_wakatime_metadata_blank_values_fall_back_to_defaults() {
     assert_eq!(
         app.wakatime.heartbeat_metadata_for_tests(),
         WakatimeHeartbeatMetadata::default()
+    );
+}
+
+#[test]
+fn selecting_task_label_applies_wakatime_mapping_override() {
+    let config = AppConfig {
+        wakatime: WakatimeMetadataConfig {
+            project: "Global Project".to_string(),
+            language: "Global Language".to_string(),
+            task_mappings: vec![crate::config::WakatimeTaskMappingConfig {
+                task_label: "Docs".to_string(),
+                project: Some("Documentation".to_string()),
+                language: Some("Markdown".to_string()),
+            }],
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.select_task_label_for_cli("Docs").unwrap();
+
+    assert_eq!(
+        app.wakatime.heartbeat_metadata_for_tests(),
+        WakatimeHeartbeatMetadata {
+            project: "Documentation".to_string(),
+            language: "Markdown".to_string(),
+        }
+    );
+}
+
+#[test]
+fn selecting_unmapped_task_label_uses_global_wakatime_metadata() {
+    let config = AppConfig {
+        wakatime: WakatimeMetadataConfig {
+            project: "Global Project".to_string(),
+            language: "Global Language".to_string(),
+            task_mappings: vec![crate::config::WakatimeTaskMappingConfig {
+                task_label: "Docs".to_string(),
+                project: Some("Documentation".to_string()),
+                language: Some("Markdown".to_string()),
+            }],
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.select_task_label_for_cli("Planning").unwrap();
+
+    assert_eq!(
+        app.wakatime.heartbeat_metadata_for_tests(),
+        WakatimeHeartbeatMetadata {
+            project: "Global Project".to_string(),
+            language: "Global Language".to_string(),
+        }
+    );
+}
+
+#[test]
+fn selecting_task_label_uses_partial_wakatime_mapping_fallback() {
+    let config = AppConfig {
+        wakatime: WakatimeMetadataConfig {
+            project: "Global Project".to_string(),
+            language: "Global Language".to_string(),
+            task_mappings: vec![crate::config::WakatimeTaskMappingConfig {
+                task_label: "Docs".to_string(),
+                project: Some("Documentation".to_string()),
+                language: None,
+            }],
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.select_task_label_for_cli("Docs").unwrap();
+
+    assert_eq!(
+        app.wakatime.heartbeat_metadata_for_tests(),
+        WakatimeHeartbeatMetadata {
+            project: "Documentation".to_string(),
+            language: "Global Language".to_string(),
+        }
+    );
+}
+
+#[test]
+fn selecting_task_label_matches_wakatime_mapping_case_insensitively() {
+    let config = AppConfig {
+        wakatime: WakatimeMetadataConfig {
+            project: "Global Project".to_string(),
+            language: "Global Language".to_string(),
+            task_mappings: vec![crate::config::WakatimeTaskMappingConfig {
+                task_label: "Deep Work".to_string(),
+                project: None,
+                language: Some("Rust".to_string()),
+            }],
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.select_task_label_for_cli("deep work").unwrap();
+
+    assert_eq!(
+        app.wakatime.heartbeat_metadata_for_tests(),
+        WakatimeHeartbeatMetadata {
+            project: "Global Project".to_string(),
+            language: "Rust".to_string(),
+        }
     );
 }
 
@@ -1803,6 +1916,7 @@ fn cancelling_profile_edit_restores_wakatime_metadata() {
         wakatime: WakatimeMetadataConfig {
             project: "Team Focus".to_string(),
             language: "Deep Work".to_string(),
+            ..WakatimeMetadataConfig::default()
         },
         ..AppConfig::default()
     };
@@ -1821,6 +1935,7 @@ fn cancelling_profile_edit_restores_wakatime_metadata() {
         WakatimeMetadataConfig {
             project: "Team Focus".to_string(),
             language: "Deep Work".to_string(),
+            ..WakatimeMetadataConfig::default()
         }
     );
     assert_eq!(

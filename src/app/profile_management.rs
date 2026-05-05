@@ -449,12 +449,12 @@ impl App {
         }
     }
 
-    fn sync_wakatime_metadata_to_tracker(&mut self) {
+    pub(super) fn sync_wakatime_metadata_to_tracker(&mut self) {
+        let (project, language) = self
+            .wakatime_metadata
+            .resolved_project_language_for_task_label(self.current_task_label());
         self.wakatime
-            .set_heartbeat_metadata(WakatimeHeartbeatMetadata {
-                project: self.wakatime_metadata.project.clone(),
-                language: self.wakatime_metadata.language.clone(),
-            });
+            .set_heartbeat_metadata(WakatimeHeartbeatMetadata { project, language });
     }
 
     pub(super) fn clamp_break_template_selection(&mut self) {
