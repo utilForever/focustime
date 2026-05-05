@@ -204,6 +204,87 @@ fn status_watch_json_streams_multiple_snapshots() {
 }
 
 #[test]
+fn backup_and_restore_json_round_trip_config_and_stats_files() {
+    let env = TestEnv::new("backup-restore-json");
+    let backup_dir = env.root.join("backup");
+    let backup_arg = format!("--backup={}", backup_dir.display());
+    let restore_arg = format!("--restore={}", backup_dir.display());
+
+    let set_goal_output = env.run(&["--goal=120,4", "--json"]);
+    assert_eq!(set_goal_output.status.code(), Some(0));
+    assert!(stderr_text(&set_goal_output).trim().is_empty());
+
+    let set_task_goal_output = env.run(&["--task-goal=Docs:90,3", "--json"]);
+    assert_eq!(set_task_goal_output.status.code(), Some(0));
+    assert!(stderr_text(&set_task_goal_output).trim().is_empty());
+
+    let backup_output = env.run(&[backup_arg.as_str(), "--json"]);
+    assert_eq!(backup_output.status.code(), Some(0));
+    assert!(stderr_text(&backup_output).trim().is_empty());
+    let backup_payload: Value =
+        serde_json::from_slice(&backup_output.stdout).expect("stdout should be JSON");
+    assert!(backup_payload.get("backup_dir").is_some());
+    assert!(backup_payload.get("config_backup_path").is_some());
+    assert!(backup_payload.get("stats_backup_path").is_some());
+    assert!(backup_dir.join("config.toml").is_file());
+    assert!(backup_dir.join("stats.toml").is_file());
+
+    let mutate_goal_output = env.run(&["--goal=15,1", "--json"]);
+    assert_eq!(mutate_goal_output.status.code(), Some(0));
+    assert!(stderr_text(&mutate_goal_output).trim().is_empty());
+
+    let mutate_task_goal_output = env.run(&["--task-goal=Docs:30,1", "--json"]);
+    assert_eq!(mutate_task_goal_output.status.code(), Some(0));
+    assert!(stderr_text(&mutate_task_goal_output).trim().is_empty());
+
+    let restore_output = env.run(&[restore_arg.as_str(), "--json"]);
+    assert_eq!(restore_output.status.code(), Some(0));
+    assert!(stderr_text(&restore_output).trim().is_empty());
+    let restore_payload: Value =
+        serde_json::from_slice(&restore_output.stdout).expect("stdout should be JSON");
+    assert!(restore_payload.get("restore_dir").is_some());
+    assert!(restore_payload.get("config_restored_path").is_some());
+    assert!(restore_payload.get("stats_restored_path").is_some());
+
+    let goal_output = env.run(&["--goal", "--json"]);
+    assert_eq!(goal_output.status.code(), Some(0));
+    let goal_payload: Value = serde_json::from_slice(&goal_output.stdout).unwrap();
+    assert_eq!(goal_payload["minutes_target"], 120);
+    assert_eq!(goal_payload["pomodoros_target"], 4);
+
+    let task_goal_output = env.run(&["--task-goal", "Docs", "--json"]);
+    assert_eq!(task_goal_output.status.code(), Some(0));
+    let task_goal_payload: Value = serde_json::from_slice(&task_goal_output.stdout).unwrap();
+    assert_eq!(task_goal_payload["minutes_target"], 90);
+    assert_eq!(task_goal_payload["pomodoros_target"], 3);
+}
+
+#[test]
+fn restore_json_fails_when_backup_is_missing_stats_file() {
+    let env = TestEnv::new("restore-missing-stats");
+    let backup_dir = env.root.join("broken-backup");
+    fs::create_dir_all(&backup_dir).expect("failed to create backup directory");
+    fs::write(backup_dir.join("config.toml"), "focus_secs = 1500\n")
+        .expect("failed to write config backup file");
+    let restore_arg = format!("--restore={}", backup_dir.display());
+
+    let output = env.run(&[restore_arg.as_str(), "--json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr_text(&output).trim().is_empty());
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(payload["ok"], false);
+    assert_eq!(payload["error"]["kind"], "runtime");
+    assert_eq!(payload["error"]["exit_code"], 1);
+    assert!(
+        payload["error"]["message"]
+            .as_str()
+            .expect("error message should be a string")
+            .contains("missing `stats.toml`")
+    );
+}
+
+#[test]
 fn parse_errors_in_json_mode_emit_usage_envelope() {
     let env = TestEnv::new("json-parse-error");
     let output = env.run(&["--status", "--unknown", "--json"]);

@@ -584,6 +584,62 @@ fn parse_export_accepts_optional_directory() {
 }
 
 #[test]
+fn parse_backup_accepts_optional_directory() {
+    let parsed = parse(&["--backup", "reports"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Backup {
+                dir: Some(PathBuf::from("reports"))
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_backup_with_equals_accepts_directory() {
+    let parsed = parse(&["--backup=reports"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Backup {
+                dir: Some(PathBuf::from("reports"))
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_restore_accepts_optional_directory() {
+    let parsed = parse(&["--restore", "reports"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Restore {
+                dir: Some(PathBuf::from("reports"))
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_restore_with_equals_accepts_directory() {
+    let parsed = parse(&["--restore=reports"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Restore {
+                dir: Some(PathBuf::from("reports"))
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
 fn parse_export_with_equals_accepts_directory() {
     let parsed = parse(&["--export=reports"]).unwrap();
     assert_eq!(
@@ -790,6 +846,24 @@ fn classify_key_value_arg_accepts_export_equals_value() {
 }
 
 #[test]
+fn classify_key_value_arg_accepts_backup_equals_value() {
+    let parsed = classify_key_value_arg("--backup=reports").unwrap();
+    assert_eq!(
+        parsed,
+        Some(ParsedToken::Backup(Some(PathBuf::from("reports"))))
+    );
+}
+
+#[test]
+fn classify_key_value_arg_accepts_restore_equals_value() {
+    let parsed = classify_key_value_arg("--restore=reports").unwrap();
+    assert_eq!(
+        parsed,
+        Some(ParsedToken::Restore(Some(PathBuf::from("reports"))))
+    );
+}
+
+#[test]
 fn classify_key_value_arg_accepts_goal_equals_value() {
     let parsed = classify_key_value_arg("--goal=90,3").unwrap();
     assert_eq!(
@@ -871,6 +945,18 @@ fn classify_key_value_arg_accepts_schedule_set_equals_value() {
 fn classify_key_value_arg_rejects_empty_export_equals_value() {
     let error = classify_key_value_arg("--export=").unwrap_err();
     assert!(error.contains("`--export=` requires a target directory."));
+}
+
+#[test]
+fn classify_key_value_arg_rejects_empty_backup_equals_value() {
+    let error = classify_key_value_arg("--backup=").unwrap_err();
+    assert!(error.contains("`--backup=` requires a target directory."));
+}
+
+#[test]
+fn classify_key_value_arg_rejects_empty_restore_equals_value() {
+    let error = classify_key_value_arg("--restore=").unwrap_err();
+    assert!(error.contains("`--restore=` requires a source directory."));
 }
 
 #[test]
@@ -1045,6 +1131,12 @@ fn parse_rejects_schedule_set_with_invalid_one_time_date() {
 #[test]
 fn parse_rejects_multiple_primary_commands() {
     let error = parse(&["--status", "--export"]).unwrap_err();
+    assert!(error.contains("Multiple primary commands"));
+}
+
+#[test]
+fn parse_rejects_multiple_primary_commands_for_backup_and_restore() {
+    let error = parse(&["--backup", "--restore"]).unwrap_err();
     assert!(error.contains("Multiple primary commands"));
 }
 
