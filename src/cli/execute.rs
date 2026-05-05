@@ -1,31 +1,34 @@
-use std::{env, thread, time::Duration};
+use std::{env, fs, path::Path, thread, time::Duration};
 
 use crate::app::App;
 
 use crate::cli::{
-    AppConfig, BlocklistProfileCommandKind, BlocklistProfileCommandOutput, BlocklistProfileConfig,
-    BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, CliCommand, CommandKind,
-    DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats,
+    AppConfig, BackupOutput, BlocklistProfileCommandKind, BlocklistProfileCommandOutput,
+    BlocklistProfileConfig, BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, CliCommand,
+    CommandKind, DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats,
     GoalCarryCommandOutput, GoalCommandOutput, InvalidSiteEntryOutput, InvalidSiteInput,
     MonthlyGoalConfig, OutputMode, PathBuf, ProfileId, ProfileOutput, ProfileView,
-    RecurringScheduleConfig, ScheduleCommandOutput, SiteAddCommandOutput, SiteBlocker,
-    SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
-    SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
-    TaskGoalOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput,
-    WeeklyGoalConfig, available_break_template_views, available_theme_preset_views,
-    build_blocking_preview_command_output, build_diagnostics_command_output,
-    build_schedule_inspection_output, build_status_output, build_task_goal_output,
-    display_input_value, effective_blocked_sites_for_profile, flush_stdout,
-    mirror_metadata_from_task_label, print_blocking_preview_command_output,
+    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, SiteAddCommandOutput,
+    SiteBlocker, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue,
+    SiteListCommandOutput, SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput,
+    TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
+    TimerStateOutput, WeeklyGoalConfig, available_break_template_views,
+    available_theme_preset_views, build_blocking_preview_command_output,
+    build_diagnostics_command_output, build_schedule_inspection_output, build_status_output,
+    build_task_goal_output, display_input_value, effective_blocked_sites_for_profile, flush_stdout,
+    mirror_metadata_from_task_label, print_backup_output, print_blocking_preview_command_output,
     print_blocklist_profile_command_output, print_diagnostics_command_output, print_export_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
-    print_profile_output, print_schedule_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
-    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
-    timer_status_id,
+    print_profile_output, print_restore_output, print_schedule_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
+    print_timer_state_output, profile_id, profile_view, selected_break_template_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
+
+const CONFIG_FILE_NAME: &str = "config.toml";
+const STATS_FILE_NAME: &str = "stats.toml";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
     match cli_command.kind {
@@ -60,6 +63,8 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::Status {
             watch_interval_secs,
         } => execute_status_command(cli_command.output, watch_interval_secs),
+        CommandKind::Backup { dir } => execute_backup_command(dir, cli_command.output),
+        CommandKind::Restore { dir } => execute_restore_command(dir, cli_command.output),
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
@@ -992,6 +997,273 @@ fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
         OutputMode::Text => print_export_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
+    Ok(())
+}
+
+fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
+    let backup_dir = match dir {
+        Some(path) => path,
+        None => env::current_dir().map_err(|error| {
+            format!("Backup failed: could not determine current directory: {error}")
+        })?,
+    };
+    fs::create_dir_all(&backup_dir)
+        .map_err(|error| format!("Backup failed: could not create backup directory: {error}"))?;
+
+    let source_config = app_data_file_path(CONFIG_FILE_NAME)?;
+    let source_stats = app_data_file_path(STATS_FILE_NAME)?;
+    ensure_backup_source_file(&source_config, CONFIG_FILE_NAME)?;
+    ensure_backup_source_file(&source_stats, STATS_FILE_NAME)?;
+    let config_backup_path = backup_dir.join(CONFIG_FILE_NAME);
+    let stats_backup_path = backup_dir.join(STATS_FILE_NAME);
+
+    copy_file_with_context(&source_config, &config_backup_path, "backup config.toml")?;
+    copy_file_with_context(&source_stats, &stats_backup_path, "backup stats.toml")?;
+
+    let payload = BackupOutput {
+        backup_dir,
+        config_backup_path,
+        stats_backup_path,
+    };
+    match output {
+        OutputMode::Text => print_backup_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
+    let restore_dir = match dir {
+        Some(path) => path,
+        None => env::current_dir().map_err(|error| {
+            format!("Restore failed: could not determine current directory: {error}")
+        })?,
+    };
+    let source_config = restore_dir.join(CONFIG_FILE_NAME);
+    let source_stats = restore_dir.join(STATS_FILE_NAME);
+    ensure_restore_source_file(&source_config, CONFIG_FILE_NAME)?;
+    ensure_restore_source_file(&source_stats, STATS_FILE_NAME)?;
+
+    let config_restored_path = app_data_file_path(CONFIG_FILE_NAME)?;
+    let stats_restored_path = app_data_file_path(STATS_FILE_NAME)?;
+    let staged_config_path = temp_restore_path(&config_restored_path, "staged");
+    let staged_stats_path = temp_restore_path(&stats_restored_path, "staged");
+    copy_file_with_context(
+        &source_config,
+        &staged_config_path,
+        "stage restore config.toml",
+    )?;
+    copy_file_with_context(
+        &source_stats,
+        &staged_stats_path,
+        "stage restore stats.toml",
+    )?;
+
+    let original_config_snapshot = snapshot_existing_file(
+        &config_restored_path,
+        "snapshot existing config.toml for rollback",
+    )?;
+    let original_stats_snapshot = snapshot_existing_file(
+        &stats_restored_path,
+        "snapshot existing stats.toml for rollback",
+    )?;
+
+    replace_file_atomically(
+        &staged_config_path,
+        &config_restored_path,
+        "restore config.toml",
+    )?;
+    if let Err(error) = replace_file_atomically(
+        &staged_stats_path,
+        &stats_restored_path,
+        "restore stats.toml",
+    ) {
+        if let Some(snapshot) = original_config_snapshot.as_deref() {
+            let _ = replace_file_atomically(
+                snapshot,
+                &config_restored_path,
+                "roll back restored config.toml",
+            );
+        } else {
+            let _ = remove_file_if_exists(&config_restored_path);
+        }
+        if let Some(snapshot) = original_stats_snapshot.as_deref() {
+            let _ = replace_file_atomically(
+                snapshot,
+                &stats_restored_path,
+                "roll back restored stats.toml",
+            );
+        } else {
+            let _ = remove_file_if_exists(&stats_restored_path);
+        }
+        let _ = remove_file_if_exists(&staged_stats_path);
+        return Err(error);
+    }
+    if let Some(snapshot) = original_config_snapshot.as_deref() {
+        let _ = remove_file_if_exists(snapshot);
+    }
+    if let Some(snapshot) = original_stats_snapshot.as_deref() {
+        let _ = remove_file_if_exists(snapshot);
+    }
+
+    let payload = RestoreOutput {
+        restore_dir,
+        config_restored_path,
+        stats_restored_path,
+    };
+    match output {
+        OutputMode::Text => print_restore_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn ensure_restore_source_file(path: &Path, file_name: &str) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!(
+            "Restore failed: missing `{file_name}` in `{}`.",
+            path.parent()
+                .map(|parent| parent.display().to_string())
+                .unwrap_or_else(|| ".".to_string())
+        ));
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "Restore failed: `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_backup_source_file(path: &Path, file_name: &str) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!(
+            "Backup failed: missing `{file_name}` in `{}`.",
+            path.parent()
+                .map(|parent| parent.display().to_string())
+                .unwrap_or_else(|| ".".to_string())
+        ));
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "Backup failed: `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn snapshot_existing_file(path: &Path, context: &str) -> Result<Option<PathBuf>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "Failed to {context}: `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    let snapshot = temp_restore_path(path, "original");
+    fs::copy(path, &snapshot).map_err(|error| {
+        format!(
+            "Failed to {context}: `{}` -> `{}`: {error}",
+            path.display(),
+            snapshot.display()
+        )
+    })?;
+    Ok(Some(snapshot))
+}
+
+fn temp_restore_path(path: &Path, marker: &str) -> PathBuf {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let target_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("focustime-restore");
+    let pid = std::process::id();
+    parent.join(format!(".{target_name}.{pid}.{marker}.tmp"))
+}
+
+fn replace_file_atomically(
+    staged_path: &Path,
+    destination: &Path,
+    context: &str,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        match fs::rename(staged_path, destination) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                fs::remove_file(destination).map_err(|remove_error| {
+                    format!(
+                        "Failed to {context}: could not replace `{}`: {remove_error}",
+                        destination.display()
+                    )
+                })?;
+                fs::rename(staged_path, destination).map_err(|rename_error| {
+                    format!(
+                        "Failed to {context}: `{}` -> `{}`: {rename_error}",
+                        staged_path.display(),
+                        destination.display()
+                    )
+                })
+            }
+            Err(error) => {
+                let _ = remove_file_if_exists(staged_path);
+                Err(format!(
+                    "Failed to {context}: `{}` -> `{}`: {error}",
+                    staged_path.display(),
+                    destination.display()
+                ))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        fs::rename(staged_path, destination).map_err(|error| {
+            let _ = remove_file_if_exists(staged_path);
+            format!(
+                "Failed to {context}: `{}` -> `{}`: {error}",
+                staged_path.display(),
+                destination.display()
+            )
+        })
+    }
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    fs::remove_file(path).map_err(|error| format!("Failed to remove `{}`: {error}", path.display()))
+}
+
+fn app_data_file_path(file_name: &str) -> Result<PathBuf, String> {
+    crate::config::app_data_path(file_name).ok_or_else(|| {
+        format!(
+            "could not determine application data path for `{file_name}` (environment is not configured)"
+        )
+    })
+}
+
+fn copy_file_with_context(source: &Path, destination: &Path, context: &str) -> Result<(), String> {
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to {context}: could not create `{}`: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    fs::copy(source, destination).map_err(|error| {
+        format!(
+            "Failed to {context}: `{}` -> `{}`: {error}",
+            source.display(),
+            destination.display()
+        )
+    })?;
     Ok(())
 }
 

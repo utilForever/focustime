@@ -171,6 +171,15 @@ cargo run -- --status --json
 cargo run -- --status --watch
 cargo run -- --status --watch=2 --json
 
+# Back up config.toml and stats.toml to current directory or a target directory
+cargo run -- --backup
+cargo run -- --backup=./reports --json
+
+# Restore config.toml and stats.toml from current directory or a source directory
+# (restore requires both files to be present in the source directory)
+cargo run -- --restore
+cargo run -- --restore=./reports --json
+
 # Export stats to current directory or a target directory
 cargo run -- --export
 cargo run -- --export=./reports --json
