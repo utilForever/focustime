@@ -400,10 +400,29 @@ pomodoros = 80
 [wakatime]
 project = "focustime"
 language = "Pomodoro"
+
+[[wakatime.task_mappings]]
+task_label = "Docs"
+project = "Documentation"
+language = "Markdown"
+
+[[wakatime.task_mappings]]
+task_label = "Review"
+language = "Code Review"
 ```
 
 `[wakatime]` is optional. If omitted (or set to blank values), `focustime` uses
 the defaults above for heartbeat metadata labels.
+
+`[[wakatime.task_mappings]]` is also optional. When present, focustime matches
+the active task label case-insensitively and overrides WakaTime metadata per
+field:
+
+- `project`: task-mapped value if provided, otherwise `[wakatime].project`
+- `language`: task-mapped value if provided, otherwise `[wakatime].language`
+
+Mappings with blank `task_label` or blank override values are ignored. If
+duplicate task labels are configured, the first valid mapping is used.
 
 ## Site manager workflow
 
