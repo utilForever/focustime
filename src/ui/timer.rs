@@ -320,6 +320,14 @@ pub(super) fn wakatime_status_line(app: &App) -> (String, Color) {
             "⏱  WakaTime: sending heartbeat...".to_string(),
             app_color(app, Color::Cyan),
         ),
+        WakatimeRuntimeState::Queued { pending } => (
+            format!("⏱  WakaTime: queued offline ({pending} pending)"),
+            app_color(app, Color::Yellow),
+        ),
+        WakatimeRuntimeState::Replaying { pending } => (
+            format!("⏱  WakaTime: resending queued heartbeats ({pending} pending)"),
+            app_color(app, Color::Cyan),
+        ),
         WakatimeRuntimeState::Retrying {
             attempt,
             max_attempts,

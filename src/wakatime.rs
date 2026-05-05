@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -11,12 +12,17 @@ use serde::Serialize;
 const HEARTBEAT_INTERVAL_SECS: u64 = 120;
 const HEARTBEAT_RETRY_BACKOFF_SECS: [u64; 2] = [1, 2];
 const HEARTBEAT_MAX_ATTEMPTS: u8 = 3;
+const HEARTBEAT_QUEUE_CAPACITY: usize = 256;
+#[cfg(not(test))]
+const HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 10;
+#[cfg(test)]
+const HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 0;
 const DEFAULT_API_URL: &str = "https://wakatime.com";
 const DEFAULT_HEARTBEAT_ENTITY: &str = "focustime";
 const DEFAULT_HEARTBEAT_PROJECT: &str = "focustime";
 const DEFAULT_HEARTBEAT_LANGUAGE: &str = "Pomodoro";
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 struct Heartbeat {
     entity: String,
     #[serde(rename = "type")]
@@ -33,6 +39,12 @@ pub enum WakatimeRuntimeState {
     Idle,
     Tracking,
     Sending,
+    Queued {
+        pending: usize,
+    },
+    Replaying {
+        pending: usize,
+    },
     Retrying {
         attempt: u8,
         max_attempts: u8,
@@ -108,6 +120,7 @@ enum HeartbeatEvent {
     },
     Failed {
         error: String,
+        retryable: bool,
     },
 }
 
@@ -221,6 +234,14 @@ pub struct WakatimeTracker {
     last_error: Option<String>,
     /// Unix timestamp (seconds) of the most recent successful heartbeat.
     last_successful_heartbeat_epoch_secs: Option<u64>,
+    /// Backlog of unsent heartbeats, oldest first.
+    queued_heartbeats: VecDeque<Heartbeat>,
+    /// Heartbeat currently being sent in the worker thread.
+    in_flight_heartbeat: Option<Heartbeat>,
+    /// Whether the in-flight heartbeat originated from the offline queue.
+    in_flight_from_queue: bool,
+    /// Earliest time at which queued heartbeats should be replayed again.
+    queue_retry_not_before_epoch_secs: Option<u64>,
     /// Latches an immediate heartbeat request while another worker is in flight.
     pending_immediate_heartbeat: bool,
     heartbeat_metadata: WakatimeHeartbeatMetadata,
@@ -247,6 +268,10 @@ impl WakatimeTracker {
             retry_state: None,
             last_error: None,
             last_successful_heartbeat_epoch_secs: None,
+            queued_heartbeats: VecDeque::new(),
+            in_flight_heartbeat: None,
+            in_flight_from_queue: false,
+            queue_retry_not_before_epoch_secs: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: metadata.normalized(),
             #[cfg(test)]
@@ -263,6 +288,11 @@ impl WakatimeTracker {
         if self.api_key.is_none() {
             return WakatimeRuntimeState::NotConfigured;
         }
+        if !self.queued_heartbeats.is_empty() && !self.heartbeat_in_flight {
+            return WakatimeRuntimeState::Queued {
+                pending: self.pending_heartbeat_count(),
+            };
+        }
         if let Some(retry) = self.retry_state.as_ref() {
             return WakatimeRuntimeState::Retrying {
                 attempt: retry.attempt,
@@ -272,6 +302,11 @@ impl WakatimeTracker {
             };
         }
         if self.heartbeat_in_flight {
+            if self.in_flight_from_queue {
+                return WakatimeRuntimeState::Replaying {
+                    pending: self.pending_heartbeat_count(),
+                };
+            }
             return WakatimeRuntimeState::Sending;
         }
         if let Some(error) = self.last_error.as_ref() {
@@ -299,16 +334,23 @@ impl WakatimeTracker {
         self.last_successful_heartbeat_epoch_secs
     }
 
+    pub fn pending_heartbeat_count(&self) -> usize {
+        self.queued_heartbeats.len()
+            + usize::from(self.heartbeat_in_flight && self.in_flight_from_queue)
+    }
+
     /// Drains heartbeat events from worker threads and updates tracker status.
     pub fn poll_events(&mut self) {
         while let Ok(event) = self.result_rx.try_recv() {
             match event {
                 HeartbeatEvent::Sent => {
                     self.heartbeat_in_flight = false;
+                    self.in_flight_from_queue = false;
+                    self.in_flight_heartbeat = None;
+                    self.queue_retry_not_before_epoch_secs = None;
                     self.retry_state = None;
                     self.last_error = None;
                     self.last_successful_heartbeat_epoch_secs = Some(current_unix_epoch_secs());
-                    self.dispatch_pending_immediate_heartbeat();
                 }
                 HeartbeatEvent::Retrying {
                     attempt,
@@ -324,14 +366,24 @@ impl WakatimeTracker {
                         error,
                     });
                 }
-                HeartbeatEvent::Failed { error } => {
+                HeartbeatEvent::Failed { error, retryable } => {
                     self.heartbeat_in_flight = false;
+                    self.in_flight_from_queue = false;
                     self.retry_state = None;
                     self.last_error = Some(error);
-                    self.dispatch_pending_immediate_heartbeat();
+                    if retryable {
+                        self.requeue_in_flight_heartbeat();
+                        self.queue_retry_not_before_epoch_secs = Some(
+                            current_unix_epoch_secs()
+                                .saturating_add(HEARTBEAT_QUEUE_RETRY_DELAY_SECS),
+                        );
+                    } else {
+                        self.in_flight_heartbeat = None;
+                    }
                 }
             }
         }
+        self.dispatch_pending_work();
     }
 
     /// Called when a focus session starts (timer transitions to Running in Focus phase).
@@ -343,7 +395,7 @@ impl WakatimeTracker {
         }
         self.poll_events();
         self.set_tracking_state(true);
-        self.queue_heartbeat_async(true);
+        self.request_heartbeat(true);
     }
 
     /// Advances the heartbeat counter by `secs` simulated seconds.
@@ -361,7 +413,7 @@ impl WakatimeTracker {
             (self.secs_since_last_heartbeat + secs).min(HEARTBEAT_INTERVAL_SECS);
         if self.secs_since_last_heartbeat >= HEARTBEAT_INTERVAL_SECS {
             self.secs_since_last_heartbeat = 0;
-            self.queue_heartbeat_async(false);
+            self.request_heartbeat(false);
         }
     }
 
@@ -377,21 +429,98 @@ impl WakatimeTracker {
     fn set_tracking_state(&mut self, tracking: bool) {
         self.tracking = tracking;
         self.secs_since_last_heartbeat = 0;
+        if !tracking {
+            self.pending_immediate_heartbeat = false;
+        }
     }
 
-    /// Spawns a background thread to send a heartbeat to the WakaTime API.
-    /// Retries transient failures with bounded exponential backoff.
-    fn queue_heartbeat_async(&mut self, immediate: bool) {
-        let Some(ref api_key) = self.api_key else {
+    /// Captures a heartbeat request and either dispatches immediately or queues it.
+    fn request_heartbeat(&mut self, immediate: bool) {
+        if self.api_key.is_none() {
             return;
-        };
+        }
         if self.heartbeat_in_flight {
             if immediate {
                 self.pending_immediate_heartbeat = true;
             }
             return;
         }
+
+        let heartbeat = self.build_heartbeat_payload_for_now();
+        if !self.queued_heartbeats.is_empty() {
+            self.enqueue_heartbeat(heartbeat);
+            self.dispatch_pending_work();
+            return;
+        }
+
+        self.dispatch_heartbeat(heartbeat, false);
+    }
+
+    fn build_heartbeat_payload_for_now(&self) -> Heartbeat {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+
+        build_heartbeat_payload(now, &self.heartbeat_metadata)
+    }
+
+    fn enqueue_heartbeat(&mut self, heartbeat: Heartbeat) {
+        if self.queued_heartbeats.len() >= HEARTBEAT_QUEUE_CAPACITY {
+            let _ = self.queued_heartbeats.pop_front();
+        }
+        self.queued_heartbeats.push_back(heartbeat);
+    }
+
+    fn requeue_in_flight_heartbeat(&mut self) {
+        let Some(in_flight_heartbeat) = self.in_flight_heartbeat.take() else {
+            return;
+        };
+        if self.queued_heartbeats.len() >= HEARTBEAT_QUEUE_CAPACITY {
+            let _ = self.queued_heartbeats.pop_front();
+        }
+        self.queued_heartbeats.push_front(in_flight_heartbeat);
+    }
+
+    fn queue_retry_is_due(&self) -> bool {
+        self.queue_retry_not_before_epoch_secs
+            .is_none_or(|not_before| current_unix_epoch_secs() >= not_before)
+    }
+
+    fn dispatch_pending_work(&mut self) {
+        if self.api_key.is_none() || self.heartbeat_in_flight {
+            return;
+        }
+        if self.dispatch_next_queued_heartbeat_if_due() {
+            return;
+        }
+        self.dispatch_pending_immediate_heartbeat();
+    }
+
+    fn dispatch_next_queued_heartbeat_if_due(&mut self) -> bool {
+        if !self.queue_retry_is_due() {
+            return false;
+        }
+        let Some(heartbeat) = self.queued_heartbeats.pop_front() else {
+            return false;
+        };
+        if self.api_key.is_none() {
+            return false;
+        }
+        self.dispatch_heartbeat(heartbeat, true);
+        true
+    }
+
+    /// Spawns a background thread to send a heartbeat to the WakaTime API.
+    /// Retries transient failures with bounded exponential backoff.
+    fn dispatch_heartbeat(&mut self, heartbeat: Heartbeat, from_queue: bool) {
+        let Some(api_key) = self.api_key.clone() else {
+            return;
+        };
         self.heartbeat_in_flight = true;
+        self.in_flight_heartbeat = Some(heartbeat.clone());
+        self.in_flight_from_queue = from_queue;
+        self.queue_retry_not_before_epoch_secs = None;
         self.retry_state = None;
         self.last_error = None;
 
@@ -410,13 +539,6 @@ impl WakatimeTracker {
             "wakatime/unset ({os}) focustime/{plugin_version} focustime-wakatime/{plugin_version}"
         );
         let hostname = get_hostname();
-
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs_f64())
-            .unwrap_or(0.0);
-
-        let heartbeat = build_heartbeat_payload(now, &self.heartbeat_metadata);
         let result_tx = self.result_tx.clone();
 
         std::thread::spawn(move || {
@@ -427,7 +549,7 @@ impl WakatimeTracker {
     fn dispatch_pending_immediate_heartbeat(&mut self) {
         if self.pending_immediate_heartbeat && self.tracking {
             self.pending_immediate_heartbeat = false;
-            self.queue_heartbeat_async(true);
+            self.request_heartbeat(true);
         }
     }
 
@@ -445,6 +567,10 @@ impl WakatimeTracker {
             retry_state: None,
             last_error: None,
             last_successful_heartbeat_epoch_secs: None,
+            queued_heartbeats: VecDeque::new(),
+            in_flight_heartbeat: None,
+            in_flight_from_queue: false,
+            queue_retry_not_before_epoch_secs: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
             disable_network_io: true,
@@ -465,6 +591,10 @@ impl WakatimeTracker {
             retry_state: None,
             last_error: None,
             last_successful_heartbeat_epoch_secs: None,
+            queued_heartbeats: VecDeque::new(),
+            in_flight_heartbeat: None,
+            in_flight_from_queue: false,
+            queue_retry_not_before_epoch_secs: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
             disable_network_io: true,
@@ -480,12 +610,46 @@ impl WakatimeTracker {
     pub(crate) fn push_failed_event_for_tests(&self, error: impl Into<String>) {
         let _ = self.result_tx.send(HeartbeatEvent::Failed {
             error: error.into(),
+            retryable: false,
         });
     }
 
     #[cfg(test)]
     pub(crate) fn heartbeat_metadata_for_tests(&self) -> WakatimeHeartbeatMetadata {
         self.heartbeat_metadata.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_pending_heartbeats_for_tests(&mut self, pending: usize) {
+        self.queued_heartbeats.clear();
+        for index in 0..pending {
+            self.queued_heartbeats.push_back(build_heartbeat_payload(
+                index as f64,
+                &self.heartbeat_metadata,
+            ));
+        }
+        self.heartbeat_in_flight = false;
+        self.in_flight_heartbeat = None;
+        self.in_flight_from_queue = false;
+        self.queue_retry_not_before_epoch_secs = None;
+        self.pending_immediate_heartbeat = false;
+        self.retry_state = None;
+        self.last_error = None;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_replaying_heartbeats_for_tests(&mut self, pending: usize) {
+        self.set_pending_heartbeats_for_tests(pending);
+        if pending == 0 {
+            return;
+        }
+        let in_flight = self
+            .queued_heartbeats
+            .pop_front()
+            .unwrap_or_else(|| build_heartbeat_payload(0.0, &self.heartbeat_metadata));
+        self.heartbeat_in_flight = true;
+        self.in_flight_heartbeat = Some(in_flight);
+        self.in_flight_from_queue = true;
     }
 }
 
@@ -519,8 +683,9 @@ fn send_heartbeat_with_retries(
             }
             Err(error) => {
                 let error_message = format_heartbeat_error(&error);
+                let retryable = is_retryable_error(&error);
                 let backoff_index = attempt.saturating_sub(1) as usize;
-                if is_retryable_error(&error)
+                if retryable
                     && let Some(backoff_secs) = HEARTBEAT_RETRY_BACKOFF_SECS.get(backoff_index)
                 {
                     let _ = result_tx.send(HeartbeatEvent::Retrying {
@@ -536,6 +701,7 @@ fn send_heartbeat_with_retries(
 
                 let _ = result_tx.send(HeartbeatEvent::Failed {
                     error: error_message,
+                    retryable,
                 });
                 return;
             }
@@ -655,6 +821,10 @@ mod tests {
             retry_state: None,
             last_error: None,
             last_successful_heartbeat_epoch_secs: None,
+            queued_heartbeats: VecDeque::new(),
+            in_flight_heartbeat: None,
+            in_flight_from_queue: false,
+            queue_retry_not_before_epoch_secs: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
             disable_network_io: true,
@@ -778,9 +948,11 @@ mod tests {
     #[test]
     fn on_focus_stop_clears_tracking() {
         let mut tracker = tracker_with(None, true, 60);
+        tracker.pending_immediate_heartbeat = true;
         tracker.on_focus_stop();
         assert!(!tracker.is_tracking());
         assert_eq!(tracker.secs_since_last_heartbeat, 0);
+        assert!(!tracker.pending_immediate_heartbeat);
     }
 
     #[test]
@@ -867,6 +1039,7 @@ mod tests {
             .result_tx
             .send(HeartbeatEvent::Failed {
                 error: "HTTP 503".to_string(),
+                retryable: false,
             })
             .expect("test event send must succeed");
 
@@ -874,6 +1047,98 @@ mod tests {
 
         assert!(tracker.heartbeat_in_flight);
         assert!(!tracker.pending_immediate_heartbeat);
+    }
+
+    #[test]
+    fn retryable_failure_requeues_heartbeat_for_replay() {
+        let mut tracker = tracker_with(Some("test-key"), true, 0);
+        tracker.request_heartbeat(true);
+        assert!(tracker.heartbeat_in_flight);
+
+        tracker
+            .result_tx
+            .send(HeartbeatEvent::Failed {
+                error: "network unavailable".to_string(),
+                retryable: true,
+            })
+            .expect("test event send must succeed");
+
+        tracker.poll_events();
+
+        assert_eq!(tracker.pending_heartbeat_count(), 1);
+        assert!(matches!(
+            tracker.runtime_state(),
+            WakatimeRuntimeState::Replaying { pending: 1 }
+        ));
+    }
+
+    #[test]
+    fn queued_heartbeats_take_priority_over_new_requests() {
+        let mut tracker = tracker_with(Some("test-key"), true, 0);
+        tracker.set_pending_heartbeats_for_tests(2);
+
+        tracker.on_focus_start();
+
+        assert!(matches!(
+            tracker.runtime_state(),
+            WakatimeRuntimeState::Replaying { pending: 2 }
+        ));
+        assert_eq!(tracker.pending_heartbeat_count(), 2);
+    }
+
+    #[test]
+    fn queue_capacity_drops_oldest_entries_when_full() {
+        let mut tracker = tracker_with(Some("test-key"), true, 0);
+        for index in 0..(HEARTBEAT_QUEUE_CAPACITY + 5) {
+            tracker.enqueue_heartbeat(build_heartbeat_payload(
+                index as f64,
+                &tracker.heartbeat_metadata,
+            ));
+        }
+        assert_eq!(tracker.queued_heartbeats.len(), HEARTBEAT_QUEUE_CAPACITY);
+        let oldest = tracker
+            .queued_heartbeats
+            .front()
+            .expect("queue should have oldest heartbeat after capping");
+        assert_eq!(oldest.time, 5.0);
+    }
+
+    #[test]
+    fn requeue_overflow_drops_oldest_queued_heartbeat() {
+        let mut tracker = tracker_with(Some("test-key"), true, 0);
+        tracker.queued_heartbeats = (0..HEARTBEAT_QUEUE_CAPACITY)
+            .map(|index| build_heartbeat_payload(index as f64, &tracker.heartbeat_metadata))
+            .collect();
+        tracker.in_flight_heartbeat =
+            Some(build_heartbeat_payload(999.0, &tracker.heartbeat_metadata));
+
+        tracker.requeue_in_flight_heartbeat();
+
+        assert_eq!(tracker.queued_heartbeats.len(), HEARTBEAT_QUEUE_CAPACITY);
+        assert_eq!(
+            tracker
+                .queued_heartbeats
+                .front()
+                .expect("in-flight heartbeat should be first")
+                .time,
+            999.0
+        );
+        assert_eq!(
+            tracker
+                .queued_heartbeats
+                .get(1)
+                .expect("oldest queued heartbeat should be evicted")
+                .time,
+            1.0
+        );
+        assert_eq!(
+            tracker
+                .queued_heartbeats
+                .back()
+                .expect("latest queued heartbeat should remain")
+                .time,
+            (HEARTBEAT_QUEUE_CAPACITY - 1) as f64
+        );
     }
 
     #[test]
@@ -916,6 +1181,7 @@ mod tests {
             .result_tx
             .send(HeartbeatEvent::Failed {
                 error: "HTTP 500".to_string(),
+                retryable: false,
             })
             .expect("test event send must succeed");
 
@@ -934,6 +1200,7 @@ mod tests {
             .result_tx
             .send(HeartbeatEvent::Failed {
                 error: "io: network unreachable".to_string(),
+                retryable: false,
             })
             .expect("test event send must succeed");
         tracker.poll_events();
@@ -975,6 +1242,7 @@ mod tests {
             .result_tx
             .send(HeartbeatEvent::Failed {
                 error: "HTTP 500".to_string(),
+                retryable: false,
             })
             .expect("test event send must succeed");
         tracker.poll_events();
