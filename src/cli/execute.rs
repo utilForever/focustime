@@ -1100,10 +1100,10 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
         return Err(error);
     }
     if let Some(snapshot) = original_config_snapshot.as_deref() {
-        remove_file_if_exists(snapshot)?;
+        let _ = remove_file_if_exists(snapshot);
     }
     if let Some(snapshot) = original_stats_snapshot.as_deref() {
-        remove_file_if_exists(snapshot)?;
+        let _ = remove_file_if_exists(snapshot);
     }
 
     let payload = RestoreOutput {
