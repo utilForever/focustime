@@ -632,10 +632,13 @@ The timer never waits on network calls.
 
 - transient heartbeat failures (`429`, `5xx`, and connectivity/timeout errors)
   retry with bounded backoff (`1s`, then `2s`)
+- retryable failures that still cannot be delivered are queued in-memory (bounded,
+  drop-oldest at capacity) and replayed automatically when connectivity recovers
 - non-retryable failures are surfaced in the timer view status line
-- status line reflects runtime states (`tracking`, `sending`, `retrying`,
-  `error`, `idle`, `not configured`) and, when configured, also shows the last
-  successful heartbeat time (`HH:MM:SS`) or `not yet sent` before first success
+- status line reflects runtime states (`tracking`, `sending`, `queued`,
+  `replaying`, `retrying`, `error`, `idle`, `not configured`) and, when
+  configured, also shows the last successful heartbeat time (`HH:MM:SS`) or
+  `not yet sent` before first success
 
 For full module map and design details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
