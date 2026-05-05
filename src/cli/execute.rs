@@ -1,4 +1,4 @@
-use std::{env, fs, io, path::Path, thread, time::Duration};
+use std::{env, fs, path::Path, thread, time::Duration};
 
 use crate::app::App;
 
@@ -1188,7 +1188,7 @@ fn replace_file_atomically(
     {
         match fs::rename(staged_path, destination) {
             Ok(()) => Ok(()),
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 fs::remove_file(destination).map_err(|remove_error| {
                     format!(
                         "Failed to {context}: could not replace `{}`: {remove_error}",
