@@ -474,7 +474,7 @@ impl WakatimeTracker {
             return;
         };
         if self.queued_heartbeats.len() >= HEARTBEAT_QUEUE_CAPACITY {
-            let _ = self.queued_heartbeats.pop_back();
+            let _ = self.queued_heartbeats.pop_front();
         }
         self.queued_heartbeats.push_front(in_flight_heartbeat);
     }
@@ -1096,6 +1096,44 @@ mod tests {
             .front()
             .expect("queue should have oldest heartbeat after capping");
         assert_eq!(oldest.time, 5.0);
+    }
+
+    #[test]
+    fn requeue_overflow_drops_oldest_queued_heartbeat() {
+        let mut tracker = tracker_with(Some("test-key"), true, 0);
+        tracker.queued_heartbeats = (0..HEARTBEAT_QUEUE_CAPACITY)
+            .map(|index| build_heartbeat_payload(index as f64, &tracker.heartbeat_metadata))
+            .collect();
+        tracker.in_flight_heartbeat =
+            Some(build_heartbeat_payload(999.0, &tracker.heartbeat_metadata));
+
+        tracker.requeue_in_flight_heartbeat();
+
+        assert_eq!(tracker.queued_heartbeats.len(), HEARTBEAT_QUEUE_CAPACITY);
+        assert_eq!(
+            tracker
+                .queued_heartbeats
+                .front()
+                .expect("in-flight heartbeat should be first")
+                .time,
+            999.0
+        );
+        assert_eq!(
+            tracker
+                .queued_heartbeats
+                .get(1)
+                .expect("oldest queued heartbeat should be evicted")
+                .time,
+            1.0
+        );
+        assert_eq!(
+            tracker
+                .queued_heartbeats
+                .back()
+                .expect("latest queued heartbeat should remain")
+                .time,
+            (HEARTBEAT_QUEUE_CAPACITY - 1) as f64
+        );
     }
 
     #[test]
