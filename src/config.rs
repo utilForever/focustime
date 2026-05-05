@@ -667,11 +667,23 @@ pub struct GoalCarryOverConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WakatimeTaskMappingConfig {
+    #[serde(default)]
+    pub task_label: String,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WakatimeMetadataConfig {
     #[serde(default = "default_wakatime_project")]
     pub project: String,
     #[serde(default = "default_wakatime_language")]
     pub language: String,
+    #[serde(default)]
+    pub task_mappings: Vec<WakatimeTaskMappingConfig>,
 }
 
 impl WakatimeMetadataConfig {
@@ -685,7 +697,40 @@ impl WakatimeMetadataConfig {
                 &self.language,
                 &default_wakatime_language(),
             ),
+            task_mappings: normalize_wakatime_task_mappings(&self.task_mappings),
         }
+    }
+
+    pub fn task_mapping_for_label(&self, task_label: &str) -> Option<&WakatimeTaskMappingConfig> {
+        let task_label = task_label.trim();
+        if task_label.is_empty() {
+            return None;
+        }
+        self.task_mappings
+            .iter()
+            .find(|mapping| mapping.task_label.eq_ignore_ascii_case(task_label))
+    }
+
+    pub fn resolved_project_language_for_task_label(
+        &self,
+        task_label: Option<&str>,
+    ) -> (String, String) {
+        let Some(task_label) = task_label.map(str::trim).filter(|label| !label.is_empty()) else {
+            return (self.project.clone(), self.language.clone());
+        };
+        let Some(mapping) = self.task_mapping_for_label(task_label) else {
+            return (self.project.clone(), self.language.clone());
+        };
+        (
+            mapping
+                .project
+                .clone()
+                .unwrap_or_else(|| self.project.clone()),
+            mapping
+                .language
+                .clone()
+                .unwrap_or_else(|| self.language.clone()),
+        )
     }
 }
 
@@ -694,6 +739,7 @@ impl Default for WakatimeMetadataConfig {
         Self {
             project: default_wakatime_project(),
             language: default_wakatime_language(),
+            task_mappings: Vec::new(),
         }
     }
 }
@@ -1362,6 +1408,41 @@ fn normalize_nonempty_or_default_string(value: &str, default: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+fn normalize_optional_nonempty_string(value: Option<&str>) -> Option<String> {
+    let trimmed = value?.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn normalize_wakatime_task_mappings(
+    mappings: &[WakatimeTaskMappingConfig],
+) -> Vec<WakatimeTaskMappingConfig> {
+    let mut normalized = Vec::new();
+    let mut seen_labels = HashSet::new();
+    for mapping in mappings {
+        let Some(task_label) = normalize_optional_nonempty_string(Some(&mapping.task_label)) else {
+            continue;
+        };
+        let project = normalize_optional_nonempty_string(mapping.project.as_deref());
+        let language = normalize_optional_nonempty_string(mapping.language.as_deref());
+        if project.is_none() && language.is_none() {
+            continue;
+        }
+        let key = task_label.to_ascii_lowercase();
+        if seen_labels.insert(key) {
+            normalized.push(WakatimeTaskMappingConfig {
+                task_label,
+                project,
+                language,
+            });
+        }
+    }
+    normalized
 }
 
 fn parse_shortcut_char(value: &str) -> Option<char> {

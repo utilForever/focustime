@@ -1181,6 +1181,7 @@ impl App {
             self.blocker.unblock()
         };
         self.set_block_error_from_result(block_result);
+        self.sync_wakatime_metadata_to_tracker();
         self.sync_wakatime_tracking_for_state();
     }
 
