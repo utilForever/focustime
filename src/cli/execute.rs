@@ -1087,10 +1087,16 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
         } else {
             let _ = remove_file_if_exists(&config_restored_path);
         }
-        let _ = remove_file_if_exists(&staged_stats_path);
         if let Some(snapshot) = original_stats_snapshot.as_deref() {
-            let _ = remove_file_if_exists(snapshot);
+            let _ = replace_file_atomically(
+                snapshot,
+                &stats_restored_path,
+                "roll back restored stats.toml",
+            );
+        } else {
+            let _ = remove_file_if_exists(&stats_restored_path);
         }
+        let _ = remove_file_if_exists(&staged_stats_path);
         return Err(error);
     }
     if let Some(snapshot) = original_config_snapshot.as_deref() {
