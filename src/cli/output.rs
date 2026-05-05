@@ -1,14 +1,14 @@
 use std::collections::HashSet;
 
 use crate::cli::{
-    BlockingPreviewAction, BlockingPreviewCommandOutput, BlocklistProfileCommandOutput,
-    BlocklistProfileConfig, DiagnosticsCommandOutput, ExportOutput, FocusScoreOutput,
-    GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, ProfileOutput, RecurringScheduleConfig,
-    ScheduleCommandOutput, ScheduleInspectionOutput, Serialize, SetupCheck, SetupCheckLevel,
-    SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
-    SiteEditCommandOutput, SiteListCommandOutput, StatusOutput, StrictCommandOutput,
-    TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, TimerStateOutput, Write,
-    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
+    BackupOutput, BlockingPreviewAction, BlockingPreviewCommandOutput,
+    BlocklistProfileCommandOutput, BlocklistProfileConfig, DiagnosticsCommandOutput, ExportOutput,
+    FocusScoreOutput, GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, ProfileOutput,
+    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleInspectionOutput,
+    Serialize, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
+    SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
+    StatusOutput, StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
+    TimerStateOutput, Write, format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -372,6 +372,18 @@ pub(super) fn print_export_output(payload: &ExportOutput) {
     println!("Exported stats to {}", payload.export_dir.display());
     println!("JSON: {}", payload.json_path.display());
     println!("CSV: {}", payload.csv_path.display());
+}
+
+pub(super) fn print_backup_output(payload: &BackupOutput) {
+    println!("Backed up app data to {}", payload.backup_dir.display());
+    println!("Config: {}", payload.config_backup_path.display());
+    println!("Stats: {}", payload.stats_backup_path.display());
+}
+
+pub(super) fn print_restore_output(payload: &RestoreOutput) {
+    println!("Restored app data from {}", payload.restore_dir.display());
+    println!("Config: {}", payload.config_restored_path.display());
+    println!("Stats: {}", payload.stats_restored_path.display());
 }
 
 pub(super) fn print_goal_command_output(label: &str, payload: &GoalCommandOutput) {

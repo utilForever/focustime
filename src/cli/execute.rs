@@ -1,31 +1,34 @@
-use std::{env, thread, time::Duration};
+use std::{env, fs, path::Path, thread, time::Duration};
 
 use crate::app::App;
 
 use crate::cli::{
-    AppConfig, BlocklistProfileCommandKind, BlocklistProfileCommandOutput, BlocklistProfileConfig,
-    BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, CliCommand, CommandKind,
-    DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats,
+    AppConfig, BackupOutput, BlocklistProfileCommandKind, BlocklistProfileCommandOutput,
+    BlocklistProfileConfig, BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, CliCommand,
+    CommandKind, DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats,
     GoalCarryCommandOutput, GoalCommandOutput, InvalidSiteEntryOutput, InvalidSiteInput,
     MonthlyGoalConfig, OutputMode, PathBuf, ProfileId, ProfileOutput, ProfileView,
-    RecurringScheduleConfig, ScheduleCommandOutput, SiteAddCommandOutput, SiteBlocker,
-    SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
-    SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
-    TaskGoalOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput,
-    WeeklyGoalConfig, available_break_template_views, available_theme_preset_views,
-    build_blocking_preview_command_output, build_diagnostics_command_output,
-    build_schedule_inspection_output, build_status_output, build_task_goal_output,
-    display_input_value, effective_blocked_sites_for_profile, flush_stdout,
-    mirror_metadata_from_task_label, print_blocking_preview_command_output,
+    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, SiteAddCommandOutput,
+    SiteBlocker, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue,
+    SiteListCommandOutput, SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput,
+    TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
+    TimerStateOutput, WeeklyGoalConfig, available_break_template_views,
+    available_theme_preset_views, build_blocking_preview_command_output,
+    build_diagnostics_command_output, build_schedule_inspection_output, build_status_output,
+    build_task_goal_output, display_input_value, effective_blocked_sites_for_profile, flush_stdout,
+    mirror_metadata_from_task_label, print_backup_output, print_blocking_preview_command_output,
     print_blocklist_profile_command_output, print_diagnostics_command_output, print_export_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
-    print_profile_output, print_schedule_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
-    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
-    timer_status_id,
+    print_profile_output, print_restore_output, print_schedule_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
+    print_timer_state_output, profile_id, profile_view, selected_break_template_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
+
+const CONFIG_FILE_NAME: &str = "config.toml";
+const STATS_FILE_NAME: &str = "stats.toml";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
     match cli_command.kind {
@@ -60,6 +63,8 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::Status {
             watch_interval_secs,
         } => execute_status_command(cli_command.output, watch_interval_secs),
+        CommandKind::Backup { dir } => execute_backup_command(dir, cli_command.output),
+        CommandKind::Restore { dir } => execute_restore_command(dir, cli_command.output),
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
@@ -992,6 +997,120 @@ fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
         OutputMode::Text => print_export_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
+    Ok(())
+}
+
+fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
+    let config = AppConfig::load().normalized();
+    config
+        .save()
+        .map_err(|error| format!("Backup failed: could not persist config.toml: {error}"))?;
+    let stats = FocusStats::load().map_err(|error| format!("Backup failed: {error}"))?;
+    stats
+        .save()
+        .map_err(|error| format!("Backup failed: could not persist stats.toml: {error}"))?;
+
+    let backup_dir = match dir {
+        Some(path) => path,
+        None => env::current_dir().map_err(|error| {
+            format!("Backup failed: could not determine current directory: {error}")
+        })?,
+    };
+    fs::create_dir_all(&backup_dir)
+        .map_err(|error| format!("Backup failed: could not create backup directory: {error}"))?;
+
+    let source_config = app_data_file_path(CONFIG_FILE_NAME)?;
+    let source_stats = app_data_file_path(STATS_FILE_NAME)?;
+    let config_backup_path = backup_dir.join(CONFIG_FILE_NAME);
+    let stats_backup_path = backup_dir.join(STATS_FILE_NAME);
+
+    copy_file_with_context(&source_config, &config_backup_path, "backup config.toml")?;
+    copy_file_with_context(&source_stats, &stats_backup_path, "backup stats.toml")?;
+
+    let payload = BackupOutput {
+        backup_dir,
+        config_backup_path,
+        stats_backup_path,
+    };
+    match output {
+        OutputMode::Text => print_backup_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
+    let restore_dir = match dir {
+        Some(path) => path,
+        None => env::current_dir().map_err(|error| {
+            format!("Restore failed: could not determine current directory: {error}")
+        })?,
+    };
+    let source_config = restore_dir.join(CONFIG_FILE_NAME);
+    let source_stats = restore_dir.join(STATS_FILE_NAME);
+    ensure_restore_source_file(&source_config, CONFIG_FILE_NAME)?;
+    ensure_restore_source_file(&source_stats, STATS_FILE_NAME)?;
+
+    let config_restored_path = app_data_file_path(CONFIG_FILE_NAME)?;
+    let stats_restored_path = app_data_file_path(STATS_FILE_NAME)?;
+
+    copy_file_with_context(&source_config, &config_restored_path, "restore config.toml")?;
+    copy_file_with_context(&source_stats, &stats_restored_path, "restore stats.toml")?;
+
+    let payload = RestoreOutput {
+        restore_dir,
+        config_restored_path,
+        stats_restored_path,
+    };
+    match output {
+        OutputMode::Text => print_restore_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn ensure_restore_source_file(path: &Path, file_name: &str) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!(
+            "Restore failed: missing `{file_name}` in `{}`.",
+            path.parent()
+                .map(|parent| parent.display().to_string())
+                .unwrap_or_else(|| ".".to_string())
+        ));
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "Restore failed: `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn app_data_file_path(file_name: &str) -> Result<PathBuf, String> {
+    crate::config::app_data_path(file_name).ok_or_else(|| {
+        format!(
+            "could not determine application data path for `{file_name}` (environment is not configured)"
+        )
+    })
+}
+
+fn copy_file_with_context(source: &Path, destination: &Path, context: &str) -> Result<(), String> {
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to {context}: could not create `{}`: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    fs::copy(source, destination).map_err(|error| {
+        format!(
+            "Failed to {context}: `{}` -> `{}`: {error}",
+            source.display(),
+            destination.display()
+        )
+    })?;
     Ok(())
 }
 

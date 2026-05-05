@@ -49,6 +49,8 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::ScheduleSet(_)
             | ParsedToken::Diagnostics
             | ParsedToken::BlockingPreview
+            | ParsedToken::Backup(_)
+            | ParsedToken::Restore(_)
             | ParsedToken::Export(_)
             | ParsedToken::BlocklistProfile(_)
             | ParsedToken::BlocklistProfileCreate(_)
@@ -126,6 +128,12 @@ pub(super) fn parse_primary_command(
             }
             ParsedToken::BlockingPreview => {
                 set_primary_command(&mut primary, PrimaryCommand::BlockingPreview)?
+            }
+            ParsedToken::Backup(dir) => {
+                set_primary_command(&mut primary, PrimaryCommand::Backup(dir.clone()))?
+            }
+            ParsedToken::Restore(dir) => {
+                set_primary_command(&mut primary, PrimaryCommand::Restore(dir.clone()))?
             }
             ParsedToken::Export(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
@@ -299,6 +307,14 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Status {
                 watch_interval_secs,
             },
+            output,
+        })),
+        Some(PrimaryCommand::Backup(dir)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Backup { dir },
+            output,
+        })),
+        Some(PrimaryCommand::Restore(dir)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Restore { dir },
             output,
         })),
         Some(PrimaryCommand::Export(dir)) => Ok(CliAction::RunCommand(CliCommand {
@@ -693,6 +709,8 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::BlockingPreview => "--blocking-preview",
         PrimaryCommand::Status => "--status",
+        PrimaryCommand::Backup(_) => "--backup",
+        PrimaryCommand::Restore(_) => "--restore",
         PrimaryCommand::Export(_) => "--export",
         PrimaryCommand::BlocklistProfile(_) => "--blocklist-profile",
         PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
