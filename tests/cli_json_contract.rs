@@ -260,6 +260,33 @@ fn backup_and_restore_json_round_trip_config_and_stats_files() {
 }
 
 #[test]
+fn backup_json_copies_raw_files_even_when_malformed() {
+    let env = TestEnv::new("backup-raw-malformed");
+    let app_data_dir = env.root.join("focustime");
+    fs::create_dir_all(&app_data_dir).expect("failed to create app data directory");
+    let seed_output = env.run(&["--task", "Docs", "--json"]);
+    assert_eq!(seed_output.status.code(), Some(0));
+    assert!(stderr_text(&seed_output).trim().is_empty());
+
+    let malformed_config = "this is not valid toml !!!\n";
+    fs::write(app_data_dir.join("config.toml"), malformed_config).expect("failed to write config");
+
+    let backup_dir = env.root.join("backup");
+    let backup_arg = format!("--backup={}", backup_dir.display());
+    let output = env.run(&[backup_arg.as_str(), "--json"]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(stderr_text(&output).trim().is_empty());
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert!(payload.get("backup_dir").is_some());
+    assert_eq!(
+        fs::read_to_string(backup_dir.join("config.toml")).unwrap(),
+        malformed_config
+    );
+    assert!(backup_dir.join("stats.toml").is_file());
+}
+
+#[test]
 fn restore_json_fails_when_backup_is_missing_stats_file() {
     let env = TestEnv::new("restore-missing-stats");
     let backup_dir = env.root.join("broken-backup");

@@ -1001,15 +1001,6 @@ fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
 }
 
 fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
-    let config = AppConfig::load().normalized();
-    config
-        .save()
-        .map_err(|error| format!("Backup failed: could not persist config.toml: {error}"))?;
-    let stats = FocusStats::load().map_err(|error| format!("Backup failed: {error}"))?;
-    stats
-        .save()
-        .map_err(|error| format!("Backup failed: could not persist stats.toml: {error}"))?;
-
     let backup_dir = match dir {
         Some(path) => path,
         None => env::current_dir().map_err(|error| {
@@ -1021,6 +1012,8 @@ fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
 
     let source_config = app_data_file_path(CONFIG_FILE_NAME)?;
     let source_stats = app_data_file_path(STATS_FILE_NAME)?;
+    ensure_backup_source_file(&source_config, CONFIG_FILE_NAME)?;
+    ensure_backup_source_file(&source_stats, STATS_FILE_NAME)?;
     let config_backup_path = backup_dir.join(CONFIG_FILE_NAME);
     let stats_backup_path = backup_dir.join(STATS_FILE_NAME);
 
@@ -1081,6 +1074,24 @@ fn ensure_restore_source_file(path: &Path, file_name: &str) -> Result<(), String
     if !path.is_file() {
         return Err(format!(
             "Restore failed: `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_backup_source_file(path: &Path, file_name: &str) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!(
+            "Backup failed: missing `{file_name}` in `{}`.",
+            path.parent()
+                .map(|parent| parent.display().to_string())
+                .unwrap_or_else(|| ".".to_string())
+        ));
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "Backup failed: `{}` is not a regular file.",
             path.display()
         ));
     }
