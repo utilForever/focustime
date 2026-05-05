@@ -195,8 +195,7 @@ fn classify_backup_arg(args: &[String], index: usize) -> Result<(ParsedToken, us
     if let Some(next) = args.get(index + 1)
         && !next.starts_with('-')
     {
-        let value =
-            require_nonempty_key_value(next, "`--backup` requires a target directory.")?;
+        let value = require_nonempty_key_value(next, "`--backup` requires a target directory.")?;
         return Ok((ParsedToken::Backup(Some(PathBuf::from(value))), 2));
     }
     Ok((ParsedToken::Backup(None), 1))
@@ -206,8 +205,7 @@ fn classify_restore_arg(args: &[String], index: usize) -> Result<(ParsedToken, u
     if let Some(next) = args.get(index + 1)
         && !next.starts_with('-')
     {
-        let value =
-            require_nonempty_key_value(next, "`--restore` requires a source directory.")?;
+        let value = require_nonempty_key_value(next, "`--restore` requires a source directory.")?;
         return Ok((ParsedToken::Restore(Some(PathBuf::from(value))), 2));
     }
     Ok((ParsedToken::Restore(None), 1))
