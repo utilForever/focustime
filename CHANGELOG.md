@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-05
+
 ### Added
 
-- **WakaTime task-label metadata mapping (#195):** added optional `[[wakatime.task_mappings]]` config entries to override heartbeat `project`/`language` per task label with case-insensitive matching and per-field fallback to global `[wakatime]` defaults across runtime tracking.
-- **CLI backup/restore commands (#197):** added `--backup[=DIR]` and `--restore[=DIR]` automation commands to copy `config.toml` and `stats.toml`, including strict restore validation that requires both files in the restore source directory.
+- **WakaTime task-label metadata mapping (#247):** added optional `[[wakatime.task_mappings]]` config entries to override heartbeat `project`/`language` per task label with case-insensitive matching and per-field fallback to global `[wakatime]` defaults across runtime tracking.
+- **Offline WakaTime heartbeat queue/replay (#248):** added bounded in-memory queuing for retryable heartbeat delivery failures with automatic oldest-first replay after connectivity recovers, plus timer status visibility for `queued` and `replaying` states.
+- **CLI backup/restore commands (#249):** added `--backup[=DIR]` and `--restore[=DIR]` automation commands to copy `config.toml` and `stats.toml`, including strict restore validation that requires both files in the restore source directory.
 
 ## [0.8.1] - 2026-05-04
 
@@ -225,7 +228,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/utilForever/focustime/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/utilForever/focustime/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/utilForever/focustime/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/utilForever/focustime/compare/v0.7.0...v0.7.1

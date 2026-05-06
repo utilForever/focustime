@@ -48,21 +48,21 @@ flowchart LR
 
 ## Module map
 
-| Module | Responsibility | Main collaborators |
-| --- | --- | --- |
-| `main.rs` | Composition root, CLI vs TUI dispatch, terminal setup/teardown, frame/tick loop | `cli`, `app`, `ui`, `crossterm`, `ratatui` |
-| `app.rs` + `app/*` | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`) | `timer`, `blocker`, `wakatime`, `notifications`, `schedule`, `stats`, `config` |
-| `cli.rs` + `cli/*` | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output` | `app`, `config`, `stats`, `blocker` |
-| `stats.rs` + `stats/*` | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers | `app`, `task_labels`, filesystem |
-| `ui.rs` + `ui/*` | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup` | `app`, `timer`, `wakatime` |
-| `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution | `app`, `cli`, filesystem/env |
-| `timer.rs` | Pomodoro timer domain model and phase transitions | `app`, `ui` |
-| `blocker.rs` | Hosts-file blocking/unblocking and diagnostics | `app`, `cli`, OS/filesystem |
-| `schedule.rs` | Recurring/one-time schedule compile and conflict/occurrence logic | `app`, `cli`, `config` |
-| `session_recovery.rs` | Runtime recovery snapshot read/write and reconciliation helpers | `app`, `cli`, filesystem |
-| `task_labels.rs` | Task-label normalization, canonicalization, and index helpers | `app`, `stats`, `cli` |
-| `wakatime.rs` | WakaTime config parsing and heartbeat scheduling/sending | `app`, HTTP (`ureq`) |
-| `notifications.rs` | Phase completion notifications and optional sound alerts | `app`, OS notification commands |
+| Module                          | Responsibility                                                                                                                                                                                                                                       | Main collaborators                                                             |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `main.rs`                       | Composition root, CLI vs TUI dispatch, terminal setup/teardown, frame/tick loop                                                                                                                                                                      | `cli`, `app`, `ui`, `crossterm`, `ratatui`                                     |
+| `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`) | `timer`, `blocker`, `wakatime`, `notifications`, `schedule`, `stats`, `config` |
+| `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including non-interactive backup/restore data-file workflows                                                                                    | `app`, `config`, `stats`, `blocker`                                            |
+| `stats.rs` + `stats/*`          | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers                                                                                                                                                            | `app`, `task_labels`, filesystem                                               |
+| `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                   | `app`, `timer`, `wakatime`                                                     |
+| `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including task-label-aware WakaTime metadata mapping rules                                                                                                                 | `app`, `cli`, filesystem/env                                                   |
+| `timer.rs`                      | Pomodoro timer domain model and phase transitions                                                                                                                                                                                                    | `app`, `ui`                                                                    |
+| `blocker.rs`                    | Hosts-file blocking/unblocking and diagnostics                                                                                                                                                                                                       | `app`, `cli`, OS/filesystem                                                    |
+| `schedule.rs`                   | Recurring/one-time schedule compile and conflict/occurrence logic                                                                                                                                                                                    | `app`, `cli`, `config`                                                         |
+| `session_recovery.rs`           | Runtime recovery snapshot read/write and reconciliation helpers                                                                                                                                                                                      | `app`, `cli`, filesystem                                                       |
+| `task_labels.rs`                | Task-label normalization, canonicalization, and index helpers                                                                                                                                                                                        | `app`, `stats`, `cli`                                                          |
+| `wakatime.rs`                   | WakaTime config parsing and heartbeat scheduling/sending with retry, bounded offline queueing, and replay orchestration                                                                                                                              | `app`, HTTP (`ureq`)                                                           |
+| `notifications.rs`              | Phase completion notifications and optional sound alerts                                                                                                                                                                                             | `app`, OS notification commands                                                |
 
 ## Runtime flow (timer mode)
 
@@ -91,7 +91,7 @@ sequenceDiagram
         alt Focus + Running
             App->>Waka: tick_elapsed(elapsed_secs)
         end
-        App-->>UI: expose sending/retrying/error state
+        App-->>UI: expose sending/queued/replaying/retrying/error state
     end
 ```
 
