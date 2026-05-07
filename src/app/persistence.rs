@@ -104,6 +104,7 @@ impl App {
     }
 
     pub(super) fn sync_recovery_snapshot(&mut self) {
+        let metadata_fallback_enabled = self.feature_flags.metadata_task_label_fallback;
         let recovery_task_label = if self.focus_session_active_for_current_state() {
             self.active_focus_task_label
                 .clone()
@@ -112,26 +113,43 @@ impl App {
             self.selected_task_label.clone()
         };
         let recovery_focus_intention = if self.focus_session_active_for_current_state() {
-            self.active_focus_intention
-                .clone()
-                .or_else(|| recovery_task_label.clone())
+            self.active_focus_intention.clone().or_else(|| {
+                if metadata_fallback_enabled {
+                    recovery_task_label.clone()
+                } else {
+                    None
+                }
+            })
         } else {
-            recovery_task_label.clone()
+            if metadata_fallback_enabled {
+                recovery_task_label.clone()
+            } else {
+                None
+            }
         };
         let recovery_task_note = if self.focus_session_active_for_current_state() {
-            self.active_focus_task_note
-                .clone()
-                .or_else(|| recovery_task_label.clone())
+            self.active_focus_task_note.clone().or_else(|| {
+                if metadata_fallback_enabled {
+                    recovery_task_label.clone()
+                } else {
+                    None
+                }
+            })
         } else {
-            recovery_task_label.clone()
+            if metadata_fallback_enabled {
+                recovery_task_label.clone()
+            } else {
+                None
+            }
         };
 
-        let snapshot = InProgressSessionSnapshot::from_timer_state_with_metadata(
+        let snapshot = InProgressSessionSnapshot::from_timer_state_with_metadata_with_fallback(
             &self.timer,
             recovery_task_label,
             recovery_focus_intention,
             recovery_task_note,
             self.selected_profile,
+            metadata_fallback_enabled,
         );
 
         match snapshot {

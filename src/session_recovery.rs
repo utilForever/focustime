@@ -88,12 +88,31 @@ pub struct InProgressSessionSnapshot {
 }
 
 impl InProgressSessionSnapshot {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn from_timer_state_with_metadata(
         timer: &TimerState,
         selected_task_label: Option<String>,
         focus_intention: Option<String>,
         task_note: Option<String>,
         selected_profile: ProfileId,
+    ) -> Option<Self> {
+        Self::from_timer_state_with_metadata_with_fallback(
+            timer,
+            selected_task_label,
+            focus_intention,
+            task_note,
+            selected_profile,
+            true,
+        )
+    }
+
+    pub fn from_timer_state_with_metadata_with_fallback(
+        timer: &TimerState,
+        selected_task_label: Option<String>,
+        focus_intention: Option<String>,
+        task_note: Option<String>,
+        selected_profile: ProfileId,
+        metadata_fallback_to_task_label: bool,
     ) -> Option<Self> {
         if timer.status == TimerStatus::Idle {
             return None;
@@ -102,14 +121,18 @@ impl InProgressSessionSnapshot {
         let selected_task_label = selected_task_label
             .as_deref()
             .and_then(normalize_task_label)?;
-        let focus_intention = focus_intention
-            .as_deref()
-            .and_then(normalize_metadata_text)
-            .unwrap_or_else(|| selected_task_label.clone());
-        let task_note = task_note
-            .as_deref()
-            .and_then(normalize_metadata_text)
-            .unwrap_or_else(|| selected_task_label.clone());
+        let focus_intention = focus_intention.as_deref().and_then(normalize_metadata_text);
+        let task_note = task_note.as_deref().and_then(normalize_metadata_text);
+        let focus_intention = if focus_intention.is_some() || !metadata_fallback_to_task_label {
+            focus_intention
+        } else {
+            Some(selected_task_label.clone())
+        };
+        let task_note = if task_note.is_some() || !metadata_fallback_to_task_label {
+            task_note
+        } else {
+            Some(selected_task_label.clone())
+        };
 
         Some(Self {
             phase: RecoveryTimerPhase::from_timer_phase(timer.phase),
@@ -117,8 +140,8 @@ impl InProgressSessionSnapshot {
             remaining_secs: timer.remaining_secs,
             pomodoros_completed: timer.pomodoros_completed,
             selected_task_label: Some(selected_task_label),
-            focus_intention: Some(focus_intention),
-            task_note: Some(task_note),
+            focus_intention,
+            task_note,
             selected_profile,
         })
     }

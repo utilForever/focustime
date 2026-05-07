@@ -4784,6 +4784,35 @@ fn planner_label_change_during_running_break_updates_recovery_snapshot() {
 }
 
 #[test]
+fn planner_label_change_during_running_break_does_not_backfill_metadata_when_disabled() {
+    let mut app = App::from_config(AppConfig {
+        feature_flags: FeatureFlagsConfig {
+            metadata_task_label_fallback: false,
+            ..FeatureFlagsConfig::default()
+        },
+        ..AppConfig::default()
+    });
+    app.task_labels = vec!["Task A".to_string(), "Task B".to_string()];
+    app.selected_task_label = Some("Task A".to_string());
+    app.sync_task_planner_state();
+
+    app.handle_key(key(KeyCode::Char(' '))); // focus running
+    app.handle_key(key(KeyCode::Char('n'))); // short break idle
+    app.handle_key(key(KeyCode::Char(' '))); // short break running
+    assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+    assert_eq!(app.timer.status, TimerStatus::Running);
+
+    app.open_session_planner();
+    app.planner_selection_index = 1;
+    app.select_planner_label();
+
+    let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+    assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task B"));
+    assert_eq!(snapshot.focus_intention, None);
+    assert_eq!(snapshot.task_note, None);
+}
+
+#[test]
 fn prevent_double_input_on_windows() {
     let mut press_event = KeyEvent::from(KeyCode::Char('a'));
     press_event.kind = KeyEventKind::Press;
