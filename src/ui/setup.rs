@@ -24,6 +24,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             Constraint::Length(2), // blocking permissions
             Constraint::Length(2), // hosts write capability
             Constraint::Length(2), // wakatime config status
+            Constraint::Length(2), // feature flags
             Constraint::Length(1), // preview summary
             Constraint::Min(0),    // preview section
             Constraint::Length(2), // key hints
@@ -58,6 +59,25 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         "WakaTime config status",
         &app.setup_diagnostics.wakatime_config,
     );
+    frame.render_widget(
+        Paragraph::new(format!(
+            "Feature flags: automation-mirror={} · blocked-sites-mirror={} · metadata-fallback={}",
+            bool_label(app.setup_diagnostics.feature_flags.legacy_automation_mirror),
+            bool_label(
+                app.setup_diagnostics
+                    .feature_flags
+                    .legacy_blocked_sites_mirror
+            ),
+            bool_label(
+                app.setup_diagnostics
+                    .feature_flags
+                    .metadata_task_label_fallback
+            )
+        ))
+        .style(Style::default().fg(app_color(app, Color::DarkGray)))
+        .wrap(Wrap { trim: true }),
+        inner[5],
+    );
 
     let (preview_summary, preview_style) = if let Some(error) = app.blocking_preview.error.as_ref()
     {
@@ -88,7 +108,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         Paragraph::new(preview_summary)
             .alignment(Alignment::Left)
             .style(preview_style),
-        inner[5],
+        inner[6],
     );
 
     let preview_section_text = if app.blocking_preview.error.is_some() {
@@ -107,13 +127,13 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             )
             .style(Style::default().fg(app_color(app, Color::Gray)))
             .wrap(Wrap { trim: false }),
-        inner[6],
+        inner[7],
     );
 
     render_hint_lines(
         frame,
         app,
-        inner[7],
+        inner[8],
         vec![
             Line::from(format!(
                 "Diagnostics: {} Refresh checks + preview",
@@ -134,6 +154,10 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             }),
         ],
     );
+}
+
+fn bool_label(enabled: bool) -> &'static str {
+    if enabled { "on" } else { "off" }
 }
 
 pub(super) fn render_setup_check(

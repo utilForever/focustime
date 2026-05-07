@@ -651,12 +651,20 @@ struct SetupCheckOutput {
     message: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+struct FeatureFlagsOutput {
+    legacy_automation_mirror: bool,
+    legacy_blocked_sites_mirror: bool,
+    metadata_task_label_fallback: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct DiagnosticsCommandOutput {
     hosts_file_path: String,
     blocking_permissions: SetupCheckOutput,
     hosts_write_capability: SetupCheckOutput,
     wakatime_config: SetupCheckOutput,
+    feature_flags: FeatureFlagsOutput,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

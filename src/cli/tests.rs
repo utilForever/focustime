@@ -1,4 +1,5 @@
 use crate::cli::*;
+use crate::config::FeatureFlagsConfig;
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -555,6 +556,16 @@ fn parse_diagnostics_supports_json_mode() {
             output: OutputMode::Json
         })
     );
+}
+
+#[test]
+fn diagnostics_output_includes_effective_feature_flags() {
+    let app = App::default();
+    let payload = build_diagnostics_command_output(&app.setup_diagnostics);
+
+    assert!(payload.feature_flags.legacy_automation_mirror);
+    assert!(payload.feature_flags.legacy_blocked_sites_mirror);
+    assert!(payload.feature_flags.metadata_task_label_fallback);
 }
 
 #[test]
@@ -1777,6 +1788,29 @@ fn build_status_output_includes_unconfigured_selected_task_goal() {
     assert!(!selected_task_goal.met);
     assert!(!output.focus_score.available);
     assert!(output.focus_score.focus_score_pct.is_none());
+}
+
+#[test]
+fn build_status_output_disables_task_label_metadata_mirror_when_flag_disabled() {
+    let mut stats = FocusStats::default();
+    let changed =
+        stats.update_task_planner_state(vec!["Docs".to_string()], Some("Docs".to_string()));
+    assert!(changed);
+    let config = AppConfig {
+        feature_flags: FeatureFlagsConfig {
+            metadata_task_label_fallback: false,
+            ..FeatureFlagsConfig::default()
+        },
+        ..AppConfig::default()
+    };
+
+    let output = build_status_output(&config, &stats);
+
+    assert_eq!(output.selected_task_label.as_deref(), Some("Docs"));
+    assert!(output.focus_intention.is_none());
+    assert!(output.task_note.is_none());
+    assert!(output.live.focus_intention.is_none());
+    assert!(output.live.task_note.is_none());
 }
 
 #[test]
