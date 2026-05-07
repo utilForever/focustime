@@ -286,6 +286,7 @@ fn round_trip_full_config() {
     assert_eq!(parsed.goal_carry_over, original.goal_carry_over);
     assert_eq!(parsed.stats_retention, original.stats_retention);
     assert_eq!(parsed.wakatime, original.wakatime);
+    assert_eq!(parsed.feature_flags, original.feature_flags);
     assert_eq!(parsed.shortcuts, original.shortcuts);
 }
 
