@@ -163,7 +163,7 @@ cargo run -- --diagnostics --json
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
 
-# Show status (text or JSON, including live timer/session fields, latest interruption summary, and `selected_task_goal` in JSON)
+# Show status (text or JSON, including growth/retention signals, live timer/session fields, latest interruption summary, and `selected_task_goal` in JSON)
 cargo run -- --status
 cargo run -- --status --json
 
@@ -412,6 +412,9 @@ pomodoros = 20
 minutes = 2400
 pomodoros = 80
 
+[stats_retention]
+preset = "balanced" # keep_all | balanced | aggressive
+
 [wakatime]
 project = "focustime"
 language = "Pomodoro"
@@ -592,6 +595,15 @@ Override events are recorded for audit visibility in the History view and includ
 - per-task cumulative goals (minutes/pomodoros) with per-label progress and met/in-progress evaluation
 - structured interruption events for manual `stop/reset` and `skip/next` actions
 - current streak and best streak based on completed daily goals
+- growth indicators (`record` count + estimated `stats.toml` size + top high-volume sections)
+
+Current retention presets for historical records:
+
+- `keep_all`: no automatic pruning
+- `balanced` (default): keep daily aggregates, prune `focus_sessions` at 365 days, prune `session_interruptions` and `break_glass_overrides` at 180 days
+- `aggressive`: prune daily aggregates at 365 days, `focus_sessions` at 180 days, and `session_interruptions` / `break_glass_overrides` at 90 days
+
+Retention is enforced when stats are persisted. Existing data older than the selected windows is pruned on save.
 
 If daily, weekly, or monthly goals are configured, timer and history views also
 show live progress for each period:
