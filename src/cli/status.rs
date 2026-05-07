@@ -16,8 +16,10 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let week = stats.weekly_for_day(day_date);
     let month = stats.monthly_for_day(day_date);
     let (_, selected_task_label) = stats.task_planner_state();
-    let (selected_task_label, focus_intention, task_note) =
-        mirror_metadata_from_task_label(selected_task_label);
+    let (selected_task_label, focus_intention, task_note) = mirror_metadata_from_task_label(
+        selected_task_label,
+        config.feature_flags.metadata_task_label_fallback,
+    );
     let goal_snapshot = effective_daily_goal_snapshot_for_day(config, stats, day_date);
     let weekly_goal_snapshot = effective_weekly_goal_snapshot(config, stats, day_date);
     let monthly_goal_snapshot = effective_monthly_goal_snapshot(config, stats, day_date);
@@ -34,6 +36,7 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         })
         .map(|profile| effective_blocked_sites_for_profile(profile).len())
         .unwrap_or_default();
+    let selected_automation = config.profile_automation_for(config.selected_profile);
     let live = build_live_status_output(config, selected_task_label.clone());
     let session = build_session_output(&live);
     let latest_interruption = stats.latest_session_interruption();
@@ -67,7 +70,7 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         task_note,
         selected_blocklist_profile: config.selected_blocklist_profile.clone(),
         blocked_sites_count: active_sites_count,
-        strict_mode: config.strict_mode,
+        strict_mode: selected_automation.strict_mode,
         goal: GoalOutput {
             configured: goal_snapshot.has_any_target(),
             minutes_target: goal_snapshot.minutes,
@@ -290,8 +293,12 @@ fn build_live_status_output(
     fallback_task_label: Option<String>,
 ) -> LiveStatusOutput {
     let custom = config.effective_custom_profile();
+    let strict_mode_enabled = config
+        .profile_automation_for(config.selected_profile)
+        .strict_mode;
+    let metadata_fallback = config.feature_flags.metadata_task_label_fallback;
     let (fallback_task_label, fallback_focus_intention, fallback_task_note) =
-        mirror_metadata_from_task_label(fallback_task_label);
+        mirror_metadata_from_task_label(fallback_task_label, metadata_fallback);
     match session_recovery::load() {
         Ok(Some(snapshot)) => {
             let phase = snapshot.phase();
@@ -306,9 +313,10 @@ fn build_live_status_output(
                 pomodoros_completed: snapshot.pomodoros_completed,
                 selected_profile: profile_view(snapshot.selected_profile, &custom),
                 selected_task_label: snapshot.normalized_task_label(),
-                focus_intention: snapshot.normalized_focus_intention(),
-                task_note: snapshot.normalized_task_note(),
-                strict_mode_enforced: config.strict_mode
+                focus_intention: snapshot
+                    .normalized_focus_intention_with_fallback(metadata_fallback),
+                task_note: snapshot.normalized_task_note_with_fallback(metadata_fallback),
+                strict_mode_enforced: strict_mode_enabled
                     && phase == TimerPhase::Focus
                     && status != TimerStatus::Idle,
             }
@@ -352,12 +360,16 @@ fn build_live_status_output(
 
 pub(super) fn mirror_metadata_from_task_label(
     task_label: Option<String>,
+    metadata_fallback: bool,
 ) -> (Option<String>, Option<String>, Option<String>) {
     let task_label = task_label
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
-    let focus_intention = task_label.clone();
-    let task_note = task_label.clone();
+    let (focus_intention, task_note) = if metadata_fallback {
+        (task_label.clone(), task_label.clone())
+    } else {
+        (None, None)
+    };
     (task_label, focus_intention, task_note)
 }
 

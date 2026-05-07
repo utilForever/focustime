@@ -12,10 +12,11 @@ use crate::blocker::{
 };
 use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, BreakTemplateConfig, CustomProfileConfig,
-    DailyGoalConfig, GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig,
-    OneTimeFocusWindowConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, StatsRetentionConfig, ThemePreset,
-    WakatimeMetadataConfig, WeeklyGoalConfig,
+    DailyGoalConfig, FeatureFlagsConfig, GoalCarryOverConfig, MonthlyGoalConfig,
+    NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
+    ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
+    WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -431,10 +432,11 @@ pub struct SetupDiagnostics {
     pub blocking_permissions: SetupCheck,
     pub hosts_write_capability: SetupCheck,
     pub wakatime_config: SetupCheck,
+    pub feature_flags: FeatureFlagsConfig,
 }
 
 impl SetupDiagnostics {
-    fn collect(blocker: &SiteBlocker) -> Self {
+    fn collect(blocker: &SiteBlocker, feature_flags: FeatureFlagsConfig) -> Self {
         let hosts_diagnostics = blocker.hosts_file_diagnostics();
         let blocking_permissions = blocking_permissions_check(&hosts_diagnostics);
         let hosts_write_capability = hosts_write_capability_check(&hosts_diagnostics);
@@ -454,6 +456,7 @@ impl SetupDiagnostics {
             blocking_permissions,
             hosts_write_capability,
             wakatime_config,
+            feature_flags,
         }
     }
 }
@@ -528,6 +531,8 @@ pub struct App {
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
     selected_theme_preset: ThemePreset,
+    feature_flags: FeatureFlagsConfig,
+    legacy_blocked_sites: Vec<String>,
     profile_automation: ProfileAutomationSettingsConfig,
     pub custom_profile: CustomProfileConfig,
     pub profile_selection_index: usize,
@@ -582,6 +587,8 @@ impl App {
         let config = config.normalized();
         let selected_profile = config.selected_profile;
         let selected_theme_preset = config.selected_theme_preset;
+        let feature_flags = config.feature_flags;
+        let legacy_blocked_sites = config.blocked_sites.clone();
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
         let selected_automation = config.profile_automation_for(selected_profile);
@@ -611,10 +618,13 @@ impl App {
             &custom_profile,
         );
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
-        let (mut stats, stats_error) = match FocusStats::load() {
-            Ok(stats) => (stats, None),
-            Err(e) => (FocusStats::default(), Some(e)),
-        };
+        let (mut stats, stats_error) =
+            match FocusStats::load_with_options(crate::stats::StatsLoadOptions {
+                metadata_task_label_fallback: feature_flags.metadata_task_label_fallback,
+            }) {
+                Ok(stats) => (stats, None),
+                Err(e) => (FocusStats::default(), Some(e)),
+            };
         let retained = stats.apply_retention_policy(stats_retention, Local::now().date_naive());
         let (task_labels, selected_task_label) = stats.task_planner_state();
         let task_label_favorites = task_label_state_keys(stats.task_label_favorites());
@@ -627,7 +637,7 @@ impl App {
             profile_spec.long_break_interval,
         );
         let blocker = SiteBlocker::new();
-        let setup_diagnostics = SetupDiagnostics::collect(&blocker);
+        let setup_diagnostics = SetupDiagnostics::collect(&blocker, feature_flags);
         let mut app = Self {
             timer,
             should_quit: false,
@@ -674,6 +684,8 @@ impl App {
             }),
             selected_profile,
             selected_theme_preset,
+            feature_flags,
+            legacy_blocked_sites,
             profile_automation,
             custom_profile,
             profile_selection_index: profile_index(selected_profile),

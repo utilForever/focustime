@@ -1,6 +1,6 @@
 use crate::app::*;
 use crate::blocker;
-use crate::config::{ShortcutConfig, StatsRetentionConfig};
+use crate::config::{FeatureFlagsConfig, ShortcutConfig, StatsRetentionConfig};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -125,6 +125,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         stats_retention: StatsRetentionConfig::default(),
         selected_theme_preset: ThemePreset::Classic,
         wakatime: WakatimeMetadataConfig::default(),
+        feature_flags: FeatureFlagsConfig::default(),
         shortcuts: ShortcutConfig::default(),
     };
     let app = App::from_config(config);
@@ -2351,6 +2352,32 @@ fn persisted_config_mirrors_active_profile_sites_to_legacy_blocked_sites() {
     assert_eq!(
         persisted.blocklist_profiles[0].sites,
         vec!["example.com".to_string()]
+    );
+}
+
+#[test]
+fn persisted_config_keeps_legacy_blocked_sites_when_mirror_flag_is_disabled() {
+    let mut app = App::from_config(AppConfig {
+        blocked_sites: vec!["legacy-only.com".to_string()],
+        feature_flags: FeatureFlagsConfig {
+            legacy_blocked_sites_mirror: false,
+            ..FeatureFlagsConfig::default()
+        },
+        ..AppConfig::default()
+    });
+    app.handle_key(key(KeyCode::Char('b')));
+    app.handle_key(key(KeyCode::Char('a')));
+    for c in "example.com".chars() {
+        app.handle_key(key(KeyCode::Char(c)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+
+    let persisted = app.persisted_config();
+    assert_eq!(persisted.blocked_sites, vec!["legacy-only.com".to_string()]);
+    assert!(
+        persisted.blocklist_profiles[0]
+            .sites
+            .contains(&"example.com".to_string())
     );
 }
 
@@ -4759,6 +4786,35 @@ fn planner_label_change_during_running_break_updates_recovery_snapshot() {
     assert_eq!(snapshot.task_note.as_deref(), Some("Task B"));
     assert_eq!(snapshot.phase, RecoveryTimerPhase::ShortBreak);
     assert_eq!(snapshot.status, RecoveryTimerStatus::Running);
+}
+
+#[test]
+fn planner_label_change_during_running_break_does_not_backfill_metadata_when_disabled() {
+    let mut app = App::from_config(AppConfig {
+        feature_flags: FeatureFlagsConfig {
+            metadata_task_label_fallback: false,
+            ..FeatureFlagsConfig::default()
+        },
+        ..AppConfig::default()
+    });
+    app.task_labels = vec!["Task A".to_string(), "Task B".to_string()];
+    app.selected_task_label = Some("Task A".to_string());
+    app.sync_task_planner_state();
+
+    app.handle_key(key(KeyCode::Char(' '))); // focus running
+    app.handle_key(key(KeyCode::Char('n'))); // short break idle
+    app.handle_key(key(KeyCode::Char(' '))); // short break running
+    assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+    assert_eq!(app.timer.status, TimerStatus::Running);
+
+    app.open_session_planner();
+    app.planner_selection_index = 1;
+    app.select_planner_label();
+
+    let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+    assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task B"));
+    assert_eq!(snapshot.focus_intention, None);
+    assert_eq!(snapshot.task_note, None);
 }
 
 #[test]

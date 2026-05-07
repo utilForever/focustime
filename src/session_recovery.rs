@@ -88,12 +88,31 @@ pub struct InProgressSessionSnapshot {
 }
 
 impl InProgressSessionSnapshot {
+    #[allow(dead_code)]
     pub fn from_timer_state_with_metadata(
         timer: &TimerState,
         selected_task_label: Option<String>,
         focus_intention: Option<String>,
         task_note: Option<String>,
         selected_profile: ProfileId,
+    ) -> Option<Self> {
+        Self::from_timer_state_with_metadata_with_fallback(
+            timer,
+            selected_task_label,
+            focus_intention,
+            task_note,
+            selected_profile,
+            true,
+        )
+    }
+
+    pub fn from_timer_state_with_metadata_with_fallback(
+        timer: &TimerState,
+        selected_task_label: Option<String>,
+        focus_intention: Option<String>,
+        task_note: Option<String>,
+        selected_profile: ProfileId,
+        metadata_fallback_to_task_label: bool,
     ) -> Option<Self> {
         if timer.status == TimerStatus::Idle {
             return None;
@@ -102,14 +121,18 @@ impl InProgressSessionSnapshot {
         let selected_task_label = selected_task_label
             .as_deref()
             .and_then(normalize_task_label)?;
-        let focus_intention = focus_intention
-            .as_deref()
-            .and_then(normalize_metadata_text)
-            .unwrap_or_else(|| selected_task_label.clone());
-        let task_note = task_note
-            .as_deref()
-            .and_then(normalize_metadata_text)
-            .unwrap_or_else(|| selected_task_label.clone());
+        let focus_intention = focus_intention.as_deref().and_then(normalize_metadata_text);
+        let task_note = task_note.as_deref().and_then(normalize_metadata_text);
+        let focus_intention = if focus_intention.is_some() || !metadata_fallback_to_task_label {
+            focus_intention
+        } else {
+            Some(selected_task_label.clone())
+        };
+        let task_note = if task_note.is_some() || !metadata_fallback_to_task_label {
+            task_note
+        } else {
+            Some(selected_task_label.clone())
+        };
 
         Some(Self {
             phase: RecoveryTimerPhase::from_timer_phase(timer.phase),
@@ -117,8 +140,8 @@ impl InProgressSessionSnapshot {
             remaining_secs: timer.remaining_secs,
             pomodoros_completed: timer.pomodoros_completed,
             selected_task_label: Some(selected_task_label),
-            focus_intention: Some(focus_intention),
-            task_note: Some(task_note),
+            focus_intention,
+            task_note,
             selected_profile,
         })
     }
@@ -137,21 +160,53 @@ impl InProgressSessionSnapshot {
             .and_then(normalize_task_label)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn normalized_focus_intention(&self) -> Option<String> {
-        self.focus_intention
-            .as_deref()
-            .and_then(normalize_metadata_text)
-            .or_else(|| self.normalized_task_label())
+        self.normalized_focus_intention_with_fallback(true)
     }
 
+    pub fn normalized_focus_intention_with_fallback(
+        &self,
+        fallback_to_task_label: bool,
+    ) -> Option<String> {
+        let normalized = self
+            .focus_intention
+            .as_deref()
+            .and_then(normalize_metadata_text);
+        if normalized.is_some() || !fallback_to_task_label {
+            normalized
+        } else {
+            self.normalized_task_label()
+        }
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn normalized_task_note(&self) -> Option<String> {
-        self.task_note
-            .as_deref()
-            .and_then(normalize_metadata_text)
-            .or_else(|| self.normalized_task_label())
+        self.normalized_task_note_with_fallback(true)
     }
 
+    pub fn normalized_task_note_with_fallback(
+        &self,
+        fallback_to_task_label: bool,
+    ) -> Option<String> {
+        let normalized = self.task_note.as_deref().and_then(normalize_metadata_text);
+        if normalized.is_some() || !fallback_to_task_label {
+            normalized
+        } else {
+            self.normalized_task_label()
+        }
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn validate_for_timer(&self, timer: &TimerState) -> Result<(), String> {
+        self.validate_for_timer_with_fallback(timer, true)
+    }
+
+    pub fn validate_for_timer_with_fallback(
+        &self,
+        timer: &TimerState,
+        fallback_to_task_label: bool,
+    ) -> Result<(), String> {
         if !matches!(
             self.status,
             RecoveryTimerStatus::Running | RecoveryTimerStatus::Paused
@@ -162,10 +217,16 @@ impl InProgressSessionSnapshot {
         if self.normalized_task_label().is_none() {
             return Err("saved task label is missing or invalid".to_string());
         }
-        if self.normalized_focus_intention().is_none() {
+        if self
+            .normalized_focus_intention_with_fallback(fallback_to_task_label)
+            .is_none()
+        {
             return Err("saved focus intention is missing or invalid".to_string());
         }
-        if self.normalized_task_note().is_none() {
+        if self
+            .normalized_task_note_with_fallback(fallback_to_task_label)
+            .is_none()
+        {
             return Err("saved task note is missing or invalid".to_string());
         }
 
@@ -426,5 +487,38 @@ mod tests {
         );
         assert_eq!(snapshot.normalized_task_note().as_deref(), Some("Docs"));
         assert!(snapshot.validate_for_timer(&timer).is_ok());
+    }
+
+    #[test]
+    fn metadata_fallback_can_be_disabled_for_legacy_snapshots() {
+        let timer = TimerState::with_profile(60, 30, 90, 4);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 60,
+            pomodoros_completed: 1,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: None,
+            task_note: None,
+            selected_profile: ProfileId::Classic,
+        };
+
+        assert_eq!(
+            snapshot
+                .normalized_focus_intention_with_fallback(false)
+                .as_deref(),
+            None
+        );
+        assert_eq!(
+            snapshot
+                .normalized_task_note_with_fallback(false)
+                .as_deref(),
+            None
+        );
+        assert!(
+            snapshot
+                .validate_for_timer_with_fallback(&timer, false)
+                .is_err()
+        );
     }
 }

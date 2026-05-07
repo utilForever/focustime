@@ -2,40 +2,60 @@
 use crate::stats::fs;
 use crate::stats::{
     BreakGlassOverrideEvent, FocusSessionRecord, FocusStats, PersistedStats, STATS_FILE_NAME,
-    SessionInterruptionEvent, SessionStats, io, normalize_session_metadata_text,
+    SessionInterruptionEvent, SessionStats, StatsLoadOptions, io, normalize_session_metadata_text,
     normalize_task_goal_targets, normalize_task_label, normalize_task_planner_state,
     planner_state_labels_for_keys, write_atomic_bytes,
 };
 
 impl FocusStats {
     #[cfg(test)]
+    #[allow(dead_code)]
     pub fn load() -> Result<Self, String> {
+        Self::load_with_options(StatsLoadOptions::default())
+    }
+
+    #[cfg(test)]
+    pub fn load_with_options(_options: StatsLoadOptions) -> Result<Self, String> {
         Ok(Self::default())
     }
 
     #[cfg(not(test))]
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn load() -> Result<Self, String> {
-        Self::try_load()
+        Self::load_with_options(StatsLoadOptions::default())
     }
 
     #[cfg(not(test))]
-    fn try_load() -> Result<Self, String> {
+    pub fn load_with_options(options: StatsLoadOptions) -> Result<Self, String> {
+        Self::try_load(options)
+    }
+
+    #[cfg(not(test))]
+    fn try_load(options: StatsLoadOptions) -> Result<Self, String> {
         let path = crate::config::app_data_path(STATS_FILE_NAME)
             .ok_or_else(|| "cannot determine stats directory".to_string())?;
         match fs::read_to_string(path) {
-            Ok(content) => Self::try_from_toml(&content),
+            Ok(content) => Self::try_from_toml_with_options(&content, options),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(format!("stats read failed: {e}")),
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(super) fn try_from_toml(content: &str) -> Result<Self, String> {
-        let persisted: PersistedStats =
-            toml::from_str(content).map_err(|e| format!("stats parse failed: {e}"))?;
-        Ok(Self::from_persisted(persisted))
+        Self::try_from_toml_with_options(content, StatsLoadOptions::default())
     }
 
-    fn from_persisted(persisted: PersistedStats) -> Self {
+    pub(super) fn try_from_toml_with_options(
+        content: &str,
+        options: StatsLoadOptions,
+    ) -> Result<Self, String> {
+        let persisted: PersistedStats =
+            toml::from_str(content).map_err(|e| format!("stats parse failed: {e}"))?;
+        Ok(Self::from_persisted(persisted, options))
+    }
+
+    fn from_persisted(persisted: PersistedStats, options: StatsLoadOptions) -> Self {
         let (task_labels, selected_task_label, task_label_favorites, task_label_archived) =
             normalize_task_planner_state(
                 persisted.task_labels,
@@ -47,10 +67,18 @@ impl FocusStats {
         let mut focus_sessions = Vec::new();
         for session in persisted.focus_sessions {
             if let Some(task_label) = normalize_task_label(&session.task_label) {
-                let focus_intention = normalize_session_metadata_text(&session.focus_intention)
-                    .unwrap_or_else(|| task_label.clone());
-                let task_note = normalize_session_metadata_text(&session.task_note)
-                    .unwrap_or_else(|| task_label.clone());
+                let focus_intention = normalize_session_metadata_text(&session.focus_intention);
+                let task_note = normalize_session_metadata_text(&session.task_note);
+                let focus_intention = if options.metadata_task_label_fallback {
+                    focus_intention.unwrap_or_else(|| task_label.clone())
+                } else {
+                    focus_intention.unwrap_or_default()
+                };
+                let task_note = if options.metadata_task_label_fallback {
+                    task_note.unwrap_or_else(|| task_label.clone())
+                } else {
+                    task_note.unwrap_or_default()
+                };
                 focus_sessions.push(FocusSessionRecord {
                     date: session.date.trim().to_string(),
                     task_label,

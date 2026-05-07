@@ -57,7 +57,8 @@ impl App {
         recovered_timer.status = snapshot.status();
         recovered_timer.remaining_secs = snapshot.remaining_secs;
         recovered_timer.pomodoros_completed = snapshot.pomodoros_completed;
-        snapshot.validate_for_timer(&recovered_timer)?;
+        let metadata_fallback_enabled = self.feature_flags.metadata_task_label_fallback;
+        snapshot.validate_for_timer_with_fallback(&recovered_timer, metadata_fallback_enabled)?;
 
         let task_label = snapshot
             .normalized_task_label()
@@ -84,12 +85,12 @@ impl App {
             None
         };
         self.active_focus_intention = if self.timer.phase == TimerPhase::Focus {
-            snapshot.normalized_focus_intention()
+            snapshot.normalized_focus_intention_with_fallback(metadata_fallback_enabled)
         } else {
             None
         };
         self.active_focus_task_note = if self.timer.phase == TimerPhase::Focus {
-            snapshot.normalized_task_note()
+            snapshot.normalized_task_note_with_fallback(metadata_fallback_enabled)
         } else {
             None
         };
@@ -102,35 +103,68 @@ impl App {
         Ok(())
     }
 
+    fn recovery_snapshot_task_label_fallback(
+        recovery_task_label: &Option<String>,
+        metadata_fallback_enabled: bool,
+    ) -> Option<String> {
+        if metadata_fallback_enabled {
+            recovery_task_label.clone()
+        } else {
+            None
+        }
+    }
+
+    fn recovery_snapshot_metadata_value(
+        focus_active: bool,
+        active_value: Option<String>,
+        recovery_task_label: &Option<String>,
+        metadata_fallback_enabled: bool,
+    ) -> Option<String> {
+        if focus_active {
+            active_value.or_else(|| {
+                Self::recovery_snapshot_task_label_fallback(
+                    recovery_task_label,
+                    metadata_fallback_enabled,
+                )
+            })
+        } else {
+            Self::recovery_snapshot_task_label_fallback(
+                recovery_task_label,
+                metadata_fallback_enabled,
+            )
+        }
+    }
+
     pub(super) fn sync_recovery_snapshot(&mut self) {
-        let recovery_task_label = if self.focus_session_active_for_current_state() {
+        let focus_active = self.focus_session_active_for_current_state();
+        let metadata_fallback_enabled = self.feature_flags.metadata_task_label_fallback;
+        let recovery_task_label = if focus_active {
             self.active_focus_task_label
                 .clone()
                 .or_else(|| self.selected_task_label.clone())
         } else {
             self.selected_task_label.clone()
         };
-        let recovery_focus_intention = if self.focus_session_active_for_current_state() {
-            self.active_focus_intention
-                .clone()
-                .or_else(|| recovery_task_label.clone())
-        } else {
-            recovery_task_label.clone()
-        };
-        let recovery_task_note = if self.focus_session_active_for_current_state() {
-            self.active_focus_task_note
-                .clone()
-                .or_else(|| recovery_task_label.clone())
-        } else {
-            recovery_task_label.clone()
-        };
+        let recovery_focus_intention = Self::recovery_snapshot_metadata_value(
+            focus_active,
+            self.active_focus_intention.clone(),
+            &recovery_task_label,
+            metadata_fallback_enabled,
+        );
+        let recovery_task_note = Self::recovery_snapshot_metadata_value(
+            focus_active,
+            self.active_focus_task_note.clone(),
+            &recovery_task_label,
+            metadata_fallback_enabled,
+        );
 
-        let snapshot = InProgressSessionSnapshot::from_timer_state_with_metadata(
+        let snapshot = InProgressSessionSnapshot::from_timer_state_with_metadata_with_fallback(
             &self.timer,
             recovery_task_label,
             recovery_focus_intention,
             recovery_task_note,
             self.selected_profile,
+            metadata_fallback_enabled,
         );
 
         match snapshot {
@@ -167,10 +201,15 @@ impl App {
             .or_else(|| blocklist_profiles.first())
             .map(|profile| profile.name.clone())
             .unwrap_or_else(|| DEFAULT_BLOCKLIST_PROFILE_NAME.to_string());
-        let blocked_sites = blocklist_profiles
+        let mirrored_blocked_sites = blocklist_profiles
             .get(active_index)
             .map(effective_blocked_sites_for_profile)
             .unwrap_or_default();
+        let blocked_sites = if self.feature_flags.legacy_blocked_sites_mirror {
+            mirrored_blocked_sites
+        } else {
+            self.legacy_blocked_sites.clone()
+        };
         let mut profile_automation = self.profile_automation.clone();
         profile_automation
             .set_for_profile(self.selected_profile, self.selected_profile_automation());
@@ -201,6 +240,7 @@ impl App {
             goal_carry_over: self.goal_carry_over,
             stats_retention: self.stats_retention,
             wakatime: self.wakatime_metadata.clone(),
+            feature_flags: self.feature_flags,
             shortcuts: self.shortcuts.to_config(),
         }
     }
