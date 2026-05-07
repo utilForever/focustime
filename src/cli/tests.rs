@@ -197,6 +197,58 @@ fn parse_task_goal_with_colon_in_label_reads_specific_goal() {
 }
 
 #[test]
+fn parse_focus_intention_without_value_reads_current_metadata() {
+    let parsed = parse(&["--focus-intention"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::FocusIntention { value: None },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_focus_intention_with_equals_sets_metadata() {
+    let parsed = parse(&["--focus-intention=Write docs"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::FocusIntention {
+                value: Some("Write docs".to_string())
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_task_note_without_value_reads_current_metadata() {
+    let parsed = parse(&["--task-note"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::TaskNote { value: None },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_task_note_with_value_sets_metadata() {
+    let parsed = parse(&["--task-note", "Capture blockers"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::TaskNote {
+                value: Some("Capture blockers".to_string())
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
 fn parse_profile_supports_json_mode() {
     let parsed = parse(&["--profile", "--json"]).unwrap();
     assert_eq!(
@@ -1064,6 +1116,18 @@ fn parse_rejects_task_without_value() {
 fn parse_rejects_task_with_blank_value() {
     let error = parse(&["--task", "   "]).unwrap_err();
     assert!(error.contains("`--task` requires a task label"));
+}
+
+#[test]
+fn parse_rejects_focus_intention_with_blank_value() {
+    let error = parse(&["--focus-intention", "   "]).unwrap_err();
+    assert!(error.contains("`--focus-intention` requires a value"));
+}
+
+#[test]
+fn parse_rejects_task_note_with_blank_equals_value() {
+    let error = parse(&["--task-note="]).unwrap_err();
+    assert!(error.contains("`--task-note=` requires a non-empty value."));
 }
 
 #[test]

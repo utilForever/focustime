@@ -83,6 +83,13 @@ fn stderr_text(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).to_string()
 }
 
+fn write_recovery_snapshot(env: &TestEnv, content: &str) {
+    let app_data_dir = env.root.join("focustime");
+    fs::create_dir_all(&app_data_dir).expect("failed to create app data directory");
+    fs::write(app_data_dir.join("session-recovery.toml"), content)
+        .expect("failed to write recovery snapshot");
+}
+
 #[test]
 fn status_json_success_emits_payload_on_stdout() {
     let env = TestEnv::new("status-json-success");
@@ -170,6 +177,92 @@ fn task_goal_json_reads_unconfigured_selected_task_goal() {
     assert_eq!(read_payload["focused_minutes"], 0);
     assert_eq!(read_payload["pomodoros_completed"], 0);
     assert_eq!(read_payload["met"], false);
+}
+
+#[test]
+fn session_metadata_json_reads_fallback_from_selected_task_label() {
+    let env = TestEnv::new("metadata-json-read-fallback");
+
+    let select_output = env.run(&["--task", "Docs", "--json"]);
+    assert_eq!(select_output.status.code(), Some(0));
+    assert!(stderr_text(&select_output).trim().is_empty());
+
+    let read_output = env.run(&["--focus-intention", "--json"]);
+    assert_eq!(read_output.status.code(), Some(0));
+    assert!(stderr_text(&read_output).trim().is_empty());
+
+    let payload: Value =
+        serde_json::from_slice(&read_output.stdout).expect("stdout should be JSON");
+    assert_eq!(payload["action"], "focus-intention");
+    assert_eq!(payload["updated"], false);
+    assert_eq!(payload["focus_intention"], "Docs");
+    assert_eq!(payload["task_note"], "Docs");
+    assert_eq!(payload["timer"]["selected_task_label"], "Docs");
+}
+
+#[test]
+fn session_metadata_json_set_and_read_updates_recovery_backed_state() {
+    let env = TestEnv::new("metadata-json-set-read");
+    write_recovery_snapshot(
+        &env,
+        r#"phase = "focus"
+status = "running"
+remaining_secs = 1200
+pomodoros_completed = 2
+selected_task_label = "Docs"
+focus_intention = "Write docs"
+task_note = "Draft outline"
+selected_profile = "classic"
+"#,
+    );
+
+    let set_note_output = env.run(&["--task-note", "Capture blockers", "--json"]);
+    assert_eq!(set_note_output.status.code(), Some(0));
+    assert!(stderr_text(&set_note_output).trim().is_empty());
+    let set_note_payload: Value =
+        serde_json::from_slice(&set_note_output.stdout).expect("stdout should be JSON");
+    assert_eq!(set_note_payload["action"], "task-note");
+    assert_eq!(set_note_payload["updated"], true);
+    assert_eq!(set_note_payload["focus_intention"], "Write docs");
+    assert_eq!(set_note_payload["task_note"], "Capture blockers");
+
+    let set_focus_output = env.run(&["--focus-intention=Deep Work", "--json"]);
+    assert_eq!(set_focus_output.status.code(), Some(0));
+    assert!(stderr_text(&set_focus_output).trim().is_empty());
+    let set_focus_payload: Value =
+        serde_json::from_slice(&set_focus_output.stdout).expect("stdout should be JSON");
+    assert_eq!(set_focus_payload["action"], "focus-intention");
+    assert_eq!(set_focus_payload["updated"], true);
+    assert_eq!(set_focus_payload["focus_intention"], "Deep Work");
+    assert_eq!(set_focus_payload["task_note"], "Capture blockers");
+
+    let read_output = env.run(&["--task-note", "--json"]);
+    assert_eq!(read_output.status.code(), Some(0));
+    assert!(stderr_text(&read_output).trim().is_empty());
+    let read_payload: Value = serde_json::from_slice(&read_output.stdout).expect("stdout JSON");
+    assert_eq!(read_payload["action"], "task-note");
+    assert_eq!(read_payload["updated"], false);
+    assert_eq!(read_payload["focus_intention"], "Deep Work");
+    assert_eq!(read_payload["task_note"], "Capture blockers");
+}
+
+#[test]
+fn session_metadata_set_json_requires_active_focus_session() {
+    let env = TestEnv::new("metadata-json-set-requires-active-session");
+    let output = env.run(&["--focus-intention", "Write docs", "--json"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr_text(&output).trim().is_empty());
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(payload["ok"], false);
+    assert_eq!(payload["error"]["kind"], "runtime");
+    assert_eq!(payload["error"]["exit_code"], 1);
+    assert!(
+        payload["error"]["message"]
+            .as_str()
+            .expect("error message should be a string")
+            .contains("focus session is not active or paused")
+    );
 }
 
 #[test]
