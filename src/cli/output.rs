@@ -7,8 +7,9 @@ use crate::cli::{
     RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleInspectionOutput,
     Serialize, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
     SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
-    StatusOutput, StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
-    TimerStateOutput, Write, format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
+    StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput, StrictCommandOutput,
+    TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, TimerStateOutput, Write,
+    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -266,6 +267,8 @@ pub(super) fn print_status_output(payload: &StatusOutput) {
         println!("Last interruption: none");
     }
     print_status_focus_score_line(&payload.focus_score);
+    print_status_growth_line(&payload.stats_growth);
+    print_status_retention_line(&payload.stats_retention);
     println!(
         "Live timer: {} {} ({} remaining, source: {})",
         payload.live.phase,
@@ -339,6 +342,74 @@ fn print_status_focus_score_line(focus_score: &FocusScoreOutput) {
             "Focus score: n/a (weekly goal off; consistency {}%)",
             focus_score.consistency_score_pct
         );
+    }
+}
+
+fn print_status_growth_line(growth: &StatsGrowthSummary) {
+    println!(
+        "Stats growth: {} records, ~{}",
+        growth.total_record_count,
+        format_bytes(growth.estimated_bytes)
+    );
+    if growth.high_volume_sections.is_empty() {
+        println!("Stats growth top sections: none");
+        return;
+    }
+    let high_volume = growth
+        .high_volume_sections
+        .iter()
+        .map(|section| {
+            format!(
+                "{} ({}, ~{})",
+                section.name,
+                section.record_count,
+                format_bytes(section.estimated_bytes)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    println!("Stats growth top sections: {high_volume}");
+}
+
+fn print_status_retention_line(retention: &StatsRetentionStatusOutput) {
+    println!("Stats retention preset: {}", retention.preset);
+    println!(
+        "Stats retention windows: daily {}, sessions {}, interruptions {}, overrides {}",
+        format_retention_window(retention.keep_daily_days),
+        format_retention_window(retention.keep_focus_sessions_days),
+        format_retention_window(retention.keep_session_interruptions_days),
+        format_retention_window(retention.keep_break_glass_overrides_days),
+    );
+    if retention.pending_prune.any_removed() {
+        println!(
+            "Stats retention pending prune: {} records (daily {}, sessions {}, interruptions {}, overrides {})",
+            retention.pending_prune.total_removed(),
+            retention.pending_prune.daily_removed,
+            retention.pending_prune.focus_sessions_removed,
+            retention.pending_prune.session_interruptions_removed,
+            retention.pending_prune.break_glass_overrides_removed
+        );
+    } else {
+        println!("Stats retention pending prune: none");
+    }
+}
+
+fn format_retention_window(days: Option<u16>) -> String {
+    match days {
+        Some(days) => format!("{days}d"),
+        None => "keep_all".to_string(),
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = KIB * 1024;
+    if bytes >= MIB {
+        format!("{:.1} MiB", bytes as f64 / MIB as f64)
+    } else if bytes >= KIB {
+        format!("{:.1} KiB", bytes as f64 / KIB as f64)
+    } else {
+        format!("{bytes} B")
     }
 }
 
