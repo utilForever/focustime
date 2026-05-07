@@ -2374,6 +2374,11 @@ fn persisted_config_keeps_legacy_blocked_sites_when_mirror_flag_is_disabled() {
 
     let persisted = app.persisted_config();
     assert_eq!(persisted.blocked_sites, vec!["legacy-only.com".to_string()]);
+    assert!(
+        persisted.blocklist_profiles[0]
+            .sites
+            .contains(&"example.com".to_string())
+    );
 }
 
 #[test]
