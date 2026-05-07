@@ -5,10 +5,10 @@ use crate::cli::{
     BlocklistProfileCommandOutput, BlocklistProfileConfig, DiagnosticsCommandOutput, ExportOutput,
     FeatureFlagsOutput, FocusScoreOutput, GoalCarryCommandOutput, GoalCommandOutput, GoalOutput,
     ProfileOutput, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
-    ScheduleInspectionOutput, Serialize, SetupCheck, SetupCheckLevel, SetupCheckOutput,
-    SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput,
-    SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput,
-    StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
+    ScheduleInspectionOutput, Serialize, SessionMetadataCommandOutput, SetupCheck, SetupCheckLevel,
+    SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
+    SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput,
+    StatusOutput, StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
     TimerStateOutput, Write, format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 
@@ -204,6 +204,23 @@ pub(super) fn print_site_delete_command_output(payload: &SiteDeleteCommandOutput
         "Effective blocked sites: {}",
         payload.effective_blocked_sites_count
     );
+}
+
+pub(super) fn print_session_metadata_command_output(payload: &SessionMetadataCommandOutput) {
+    if payload.updated {
+        println!("Session metadata updated: {}.", payload.action);
+    } else {
+        println!("Session metadata: {}.", payload.action);
+    }
+    println!(
+        "Focus intention: {}",
+        payload.focus_intention.as_deref().unwrap_or("none")
+    );
+    println!(
+        "Task note: {}",
+        payload.task_note.as_deref().unwrap_or("none")
+    );
+    print_timer_state_output(&payload.timer);
 }
 
 pub(super) fn print_status_output(payload: &StatusOutput) {

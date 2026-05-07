@@ -4108,6 +4108,42 @@ fn cli_start_begins_focus_when_task_label_exists() {
 }
 
 #[test]
+fn cli_metadata_update_requires_active_or_paused_focus() {
+    let mut app = App::default();
+
+    let focus_error = app.set_focus_intention_for_cli("Write docs").unwrap_err();
+    assert_eq!(
+        focus_error,
+        "Cannot set session metadata with `--focus-intention`: focus session is not active or paused."
+    );
+
+    let note_error = app.set_task_note_for_cli("Capture blockers").unwrap_err();
+    assert_eq!(
+        note_error,
+        "Cannot set session metadata with `--task-note`: focus session is not active or paused."
+    );
+}
+
+#[test]
+fn cli_metadata_update_syncs_active_state_and_recovery_snapshot() {
+    let mut app = App::default();
+    app.selected_task_label = Some("Docs".to_string());
+    app.start_focus_for_cli().unwrap();
+
+    app.set_focus_intention_for_cli("Write API docs").unwrap();
+    app.set_task_note_for_cli("Capture blockers").unwrap();
+
+    assert_eq!(
+        app.focus_intention_for_cli().as_deref(),
+        Some("Write API docs")
+    );
+    assert_eq!(app.task_note_for_cli().as_deref(), Some("Capture blockers"));
+    let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
+    assert_eq!(snapshot.focus_intention.as_deref(), Some("Write API docs"));
+    assert_eq!(snapshot.task_note.as_deref(), Some("Capture blockers"));
+}
+
+#[test]
 fn cli_pause_and_resume_transitions_timer_state() {
     let mut app = App::default();
     app.selected_task_label = Some("Docs".to_string());

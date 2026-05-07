@@ -48,10 +48,10 @@ use output::{
     print_blocklist_profile_command_output, print_diagnostics_command_output, print_export_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
     print_profile_output, print_restore_output, print_schedule_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
-    print_timer_state_output,
+    print_session_metadata_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, invalid_usage, parse_global_tokens, parse_goal_carry_value,
@@ -62,8 +62,8 @@ use parsing::{
 };
 use status::{
     available_break_template_views, available_theme_preset_views, build_status_output,
-    build_task_goal_output, mirror_metadata_from_task_label, profile_id, profile_view,
-    selected_break_template_view, theme_preset_view, timer_phase_id, timer_status_id,
+    build_task_goal_output, profile_id, profile_view, selected_break_template_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const USAGE_TEXT: &str = r#"Usage:
@@ -76,6 +76,10 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --task=LABEL [--json]
   focustime --task-goal [LABEL|LABEL:MINUTES,POMODOROS] [--json]
   focustime --task-goal=LABEL[:MINUTES,POMODOROS] [--json]
+  focustime --focus-intention [TEXT] [--json]
+  focustime --focus-intention=TEXT [--json]
+  focustime --task-note [TEXT] [--json]
+  focustime --task-note=TEXT [--json]
   focustime --profile [classic|deep-work|custom] [--json]
   focustime --theme [classic|high-contrast|deuteranopia-friendly] [--json]
   focustime --goal [--json]
@@ -121,6 +125,8 @@ Options:
   --next          Skip to the next phase
   --task          Select task label (auto-creates unknown labels)
   --task-goal     Show or set per-task cumulative goal targets
+  --focus-intention  Show current focus intention, or set it for the active/paused focus session
+  --task-note        Show current task note, or set it for the active/paused focus session
   --profile       Show current profile, or set it when value is provided
   --theme         Show current theme preset, or set it when value is provided
   --goal          Show current daily goal, or set minutes/pomodoros targets
@@ -213,6 +219,12 @@ pub enum CommandKind {
         label: Option<String>,
         goal: Option<DailyGoalConfig>,
     },
+    FocusIntention {
+        value: Option<String>,
+    },
+    TaskNote {
+        value: Option<String>,
+    },
     Profile {
         profile: Option<ProfileId>,
     },
@@ -291,6 +303,8 @@ enum PrimaryCommand {
         label: Option<String>,
         goal: Option<DailyGoalConfig>,
     },
+    FocusIntention(Option<String>),
+    TaskNote(Option<String>),
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
@@ -336,6 +350,8 @@ enum ParsedToken {
         label: Option<String>,
         goal: Option<DailyGoalConfig>,
     },
+    FocusIntention(Option<String>),
+    TaskNote(Option<String>),
     Status,
     Watch(Option<u64>),
     Profile(Option<ProfileId>),
@@ -603,6 +619,15 @@ struct TaskGoalCommandOutput {
     focused_minutes: u64,
     pomodoros_completed: u32,
     met: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SessionMetadataCommandOutput {
+    action: &'static str,
+    updated: bool,
+    focus_intention: Option<String>,
+    task_note: Option<String>,
+    timer: TimerStateOutput,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

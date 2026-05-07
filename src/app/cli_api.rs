@@ -106,8 +106,42 @@ impl App {
         self.selected_task_label.clone()
     }
 
-    pub fn metadata_task_label_fallback_enabled_for_cli(&self) -> bool {
-        self.feature_flags.metadata_task_label_fallback
+    pub fn focus_intention_for_cli(&self) -> Option<String> {
+        if self.focus_session_active_for_current_state() {
+            return self
+                .active_focus_intention
+                .clone()
+                .or_else(|| self.active_focus_task_label.clone())
+                .or_else(|| self.selected_task_label.clone());
+        }
+        self.cli_metadata_fallback_value()
+    }
+
+    pub fn task_note_for_cli(&self) -> Option<String> {
+        if self.focus_session_active_for_current_state() {
+            return self
+                .active_focus_task_note
+                .clone()
+                .or_else(|| self.active_focus_task_label.clone())
+                .or_else(|| self.selected_task_label.clone());
+        }
+        self.cli_metadata_fallback_value()
+    }
+
+    pub fn set_focus_intention_for_cli(&mut self, value: &str) -> Result<(), String> {
+        self.ensure_focus_active_for_cli_metadata_update("--focus-intention")?;
+        let value = self.resolve_cli_metadata_value(value)?;
+        self.active_focus_intention = Some(value);
+        self.sync_recovery_snapshot();
+        Ok(())
+    }
+
+    pub fn set_task_note_for_cli(&mut self, value: &str) -> Result<(), String> {
+        self.ensure_focus_active_for_cli_metadata_update("--task-note")?;
+        let value = self.resolve_cli_metadata_value(value)?;
+        self.active_focus_task_note = Some(value);
+        self.sync_recovery_snapshot();
+        Ok(())
     }
 
     pub fn timer_state_for_cli(&self) -> (TimerPhase, TimerStatus, u64, u32) {
@@ -117,5 +151,30 @@ impl App {
             self.timer.remaining_secs,
             self.timer.pomodoros_completed,
         )
+    }
+
+    fn cli_metadata_fallback_value(&self) -> Option<String> {
+        if self.feature_flags.metadata_task_label_fallback {
+            self.selected_task_label.clone()
+        } else {
+            None
+        }
+    }
+
+    fn ensure_focus_active_for_cli_metadata_update(&self, command: &str) -> Result<(), String> {
+        if self.focus_session_active_for_current_state() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Cannot set session metadata with `{command}`: focus session is not active or paused."
+            ))
+        }
+    }
+
+    fn resolve_cli_metadata_value(&self, value: &str) -> Result<String, String> {
+        normalize_task_label(value)
+            .or_else(|| self.active_focus_task_label.clone())
+            .or_else(|| self.selected_task_label.clone())
+            .ok_or_else(|| "Cannot set session metadata: no task label is selected.".to_string())
     }
 }

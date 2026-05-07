@@ -98,6 +98,12 @@ cargo run -- --task-goal "Write docs"
 cargo run -- --task-goal "Write docs:120,4"
 cargo run -- --task-goal=Write-docs:120,4 --json
 
+# Show session metadata, or set it while focus is running/paused
+cargo run -- --focus-intention
+cargo run -- --focus-intention "Review PR feedback"
+cargo run -- --task-note
+cargo run -- --task-note="Capture blockers for retro" --json
+
 # Show or set the active profile
 cargo run -- --profile
 cargo run -- --profile deep-work
@@ -333,6 +339,9 @@ quick session note.
 
 Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
+
+CLI parity is available via `--focus-intention` and `--task-note` for non-interactive
+inspection and in-session updates (updates require an active or paused focus session).
 
 ### Example config
 

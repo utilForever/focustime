@@ -8,23 +8,24 @@ use crate::cli::{
     CommandKind, DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats,
     GoalCarryCommandOutput, GoalCommandOutput, InvalidSiteEntryOutput, InvalidSiteInput,
     MonthlyGoalConfig, OutputMode, PathBuf, ProfileId, ProfileOutput, ProfileView,
-    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, SiteAddCommandOutput,
-    SiteBlocker, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue,
-    SiteListCommandOutput, SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput,
-    TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
-    TimerStateOutput, WeeklyGoalConfig, available_break_template_views,
+    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, SessionMetadataCommandOutput,
+    SiteAddCommandOutput, SiteBlocker, SiteDeleteCommandOutput, SiteEditCommandOutput,
+    SiteEditValue, SiteListCommandOutput, SiteListTarget, StatusOutput, StrictCommandOutput,
+    TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, ThemePreset,
+    TimerCommandOutput, TimerStateOutput, WeeklyGoalConfig, available_break_template_views,
     available_theme_preset_views, build_blocking_preview_command_output,
     build_diagnostics_command_output, build_schedule_inspection_output, build_status_output,
     build_task_goal_output, display_input_value, effective_blocked_sites_for_profile, flush_stdout,
-    mirror_metadata_from_task_label, print_backup_output, print_blocking_preview_command_output,
+    print_backup_output, print_blocking_preview_command_output,
     print_blocklist_profile_command_output, print_diagnostics_command_output, print_export_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
     print_profile_output, print_restore_output, print_schedule_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
-    print_timer_state_output, profile_id, profile_view, selected_break_template_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    print_session_metadata_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
+    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
+    timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -40,6 +41,10 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::TaskGoal { label, goal } => {
             execute_task_goal_command(label, goal, cli_command.output)
         }
+        CommandKind::FocusIntention { value } => {
+            execute_focus_intention_command(value, cli_command.output)
+        }
+        CommandKind::TaskNote { value } => execute_task_note_command(value, cli_command.output),
         CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
         CommandKind::Theme { preset } => execute_theme_command(preset, cli_command.output),
         CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
@@ -184,6 +189,29 @@ fn execute_task_goal_command(
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
+}
+
+fn execute_focus_intention_command(
+    value: Option<String>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut app = App::new();
+    let mut updated = false;
+    if let Some(value) = value {
+        app.set_focus_intention_for_cli(&value)?;
+        updated = true;
+    }
+    emit_session_metadata_command_output("focus-intention", updated, &app, output)
+}
+
+fn execute_task_note_command(value: Option<String>, output: OutputMode) -> Result<(), String> {
+    let mut app = App::new();
+    let mut updated = false;
+    if let Some(value) = value {
+        app.set_task_note_for_cli(&value)?;
+        updated = true;
+    }
+    emit_session_metadata_command_output("task-note", updated, &app, output)
 }
 
 fn execute_blocklist_profile_command(
@@ -1300,15 +1328,34 @@ fn emit_timer_command_output(
     Ok(())
 }
 
+fn emit_session_metadata_command_output(
+    action: &'static str,
+    updated: bool,
+    app: &App,
+    output: OutputMode,
+) -> Result<(), String> {
+    let payload = SessionMetadataCommandOutput {
+        action,
+        updated,
+        focus_intention: app.focus_intention_for_cli(),
+        task_note: app.task_note_for_cli(),
+        timer: build_timer_state_output(app),
+    };
+    match output {
+        OutputMode::Text => print_session_metadata_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
 fn build_timer_state_output(app: &App) -> TimerStateOutput {
     let (phase, status, remaining_secs, pomodoros_completed) = app.timer_state_for_cli();
     let profile = app.selected_profile_id();
     let (focus_secs, short_break_secs, long_break_secs, long_break_interval) =
         app.profile_values(profile);
-    let (selected_task_label, focus_intention, task_note) = mirror_metadata_from_task_label(
-        app.selected_task_label_for_cli(),
-        app.metadata_task_label_fallback_enabled_for_cli(),
-    );
+    let selected_task_label = app.selected_task_label_for_cli();
+    let focus_intention = app.focus_intention_for_cli();
+    let task_note = app.task_note_for_cli();
 
     TimerStateOutput {
         phase: timer_phase_id(phase),

@@ -55,9 +55,11 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 25] = [
+    let parsers: [(&str, ValueArgParser); 27] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
+        ("--focus-intention", classify_focus_intention_arg),
+        ("--task-note", classify_task_note_arg),
         ("--profile", classify_profile_arg),
         ("--theme", classify_theme_arg),
         ("--goal", classify_goal_arg),
@@ -180,6 +182,35 @@ fn classify_theme_arg(args: &[String], index: usize) -> Result<(ParsedToken, usi
         return Ok((ParsedToken::Theme(Some(selected)), 2));
     }
     Ok((ParsedToken::Theme(None), 1))
+}
+
+fn classify_focus_intention_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--focus-intention` requires a value when one is provided.",
+        )?;
+        return Ok((ParsedToken::FocusIntention(Some(value.to_string())), 2));
+    }
+    Ok((ParsedToken::FocusIntention(None), 1))
+}
+
+fn classify_task_note_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--task-note` requires a value when one is provided.",
+        )?;
+        return Ok((ParsedToken::TaskNote(Some(value.to_string())), 2));
+    }
+    Ok((ParsedToken::TaskNote(None), 1))
 }
 
 fn classify_export_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
@@ -476,9 +507,11 @@ fn classify_schedule_set_arg(
 }
 
 pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 25] = [
+    let parsers: [KeyValueParser; 27] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
+        parse_focus_intention_key_value_arg,
+        parse_task_note_key_value_arg,
         parse_profile_key_value_arg,
         parse_theme_key_value_arg,
         parse_goal_key_value_arg,
@@ -532,6 +565,24 @@ fn parse_task_goal_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, Strin
             label: Some(label),
             goal,
         }));
+    }
+    Ok(None)
+}
+
+fn parse_focus_intention_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--focus-intention=") {
+        let value =
+            require_nonempty_key_value(value, "`--focus-intention=` requires a non-empty value.")?;
+        return Ok(Some(ParsedToken::FocusIntention(Some(value.to_string()))));
+    }
+    Ok(None)
+}
+
+fn parse_task_note_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--task-note=") {
+        let value =
+            require_nonempty_key_value(value, "`--task-note=` requires a non-empty value.")?;
+        return Ok(Some(ParsedToken::TaskNote(Some(value.to_string()))));
     }
     Ok(None)
 }
