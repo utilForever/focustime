@@ -7,6 +7,17 @@ const CONFIG_DIR_ENV: &str = "APPDATA";
 #[cfg(not(target_os = "windows"))]
 const CONFIG_DIR_ENV: &str = "XDG_CONFIG_HOME";
 
+fn unique_temp_base(test_name: &str) -> PathBuf {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "focustime-config-test-{test_name}-{}-{now}",
+        std::process::id()
+    ))
+}
+
 #[test]
 fn default_values_are_canonical_pomodoro() {
     let cfg = AppConfig::default();
@@ -659,14 +670,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
 
 #[test]
 fn load_returns_default_when_config_file_is_corrupt() {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let temp_base = std::env::temp_dir().join(format!(
-        "focustime-config-test-{}-{now}",
-        std::process::id()
-    ));
+    let temp_base = unique_temp_base("corrupt");
     let app_dir = temp_base.join("focustime");
     fs::create_dir_all(&app_dir).unwrap();
     fs::write(app_dir.join("config.toml"), "this is not valid toml !!!").unwrap();
@@ -707,6 +711,111 @@ fn load_returns_default_when_config_file_is_corrupt() {
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
+}
+
+#[test]
+fn load_with_env_migrates_legacy_config_without_schema_version() {
+    let temp_base = unique_temp_base("legacy-no-version");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(
+        app_dir.join("config.toml"),
+        "focus_secs = 1800\nshort_break_secs = 360\n",
+    )
+    .unwrap();
+
+    let cfg = AppConfig::load_with_env(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(cfg.focus_secs, 1800);
+    assert_eq!(cfg.short_break_secs, 360);
+}
+
+#[test]
+fn load_with_env_migrates_explicit_legacy_schema_version() {
+    let temp_base = unique_temp_base("legacy-version-zero");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(
+        app_dir.join("config.toml"),
+        "schema_version = 0\nfocus_secs = 1950\n",
+    )
+    .unwrap();
+
+    let cfg = AppConfig::load_with_env(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(cfg.focus_secs, 1950);
+}
+
+#[test]
+fn load_with_env_leniently_parses_newer_schema_version() {
+    let temp_base = unique_temp_base("future-version");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(
+        app_dir.join("config.toml"),
+        "schema_version = 99\nfocus_secs = 2100\nfuture_only = \"ignored\"\n",
+    )
+    .unwrap();
+
+    let cfg = AppConfig::load_with_env(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(cfg.focus_secs, 2100);
+}
+
+#[test]
+fn save_with_env_writes_current_schema_version() {
+    let temp_base = unique_temp_base("save-schema-version");
+    let cfg = AppConfig {
+        focus_secs: 2100,
+        ..AppConfig::default()
+    };
+    cfg.save_with_env(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    })
+    .unwrap();
+
+    let app_dir = temp_base.join("focustime");
+    let saved = fs::read_to_string(app_dir.join("config.toml")).unwrap();
+    let saved_toml: toml::Value = toml::from_str(&saved).unwrap();
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(
+        saved_toml
+            .get("schema_version")
+            .and_then(toml::Value::as_integer),
+        Some(i64::from(CURRENT_CONFIG_SCHEMA_VERSION))
+    );
+    assert_eq!(
+        saved_toml
+            .get("focus_secs")
+            .and_then(toml::Value::as_integer),
+        Some(2100)
+    );
 }
 
 #[test]
