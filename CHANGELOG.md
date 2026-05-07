@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Feature flags for rollout-safe compatibility paths (#258):** added centralized `[feature_flags]` config defaults plus diagnostics visibility to gate legacy automation/blocklist mirrors and task-label metadata fallback behavior across config, CLI, recovery, and stats loading paths.
+- **CLI parity for session metadata commands (#259):** added non-interactive `--focus-intention` and `--task-note` read/set workflows so in-progress session metadata can be inspected and updated from CLI output contracts without entering TUI mode.
 
 ## [0.9.0] - 2026-05-05
 
