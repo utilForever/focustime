@@ -503,6 +503,24 @@ impl FocusStats {
                 before.saturating_sub(self.break_glass_overrides.len());
         }
 
+        if let Some(keep_days) = windows.keep_weekly_goal_snapshots_days {
+            let cutoff_day = retention_cutoff_day(reference_day, keep_days);
+            let before = self.weekly_goal_snapshots.len();
+            self.weekly_goal_snapshots
+                .retain(|week_key, _| is_week_key_on_or_after(week_key, cutoff_day));
+            result.weekly_goal_snapshots_removed =
+                before.saturating_sub(self.weekly_goal_snapshots.len());
+        }
+
+        if let Some(keep_days) = windows.keep_monthly_goal_snapshots_days {
+            let cutoff_day = retention_cutoff_day(reference_day, keep_days);
+            let before = self.monthly_goal_snapshots.len();
+            self.monthly_goal_snapshots
+                .retain(|month_key, _| is_month_key_on_or_after(month_key, cutoff_day));
+            result.monthly_goal_snapshots_removed =
+                before.saturating_sub(self.monthly_goal_snapshots.len());
+        }
+
         result
     }
 
@@ -545,4 +563,37 @@ fn is_day_key_on_or_after(day_key: &str, cutoff_day: chrono::NaiveDate) -> bool 
     chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d")
         .map(|day| day >= cutoff_day)
         .unwrap_or(true)
+}
+
+fn is_week_key_on_or_after(week_key: &str, cutoff_day: chrono::NaiveDate) -> bool {
+    let Some((year, week)) = parse_week_label(week_key) else {
+        return true;
+    };
+    let Some(week_start) = chrono::NaiveDate::from_isoywd_opt(year, week, chrono::Weekday::Mon)
+    else {
+        return true;
+    };
+    let week_end = week_start
+        .checked_add_signed(chrono::Duration::days(6))
+        .unwrap_or(week_start);
+    week_end >= cutoff_day
+}
+
+fn is_month_key_on_or_after(month_key: &str, cutoff_day: chrono::NaiveDate) -> bool {
+    let Some((year_token, month_token)) = month_key.split_once('-') else {
+        return true;
+    };
+    let Ok(year) = year_token.parse::<i32>() else {
+        return true;
+    };
+    let Ok(month) = month_token.parse::<u32>() else {
+        return true;
+    };
+    let Some(month_start) = chrono::NaiveDate::from_ymd_opt(year, month, 1) else {
+        return true;
+    };
+    let month_end_day = days_in_month(year, month);
+    let month_end =
+        chrono::NaiveDate::from_ymd_opt(year, month, month_end_day).unwrap_or(month_start);
+    month_end >= cutoff_day
 }

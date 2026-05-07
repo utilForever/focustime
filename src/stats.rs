@@ -221,6 +221,8 @@ pub struct StatsRetentionPruneResult {
     pub focus_sessions_removed: usize,
     pub session_interruptions_removed: usize,
     pub break_glass_overrides_removed: usize,
+    pub weekly_goal_snapshots_removed: usize,
+    pub monthly_goal_snapshots_removed: usize,
 }
 
 impl StatsRetentionPruneResult {
@@ -229,6 +231,8 @@ impl StatsRetentionPruneResult {
             .saturating_add(self.focus_sessions_removed)
             .saturating_add(self.session_interruptions_removed)
             .saturating_add(self.break_glass_overrides_removed)
+            .saturating_add(self.weekly_goal_snapshots_removed)
+            .saturating_add(self.monthly_goal_snapshots_removed)
     }
 
     pub fn any_removed(self) -> bool {

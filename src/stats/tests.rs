@@ -1473,19 +1473,21 @@ fn apply_retention_policy_prunes_old_high_volume_entries() {
         pomodoros: 1,
     };
     let today = chrono::NaiveDate::from_ymd_opt(2026, 4, 10).unwrap();
-    let old_day = today
+    let old_day_date = today
         .checked_sub_signed(chrono::Duration::days(500))
-        .unwrap()
-        .format("%Y-%m-%d")
-        .to_string();
-    let recent_day = today
+        .unwrap();
+    let recent_day_date = today
         .checked_sub_signed(chrono::Duration::days(10))
-        .unwrap()
-        .format("%Y-%m-%d")
-        .to_string();
+        .unwrap();
+    let old_day = old_day_date.format("%Y-%m-%d").to_string();
+    let recent_day = recent_day_date.format("%Y-%m-%d").to_string();
 
     stats.record_completed_pomodoro_with_task(&old_day, goal, Some("Docs"), 25 * 60, None);
     stats.record_completed_pomodoro_with_task(&recent_day, goal, Some("Docs"), 25 * 60, None);
+    stats.sync_weekly_goal_snapshot(old_day_date, goal);
+    stats.sync_weekly_goal_snapshot(recent_day_date, goal);
+    stats.sync_monthly_goal_snapshot(old_day_date, goal);
+    stats.sync_monthly_goal_snapshot(recent_day_date, goal);
     stats.record_session_interruption_event(
         &old_day,
         1_711_000_000,
@@ -1523,7 +1525,9 @@ fn apply_retention_policy_prunes_old_high_volume_entries() {
     assert_eq!(result.focus_sessions_removed, 1);
     assert_eq!(result.session_interruptions_removed, 1);
     assert_eq!(result.break_glass_overrides_removed, 1);
-    assert_eq!(result.total_removed(), 3);
+    assert_eq!(result.weekly_goal_snapshots_removed, 1);
+    assert_eq!(result.monthly_goal_snapshots_removed, 1);
+    assert_eq!(result.total_removed(), 5);
     assert!(result.any_removed());
     assert_eq!(stats.task_totals(10)[0].pomodoros_completed, 1);
     assert_eq!(stats.recent_break_glass_overrides(10).len(), 1);

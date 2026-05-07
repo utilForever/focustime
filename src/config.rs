@@ -722,18 +722,24 @@ impl StatsRetentionConfig {
                 keep_focus_sessions_days: None,
                 keep_session_interruptions_days: None,
                 keep_break_glass_overrides_days: None,
+                keep_weekly_goal_snapshots_days: None,
+                keep_monthly_goal_snapshots_days: None,
             },
             StatsRetentionPreset::Balanced => StatsRetentionWindows {
                 keep_daily_days: None,
                 keep_focus_sessions_days: Some(365),
                 keep_session_interruptions_days: Some(180),
                 keep_break_glass_overrides_days: Some(180),
+                keep_weekly_goal_snapshots_days: Some(365),
+                keep_monthly_goal_snapshots_days: Some(365),
             },
             StatsRetentionPreset::Aggressive => StatsRetentionWindows {
                 keep_daily_days: Some(365),
                 keep_focus_sessions_days: Some(180),
                 keep_session_interruptions_days: Some(90),
                 keep_break_glass_overrides_days: Some(90),
+                keep_weekly_goal_snapshots_days: Some(180),
+                keep_monthly_goal_snapshots_days: Some(180),
             },
         }
     }
@@ -745,6 +751,8 @@ pub struct StatsRetentionWindows {
     pub keep_focus_sessions_days: Option<u16>,
     pub keep_session_interruptions_days: Option<u16>,
     pub keep_break_glass_overrides_days: Option<u16>,
+    pub keep_weekly_goal_snapshots_days: Option<u16>,
+    pub keep_monthly_goal_snapshots_days: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

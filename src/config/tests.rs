@@ -60,6 +60,8 @@ fn stats_retention_defaults_to_balanced_windows() {
     assert_eq!(windows.keep_focus_sessions_days, Some(365));
     assert_eq!(windows.keep_session_interruptions_days, Some(180));
     assert_eq!(windows.keep_break_glass_overrides_days, Some(180));
+    assert_eq!(windows.keep_weekly_goal_snapshots_days, Some(365));
+    assert_eq!(windows.keep_monthly_goal_snapshots_days, Some(365));
 }
 
 #[test]
@@ -72,6 +74,8 @@ fn stats_retention_windows_change_by_preset() {
     assert_eq!(keep_all.keep_focus_sessions_days, None);
     assert_eq!(keep_all.keep_session_interruptions_days, None);
     assert_eq!(keep_all.keep_break_glass_overrides_days, None);
+    assert_eq!(keep_all.keep_weekly_goal_snapshots_days, None);
+    assert_eq!(keep_all.keep_monthly_goal_snapshots_days, None);
 
     let aggressive = StatsRetentionConfig {
         preset: StatsRetentionPreset::Aggressive,
@@ -81,6 +85,8 @@ fn stats_retention_windows_change_by_preset() {
     assert_eq!(aggressive.keep_focus_sessions_days, Some(180));
     assert_eq!(aggressive.keep_session_interruptions_days, Some(90));
     assert_eq!(aggressive.keep_break_glass_overrides_days, Some(90));
+    assert_eq!(aggressive.keep_weekly_goal_snapshots_days, Some(180));
+    assert_eq!(aggressive.keep_monthly_goal_snapshots_days, Some(180));
 }
 
 #[test]
