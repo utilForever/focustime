@@ -2,9 +2,10 @@ use crate::cli::{
     AppConfig, BreakTemplateConfig, BreakTemplateView, CustomProfileConfig, DEFAULT_FOCUS_SECS,
     DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS,
     DailyGoalSnapshot, Datelike, FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput,
-    NaiveDate, ProfileId, ProfileSpec, ProfileView, SessionOutput, StatusOutput, TaskGoalOutput,
-    ThemePreset, ThemePresetView, TimerPhase, TimerStatus, TodayOutput, carry_over_goal_target,
-    current_day_key, effective_blocked_sites_for_profile, session_recovery,
+    NaiveDate, ProfileId, ProfileSpec, ProfileView, SessionOutput, StatsRetentionStatusOutput,
+    StatusOutput, TaskGoalOutput, ThemePreset, ThemePresetView, TimerPhase, TimerStatus,
+    TodayOutput, carry_over_goal_target, current_day_key, effective_blocked_sites_for_profile,
+    session_recovery,
 };
 
 pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
@@ -51,6 +52,9 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let focus_score_pct = completion_score_pct.map(|completion| {
         (u16::from(consistency_score_pct) + u16::from(completion)).div_ceil(2) as u8
     });
+    let stats_growth = stats.growth_summary();
+    let retention_windows = config.stats_retention.windows();
+    let pending_prune = stats.retention_preview(config.stats_retention, day_date);
 
     StatusOutput {
         day,
@@ -102,6 +106,15 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
             focus_score_pct,
             consistency_score_pct,
             completion_score_pct,
+        },
+        stats_growth,
+        stats_retention: StatsRetentionStatusOutput {
+            preset: config.stats_retention.preset.id(),
+            keep_daily_days: retention_windows.keep_daily_days,
+            keep_focus_sessions_days: retention_windows.keep_focus_sessions_days,
+            keep_session_interruptions_days: retention_windows.keep_session_interruptions_days,
+            keep_break_glass_overrides_days: retention_windows.keep_break_glass_overrides_days,
+            pending_prune,
         },
         live,
     }

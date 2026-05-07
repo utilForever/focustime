@@ -1,10 +1,11 @@
 use crate::stats::{
     BTreeMap, BTreeSet, DailyGoalSnapshot, Datelike, FocusStats, HeatmapDayStats, MonthlyHeatmap,
     MonthlyStats, ProfileBucket, ProfileEffectiveness, ProfileEffectivenessAccumulator,
-    ProfileTotals, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, average_two_percentages,
-    consistency_score_from_active_days, daily_has_activity, days_in_month, format_week_label,
-    month_key_for_day, parse_week_label, percentage_round_nearest, profile_bucket_for,
-    week_key_for_day, weekly_completion_score_pct,
+    ProfileTotals, StatsGrowthSection, StatsGrowthSummary, StatsRetentionConfig,
+    StatsRetentionPruneResult, WeeklyConsistency, WeeklyFocusScore, WeeklyStats,
+    average_two_percentages, consistency_score_from_active_days, daily_has_activity, days_in_month,
+    format_week_label, month_key_for_day, parse_week_label, percentage_round_nearest,
+    profile_bucket_for, week_key_for_day, weekly_completion_score_pct,
 };
 
 impl FocusStats {
@@ -383,4 +384,221 @@ impl FocusStats {
             days,
         }
     }
+
+    pub fn growth_summary(&self) -> StatsGrowthSummary {
+        let mut sections = vec![
+            stats_growth_section("daily", self.daily.len(), &self.daily),
+            stats_growth_section(
+                "weekly_goal_snapshots",
+                self.weekly_goal_snapshots.len(),
+                &self.weekly_goal_snapshots,
+            ),
+            stats_growth_section(
+                "monthly_goal_snapshots",
+                self.monthly_goal_snapshots.len(),
+                &self.monthly_goal_snapshots,
+            ),
+            stats_growth_section("task_labels", self.task_labels.len(), &self.task_labels),
+            stats_growth_section(
+                "selected_task_label",
+                usize::from(self.selected_task_label.is_some()),
+                &self.selected_task_label,
+            ),
+            stats_growth_section(
+                "task_label_favorites",
+                self.task_label_favorites.len(),
+                &self.task_label_favorites,
+            ),
+            stats_growth_section(
+                "task_label_archived",
+                self.task_label_archived.len(),
+                &self.task_label_archived,
+            ),
+            stats_growth_section(
+                "focus_sessions",
+                self.focus_sessions.len(),
+                &self.focus_sessions,
+            ),
+            stats_growth_section(
+                "session_interruptions",
+                self.session_interruptions.len(),
+                &self.session_interruptions,
+            ),
+            stats_growth_section(
+                "break_glass_overrides",
+                self.break_glass_overrides.len(),
+                &self.break_glass_overrides,
+            ),
+            stats_growth_section(
+                "task_goal_targets",
+                self.task_goal_targets.len(),
+                &self.task_goal_targets,
+            ),
+        ];
+        sections.sort_by(|left, right| left.name.cmp(&right.name));
+        let total_record_count = sections.iter().fold(0_usize, |total, section| {
+            total.saturating_add(section.record_count)
+        });
+        let mut high_volume_sections: Vec<StatsGrowthSection> = sections
+            .iter()
+            .filter(|section| section.record_count > 0)
+            .cloned()
+            .collect();
+        high_volume_sections.sort_by(|left, right| {
+            right
+                .record_count
+                .cmp(&left.record_count)
+                .then_with(|| right.estimated_bytes.cmp(&left.estimated_bytes))
+                .then_with(|| left.name.cmp(&right.name))
+        });
+        high_volume_sections.truncate(3);
+
+        StatsGrowthSummary {
+            total_record_count,
+            estimated_bytes: estimated_serialized_bytes(&self.to_persisted()),
+            sections,
+            high_volume_sections,
+        }
+    }
+
+    pub fn apply_retention_policy(
+        &mut self,
+        retention: StatsRetentionConfig,
+        reference_day: chrono::NaiveDate,
+    ) -> StatsRetentionPruneResult {
+        let windows = retention.windows();
+        let mut result = StatsRetentionPruneResult::default();
+
+        if let Some(keep_days) = windows.keep_daily_days {
+            let cutoff_day = retention_cutoff_day(reference_day, keep_days);
+            let before = self.daily.len();
+            self.daily
+                .retain(|day_key, _| is_day_key_on_or_after(day_key, cutoff_day));
+            result.daily_removed = before.saturating_sub(self.daily.len());
+        }
+
+        if let Some(keep_days) = windows.keep_focus_sessions_days {
+            let cutoff_day = retention_cutoff_day(reference_day, keep_days);
+            let before = self.focus_sessions.len();
+            self.focus_sessions
+                .retain(|session| is_day_key_on_or_after(&session.date, cutoff_day));
+            result.focus_sessions_removed = before.saturating_sub(self.focus_sessions.len());
+        }
+
+        if let Some(keep_days) = windows.keep_session_interruptions_days {
+            let cutoff_day = retention_cutoff_day(reference_day, keep_days);
+            let before = self.session_interruptions.len();
+            self.session_interruptions
+                .retain(|event| is_day_key_on_or_after(&event.date, cutoff_day));
+            result.session_interruptions_removed =
+                before.saturating_sub(self.session_interruptions.len());
+        }
+
+        if let Some(keep_days) = windows.keep_break_glass_overrides_days {
+            let cutoff_day = retention_cutoff_day(reference_day, keep_days);
+            let before = self.break_glass_overrides.len();
+            self.break_glass_overrides
+                .retain(|event| is_day_key_on_or_after(&event.date, cutoff_day));
+            result.break_glass_overrides_removed =
+                before.saturating_sub(self.break_glass_overrides.len());
+        }
+
+        if let Some(keep_days) = windows.keep_weekly_goal_snapshots_days {
+            let cutoff_day = retention_cutoff_day(reference_day, keep_days);
+            let before = self.weekly_goal_snapshots.len();
+            self.weekly_goal_snapshots
+                .retain(|week_key, _| is_week_key_on_or_after(week_key, cutoff_day));
+            result.weekly_goal_snapshots_removed =
+                before.saturating_sub(self.weekly_goal_snapshots.len());
+        }
+
+        if let Some(keep_days) = windows.keep_monthly_goal_snapshots_days {
+            let cutoff_day = retention_cutoff_day(reference_day, keep_days);
+            let before = self.monthly_goal_snapshots.len();
+            self.monthly_goal_snapshots
+                .retain(|month_key, _| is_month_key_on_or_after(month_key, cutoff_day));
+            result.monthly_goal_snapshots_removed =
+                before.saturating_sub(self.monthly_goal_snapshots.len());
+        }
+
+        result
+    }
+
+    pub fn retention_preview(
+        &self,
+        retention: StatsRetentionConfig,
+        reference_day: chrono::NaiveDate,
+    ) -> StatsRetentionPruneResult {
+        let mut cloned = self.clone();
+        cloned.apply_retention_policy(retention, reference_day)
+    }
+}
+
+fn stats_growth_section(
+    name: &str,
+    record_count: usize,
+    value: &impl serde::Serialize,
+) -> StatsGrowthSection {
+    StatsGrowthSection {
+        name: name.to_string(),
+        record_count,
+        estimated_bytes: estimated_serialized_bytes(value),
+    }
+}
+
+fn estimated_serialized_bytes(value: &impl serde::Serialize) -> u64 {
+    #[derive(serde::Serialize)]
+    struct SizeProbe<'a, T: ?Sized + serde::Serialize> {
+        value: &'a T,
+    }
+
+    toml::to_string(&SizeProbe { value })
+        .expect("stats growth section should be serializable")
+        .len() as u64
+}
+
+fn retention_cutoff_day(reference_day: chrono::NaiveDate, keep_days: u16) -> chrono::NaiveDate {
+    let days_to_keep = i64::from(keep_days.max(1));
+    reference_day
+        .checked_sub_signed(chrono::Duration::days(days_to_keep.saturating_sub(1)))
+        .unwrap_or(reference_day)
+}
+
+fn is_day_key_on_or_after(day_key: &str, cutoff_day: chrono::NaiveDate) -> bool {
+    chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d")
+        .map(|day| day >= cutoff_day)
+        .unwrap_or(true)
+}
+
+fn is_week_key_on_or_after(week_key: &str, cutoff_day: chrono::NaiveDate) -> bool {
+    let Some((year, week)) = parse_week_label(week_key) else {
+        return true;
+    };
+    let Some(week_start) = chrono::NaiveDate::from_isoywd_opt(year, week, chrono::Weekday::Mon)
+    else {
+        return true;
+    };
+    let week_end = week_start
+        .checked_add_signed(chrono::Duration::days(6))
+        .unwrap_or(week_start);
+    week_end >= cutoff_day
+}
+
+fn is_month_key_on_or_after(month_key: &str, cutoff_day: chrono::NaiveDate) -> bool {
+    let Some((year_token, month_token)) = month_key.split_once('-') else {
+        return true;
+    };
+    let Ok(year) = year_token.parse::<i32>() else {
+        return true;
+    };
+    let Ok(month) = month_token.parse::<u32>() else {
+        return true;
+    };
+    let Some(month_start) = chrono::NaiveDate::from_ymd_opt(year, month, 1) else {
+        return true;
+    };
+    let month_end_day = days_in_month(year, month);
+    let month_end =
+        chrono::NaiveDate::from_ymd_opt(year, month, month_end_day).unwrap_or(month_start);
+    month_end >= cutoff_day
 }

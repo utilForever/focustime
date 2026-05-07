@@ -110,6 +110,9 @@ pub struct AppConfig {
     /// Carry-over behavior for unmet daily/weekly/monthly targets.
     #[serde(default)]
     pub goal_carry_over: GoalCarryOverConfig,
+    /// Retention policy for persisted stats history.
+    #[serde(default)]
+    pub stats_retention: StatsRetentionConfig,
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
     pub wakatime: WakatimeMetadataConfig,
@@ -686,6 +689,72 @@ pub struct GoalCarryOverConfig {
     pub monthly: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StatsRetentionPreset {
+    KeepAll,
+    Aggressive,
+    #[default]
+    Balanced,
+}
+
+impl StatsRetentionPreset {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::KeepAll => "keep_all",
+            Self::Balanced => "balanced",
+            Self::Aggressive => "aggressive",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct StatsRetentionConfig {
+    #[serde(default)]
+    pub preset: StatsRetentionPreset,
+}
+
+impl StatsRetentionConfig {
+    pub fn windows(self) -> StatsRetentionWindows {
+        match self.preset {
+            StatsRetentionPreset::KeepAll => StatsRetentionWindows {
+                keep_daily_days: None,
+                keep_focus_sessions_days: None,
+                keep_session_interruptions_days: None,
+                keep_break_glass_overrides_days: None,
+                keep_weekly_goal_snapshots_days: None,
+                keep_monthly_goal_snapshots_days: None,
+            },
+            StatsRetentionPreset::Balanced => StatsRetentionWindows {
+                keep_daily_days: None,
+                keep_focus_sessions_days: Some(365),
+                keep_session_interruptions_days: Some(180),
+                keep_break_glass_overrides_days: Some(180),
+                keep_weekly_goal_snapshots_days: Some(365),
+                keep_monthly_goal_snapshots_days: Some(365),
+            },
+            StatsRetentionPreset::Aggressive => StatsRetentionWindows {
+                keep_daily_days: Some(365),
+                keep_focus_sessions_days: Some(180),
+                keep_session_interruptions_days: Some(90),
+                keep_break_glass_overrides_days: Some(90),
+                keep_weekly_goal_snapshots_days: Some(180),
+                keep_monthly_goal_snapshots_days: Some(180),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StatsRetentionWindows {
+    pub keep_daily_days: Option<u16>,
+    pub keep_focus_sessions_days: Option<u16>,
+    pub keep_session_interruptions_days: Option<u16>,
+    pub keep_break_glass_overrides_days: Option<u16>,
+    pub keep_weekly_goal_snapshots_days: Option<u16>,
+    pub keep_monthly_goal_snapshots_days: Option<u16>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WakatimeTaskMappingConfig {
     #[serde(default)]
@@ -1216,6 +1285,7 @@ impl Default for AppConfig {
             weekly_goal: WeeklyGoalConfig::default(),
             monthly_goal: MonthlyGoalConfig::default(),
             goal_carry_over: GoalCarryOverConfig::default(),
+            stats_retention: StatsRetentionConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
             shortcuts: ShortcutConfig::default(),
         }

@@ -19,8 +19,8 @@ use crate::config::{
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
 use crate::stats::{
-    DailyGoalSnapshot, FocusStats, SessionInterruptionEvent, carry_over_goal_target,
-    current_day_key,
+    DailyGoalSnapshot, FocusStats, SessionInterruptionEvent, StatsGrowthSummary,
+    StatsRetentionPruneResult, carry_over_goal_target, current_day_key,
 };
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -531,7 +531,19 @@ struct StatusOutput {
     today: TodayOutput,
     latest_interruption: Option<SessionInterruptionEvent>,
     focus_score: FocusScoreOutput,
+    stats_growth: StatsGrowthSummary,
+    stats_retention: StatsRetentionStatusOutput,
     live: LiveStatusOutput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct StatsRetentionStatusOutput {
+    preset: &'static str,
+    keep_daily_days: Option<u16>,
+    keep_focus_sessions_days: Option<u16>,
+    keep_session_interruptions_days: Option<u16>,
+    keep_break_glass_overrides_days: Option<u16>,
+    pending_prune: StatsRetentionPruneResult,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -37,6 +37,24 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
     let focus_score_line = readable_focus_score_text(&format_history_focus_score_line(app));
     let goals_line = readable_goal_streak_text(&format_history_goal_streak_line(app));
     let interruption_line = format_history_interruption_line(app);
+    let growth_summary = app.stats_growth_summary();
+    let retention_preview = app.stats_retention_preview();
+    let retention = app.stats_retention_config();
+    let growth_line = format!(
+        "Stats growth: {} records · ~{} · {}",
+        growth_summary.total_record_count,
+        format_bytes(growth_summary.estimated_bytes),
+        format_top_sections(&growth_summary.high_volume_sections)
+    );
+    let retention_line = if retention_preview.any_removed() {
+        format!(
+            "Retention: {} · prunes {} old record(s) on next save",
+            retention.preset.id(),
+            retention_preview.total_removed()
+        )
+    } else {
+        format!("Retention: {} · no pending prune", retention.preset.id())
+    };
     let overview = Paragraph::new(vec![
         Line::styled(
             format!(
@@ -64,6 +82,14 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         ),
         Line::styled(
             interruption_line,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
+        Line::styled(
+            growth_line,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
+        Line::styled(
+            retention_line,
             Style::default().fg(app_color(app, Color::DarkGray)),
         ),
     ])
@@ -439,4 +465,27 @@ fn heatmap_cell_symbol(app: &App, focused_minutes: u64, max_focused_minutes: u64
 
 pub(super) fn format_month_label(year: i32, month: u32) -> String {
     format!("{year:04}-{month:02}")
+}
+
+fn format_top_sections(sections: &[crate::stats::StatsGrowthSection]) -> String {
+    if sections.is_empty() {
+        return "top: none".to_string();
+    }
+    let labels: Vec<String> = sections
+        .iter()
+        .map(|section| format!("{} {}", section.name, section.record_count))
+        .collect();
+    format!("top: {}", labels.join(", "))
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = KIB * 1024;
+    if bytes >= MIB {
+        format!("{:.1} MiB", bytes as f64 / MIB as f64)
+    } else if bytes >= KIB {
+        format!("{:.1} KiB", bytes as f64 / KIB as f64)
+    } else {
+        format!("{bytes} B")
+    }
 }

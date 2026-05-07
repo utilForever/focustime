@@ -1,6 +1,6 @@
 use crate::app::*;
 use crate::blocker;
-use crate::config::ShortcutConfig;
+use crate::config::{ShortcutConfig, StatsRetentionConfig};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -122,6 +122,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         weekly_goal: WeeklyGoalConfig::default(),
         monthly_goal: MonthlyGoalConfig::default(),
         goal_carry_over: GoalCarryOverConfig::default(),
+        stats_retention: StatsRetentionConfig::default(),
         selected_theme_preset: ThemePreset::Classic,
         wakatime: WakatimeMetadataConfig::default(),
         shortcuts: ShortcutConfig::default(),

@@ -1600,6 +1600,46 @@ fn build_status_output_excludes_allowlist_from_blocked_sites_count() {
 }
 
 #[test]
+fn build_status_output_includes_growth_and_retention_signals() {
+    let mut stats = FocusStats::default();
+    let goal = DailyGoalSnapshot {
+        minutes: 25,
+        pomodoros: 1,
+    };
+    let today = NaiveDate::parse_from_str(&current_day_key(), "%Y-%m-%d")
+        .expect("current day key should parse as a date");
+    let old_day = today
+        .checked_sub_signed(Duration::days(500))
+        .unwrap()
+        .format("%Y-%m-%d")
+        .to_string();
+    let recent_day = today.format("%Y-%m-%d").to_string();
+    stats.record_completed_pomodoro_with_task(&old_day, goal, Some("Docs"), 25 * 60, None);
+    stats.record_completed_pomodoro_with_task(&recent_day, goal, Some("Docs"), 25 * 60, None);
+
+    let config = AppConfig::default();
+    let output = build_status_output(&config, &stats);
+
+    assert!(output.stats_growth.total_record_count > 0);
+    assert!(output.stats_growth.estimated_bytes > 0);
+    assert_eq!(output.stats_retention.preset, "balanced");
+    assert_eq!(output.stats_retention.keep_daily_days, None);
+    assert_eq!(output.stats_retention.keep_focus_sessions_days, Some(365));
+    assert_eq!(
+        output.stats_retention.keep_session_interruptions_days,
+        Some(180)
+    );
+    assert_eq!(
+        output.stats_retention.keep_break_glass_overrides_days,
+        Some(180)
+    );
+    assert_eq!(
+        output.stats_retention.pending_prune.focus_sessions_removed,
+        1
+    );
+}
+
+#[test]
 fn build_status_output_reports_daily_weekly_monthly_goal_state() {
     let mut stats = FocusStats::default();
     let today = current_day_key();
