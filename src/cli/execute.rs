@@ -134,7 +134,10 @@ fn execute_task_goal_command(
     goal: Option<DailyGoalConfig>,
     output: OutputMode,
 ) -> Result<(), String> {
-    let mut stats = FocusStats::load()?;
+    let config = AppConfig::load().normalized();
+    let mut stats = FocusStats::load_with_options(crate::stats::StatsLoadOptions {
+        metadata_task_label_fallback: config.feature_flags.metadata_task_label_fallback,
+    })?;
     let selected_task_label = stats.task_planner_state().1;
     let requested_label = label.or(selected_task_label).ok_or_else(|| {
         "No task label selected. Use `--task LABEL` first or pass `--task-goal LABEL`.".to_string()
@@ -554,7 +557,10 @@ fn sync_legacy_blocked_sites(config: &mut AppConfig) {
     ensure_blocklist_profiles(config);
     let index = selected_blocklist_profile_index(config);
     config.selected_blocklist_profile = config.blocklist_profiles[index].name.clone();
-    config.blocked_sites = effective_blocked_sites_for_profile(&config.blocklist_profiles[index]);
+    if config.feature_flags.legacy_blocked_sites_mirror {
+        config.blocked_sites =
+            effective_blocked_sites_for_profile(&config.blocklist_profiles[index]);
+    }
 }
 
 fn build_blocklist_profile_command_output(
@@ -950,7 +956,10 @@ fn execute_status_watch_command(output: OutputMode, interval_secs: u64) -> Resul
 
 fn load_status_output() -> Result<StatusOutput, String> {
     let config = AppConfig::load().normalized();
-    let stats = FocusStats::load().map_err(|error| format!("Failed to load stats: {error}"))?;
+    let stats = FocusStats::load_with_options(crate::stats::StatsLoadOptions {
+        metadata_task_label_fallback: config.feature_flags.metadata_task_label_fallback,
+    })
+    .map_err(|error| format!("Failed to load stats: {error}"))?;
     Ok(build_status_output(&config, &stats))
 }
 
@@ -978,7 +987,11 @@ fn emit_status_output(
 }
 
 fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
-    let stats = FocusStats::load().map_err(|error| format!("Failed to load stats: {error}"))?;
+    let config = AppConfig::load().normalized();
+    let stats = FocusStats::load_with_options(crate::stats::StatsLoadOptions {
+        metadata_task_label_fallback: config.feature_flags.metadata_task_label_fallback,
+    })
+    .map_err(|error| format!("Failed to load stats: {error}"))?;
     let target_dir = match dir {
         Some(path) => path,
         None => env::current_dir()
@@ -1292,8 +1305,10 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
     let profile = app.selected_profile_id();
     let (focus_secs, short_break_secs, long_break_secs, long_break_interval) =
         app.profile_values(profile);
-    let (selected_task_label, focus_intention, task_note) =
-        mirror_metadata_from_task_label(app.selected_task_label_for_cli());
+    let (selected_task_label, focus_intention, task_note) = mirror_metadata_from_task_label(
+        app.selected_task_label_for_cli(),
+        app.metadata_task_label_fallback_enabled_for_cli(),
+    );
 
     TimerStateOutput {
         phase: timer_phase_id(phase),

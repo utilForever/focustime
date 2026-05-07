@@ -57,7 +57,8 @@ impl App {
         recovered_timer.status = snapshot.status();
         recovered_timer.remaining_secs = snapshot.remaining_secs;
         recovered_timer.pomodoros_completed = snapshot.pomodoros_completed;
-        snapshot.validate_for_timer(&recovered_timer)?;
+        let metadata_fallback_enabled = self.feature_flags.metadata_task_label_fallback;
+        snapshot.validate_for_timer_with_fallback(&recovered_timer, metadata_fallback_enabled)?;
 
         let task_label = snapshot
             .normalized_task_label()
@@ -84,12 +85,12 @@ impl App {
             None
         };
         self.active_focus_intention = if self.timer.phase == TimerPhase::Focus {
-            snapshot.normalized_focus_intention()
+            snapshot.normalized_focus_intention_with_fallback(metadata_fallback_enabled)
         } else {
             None
         };
         self.active_focus_task_note = if self.timer.phase == TimerPhase::Focus {
-            snapshot.normalized_task_note()
+            snapshot.normalized_task_note_with_fallback(metadata_fallback_enabled)
         } else {
             None
         };
@@ -167,10 +168,15 @@ impl App {
             .or_else(|| blocklist_profiles.first())
             .map(|profile| profile.name.clone())
             .unwrap_or_else(|| DEFAULT_BLOCKLIST_PROFILE_NAME.to_string());
-        let blocked_sites = blocklist_profiles
+        let mirrored_blocked_sites = blocklist_profiles
             .get(active_index)
             .map(effective_blocked_sites_for_profile)
             .unwrap_or_default();
+        let blocked_sites = if self.feature_flags.legacy_blocked_sites_mirror {
+            mirrored_blocked_sites
+        } else {
+            self.legacy_blocked_sites.clone()
+        };
         let mut profile_automation = self.profile_automation.clone();
         profile_automation
             .set_for_profile(self.selected_profile, self.selected_profile_automation());
@@ -201,6 +207,7 @@ impl App {
             goal_carry_over: self.goal_carry_over,
             stats_retention: self.stats_retention,
             wakatime: self.wakatime_metadata.clone(),
+            feature_flags: self.feature_flags,
             shortcuts: self.shortcuts.to_config(),
         }
     }

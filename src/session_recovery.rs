@@ -137,21 +137,53 @@ impl InProgressSessionSnapshot {
             .and_then(normalize_task_label)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn normalized_focus_intention(&self) -> Option<String> {
-        self.focus_intention
-            .as_deref()
-            .and_then(normalize_metadata_text)
-            .or_else(|| self.normalized_task_label())
+        self.normalized_focus_intention_with_fallback(true)
     }
 
+    pub fn normalized_focus_intention_with_fallback(
+        &self,
+        fallback_to_task_label: bool,
+    ) -> Option<String> {
+        let normalized = self
+            .focus_intention
+            .as_deref()
+            .and_then(normalize_metadata_text);
+        if normalized.is_some() || !fallback_to_task_label {
+            normalized
+        } else {
+            self.normalized_task_label()
+        }
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn normalized_task_note(&self) -> Option<String> {
-        self.task_note
-            .as_deref()
-            .and_then(normalize_metadata_text)
-            .or_else(|| self.normalized_task_label())
+        self.normalized_task_note_with_fallback(true)
     }
 
+    pub fn normalized_task_note_with_fallback(
+        &self,
+        fallback_to_task_label: bool,
+    ) -> Option<String> {
+        let normalized = self.task_note.as_deref().and_then(normalize_metadata_text);
+        if normalized.is_some() || !fallback_to_task_label {
+            normalized
+        } else {
+            self.normalized_task_label()
+        }
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn validate_for_timer(&self, timer: &TimerState) -> Result<(), String> {
+        self.validate_for_timer_with_fallback(timer, true)
+    }
+
+    pub fn validate_for_timer_with_fallback(
+        &self,
+        timer: &TimerState,
+        fallback_to_task_label: bool,
+    ) -> Result<(), String> {
         if !matches!(
             self.status,
             RecoveryTimerStatus::Running | RecoveryTimerStatus::Paused
@@ -162,10 +194,16 @@ impl InProgressSessionSnapshot {
         if self.normalized_task_label().is_none() {
             return Err("saved task label is missing or invalid".to_string());
         }
-        if self.normalized_focus_intention().is_none() {
+        if self
+            .normalized_focus_intention_with_fallback(fallback_to_task_label)
+            .is_none()
+        {
             return Err("saved focus intention is missing or invalid".to_string());
         }
-        if self.normalized_task_note().is_none() {
+        if self
+            .normalized_task_note_with_fallback(fallback_to_task_label)
+            .is_none()
+        {
             return Err("saved task note is missing or invalid".to_string());
         }
 
@@ -426,5 +464,38 @@ mod tests {
         );
         assert_eq!(snapshot.normalized_task_note().as_deref(), Some("Docs"));
         assert!(snapshot.validate_for_timer(&timer).is_ok());
+    }
+
+    #[test]
+    fn metadata_fallback_can_be_disabled_for_legacy_snapshots() {
+        let timer = TimerState::with_profile(60, 30, 90, 4);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 60,
+            pomodoros_completed: 1,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: None,
+            task_note: None,
+            selected_profile: ProfileId::Classic,
+        };
+
+        assert_eq!(
+            snapshot
+                .normalized_focus_intention_with_fallback(false)
+                .as_deref(),
+            None
+        );
+        assert_eq!(
+            snapshot
+                .normalized_task_note_with_fallback(false)
+                .as_deref(),
+            None
+        );
+        assert!(
+            snapshot
+                .validate_for_timer_with_fallback(&timer, false)
+                .is_err()
+        );
     }
 }

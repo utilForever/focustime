@@ -105,7 +105,7 @@ impl App {
     }
 
     pub(super) fn refresh_setup_diagnostics(&mut self) {
-        self.setup_diagnostics = SetupDiagnostics::collect(&self.blocker);
+        self.setup_diagnostics = SetupDiagnostics::collect(&self.blocker, self.feature_flags);
         self.refresh_blocking_preview();
     }
 

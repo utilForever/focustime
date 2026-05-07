@@ -894,6 +894,29 @@ fn legacy_focus_sessions_default_metadata_from_task_label() {
 }
 
 #[test]
+fn legacy_focus_sessions_keep_empty_metadata_when_fallback_is_disabled() {
+    let legacy_toml = r#"
+            [[focus_sessions]]
+            date = "2026-04-09"
+            task_label = "Project A"
+            focused_seconds = 1500
+        "#;
+    let restored = FocusStats::try_from_toml_with_options(
+        legacy_toml,
+        StatsLoadOptions {
+            metadata_task_label_fallback: false,
+        },
+    )
+    .unwrap();
+
+    let export = restored.export_data();
+    assert_eq!(export.sessions.len(), 1);
+    assert_eq!(export.sessions[0].task_label, "Project A");
+    assert!(export.sessions[0].focus_intention.is_empty());
+    assert!(export.sessions[0].task_note.is_empty());
+}
+
+#[test]
 fn session_export_preserves_persisted_metadata_fields() {
     let mut stats = FocusStats::default();
     let goal = DailyGoalSnapshot {

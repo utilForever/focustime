@@ -106,6 +106,10 @@ impl App {
         self.selected_task_label.clone()
     }
 
+    pub fn metadata_task_label_fallback_enabled_for_cli(&self) -> bool {
+        self.feature_flags.metadata_task_label_fallback
+    }
+
     pub fn timer_state_for_cli(&self) -> (TimerPhase, TimerStatus, u64, u32) {
         (
             self.timer.phase,

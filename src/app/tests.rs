@@ -1,6 +1,6 @@
 use crate::app::*;
 use crate::blocker;
-use crate::config::{ShortcutConfig, StatsRetentionConfig};
+use crate::config::{FeatureFlagsConfig, ShortcutConfig, StatsRetentionConfig};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -125,6 +125,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         stats_retention: StatsRetentionConfig::default(),
         selected_theme_preset: ThemePreset::Classic,
         wakatime: WakatimeMetadataConfig::default(),
+        feature_flags: FeatureFlagsConfig::default(),
         shortcuts: ShortcutConfig::default(),
     };
     let app = App::from_config(config);
@@ -2352,6 +2353,27 @@ fn persisted_config_mirrors_active_profile_sites_to_legacy_blocked_sites() {
         persisted.blocklist_profiles[0].sites,
         vec!["example.com".to_string()]
     );
+}
+
+#[test]
+fn persisted_config_keeps_legacy_blocked_sites_when_mirror_flag_is_disabled() {
+    let mut app = App::from_config(AppConfig {
+        blocked_sites: vec!["legacy-only.com".to_string()],
+        feature_flags: FeatureFlagsConfig {
+            legacy_blocked_sites_mirror: false,
+            ..FeatureFlagsConfig::default()
+        },
+        ..AppConfig::default()
+    });
+    app.handle_key(key(KeyCode::Char('b')));
+    app.handle_key(key(KeyCode::Char('a')));
+    for c in "example.com".chars() {
+        app.handle_key(key(KeyCode::Char(c)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+
+    let persisted = app.persisted_config();
+    assert_eq!(persisted.blocked_sites, vec!["legacy-only.com".to_string()]);
 }
 
 #[test]
