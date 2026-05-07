@@ -88,7 +88,7 @@ pub struct InProgressSessionSnapshot {
 }
 
 impl InProgressSessionSnapshot {
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[allow(dead_code)]
     pub fn from_timer_state_with_metadata(
         timer: &TimerState,
         selected_task_label: Option<String>,
