@@ -337,6 +337,7 @@ and interruption/completed-session history export fields.
 ### Example config
 
 ```toml
+schema_version = 1
 selected_profile = "custom"
 selected_break_template = "Classic"
 selected_theme_preset = "classic"
@@ -424,6 +425,11 @@ language = "Markdown"
 task_label = "Review"
 language = "Code Review"
 ```
+
+`schema_version` is managed by focustime when writing `config.toml`. Files
+without this key are treated as legacy and migrated automatically. If a file
+declares a newer schema version than the running binary supports, focustime
+attempts a best-effort load of known fields.
 
 `[wakatime]` is optional. If omitted (or set to blank values), `focustime` uses
 the defaults above for heartbeat metadata labels.
