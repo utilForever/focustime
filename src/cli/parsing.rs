@@ -34,6 +34,8 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Next
             | ParsedToken::Task(_)
             | ParsedToken::TaskGoal { .. }
+            | ParsedToken::FocusIntention(_)
+            | ParsedToken::TaskNote(_)
             | ParsedToken::Status
             | ParsedToken::Watch(_)
             | ParsedToken::Profile(_)
@@ -90,6 +92,12 @@ pub(super) fn parse_primary_command(
                     goal: *goal,
                 },
             )?,
+            ParsedToken::FocusIntention(value) => {
+                set_primary_command(&mut primary, PrimaryCommand::FocusIntention(value.clone()))?
+            }
+            ParsedToken::TaskNote(value) => {
+                set_primary_command(&mut primary, PrimaryCommand::TaskNote(value.clone()))?
+            }
             ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
             ParsedToken::Watch(_) => {}
             ParsedToken::Profile(profile) => {
@@ -301,6 +309,14 @@ pub(super) fn finalize_cli_action(
         })),
         Some(PrimaryCommand::TaskGoal { label, goal }) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::TaskGoal { label, goal },
+            output,
+        })),
+        Some(PrimaryCommand::FocusIntention(value)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::FocusIntention { value },
+            output,
+        })),
+        Some(PrimaryCommand::TaskNote(value)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::TaskNote { value },
             output,
         })),
         Some(PrimaryCommand::Status) => Ok(CliAction::RunCommand(CliCommand {
@@ -695,6 +711,8 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Next => "--next",
         PrimaryCommand::Task(_) => "--task",
         PrimaryCommand::TaskGoal { .. } => "--task-goal",
+        PrimaryCommand::FocusIntention(_) => "--focus-intention",
+        PrimaryCommand::TaskNote(_) => "--task-note",
         PrimaryCommand::Profile(_) => "--profile",
         PrimaryCommand::Theme(_) => "--theme",
         PrimaryCommand::Goal(_) => "--goal",
