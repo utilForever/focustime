@@ -14,8 +14,8 @@ use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, BreakTemplateConfig, CustomProfileConfig,
     DailyGoalConfig, GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig,
     OneTimeFocusWindowConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, ThemePreset, WakatimeMetadataConfig,
-    WeeklyGoalConfig,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, StatsRetentionConfig, ThemePreset,
+    WakatimeMetadataConfig, WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -28,8 +28,9 @@ use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles,
     FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats,
     ProfileEffectiveness, ProfileTotals, SessionInterruptionEvent, SessionInterruptionReason,
-    SessionStats, TaskGoalProgress, TaskTotals, TaskTrend, WeeklyConsistency, WeeklyFocusScore,
-    WeeklyStats, carry_over_goal_target, current_day_key,
+    SessionStats, StatsGrowthSummary, StatsRetentionPruneResult, TaskGoalProgress, TaskTotals,
+    TaskTrend, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target,
+    current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -555,6 +556,7 @@ pub struct App {
     weekly_goal: WeeklyGoalConfig,
     monthly_goal: MonthlyGoalConfig,
     goal_carry_over: GoalCarryOverConfig,
+    stats_retention: StatsRetentionConfig,
     wakatime_metadata: WakatimeMetadataConfig,
     pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
@@ -596,6 +598,7 @@ impl App {
         let weekly_goal = config.weekly_goal;
         let monthly_goal = config.monthly_goal;
         let goal_carry_over = config.goal_carry_over;
+        let stats_retention = config.stats_retention;
         let wakatime_metadata = config.wakatime;
         let blocklist_profiles = config.blocklist_profiles.clone();
         let active_blocklist_profile =
@@ -608,10 +611,11 @@ impl App {
             &custom_profile,
         );
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
-        let (stats, stats_error) = match FocusStats::load() {
+        let (mut stats, stats_error) = match FocusStats::load() {
             Ok(stats) => (stats, None),
             Err(e) => (FocusStats::default(), Some(e)),
         };
+        let retained = stats.apply_retention_policy(stats_retention, Local::now().date_naive());
         let (task_labels, selected_task_label) = stats.task_planner_state();
         let task_label_favorites = task_label_state_keys(stats.task_label_favorites());
         let task_label_archived = task_label_state_keys(stats.task_label_archived());
@@ -698,11 +702,12 @@ impl App {
             weekly_goal,
             monthly_goal,
             goal_carry_over,
+            stats_retention,
             wakatime_metadata,
             pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
             stats,
-            stats_dirty: false,
+            stats_dirty: retained.any_removed(),
             stats_has_unsaved_elapsed: false,
             shortcuts,
         };
@@ -914,6 +919,19 @@ impl App {
 
     pub fn latest_monthly_heatmap(&self) -> MonthlyHeatmap {
         self.stats.latest_monthly_heatmap()
+    }
+
+    pub fn stats_growth_summary(&self) -> StatsGrowthSummary {
+        self.stats.growth_summary()
+    }
+
+    pub fn stats_retention_config(&self) -> StatsRetentionConfig {
+        self.stats_retention
+    }
+
+    pub fn stats_retention_preview(&self) -> StatsRetentionPruneResult {
+        self.stats
+            .retention_preview(self.stats_retention, Local::now().date_naive())
     }
 
     #[allow(dead_code)]

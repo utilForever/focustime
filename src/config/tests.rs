@@ -46,8 +46,41 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
+    assert_eq!(cfg.stats_retention, StatsRetentionConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     assert_eq!(cfg.shortcuts, ShortcutConfig::default());
+}
+
+#[test]
+fn stats_retention_defaults_to_balanced_windows() {
+    let cfg = AppConfig::default();
+    assert_eq!(cfg.stats_retention.preset, StatsRetentionPreset::Balanced);
+    let windows = cfg.stats_retention.windows();
+    assert_eq!(windows.keep_daily_days, None);
+    assert_eq!(windows.keep_focus_sessions_days, Some(365));
+    assert_eq!(windows.keep_session_interruptions_days, Some(180));
+    assert_eq!(windows.keep_break_glass_overrides_days, Some(180));
+}
+
+#[test]
+fn stats_retention_windows_change_by_preset() {
+    let keep_all = StatsRetentionConfig {
+        preset: StatsRetentionPreset::KeepAll,
+    }
+    .windows();
+    assert_eq!(keep_all.keep_daily_days, None);
+    assert_eq!(keep_all.keep_focus_sessions_days, None);
+    assert_eq!(keep_all.keep_session_interruptions_days, None);
+    assert_eq!(keep_all.keep_break_glass_overrides_days, None);
+
+    let aggressive = StatsRetentionConfig {
+        preset: StatsRetentionPreset::Aggressive,
+    }
+    .windows();
+    assert_eq!(aggressive.keep_daily_days, Some(365));
+    assert_eq!(aggressive.keep_focus_sessions_days, Some(180));
+    assert_eq!(aggressive.keep_session_interruptions_days, Some(90));
+    assert_eq!(aggressive.keep_break_glass_overrides_days, Some(90));
 }
 
 #[test]
@@ -178,6 +211,9 @@ fn round_trip_full_config() {
             weekly: false,
             monthly: true,
         },
+        stats_retention: StatsRetentionConfig {
+            preset: StatsRetentionPreset::Aggressive,
+        },
         wakatime: WakatimeMetadataConfig {
             project: "Team Focus".to_string(),
             language: "Focus Session".to_string(),
@@ -236,6 +272,7 @@ fn round_trip_full_config() {
     assert_eq!(parsed.weekly_goal, original.weekly_goal);
     assert_eq!(parsed.monthly_goal, original.monthly_goal);
     assert_eq!(parsed.goal_carry_over, original.goal_carry_over);
+    assert_eq!(parsed.stats_retention, original.stats_retention);
     assert_eq!(parsed.wakatime, original.wakatime);
     assert_eq!(parsed.shortcuts, original.shortcuts);
 }
@@ -658,6 +695,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         weekly_goal: WeeklyGoalConfig::default(),
         monthly_goal: MonthlyGoalConfig::default(),
         goal_carry_over: GoalCarryOverConfig::default(),
+        stats_retention: StatsRetentionConfig::default(),
         wakatime: WakatimeMetadataConfig::default(),
         shortcuts: ShortcutConfig::default(),
     };

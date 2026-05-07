@@ -199,6 +199,7 @@ impl App {
             weekly_goal: self.weekly_goal,
             monthly_goal: self.monthly_goal,
             goal_carry_over: self.goal_carry_over,
+            stats_retention: self.stats_retention,
             wakatime: self.wakatime_metadata.clone(),
             shortcuts: self.shortcuts.to_config(),
         }
@@ -241,6 +242,13 @@ impl App {
             return;
         }
 
+        if self
+            .stats
+            .apply_retention_policy(self.stats_retention, Local::now().date_naive())
+            .any_removed()
+        {
+            self.stats_dirty = true;
+        }
         self.save_stats();
         if self.stats_error.is_none() {
             self.stats_dirty = false;

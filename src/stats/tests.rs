@@ -1425,6 +1425,140 @@ fn export_to_dir_returns_error_when_target_is_not_directory() {
 }
 
 #[test]
+fn growth_summary_reports_sections_and_high_volume_groups() {
+    let mut stats = FocusStats::default();
+    let goal = DailyGoalSnapshot {
+        minutes: 25,
+        pomodoros: 1,
+    };
+    stats.record_focus_elapsed("2026-04-10", 25 * 60, goal);
+    stats.record_completed_pomodoro_with_task("2026-04-10", goal, Some("Docs"), 25 * 60, None);
+    stats.record_session_interruption_event(
+        "2026-04-10",
+        1_711_000_123,
+        SessionInterruptionReason::ManualStop,
+        FocusSessionMetadata {
+            task_label: Some("Docs"),
+            focus_intention: Some("Write docs"),
+            task_note: Some("API section"),
+        },
+        300,
+        None,
+    );
+
+    let summary = stats.growth_summary();
+    assert!(summary.total_record_count > 0);
+    assert!(summary.estimated_bytes > 0);
+    assert!(!summary.sections.is_empty());
+    assert!(!summary.high_volume_sections.is_empty());
+    assert!(
+        summary
+            .sections
+            .iter()
+            .any(|section| section.name == "focus_sessions" && section.record_count == 1)
+    );
+    assert!(
+        summary
+            .sections
+            .iter()
+            .any(|section| section.name == "session_interruptions" && section.record_count == 1)
+    );
+}
+
+#[test]
+fn apply_retention_policy_prunes_old_high_volume_entries() {
+    let mut stats = FocusStats::default();
+    let goal = DailyGoalSnapshot {
+        minutes: 25,
+        pomodoros: 1,
+    };
+    let today = chrono::NaiveDate::from_ymd_opt(2026, 4, 10).unwrap();
+    let old_day = today
+        .checked_sub_signed(chrono::Duration::days(500))
+        .unwrap()
+        .format("%Y-%m-%d")
+        .to_string();
+    let recent_day = today
+        .checked_sub_signed(chrono::Duration::days(10))
+        .unwrap()
+        .format("%Y-%m-%d")
+        .to_string();
+
+    stats.record_completed_pomodoro_with_task(&old_day, goal, Some("Docs"), 25 * 60, None);
+    stats.record_completed_pomodoro_with_task(&recent_day, goal, Some("Docs"), 25 * 60, None);
+    stats.record_session_interruption_event(
+        &old_day,
+        1_711_000_000,
+        SessionInterruptionReason::ManualStop,
+        FocusSessionMetadata {
+            task_label: Some("Docs"),
+            focus_intention: Some("Old interruption"),
+            task_note: Some("Old note"),
+        },
+        600,
+        None,
+    );
+    stats.record_session_interruption_event(
+        &recent_day,
+        1_711_000_111,
+        SessionInterruptionReason::ManualSkip,
+        FocusSessionMetadata {
+            task_label: Some("Docs"),
+            focus_intention: Some("Recent interruption"),
+            task_note: Some("Recent note"),
+        },
+        600,
+        None,
+    );
+    stats.record_break_glass_override_event(&old_day, 1_711_000_222, Some("Docs"), 120);
+    stats.record_break_glass_override_event(&recent_day, 1_711_000_333, Some("Docs"), 120);
+
+    let result = stats.apply_retention_policy(
+        crate::config::StatsRetentionConfig {
+            preset: crate::config::StatsRetentionPreset::Balanced,
+        },
+        today,
+    );
+    assert_eq!(result.daily_removed, 0);
+    assert_eq!(result.focus_sessions_removed, 1);
+    assert_eq!(result.session_interruptions_removed, 1);
+    assert_eq!(result.break_glass_overrides_removed, 1);
+    assert_eq!(result.total_removed(), 3);
+    assert!(result.any_removed());
+    assert_eq!(stats.task_totals(10)[0].pomodoros_completed, 1);
+    assert_eq!(stats.recent_break_glass_overrides(10).len(), 1);
+    assert_eq!(stats.recent_session_interruptions(10).len(), 1);
+}
+
+#[test]
+fn retention_preview_reports_changes_without_mutating_stats() {
+    let mut stats = FocusStats::default();
+    let goal = DailyGoalSnapshot {
+        minutes: 25,
+        pomodoros: 1,
+    };
+    stats.record_completed_pomodoro_with_task("2024-01-01", goal, Some("Docs"), 25 * 60, None);
+    let today = chrono::NaiveDate::from_ymd_opt(2026, 4, 10).unwrap();
+
+    let preview = stats.retention_preview(
+        crate::config::StatsRetentionConfig {
+            preset: crate::config::StatsRetentionPreset::Aggressive,
+        },
+        today,
+    );
+    assert_eq!(preview.focus_sessions_removed, 1);
+    assert!(preview.any_removed());
+
+    let summary = stats.growth_summary();
+    assert!(
+        summary
+            .sections
+            .iter()
+            .any(|section| section.name == "focus_sessions" && section.record_count == 1)
+    );
+}
+
+#[test]
 fn create_unique_temp_path_changes_between_calls() {
     let target = Path::new("focustime-stats.json");
     let first = create_unique_temp_path(target);

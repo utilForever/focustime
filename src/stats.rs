@@ -11,6 +11,7 @@ use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 
 use crate::config::ProfileId;
+use crate::config::StatsRetentionConfig;
 use crate::task_labels::{canonical_task_label, normalize_task_label, task_label_index};
 
 mod helpers;
@@ -197,6 +198,42 @@ impl DailyStats {
 pub struct ExportedStatsFiles {
     pub json_path: PathBuf,
     pub csv_path: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StatsGrowthSection {
+    pub name: String,
+    pub record_count: usize,
+    pub estimated_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StatsGrowthSummary {
+    pub total_record_count: usize,
+    pub estimated_bytes: u64,
+    pub sections: Vec<StatsGrowthSection>,
+    pub high_volume_sections: Vec<StatsGrowthSection>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct StatsRetentionPruneResult {
+    pub daily_removed: usize,
+    pub focus_sessions_removed: usize,
+    pub session_interruptions_removed: usize,
+    pub break_glass_overrides_removed: usize,
+}
+
+impl StatsRetentionPruneResult {
+    pub fn total_removed(self) -> usize {
+        self.daily_removed
+            .saturating_add(self.focus_sessions_removed)
+            .saturating_add(self.session_interruptions_removed)
+            .saturating_add(self.break_glass_overrides_removed)
+    }
+
+    pub fn any_removed(self) -> bool {
+        self.total_removed() > 0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
