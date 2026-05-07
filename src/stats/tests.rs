@@ -1461,7 +1461,25 @@ fn growth_summary_reports_sections_and_high_volume_groups() {
         summary
             .sections
             .iter()
+            .any(|section| section.name == "focus_sessions" && section.estimated_bytes > 0)
+    );
+    assert!(
+        summary
+            .sections
+            .iter()
+            .any(|section| section.name == "task_labels" && section.estimated_bytes > 0)
+    );
+    assert!(
+        summary
+            .sections
+            .iter()
             .any(|section| section.name == "session_interruptions" && section.record_count == 1)
+    );
+    assert!(
+        summary
+            .sections
+            .iter()
+            .any(|section| section.name == "session_interruptions" && section.estimated_bytes > 0)
     );
 }
 

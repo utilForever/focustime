@@ -547,9 +547,14 @@ fn stats_growth_section(
 }
 
 fn estimated_serialized_bytes(value: &impl serde::Serialize) -> u64 {
-    toml::to_string(value)
-        .map(|serialized| serialized.len() as u64)
-        .unwrap_or(0)
+    #[derive(serde::Serialize)]
+    struct SizeProbe<'a, T: ?Sized + serde::Serialize> {
+        value: &'a T,
+    }
+
+    toml::to_string(&SizeProbe { value })
+        .expect("stats growth section should be serializable")
+        .len() as u64
 }
 
 fn retention_cutoff_day(reference_day: chrono::NaiveDate, keep_days: u16) -> chrono::NaiveDate {
