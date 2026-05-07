@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Feature flags for rollout-safe compatibility paths (#258):** added centralized `[feature_flags]` config defaults plus diagnostics visibility to gate legacy automation/blocklist mirrors and task-label metadata fallback behavior across config, CLI, recovery, and stats loading paths.
+
 ## [0.9.0] - 2026-05-05
 
 ### Added

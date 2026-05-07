@@ -346,6 +346,14 @@ selected_blocklist_profile = "Work"
 strict_mode = false
 break_glass_duration_secs = 300
 
+[feature_flags]
+# Preserve per-profile automation values in legacy top-level fields.
+legacy_automation_mirror = true
+# Preserve active blocklist profile values in legacy blocked_sites.
+legacy_blocked_sites_mirror = true
+# Backfill legacy metadata from task_label when missing.
+metadata_task_label_fallback = true
+
 [shortcuts]
 timer_toggle_pause = "space"
 timer_stop_reset = "s"
