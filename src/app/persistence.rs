@@ -103,45 +103,60 @@ impl App {
         Ok(())
     }
 
+    fn recovery_snapshot_task_label_fallback(
+        recovery_task_label: &Option<String>,
+        metadata_fallback_enabled: bool,
+    ) -> Option<String> {
+        if metadata_fallback_enabled {
+            recovery_task_label.clone()
+        } else {
+            None
+        }
+    }
+
+    fn recovery_snapshot_metadata_value(
+        focus_active: bool,
+        active_value: Option<String>,
+        recovery_task_label: &Option<String>,
+        metadata_fallback_enabled: bool,
+    ) -> Option<String> {
+        if focus_active {
+            active_value.or_else(|| {
+                Self::recovery_snapshot_task_label_fallback(
+                    recovery_task_label,
+                    metadata_fallback_enabled,
+                )
+            })
+        } else {
+            Self::recovery_snapshot_task_label_fallback(
+                recovery_task_label,
+                metadata_fallback_enabled,
+            )
+        }
+    }
+
     pub(super) fn sync_recovery_snapshot(&mut self) {
+        let focus_active = self.focus_session_active_for_current_state();
         let metadata_fallback_enabled = self.feature_flags.metadata_task_label_fallback;
-        let recovery_task_label = if self.focus_session_active_for_current_state() {
+        let recovery_task_label = if focus_active {
             self.active_focus_task_label
                 .clone()
                 .or_else(|| self.selected_task_label.clone())
         } else {
             self.selected_task_label.clone()
         };
-        let recovery_focus_intention = if self.focus_session_active_for_current_state() {
-            self.active_focus_intention.clone().or_else(|| {
-                if metadata_fallback_enabled {
-                    recovery_task_label.clone()
-                } else {
-                    None
-                }
-            })
-        } else {
-            if metadata_fallback_enabled {
-                recovery_task_label.clone()
-            } else {
-                None
-            }
-        };
-        let recovery_task_note = if self.focus_session_active_for_current_state() {
-            self.active_focus_task_note.clone().or_else(|| {
-                if metadata_fallback_enabled {
-                    recovery_task_label.clone()
-                } else {
-                    None
-                }
-            })
-        } else {
-            if metadata_fallback_enabled {
-                recovery_task_label.clone()
-            } else {
-                None
-            }
-        };
+        let recovery_focus_intention = Self::recovery_snapshot_metadata_value(
+            focus_active,
+            self.active_focus_intention.clone(),
+            &recovery_task_label,
+            metadata_fallback_enabled,
+        );
+        let recovery_task_note = Self::recovery_snapshot_metadata_value(
+            focus_active,
+            self.active_focus_task_note.clone(),
+            &recovery_task_label,
+            metadata_fallback_enabled,
+        );
 
         let snapshot = InProgressSessionSnapshot::from_timer_state_with_metadata_with_fallback(
             &self.timer,
