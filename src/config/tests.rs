@@ -48,6 +48,7 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.stats_retention, StatsRetentionConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
+    assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
     assert_eq!(cfg.shortcuts, ShortcutConfig::default());
 }
 
@@ -236,6 +237,11 @@ fn round_trip_full_config() {
                 },
             ],
         },
+        feature_flags: FeatureFlagsConfig {
+            legacy_automation_mirror: true,
+            legacy_blocked_sites_mirror: true,
+            metadata_task_label_fallback: true,
+        },
         shortcuts: ShortcutConfig {
             timer_toggle_pause: "space".to_string(),
             timer_stop_reset: "x".to_string(),
@@ -313,6 +319,7 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
+    assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
     assert_eq!(cfg.shortcuts, ShortcutConfig::default());
 }
 
@@ -703,6 +710,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         goal_carry_over: GoalCarryOverConfig::default(),
         stats_retention: StatsRetentionConfig::default(),
         wakatime: WakatimeMetadataConfig::default(),
+        feature_flags: FeatureFlagsConfig::default(),
         shortcuts: ShortcutConfig::default(),
     };
     let custom = cfg.effective_custom_profile();
@@ -1226,4 +1234,92 @@ fn normalize_selected_profile_automation_updates_legacy_view() {
     assert_eq!(cfg.auto_start, deep_work.auto_start);
     assert_eq!(cfg.strict_mode, deep_work.strict_mode);
     assert_eq!(cfg.recurring_schedule, deep_work.recurring_schedule);
+}
+
+#[test]
+fn normalize_keeps_legacy_automation_fields_when_mirror_flag_is_disabled() {
+    let deep_work = ProfileAutomationConfig {
+        notifications: NotificationConfig {
+            enabled: true,
+            sound: true,
+        },
+        auto_start: AutoStartConfig {
+            focus_to_break: true,
+            break_to_focus: true,
+        },
+        strict_mode: true,
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["fri".to_string()],
+                start: "13:00".to_string(),
+                end: "15:00".to_string(),
+            }],
+            exception_dates: Vec::new(),
+            one_time_windows: Vec::new(),
+        },
+    };
+    let cfg = AppConfig {
+        selected_profile: ProfileId::DeepWork,
+        notifications: NotificationConfig {
+            enabled: false,
+            sound: false,
+        },
+        auto_start: AutoStartConfig {
+            focus_to_break: false,
+            break_to_focus: false,
+        },
+        strict_mode: false,
+        recurring_schedule: RecurringScheduleConfig::default(),
+        profile_automation: Some(ProfileAutomationSettingsConfig {
+            classic: None,
+            deep_work: Some(deep_work.clone()),
+            custom: None,
+        }),
+        feature_flags: FeatureFlagsConfig {
+            legacy_automation_mirror: false,
+            ..FeatureFlagsConfig::default()
+        },
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(
+        cfg.notifications,
+        NotificationConfig {
+            enabled: false,
+            sound: false,
+        }
+    );
+    assert_eq!(
+        cfg.auto_start,
+        AutoStartConfig {
+            focus_to_break: false,
+            break_to_focus: false,
+        }
+    );
+    assert!(!cfg.strict_mode);
+    assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
+    assert_eq!(cfg.profile_automation_for(ProfileId::DeepWork), deep_work);
+}
+
+#[test]
+fn normalize_keeps_legacy_blocked_sites_when_mirror_flag_is_disabled() {
+    let cfg = AppConfig {
+        blocked_sites: vec!["legacy-only.com".to_string()],
+        blocklist_profiles: vec![BlocklistProfileConfig {
+            name: "Work".to_string(),
+            sites: vec!["a.com".to_string(), "b.com".to_string()],
+            allowlist_sites: vec!["b.com".to_string()],
+        }],
+        selected_blocklist_profile: "Work".to_string(),
+        feature_flags: FeatureFlagsConfig {
+            legacy_blocked_sites_mirror: false,
+            ..FeatureFlagsConfig::default()
+        },
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(cfg.selected_blocklist_profile, "Work");
+    assert_eq!(cfg.blocked_sites, vec!["legacy-only.com".to_string()]);
 }

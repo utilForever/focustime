@@ -116,6 +116,9 @@ pub struct AppConfig {
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
     pub wakatime: WakatimeMetadataConfig,
+    /// Feature flags used to safely gate compatibility-sensitive behavior.
+    #[serde(default)]
+    pub feature_flags: FeatureFlagsConfig,
     /// User-configurable keyboard shortcuts for core TUI command actions.
     #[serde(default)]
     pub shortcuts: ShortcutConfig,
@@ -134,6 +137,35 @@ impl AppConfigDisk {
         Self {
             schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
             config,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FeatureFlagsConfig {
+    /// Keep selected profile automation mirrored into legacy top-level automation fields.
+    #[serde(default = "default_true")]
+    pub legacy_automation_mirror: bool,
+    /// Keep selected blocklist profile mirrored into legacy `blocked_sites`.
+    #[serde(default = "default_true")]
+    pub legacy_blocked_sites_mirror: bool,
+    /// Backfill missing metadata fields from task labels for legacy records/snapshots.
+    #[serde(default = "default_true")]
+    pub metadata_task_label_fallback: bool,
+}
+
+impl FeatureFlagsConfig {
+    pub fn normalized(&self) -> Self {
+        *self
+    }
+}
+
+impl Default for FeatureFlagsConfig {
+    fn default() -> Self {
+        Self {
+            legacy_automation_mirror: true,
+            legacy_blocked_sites_mirror: true,
+            metadata_task_label_fallback: true,
         }
     }
 }
@@ -1260,6 +1292,10 @@ fn default_legacy_config_schema_version() -> u32 {
     LEGACY_CONFIG_SCHEMA_VERSION
 }
 
+fn default_true() -> bool {
+    true
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -1287,6 +1323,7 @@ impl Default for AppConfig {
             goal_carry_over: GoalCarryOverConfig::default(),
             stats_retention: StatsRetentionConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
+            feature_flags: FeatureFlagsConfig::default(),
             shortcuts: ShortcutConfig::default(),
         }
     }
@@ -1356,6 +1393,9 @@ impl AppConfig {
     }
 
     pub(crate) fn align_legacy_automation_with_selected_profile(&mut self) {
+        if !self.feature_flags.legacy_automation_mirror {
+            return;
+        }
         let selected = self.profile_automation_for(self.selected_profile);
         self.notifications = selected.notifications;
         self.auto_start = selected.auto_start;
@@ -1443,6 +1483,7 @@ impl AppConfig {
             self.break_glass_duration_secs,
             default_break_glass_duration_secs(),
         );
+        self.feature_flags = self.feature_flags.normalized();
         self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
         self.break_templates = normalize_break_templates(&self.break_templates);
         let effective_custom_profile = self.effective_custom_profile();
@@ -1468,12 +1509,14 @@ impl AppConfig {
             &self.selected_blocklist_profile,
             &self.blocklist_profiles,
         );
-        self.blocked_sites = self
-            .blocklist_profiles
-            .iter()
-            .find(|profile| profile.name == self.selected_blocklist_profile)
-            .map(effective_blocked_sites_for_profile)
-            .unwrap_or_default();
+        if self.feature_flags.legacy_blocked_sites_mirror {
+            self.blocked_sites = self
+                .blocklist_profiles
+                .iter()
+                .find(|profile| profile.name == self.selected_blocklist_profile)
+                .map(effective_blocked_sites_for_profile)
+                .unwrap_or_default();
+        }
         self.wakatime = self.wakatime.normalized();
         self.shortcuts = self.shortcuts.normalized();
         self
