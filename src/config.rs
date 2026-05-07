@@ -14,6 +14,9 @@ use paths::config_dir_from_env;
 #[cfg(all(test, not(target_os = "windows")))]
 use paths::env_path_from_value;
 
+const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 1;
+const LEGACY_CONFIG_SCHEMA_VERSION: u32 = 0;
+
 /// Persistent application configuration stored as TOML.
 ///
 /// File locations:
@@ -113,6 +116,23 @@ pub struct AppConfig {
     /// User-configurable keyboard shortcuts for core TUI command actions.
     #[serde(default)]
     pub shortcuts: ShortcutConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AppConfigDisk {
+    #[serde(default = "default_legacy_config_schema_version")]
+    schema_version: u32,
+    #[serde(flatten)]
+    config: AppConfig,
+}
+
+impl AppConfigDisk {
+    fn from_config(config: AppConfig) -> Self {
+        Self {
+            schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+            config,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1167,6 +1187,9 @@ fn default_long_break_secs() -> u64 {
 fn default_long_break_interval() -> u32 {
     crate::timer::DEFAULT_LONG_BREAK_INTERVAL
 }
+fn default_legacy_config_schema_version() -> u32 {
+    LEGACY_CONFIG_SCHEMA_VERSION
+}
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -1283,7 +1306,10 @@ impl AppConfig {
     fn try_load_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Option<Self> {
         let path = Self::config_path_with_env(get_var)?;
         let content = fs::read_to_string(path).ok()?;
-        toml::from_str(&content).ok().map(Self::normalize)
+        let config_toml: toml::Value = toml::from_str(&content).ok()?;
+        let migrated_toml = migrate_config_toml_to_current(config_toml)?;
+        let disk: AppConfigDisk = migrated_toml.try_into().ok()?;
+        Some(disk.config.normalize())
     }
 
     /// Persist the current config to disk.
@@ -1293,12 +1319,23 @@ impl AppConfig {
         let path = Self::config_path().ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, "cannot determine config directory")
         })?;
+        self.save_to_path(path)
+    }
 
+    #[cfg(test)]
+    fn save_with_env(&self, get_var: impl FnMut(&str) -> Option<OsString>) -> io::Result<()> {
+        let path = Self::config_path_with_env(get_var).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "cannot determine config directory")
+        })?;
+        self.save_to_path(path)
+    }
+
+    fn save_to_path(&self, path: PathBuf) -> io::Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let content = toml::to_string_pretty(self)
+        let content = toml::to_string_pretty(&AppConfigDisk::from_config(self.clone()))
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         // Best-effort atomic write: temp file + rename.
@@ -1381,6 +1418,48 @@ impl AppConfig {
         let app_dir = app_dir_with_env(get_var)?;
         Some(app_dir.join("config.toml"))
     }
+}
+
+fn migrate_config_toml_to_current(mut config_toml: toml::Value) -> Option<toml::Value> {
+    let schema_version = detect_config_schema_version(&config_toml)?;
+    if schema_version > CURRENT_CONFIG_SCHEMA_VERSION {
+        // Forward-compatibility mode: try best-effort deserialization with known fields.
+        return Some(config_toml);
+    }
+
+    let mut from_schema_version = schema_version;
+    while from_schema_version < CURRENT_CONFIG_SCHEMA_VERSION {
+        config_toml = migrate_config_toml_step(config_toml, from_schema_version)?;
+        from_schema_version += 1;
+    }
+    Some(config_toml)
+}
+
+fn detect_config_schema_version(config_toml: &toml::Value) -> Option<u32> {
+    let table = config_toml.as_table()?;
+    table
+        .get("schema_version")
+        .map(|value| value.as_integer().and_then(|raw| u32::try_from(raw).ok()))
+        .unwrap_or(Some(LEGACY_CONFIG_SCHEMA_VERSION))
+}
+
+fn migrate_config_toml_step(
+    config_toml: toml::Value,
+    from_schema_version: u32,
+) -> Option<toml::Value> {
+    match from_schema_version {
+        LEGACY_CONFIG_SCHEMA_VERSION => migrate_config_toml_legacy_to_v1(config_toml),
+        _ => None,
+    }
+}
+
+fn migrate_config_toml_legacy_to_v1(mut config_toml: toml::Value) -> Option<toml::Value> {
+    let table = config_toml.as_table_mut()?;
+    table.insert(
+        "schema_version".to_string(),
+        toml::Value::Integer(i64::from(CURRENT_CONFIG_SCHEMA_VERSION)),
+    );
+    Some(config_toml)
 }
 
 #[cfg_attr(test, allow(dead_code))]
