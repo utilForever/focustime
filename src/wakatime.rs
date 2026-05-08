@@ -260,6 +260,8 @@ pub struct WakatimeTracker {
     heartbeat_metadata: WakatimeHeartbeatMetadata,
     /// Startup-only warning (for example, invalid persisted queue state).
     startup_warning: Option<String>,
+    /// Last queue snapshot persistence failure message.
+    queue_persistence_error: Option<String>,
     #[cfg(test)]
     disable_network_io: bool,
 }
@@ -291,6 +293,7 @@ impl WakatimeTracker {
             pending_immediate_heartbeat: false,
             heartbeat_metadata: metadata.normalized(),
             startup_warning: None,
+            queue_persistence_error: None,
             #[cfg(test)]
             disable_network_io: false,
         };
@@ -329,6 +332,9 @@ impl WakatimeTracker {
             return WakatimeRuntimeState::Sending;
         }
         if let Some(error) = self.last_error.as_ref() {
+            return WakatimeRuntimeState::Error(error.clone());
+        }
+        if let Some(error) = self.queue_persistence_error.as_ref() {
             return WakatimeRuntimeState::Error(error.clone());
         }
         if self.tracking {
@@ -411,8 +417,12 @@ impl WakatimeTracker {
         } else {
             clear_heartbeat_queue_snapshot(path)
         };
-        if let Err(error) = result {
-            eprintln!("wakatime queue persistence failed: {error}");
+        match result {
+            Ok(()) => self.queue_persistence_error = None,
+            Err(error) => {
+                self.queue_persistence_error =
+                    Some(format!("WakaTime offline queue persistence error: {error}"));
+            }
         }
     }
 
@@ -669,6 +679,7 @@ impl WakatimeTracker {
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
             startup_warning: None,
+            queue_persistence_error: None,
             disable_network_io: true,
         }
     }
@@ -695,6 +706,7 @@ impl WakatimeTracker {
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
             startup_warning: None,
+            queue_persistence_error: None,
             disable_network_io: true,
         }
     }
@@ -733,6 +745,7 @@ impl WakatimeTracker {
         self.pending_immediate_heartbeat = false;
         self.retry_state = None;
         self.last_error = None;
+        self.queue_persistence_error = None;
     }
 
     #[cfg(test)]
@@ -1007,6 +1020,17 @@ mod tests {
         ))
     }
 
+    fn unique_temp_queue_dir(test_name: &str) -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time must be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "focustime-wakatime-queue-dir-{test_name}-{}-{now}",
+            std::process::id()
+        ))
+    }
+
     fn tracker_with(
         api_key: Option<&str>,
         tracking: bool,
@@ -1032,6 +1056,7 @@ mod tests {
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
             startup_warning: None,
+            queue_persistence_error: None,
             disable_network_io: true,
         }
     }
@@ -1600,5 +1625,44 @@ mod tests {
         tracker.poll_events();
 
         assert!(!snapshot_path.exists());
+    }
+
+    #[test]
+    fn snapshot_persistence_failure_is_exposed_via_runtime_state() {
+        let snapshot_dir = unique_temp_queue_dir("persist-failure-runtime");
+        fs::create_dir_all(&snapshot_dir).expect("test snapshot directory should be created");
+
+        let mut tracker = WakatimeTracker::new_configured_for_tests();
+        tracker.queue_snapshot_path = Some(snapshot_dir.clone());
+        tracker.sync_queue_snapshot();
+
+        assert!(
+            tracker
+                .queue_persistence_error
+                .as_deref()
+                .is_some_and(|message| message.contains("offline queue persistence error"))
+        );
+        assert!(matches!(
+            tracker.runtime_state(),
+            WakatimeRuntimeState::Error(message)
+                if message.contains("offline queue persistence error")
+        ));
+
+        let _ = fs::remove_dir_all(snapshot_dir);
+    }
+
+    #[test]
+    fn successful_snapshot_sync_clears_persistence_error() {
+        let snapshot_path = unique_temp_queue_snapshot_path("persist-error-cleared");
+
+        let mut tracker = WakatimeTracker::new_configured_for_tests();
+        tracker.queue_snapshot_path = Some(snapshot_path.clone());
+        tracker.queue_persistence_error = Some("previous failure".to_string());
+        tracker.set_pending_heartbeats_for_tests(1);
+        tracker.sync_queue_snapshot();
+
+        assert!(tracker.queue_persistence_error.is_none());
+
+        let _ = fs::remove_file(snapshot_path);
     }
 }
