@@ -681,8 +681,11 @@ The timer never waits on network calls.
 
 - transient heartbeat failures (`429`, `5xx`, and connectivity/timeout errors)
   retry with bounded backoff (`1s`, then `2s`)
-- retryable failures that still cannot be delivered are queued in-memory (bounded,
-  drop-oldest at capacity) and replayed automatically when connectivity recovers
+- retryable failures that still cannot be delivered are queued in a durable local
+  backlog (bounded, drop-oldest at capacity) and replayed oldest-first after
+  restart and when connectivity recovers
+- invalid/corrupt persisted queue snapshots are dropped on startup and surfaced
+  as a runtime warning in WakaTime status
 - non-retryable failures are surfaced in the timer view status line
 - status line reflects runtime states (`tracking`, `sending`, `queued`,
   `replaying`, `retrying`, `error`, `idle`, `not configured`) and, when

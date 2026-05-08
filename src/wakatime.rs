@@ -1,18 +1,20 @@
 use std::collections::VecDeque;
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 const HEARTBEAT_INTERVAL_SECS: u64 = 120;
 const HEARTBEAT_RETRY_BACKOFF_SECS: [u64; 2] = [1, 2];
 const HEARTBEAT_MAX_ATTEMPTS: u8 = 3;
 const HEARTBEAT_QUEUE_CAPACITY: usize = 256;
+const HEARTBEAT_QUEUE_SNAPSHOT_FILE_NAME: &str = "wakatime-queue.toml";
+const HEARTBEAT_QUEUE_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 #[cfg(not(test))]
 const HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 10;
 #[cfg(test)]
@@ -22,7 +24,7 @@ const DEFAULT_HEARTBEAT_ENTITY: &str = "focustime";
 const DEFAULT_HEARTBEAT_PROJECT: &str = "focustime";
 const DEFAULT_HEARTBEAT_LANGUAGE: &str = "Pomodoro";
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 struct Heartbeat {
     entity: String,
     #[serde(rename = "type")]
@@ -31,6 +33,15 @@ struct Heartbeat {
     project: String,
     language: String,
     is_write: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct HeartbeatQueueSnapshot {
+    schema_version: u32,
+    queued_heartbeats: Vec<Heartbeat>,
+    in_flight_heartbeat: Option<Heartbeat>,
+    in_flight_from_queue: bool,
+    queue_retry_not_before_epoch_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -242,9 +253,15 @@ pub struct WakatimeTracker {
     in_flight_from_queue: bool,
     /// Earliest time at which queued heartbeats should be replayed again.
     queue_retry_not_before_epoch_secs: Option<u64>,
+    /// Durable snapshot path for queued heartbeats and replay state.
+    queue_snapshot_path: Option<PathBuf>,
     /// Latches an immediate heartbeat request while another worker is in flight.
     pending_immediate_heartbeat: bool,
     heartbeat_metadata: WakatimeHeartbeatMetadata,
+    /// Startup-only warning (for example, invalid persisted queue state).
+    startup_warning: Option<String>,
+    /// Last queue snapshot persistence failure message.
+    queue_persistence_error: Option<String>,
     #[cfg(test)]
     disable_network_io: bool,
 }
@@ -257,7 +274,7 @@ impl WakatimeTracker {
     pub fn new_with_metadata(metadata: WakatimeHeartbeatMetadata) -> Self {
         let config = WakatimeConfig::load();
         let (result_tx, result_rx) = mpsc::channel();
-        Self {
+        let mut tracker = Self {
             api_key: config.api_key,
             api_url: config.api_url,
             secs_since_last_heartbeat: 0,
@@ -272,11 +289,16 @@ impl WakatimeTracker {
             in_flight_heartbeat: None,
             in_flight_from_queue: false,
             queue_retry_not_before_epoch_secs: None,
+            queue_snapshot_path: heartbeat_queue_snapshot_path(),
             pending_immediate_heartbeat: false,
             heartbeat_metadata: metadata.normalized(),
+            startup_warning: None,
+            queue_persistence_error: None,
             #[cfg(test)]
             disable_network_io: false,
-        }
+        };
+        tracker.restore_persisted_queue_state();
+        tracker
     }
 
     /// Returns `true` if actively sending heartbeats for a focus session.
@@ -312,6 +334,9 @@ impl WakatimeTracker {
         if let Some(error) = self.last_error.as_ref() {
             return WakatimeRuntimeState::Error(error.clone());
         }
+        if let Some(error) = self.queue_persistence_error.as_ref() {
+            return WakatimeRuntimeState::Error(error.clone());
+        }
         if self.tracking {
             WakatimeRuntimeState::Tracking
         } else {
@@ -339,8 +364,86 @@ impl WakatimeTracker {
             + usize::from(self.heartbeat_in_flight && self.in_flight_from_queue)
     }
 
+    fn restore_persisted_queue_state(&mut self) {
+        let Some(path) = self.queue_snapshot_path.as_ref() else {
+            return;
+        };
+        match read_heartbeat_queue_snapshot(path) {
+            Ok(Some(snapshot)) => {
+                self.queued_heartbeats = snapshot.queued_heartbeats.into_iter().fold(
+                    VecDeque::new(),
+                    |mut queue, heartbeat| {
+                        push_back_with_capacity(&mut queue, heartbeat);
+                        queue
+                    },
+                );
+                if let Some(in_flight) = snapshot.in_flight_heartbeat {
+                    if snapshot.in_flight_from_queue {
+                        push_front_with_capacity(&mut self.queued_heartbeats, in_flight);
+                    } else {
+                        push_back_with_capacity(&mut self.queued_heartbeats, in_flight);
+                    }
+                }
+                self.heartbeat_in_flight = false;
+                self.in_flight_heartbeat = None;
+                self.in_flight_from_queue = false;
+                self.queue_retry_not_before_epoch_secs = if self.queued_heartbeats.is_empty() {
+                    None
+                } else {
+                    snapshot.queue_retry_not_before_epoch_secs
+                };
+                self.retry_state = None;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                let mut warning = format!(
+                    "WakaTime offline queue warning: dropped invalid persisted queue ({error})"
+                );
+                if let Err(clear_error) = clear_heartbeat_queue_snapshot(path) {
+                    warning = format!("{warning}; cleanup failed: {clear_error}");
+                }
+                self.startup_warning = Some(warning.clone());
+                self.last_error = Some(warning);
+            }
+        }
+    }
+
+    fn sync_queue_snapshot(&mut self) {
+        let Some(path) = self.queue_snapshot_path.as_ref() else {
+            return;
+        };
+        let result = if let Some(snapshot) = self.queue_snapshot() {
+            write_heartbeat_queue_snapshot(path, &snapshot)
+        } else {
+            clear_heartbeat_queue_snapshot(path)
+        };
+        match result {
+            Ok(()) => self.queue_persistence_error = None,
+            Err(error) => {
+                self.queue_persistence_error =
+                    Some(format!("WakaTime offline queue persistence error: {error}"));
+            }
+        }
+    }
+
+    fn queue_snapshot(&self) -> Option<HeartbeatQueueSnapshot> {
+        let has_replay_backlog =
+            !self.queued_heartbeats.is_empty() || self.in_flight_heartbeat.is_some();
+        if !has_replay_backlog {
+            return None;
+        }
+        Some(HeartbeatQueueSnapshot {
+            schema_version: HEARTBEAT_QUEUE_SNAPSHOT_SCHEMA_VERSION,
+            queued_heartbeats: self.queued_heartbeats.iter().cloned().collect(),
+            in_flight_heartbeat: self.in_flight_heartbeat.clone(),
+            in_flight_from_queue: self.heartbeat_in_flight && self.in_flight_from_queue,
+            queue_retry_not_before_epoch_secs: self.queue_retry_not_before_epoch_secs,
+        })
+    }
+
     /// Drains heartbeat events from worker threads and updates tracker status.
     pub fn poll_events(&mut self) {
+        let mut queue_state_changed = false;
         while let Ok(event) = self.result_rx.try_recv() {
             match event {
                 HeartbeatEvent::Sent => {
@@ -351,6 +454,7 @@ impl WakatimeTracker {
                     self.retry_state = None;
                     self.last_error = None;
                     self.last_successful_heartbeat_epoch_secs = Some(current_unix_epoch_secs());
+                    queue_state_changed = true;
                 }
                 HeartbeatEvent::Retrying {
                     attempt,
@@ -380,10 +484,14 @@ impl WakatimeTracker {
                     } else {
                         self.in_flight_heartbeat = None;
                     }
+                    queue_state_changed = true;
                 }
             }
         }
         self.dispatch_pending_work();
+        if queue_state_changed {
+            self.sync_queue_snapshot();
+        }
     }
 
     /// Called when a focus session starts (timer transitions to Running in Focus phase).
@@ -466,20 +574,15 @@ impl WakatimeTracker {
     }
 
     fn enqueue_heartbeat(&mut self, heartbeat: Heartbeat) {
-        if self.queued_heartbeats.len() >= HEARTBEAT_QUEUE_CAPACITY {
-            let _ = self.queued_heartbeats.pop_front();
-        }
-        self.queued_heartbeats.push_back(heartbeat);
+        push_back_with_capacity(&mut self.queued_heartbeats, heartbeat);
+        self.sync_queue_snapshot();
     }
 
     fn requeue_in_flight_heartbeat(&mut self) {
         let Some(in_flight_heartbeat) = self.in_flight_heartbeat.take() else {
             return;
         };
-        if self.queued_heartbeats.len() >= HEARTBEAT_QUEUE_CAPACITY {
-            let _ = self.queued_heartbeats.pop_front();
-        }
-        self.queued_heartbeats.push_front(in_flight_heartbeat);
+        push_front_with_capacity(&mut self.queued_heartbeats, in_flight_heartbeat);
     }
 
     fn queue_retry_is_due(&self) -> bool {
@@ -523,6 +626,7 @@ impl WakatimeTracker {
         self.queue_retry_not_before_epoch_secs = None;
         self.retry_state = None;
         self.last_error = None;
+        self.sync_queue_snapshot();
 
         #[cfg(test)]
         if self.disable_network_io {
@@ -571,8 +675,11 @@ impl WakatimeTracker {
             in_flight_heartbeat: None,
             in_flight_from_queue: false,
             queue_retry_not_before_epoch_secs: None,
+            queue_snapshot_path: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
+            startup_warning: None,
+            queue_persistence_error: None,
             disable_network_io: true,
         }
     }
@@ -595,8 +702,11 @@ impl WakatimeTracker {
             in_flight_heartbeat: None,
             in_flight_from_queue: false,
             queue_retry_not_before_epoch_secs: None,
+            queue_snapshot_path: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
+            startup_warning: None,
+            queue_persistence_error: None,
             disable_network_io: true,
         }
     }
@@ -635,6 +745,7 @@ impl WakatimeTracker {
         self.pending_immediate_heartbeat = false;
         self.retry_state = None;
         self.last_error = None;
+        self.queue_persistence_error = None;
     }
 
     #[cfg(test)]
@@ -733,6 +844,127 @@ impl Default for WakatimeTracker {
     }
 }
 
+fn heartbeat_queue_snapshot_path() -> Option<PathBuf> {
+    crate::config::app_data_path(HEARTBEAT_QUEUE_SNAPSHOT_FILE_NAME)
+}
+
+fn read_heartbeat_queue_snapshot(path: &Path) -> io::Result<Option<HeartbeatQueueSnapshot>> {
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let snapshot: HeartbeatQueueSnapshot = toml::from_str(&content).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid queue snapshot format: {error}"),
+        )
+    })?;
+    if snapshot.schema_version != HEARTBEAT_QUEUE_SNAPSHOT_SCHEMA_VERSION {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "unsupported queue snapshot schema {}",
+                snapshot.schema_version
+            ),
+        ));
+    }
+    Ok(Some(snapshot))
+}
+
+fn write_heartbeat_queue_snapshot(
+    path: &Path,
+    snapshot: &HeartbeatQueueSnapshot,
+) -> io::Result<()> {
+    let content = toml::to_string_pretty(snapshot)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    write_atomic_text(path, &content)
+}
+
+fn clear_heartbeat_queue_snapshot(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+fn write_atomic_text(path: &Path, content: &str) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp_path = path.with_extension("toml.tmp");
+    fs::write(&tmp_path, content)?;
+    if let Err(error) = sync_file_to_disk(&tmp_path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(error);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        match fs::rename(&tmp_path, path) {
+            Ok(()) => sync_parent_dir_to_disk(path),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                fs::remove_file(path)?;
+                match fs::rename(&tmp_path, path) {
+                    Ok(()) => sync_parent_dir_to_disk(path),
+                    Err(error) => {
+                        let _ = fs::remove_file(&tmp_path);
+                        Err(error)
+                    }
+                }
+            }
+            Err(error) => {
+                let _ = fs::remove_file(&tmp_path);
+                Err(error)
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        match fs::rename(&tmp_path, path) {
+            Ok(()) => sync_parent_dir_to_disk(path),
+            Err(error) => {
+                let _ = fs::remove_file(&tmp_path);
+                Err(error)
+            }
+        }
+    }
+}
+
+fn sync_file_to_disk(path: &Path) -> io::Result<()> {
+    let file = fs::OpenOptions::new().write(true).open(path)?;
+    file.sync_all()
+}
+
+fn sync_parent_dir_to_disk(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        if let Some(parent) = path.parent() {
+            let dir = fs::File::open(parent)?;
+            dir.sync_all()?;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+    Ok(())
+}
+
+fn push_back_with_capacity(queue: &mut VecDeque<Heartbeat>, heartbeat: Heartbeat) {
+    if queue.len() >= HEARTBEAT_QUEUE_CAPACITY {
+        let _ = queue.pop_front();
+    }
+    queue.push_back(heartbeat);
+}
+
+fn push_front_with_capacity(queue: &mut VecDeque<Heartbeat>, heartbeat: Heartbeat) {
+    if queue.len() >= HEARTBEAT_QUEUE_CAPACITY {
+        let _ = queue.pop_front();
+    }
+    queue.push_front(heartbeat);
+}
+
 fn build_heartbeat_payload(now: f64, metadata: &WakatimeHeartbeatMetadata) -> Heartbeat {
     let metadata = metadata.normalized();
     Heartbeat {
@@ -803,6 +1035,31 @@ fn config_diagnostics_from_read_result(
 #[cfg(test)]
 mod tests {
     use crate::wakatime::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_queue_snapshot_path(test_name: &str) -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time must be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "focustime-wakatime-queue-{test_name}-{}-{now}.toml",
+            std::process::id()
+        ))
+    }
+
+    fn unique_temp_queue_dir(test_name: &str) -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time must be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "focustime-wakatime-queue-dir-{test_name}-{}-{now}",
+            std::process::id()
+        ))
+    }
 
     fn tracker_with(
         api_key: Option<&str>,
@@ -825,8 +1082,11 @@ mod tests {
             in_flight_heartbeat: None,
             in_flight_from_queue: false,
             queue_retry_not_before_epoch_secs: None,
+            queue_snapshot_path: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
+            startup_warning: None,
+            queue_persistence_error: None,
             disable_network_io: true,
         }
     }
@@ -1259,5 +1519,180 @@ mod tests {
         assert!(!is_retryable_error(&ureq::Error::BadUri(
             "missing-host".to_string()
         )));
+    }
+
+    #[test]
+    fn queue_snapshot_restores_pending_backlog_after_restart() {
+        let snapshot_path = unique_temp_queue_snapshot_path("restore-pending");
+        let mut tracker = WakatimeTracker::new_configured_for_tests();
+        tracker.queue_snapshot_path = Some(snapshot_path.clone());
+        tracker.set_pending_heartbeats_for_tests(3);
+        tracker.sync_queue_snapshot();
+
+        let mut restored = WakatimeTracker::new_configured_for_tests();
+        restored.queue_snapshot_path = Some(snapshot_path.clone());
+        restored.restore_persisted_queue_state();
+
+        assert_eq!(restored.pending_heartbeat_count(), 3);
+        assert!(matches!(
+            restored.runtime_state(),
+            WakatimeRuntimeState::Queued { pending: 3 }
+        ));
+
+        let _ = fs::remove_file(snapshot_path);
+    }
+
+    #[test]
+    fn queue_snapshot_restores_in_flight_replay_heartbeat_at_front() {
+        let snapshot_path = unique_temp_queue_snapshot_path("restore-in-flight");
+        let mut tracker = WakatimeTracker::new_configured_for_tests();
+        tracker.queue_snapshot_path = Some(snapshot_path.clone());
+        tracker.set_replaying_heartbeats_for_tests(3);
+        tracker.sync_queue_snapshot();
+
+        let mut restored = WakatimeTracker::new_configured_for_tests();
+        restored.queue_snapshot_path = Some(snapshot_path.clone());
+        restored.restore_persisted_queue_state();
+
+        assert_eq!(restored.pending_heartbeat_count(), 3);
+        assert_eq!(
+            restored
+                .queued_heartbeats
+                .front()
+                .expect("restored queue should have first heartbeat")
+                .time,
+            0.0
+        );
+        assert_eq!(
+            restored
+                .queued_heartbeats
+                .get(1)
+                .expect("restored queue should have second heartbeat")
+                .time,
+            1.0
+        );
+        assert_eq!(
+            restored
+                .queued_heartbeats
+                .get(2)
+                .expect("restored queue should have third heartbeat")
+                .time,
+            2.0
+        );
+
+        let _ = fs::remove_file(snapshot_path);
+    }
+
+    #[test]
+    fn queue_snapshot_restore_is_bounded_by_queue_capacity() {
+        let snapshot_path = unique_temp_queue_snapshot_path("restore-capacity");
+        let oversized = HeartbeatQueueSnapshot {
+            schema_version: HEARTBEAT_QUEUE_SNAPSHOT_SCHEMA_VERSION,
+            queued_heartbeats: (0..(HEARTBEAT_QUEUE_CAPACITY + 5))
+                .map(|index| {
+                    build_heartbeat_payload(index as f64, &WakatimeHeartbeatMetadata::default())
+                })
+                .collect(),
+            in_flight_heartbeat: None,
+            in_flight_from_queue: false,
+            queue_retry_not_before_epoch_secs: None,
+        };
+        write_heartbeat_queue_snapshot(&snapshot_path, &oversized)
+            .expect("oversized queue snapshot should be written");
+
+        let mut restored = WakatimeTracker::new_configured_for_tests();
+        restored.queue_snapshot_path = Some(snapshot_path.clone());
+        restored.restore_persisted_queue_state();
+
+        assert_eq!(restored.queued_heartbeats.len(), HEARTBEAT_QUEUE_CAPACITY);
+        assert_eq!(
+            restored
+                .queued_heartbeats
+                .front()
+                .expect("restored bounded queue should keep newest capacity window")
+                .time,
+            5.0
+        );
+
+        let _ = fs::remove_file(snapshot_path);
+    }
+
+    #[test]
+    fn invalid_queue_snapshot_is_dropped_and_warning_is_exposed() {
+        let snapshot_path = unique_temp_queue_snapshot_path("restore-invalid");
+        fs::write(&snapshot_path, "not-valid = [this is invalid toml")
+            .expect("invalid snapshot fixture should be written");
+
+        let mut tracker = WakatimeTracker::new_configured_for_tests();
+        tracker.queue_snapshot_path = Some(snapshot_path.clone());
+        tracker.restore_persisted_queue_state();
+
+        assert!(
+            tracker
+                .last_error
+                .as_deref()
+                .is_some_and(|message| message.contains("dropped invalid persisted queue"))
+        );
+        assert!(
+            tracker
+                .startup_warning
+                .as_deref()
+                .is_some_and(|message| message.contains("dropped invalid persisted queue"))
+        );
+        assert!(!snapshot_path.exists());
+    }
+
+    #[test]
+    fn sent_event_clears_queue_snapshot_when_backlog_is_drained() {
+        let snapshot_path = unique_temp_queue_snapshot_path("sent-clears-snapshot");
+        let mut tracker = WakatimeTracker::new_configured_for_tests();
+        tracker.queue_snapshot_path = Some(snapshot_path.clone());
+        tracker.set_replaying_heartbeats_for_tests(1);
+        tracker.sync_queue_snapshot();
+        assert!(snapshot_path.exists());
+
+        tracker.push_sent_event_for_tests();
+        tracker.poll_events();
+
+        assert!(!snapshot_path.exists());
+    }
+
+    #[test]
+    fn snapshot_persistence_failure_is_exposed_via_runtime_state() {
+        let snapshot_dir = unique_temp_queue_dir("persist-failure-runtime");
+        fs::create_dir_all(&snapshot_dir).expect("test snapshot directory should be created");
+
+        let mut tracker = WakatimeTracker::new_configured_for_tests();
+        tracker.queue_snapshot_path = Some(snapshot_dir.clone());
+        tracker.sync_queue_snapshot();
+
+        assert!(
+            tracker
+                .queue_persistence_error
+                .as_deref()
+                .is_some_and(|message| message.contains("offline queue persistence error"))
+        );
+        assert!(matches!(
+            tracker.runtime_state(),
+            WakatimeRuntimeState::Error(message)
+                if message.contains("offline queue persistence error")
+        ));
+
+        let _ = fs::remove_dir_all(snapshot_dir);
+    }
+
+    #[test]
+    fn successful_snapshot_sync_clears_persistence_error() {
+        let snapshot_path = unique_temp_queue_snapshot_path("persist-error-cleared");
+
+        let mut tracker = WakatimeTracker::new_configured_for_tests();
+        tracker.queue_snapshot_path = Some(snapshot_path.clone());
+        tracker.queue_persistence_error = Some("previous failure".to_string());
+        tracker.set_pending_heartbeats_for_tests(1);
+        tracker.sync_queue_snapshot();
+
+        assert!(tracker.queue_persistence_error.is_none());
+
+        let _ = fs::remove_file(snapshot_path);
     }
 }
