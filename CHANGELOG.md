@@ -9,9 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [0.9.1] - 2026-05-08
+
+### Added
+
 - **Feature flags for rollout-safe compatibility paths (#258):** added centralized `[feature_flags]` config defaults plus diagnostics visibility to gate legacy automation/blocklist mirrors and task-label metadata fallback behavior across config, CLI, recovery, and stats loading paths.
 - **CLI parity for session metadata commands (#259):** added non-interactive `--focus-intention` and `--task-note` read/set workflows so in-progress session metadata can be inspected and updated from CLI output contracts without entering TUI mode.
 - **Durable WakaTime offline queue replay (#268):** persisted retryable heartbeat backlog to local app data so queued/replaying heartbeats survive restarts/crashes, replay deterministically with existing queue bounds, and surface startup warnings when invalid persisted queue snapshots are dropped.
+- **Config schema/versioning groundwork for upcoming migrations (#274):** added explicit config `schema_version` handling, migration-path scaffolding for legacy snapshots, and lenient forward-compatible loading for newer schema versions.
+- **Stats growth observability and retention policy controls (#275):** added growth/size summary signals and configurable `stats_retention` presets surfaced in CLI `--status` outputs and the TUI history overview.
 
 ## [0.9.0] - 2026-05-05
 
@@ -234,7 +240,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/utilForever/focustime/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/utilForever/focustime/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/utilForever/focustime/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/utilForever/focustime/compare/v0.7.1...v0.8.0
