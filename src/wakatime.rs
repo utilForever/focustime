@@ -895,13 +895,23 @@ fn write_atomic_text(path: &Path, content: &str) -> io::Result<()> {
     }
     let tmp_path = path.with_extension("toml.tmp");
     fs::write(&tmp_path, content)?;
+    if let Err(error) = sync_file_to_disk(&tmp_path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(error);
+    }
     #[cfg(target_os = "windows")]
     {
         match fs::rename(&tmp_path, path) {
-            Ok(()) => Ok(()),
+            Ok(()) => sync_parent_dir_to_disk(path),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                 fs::remove_file(path)?;
-                fs::rename(&tmp_path, path)
+                match fs::rename(&tmp_path, path) {
+                    Ok(()) => sync_parent_dir_to_disk(path),
+                    Err(error) => {
+                        let _ = fs::remove_file(&tmp_path);
+                        Err(error)
+                    }
+                }
             }
             Err(error) => {
                 let _ = fs::remove_file(&tmp_path);
@@ -912,13 +922,33 @@ fn write_atomic_text(path: &Path, content: &str) -> io::Result<()> {
     #[cfg(not(target_os = "windows"))]
     {
         match fs::rename(&tmp_path, path) {
-            Ok(()) => Ok(()),
+            Ok(()) => sync_parent_dir_to_disk(path),
             Err(error) => {
                 let _ = fs::remove_file(&tmp_path);
                 Err(error)
             }
         }
     }
+}
+
+fn sync_file_to_disk(path: &Path) -> io::Result<()> {
+    let file = fs::OpenOptions::new().write(true).open(path)?;
+    file.sync_all()
+}
+
+fn sync_parent_dir_to_disk(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        if let Some(parent) = path.parent() {
+            let dir = fs::File::open(parent)?;
+            dir.sync_all()?;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+    Ok(())
 }
 
 fn push_back_with_capacity(queue: &mut VecDeque<Heartbeat>, heartbeat: Heartbeat) {
