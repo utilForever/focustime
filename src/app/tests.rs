@@ -7,7 +7,7 @@ use crate::session_recovery::{
 use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, TimeZone, Weekday};
 use std::{
     fs,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -4231,6 +4231,143 @@ fn cli_next_records_session_interruption_reason() {
     );
     assert_eq!(interruptions[0].task_label.as_deref(), Some("Docs"));
     assert_eq!(interruptions[0].remaining_secs, 800);
+}
+
+#[test]
+fn cli_schedule_delay_requires_active_schedule_window() {
+    let mut app = App::default();
+
+    let error = app.schedule_delay_for_cli().unwrap_err();
+
+    assert_eq!(error, "No active schedule window to delay.");
+}
+
+#[test]
+fn cli_schedule_delay_sets_delay_for_active_window() {
+    let now = Local::now();
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "00:00".to_string(),
+                end: "23:59".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    let delayed_until = app.schedule_delay_for_cli().unwrap();
+
+    assert!(!delayed_until.is_empty());
+    assert!(app.schedule_delayed_occurrence_key.is_some());
+    assert!(
+        app.schedule_delay_until
+            .is_some_and(|delay_until| delay_until > now)
+    );
+}
+
+#[test]
+fn cli_break_glass_trigger_requires_active_focus() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Idle;
+
+    let error = app.trigger_break_glass_for_cli().unwrap_err();
+
+    assert_eq!(
+        error,
+        "Break-glass override is available only during active focus."
+    );
+    assert!(!app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn cli_break_glass_trigger_arms_confirmation_when_valid() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+
+    app.trigger_break_glass_for_cli().unwrap();
+
+    assert!(app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn cli_break_glass_cancel_requires_pending_confirmation() {
+    let mut app = App::default();
+
+    let error = app.cancel_break_glass_for_cli().unwrap_err();
+
+    assert_eq!(
+        error,
+        "Cannot cancel break-glass: no confirmation is pending."
+    );
+}
+
+#[test]
+fn cli_break_glass_cancel_clears_pending_confirmation() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.trigger_break_glass_for_cli().unwrap();
+    assert!(app.break_glass_confirmation_pending());
+
+    app.cancel_break_glass_for_cli().unwrap();
+
+    assert!(!app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn cli_break_glass_trigger_reports_active_override() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.break_glass_expires_at = Some(Instant::now() + Duration::from_secs(90));
+
+    let error = app.trigger_break_glass_for_cli().unwrap_err();
+
+    assert!(error.contains("Break-glass override already active"));
+    assert!(!app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn cli_break_glass_trigger_pending_confirm_rechecks_focus_state() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.trigger_break_glass_for_cli().unwrap();
+    assert!(app.break_glass_confirmation_pending());
+    app.timer.status = TimerStatus::Idle;
+
+    let error = app.trigger_break_glass_for_cli().unwrap_err();
+
+    assert_eq!(
+        error,
+        "Break-glass override is available only during active focus."
+    );
+    assert!(!app.break_glass_confirmation_pending());
 }
 
 #[test]

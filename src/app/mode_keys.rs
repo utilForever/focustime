@@ -1,7 +1,7 @@
 use crate::app::{
     App, AppMode, KeyCode, KeyEvent, KeyModifiers, PendingTimerAction, SCHEDULE_DELAY_SECS,
     SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
-    format_duration_label, occurrence_key,
+    format_duration_label,
 };
 
 const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 11] = [
@@ -196,42 +196,19 @@ impl App {
     }
 
     fn delay_active_schedule_start(&mut self) {
-        if self.focus_session_active_for_current_state() {
-            self.phase_notification = Some(
-                "Schedule delay is unavailable while a focus session is already active."
-                    .to_string(),
-            );
-            return;
-        }
-
         let now = self.current_frame_now;
-        let Some(active_window) = self.active_schedule_occurrence_at(now) else {
-            self.phase_notification = Some("No active schedule window to delay.".to_string());
-            return;
-        };
-        let active_occurrence_key = occurrence_key(&active_window);
-        let delayed_from = match (
-            self.schedule_delayed_occurrence_key.as_deref(),
-            self.schedule_delay_until,
-        ) {
-            (Some(existing_key), Some(existing_until))
-                if existing_key == active_occurrence_key && existing_until > now =>
-            {
-                existing_until
+        match self.delay_active_schedule_start_for_workflow(now) {
+            Ok(delayed_until) => {
+                self.phase_notification = Some(format!(
+                    "Scheduled start delayed for {} (until {}).",
+                    format_duration_label(SCHEDULE_DELAY_SECS),
+                    delayed_until.format("%H:%M")
+                ));
             }
-            _ => now,
-        };
-        let delayed_until = delayed_from + chrono::Duration::seconds(SCHEDULE_DELAY_SECS as i64);
-
-        self.schedule_armed_occurrence_key = None;
-        self.schedule_delayed_occurrence_key = Some(active_occurrence_key);
-        self.schedule_delay_until = Some(delayed_until);
-        self.last_schedule_occurrence_key = None;
-        self.phase_notification = Some(format!(
-            "Scheduled start delayed for {} (until {}).",
-            format_duration_label(SCHEDULE_DELAY_SECS),
-            delayed_until.format("%H:%M")
-        ));
+            Err(message) => {
+                self.phase_notification = Some(message);
+            }
+        }
     }
 
     pub(super) fn handle_key_stats_history(&mut self, key: KeyEvent) {

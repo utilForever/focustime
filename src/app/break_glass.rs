@@ -33,67 +33,80 @@ impl App {
             .filter(|remaining| !remaining.is_zero())
     }
 
-    pub(super) fn handle_break_glass_key(&mut self) {
+    fn break_glass_availability_error(&self) -> Option<String> {
         if !self.focus_session_active_for_current_state() {
-            self.phase_notification =
-                Some("Break-glass override is available only during active focus.".to_string());
-            return;
+            return Some("Break-glass override is available only during active focus.".to_string());
         }
         if self.blocker.sites.is_empty() {
-            self.phase_notification = Some(
+            return Some(
                 "Break-glass override unavailable: active profile has no effective blocked sites."
                     .to_string(),
             );
-            return;
+        }
+        None
+    }
+
+    pub(super) fn arm_break_glass_override_for_workflow(&mut self) -> Result<(), String> {
+        if let Some(message) = self.break_glass_availability_error() {
+            return Err(message);
         }
         if let Some(remaining_secs) = self.break_glass_override_remaining_secs() {
-            self.phase_notification = Some(format!(
+            return Err(format!(
                 "Break-glass override already active ({} remaining).",
                 format_duration_label(remaining_secs)
             ));
-            return;
         }
-
         self.pending_timer_action = Some(PendingTimerAction::BreakGlassOverride);
-        self.phase_notification = Some(format!(
-            "Confirm break-glass with {} to unblock for {}.",
-            self.shortcut_hint(ShortcutAction::BreakGlassOverride),
-            format_duration_label(self.break_glass_duration_secs)
-        ));
+        Ok(())
+    }
+
+    pub(super) fn confirm_break_glass_override_for_workflow(&mut self) -> Result<(), String> {
+        self.pending_timer_action = None;
+        if let Some(message) = self.break_glass_availability_error() {
+            return Err(message);
+        }
+        self.activate_break_glass_override()
+    }
+
+    fn activate_break_glass_override(&mut self) -> Result<(), String> {
+        self.blocker.unblock().map_err(|err| {
+            self.break_glass_expires_at = None;
+            self.block_error = Some(err.to_string());
+            format!("Break-glass failed: could not unblock sites ({err})")
+        })?;
+
+        self.block_error = None;
+        self.break_glass_expires_at =
+            Some(Instant::now() + Duration::from_secs(self.break_glass_duration_secs));
+        self.record_break_glass_override_event();
+        Ok(())
+    }
+
+    pub(super) fn handle_break_glass_key(&mut self) {
+        match self.arm_break_glass_override_for_workflow() {
+            Ok(()) => {
+                self.phase_notification = Some(format!(
+                    "Confirm break-glass with {} to unblock for {}.",
+                    self.shortcut_hint(ShortcutAction::BreakGlassOverride),
+                    format_duration_label(self.break_glass_duration_secs)
+                ));
+            }
+            Err(message) => {
+                self.phase_notification = Some(message);
+            }
+        }
     }
 
     pub(super) fn confirm_break_glass_override(&mut self) {
-        self.pending_timer_action = None;
-        if !self.focus_session_active_for_current_state() {
-            self.phase_notification =
-                Some("Break-glass override is available only during active focus.".to_string());
-            return;
-        }
-        if self.blocker.sites.is_empty() {
-            self.phase_notification = Some(
-                "Break-glass override unavailable: active profile has no effective blocked sites."
-                    .to_string(),
-            );
-            return;
-        }
-
-        match self.blocker.unblock() {
+        match self.confirm_break_glass_override_for_workflow() {
             Ok(()) => {
-                self.block_error = None;
-                self.break_glass_expires_at =
-                    Some(Instant::now() + Duration::from_secs(self.break_glass_duration_secs));
-                self.record_break_glass_override_event();
                 self.phase_notification = Some(format!(
                     "Break-glass active: blocking paused for {}.",
                     format_duration_label(self.break_glass_duration_secs)
                 ));
             }
-            Err(err) => {
-                self.break_glass_expires_at = None;
-                self.block_error = Some(err.to_string());
-                self.phase_notification = Some(format!(
-                    "Break-glass failed: could not unblock sites ({err})"
-                ));
+            Err(message) => {
+                self.phase_notification = Some(message);
             }
         }
         self.sync_wakatime_tracking_for_state();
