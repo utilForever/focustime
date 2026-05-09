@@ -1,5 +1,5 @@
 use crate::app::{
-    App, BlockingPreview, ProfileId, SessionInterruptionReason, ShortcutAction, TimerPhase,
+    App, BlockingPreview, Local, ProfileId, SessionInterruptionReason, ShortcutAction, TimerPhase,
     TimerState, TimerStatus, normalize_task_label, task_label_index,
 };
 
@@ -59,6 +59,34 @@ impl App {
             Some(SessionInterruptionReason::ManualSkip),
         );
         Ok(())
+    }
+
+    pub fn schedule_delay_for_cli(&mut self) -> Result<String, String> {
+        let now = Local::now();
+        self.current_frame_now = now;
+        let delayed_until = self.delay_active_schedule_start_for_workflow(now)?;
+        self.sync_cli_workflow_state()?;
+        Ok(delayed_until.format("%H:%M").to_string())
+    }
+
+    pub fn trigger_break_glass_for_cli(&mut self) -> Result<(), String> {
+        if self.break_glass_confirmation_pending() {
+            let result = self.confirm_break_glass_override_for_workflow();
+            self.sync_wakatime_tracking_for_state();
+            result?;
+            self.sync_cli_workflow_state()?;
+            return Ok(());
+        }
+        self.arm_break_glass_override_for_workflow()?;
+        self.sync_cli_workflow_state()
+    }
+
+    pub fn cancel_break_glass_for_cli(&mut self) -> Result<(), String> {
+        if !self.break_glass_confirmation_pending() {
+            return Err("Cannot cancel break-glass: no confirmation is pending.".to_string());
+        }
+        self.pending_timer_action = None;
+        self.sync_cli_workflow_state()
     }
 
     pub fn blocking_preview_for_cli(&self) -> Result<BlockingPreview, String> {

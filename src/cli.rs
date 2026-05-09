@@ -45,9 +45,10 @@ use output::{
     build_blocking_preview_command_output, build_diagnostics_command_output,
     build_schedule_inspection_output, display_input_value, effective_blocked_sites_for_profile,
     flush_stdout, print_backup_output, print_blocking_preview_command_output,
-    print_blocklist_profile_command_output, print_diagnostics_command_output, print_export_output,
-    print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
-    print_profile_output, print_restore_output, print_schedule_command_output,
+    print_blocklist_profile_command_output, print_break_glass_command_output,
+    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
+    print_goal_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
     print_session_metadata_command_output, print_site_add_command_output,
     print_site_delete_command_output, print_site_edit_command_output,
     print_site_list_command_output, print_status_output, print_strict_command_output,
@@ -98,6 +99,9 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
   focustime --schedule-set=JSON_PAYLOAD [--json]
+  focustime --schedule-delay [--json]
+  focustime --break-glass-trigger [--json]
+  focustime --break-glass-cancel [--json]
   focustime --blocklist-profile [PROFILE_NAME] [--json]
   focustime --blocklist-profile-create=PROFILE_NAME [--json]
   focustime --blocklist-profile-rename=PROFILE_NAME [--json]
@@ -138,6 +142,9 @@ Options:
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
   --schedule-set  Replace selected profile schedule (recurring + one-time) from JSON payload
+  --schedule-delay  Delay the current active schedule window start by 10 minutes
+  --break-glass-trigger  Trigger break-glass workflow (first call arms, second confirms)
+  --break-glass-cancel   Cancel a pending break-glass confirmation
   --blocklist-profile         Show active blocklist profile, or set active profile
   --blocklist-profile-create  Create a blocklist profile and select it
   --blocklist-profile-rename  Rename the active blocklist profile
@@ -255,6 +262,9 @@ pub enum CommandKind {
     Schedule {
         schedule: Option<RecurringScheduleConfig>,
     },
+    ScheduleDelay,
+    BreakGlassTrigger,
+    BreakGlassCancel,
     Diagnostics,
     BlockingPreview,
     Status {
@@ -316,6 +326,9 @@ enum PrimaryCommand {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
+    ScheduleDelay,
+    BreakGlassTrigger,
+    BreakGlassCancel,
     Diagnostics,
     BlockingPreview,
     Status,
@@ -365,6 +378,9 @@ enum ParsedToken {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
+    ScheduleDelay,
+    BreakGlassTrigger,
+    BreakGlassCancel,
     Diagnostics,
     BlockingPreview,
     Backup(Option<PathBuf>),
@@ -598,6 +614,22 @@ struct TimerStateOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct TimerCommandOutput {
     action: &'static str,
+    timer: TimerStateOutput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ScheduleDelayCommandOutput {
+    action: &'static str,
+    delayed_until: String,
+    timer: TimerStateOutput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct BreakGlassCommandOutput {
+    action: &'static str,
+    pending_confirmation: bool,
+    active: bool,
+    remaining_secs: Option<u64>,
     timer: TimerStateOutput,
 }
 

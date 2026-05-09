@@ -49,6 +49,9 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Strict(_)
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
+            | ParsedToken::ScheduleDelay
+            | ParsedToken::BreakGlassTrigger
+            | ParsedToken::BreakGlassCancel
             | ParsedToken::Diagnostics
             | ParsedToken::BlockingPreview
             | ParsedToken::Backup(_)
@@ -130,6 +133,15 @@ pub(super) fn parse_primary_command(
             ParsedToken::Schedule => set_primary_command(&mut primary, PrimaryCommand::Schedule)?,
             ParsedToken::ScheduleSet(schedule) => {
                 set_primary_command(&mut primary, PrimaryCommand::ScheduleSet(schedule.clone()))?
+            }
+            ParsedToken::ScheduleDelay => {
+                set_primary_command(&mut primary, PrimaryCommand::ScheduleDelay)?
+            }
+            ParsedToken::BreakGlassTrigger => {
+                set_primary_command(&mut primary, PrimaryCommand::BreakGlassTrigger)?
+            }
+            ParsedToken::BreakGlassCancel => {
+                set_primary_command(&mut primary, PrimaryCommand::BreakGlassCancel)?
             }
             ParsedToken::Diagnostics => {
                 set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
@@ -277,6 +289,18 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Schedule {
                 schedule: Some(schedule),
             },
+            output,
+        })),
+        Some(PrimaryCommand::ScheduleDelay) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::ScheduleDelay,
+            output,
+        })),
+        Some(PrimaryCommand::BreakGlassTrigger) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BreakGlassTrigger,
+            output,
+        })),
+        Some(PrimaryCommand::BreakGlassCancel) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BreakGlassCancel,
             output,
         })),
         Some(PrimaryCommand::Diagnostics) => Ok(CliAction::RunCommand(CliCommand {
@@ -724,6 +748,9 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Strict(_) => "--strict",
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
+        PrimaryCommand::ScheduleDelay => "--schedule-delay",
+        PrimaryCommand::BreakGlassTrigger => "--break-glass-trigger",
+        PrimaryCommand::BreakGlassCancel => "--break-glass-cancel",
         PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::BlockingPreview => "--blocking-preview",
         PrimaryCommand::Status => "--status",

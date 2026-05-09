@@ -4,28 +4,29 @@ use crate::app::App;
 
 use crate::cli::{
     AppConfig, BackupOutput, BlocklistProfileCommandKind, BlocklistProfileCommandOutput,
-    BlocklistProfileConfig, BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, CliCommand,
-    CommandKind, DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats,
-    GoalCarryCommandOutput, GoalCommandOutput, InvalidSiteEntryOutput, InvalidSiteInput,
-    MonthlyGoalConfig, OutputMode, PathBuf, ProfileId, ProfileOutput, ProfileView,
-    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, SessionMetadataCommandOutput,
-    SiteAddCommandOutput, SiteBlocker, SiteDeleteCommandOutput, SiteEditCommandOutput,
-    SiteEditValue, SiteListCommandOutput, SiteListTarget, StatusOutput, StrictCommandOutput,
-    TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, ThemePreset,
-    TimerCommandOutput, TimerStateOutput, WeeklyGoalConfig, available_break_template_views,
-    available_theme_preset_views, build_blocking_preview_command_output,
-    build_diagnostics_command_output, build_schedule_inspection_output, build_status_output,
-    build_task_goal_output, display_input_value, effective_blocked_sites_for_profile, flush_stdout,
-    print_backup_output, print_blocking_preview_command_output,
-    print_blocklist_profile_command_output, print_diagnostics_command_output, print_export_output,
+    BlocklistProfileConfig, BlocklistProfileSummaryOutput, BlocklistSiteCommandKind,
+    BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig, DailyGoalSnapshot,
+    EditSiteResult, ExportOutput, FocusStats, GoalCarryCommandOutput, GoalCommandOutput,
+    InvalidSiteEntryOutput, InvalidSiteInput, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId,
+    ProfileOutput, ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
+    ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SiteAddCommandOutput, SiteBlocker,
+    SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
+    SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
+    TaskGoalOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput,
+    WeeklyGoalConfig, available_break_template_views, available_theme_preset_views,
+    build_blocking_preview_command_output, build_diagnostics_command_output,
+    build_schedule_inspection_output, build_status_output, build_task_goal_output,
+    display_input_value, effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
+    print_blocking_preview_command_output, print_blocklist_profile_command_output,
+    print_break_glass_command_output, print_diagnostics_command_output, print_export_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
     print_profile_output, print_restore_output, print_schedule_command_output,
-    print_session_metadata_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
-    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
-    timer_status_id,
+    print_schedule_delay_command_output, print_session_metadata_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
+    print_timer_state_output, profile_id, profile_view, selected_break_template_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -63,6 +64,9 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::Schedule { schedule } => {
             execute_schedule_command(schedule, cli_command.output)
         }
+        CommandKind::ScheduleDelay => execute_schedule_delay_command(cli_command.output),
+        CommandKind::BreakGlassTrigger => execute_break_glass_trigger_command(cli_command.output),
+        CommandKind::BreakGlassCancel => execute_break_glass_cancel_command(cli_command.output),
         CommandKind::Diagnostics => execute_diagnostics_command(cli_command.output),
         CommandKind::BlockingPreview => execute_blocking_preview_command(cli_command.output),
         CommandKind::Status {
@@ -934,6 +938,24 @@ fn execute_schedule_command(
     Ok(())
 }
 
+fn execute_schedule_delay_command(output: OutputMode) -> Result<(), String> {
+    let mut app = App::new();
+    let delayed_until = app.schedule_delay_for_cli()?;
+    emit_schedule_delay_command_output("schedule-delay", delayed_until, &app, output)
+}
+
+fn execute_break_glass_trigger_command(output: OutputMode) -> Result<(), String> {
+    let mut app = App::new();
+    app.trigger_break_glass_for_cli()?;
+    emit_break_glass_command_output("break-glass-trigger", &app, output)
+}
+
+fn execute_break_glass_cancel_command(output: OutputMode) -> Result<(), String> {
+    let mut app = App::new();
+    app.cancel_break_glass_for_cli()?;
+    emit_break_glass_command_output("break-glass-cancel", &app, output)
+}
+
 fn execute_diagnostics_command(output: OutputMode) -> Result<(), String> {
     let app = App::new();
     let payload = build_diagnostics_command_output(&app.setup_diagnostics);
@@ -1343,6 +1365,43 @@ fn emit_session_metadata_command_output(
     };
     match output {
         OutputMode::Text => print_session_metadata_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn emit_schedule_delay_command_output(
+    action: &'static str,
+    delayed_until: String,
+    app: &App,
+    output: OutputMode,
+) -> Result<(), String> {
+    let payload = ScheduleDelayCommandOutput {
+        action,
+        delayed_until,
+        timer: build_timer_state_output(app),
+    };
+    match output {
+        OutputMode::Text => print_schedule_delay_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn emit_break_glass_command_output(
+    action: &'static str,
+    app: &App,
+    output: OutputMode,
+) -> Result<(), String> {
+    let payload = BreakGlassCommandOutput {
+        action,
+        pending_confirmation: app.break_glass_confirmation_pending(),
+        active: app.break_glass_override_active(),
+        remaining_secs: app.break_glass_override_remaining_secs(),
+        timer: build_timer_state_output(app),
+    };
+    match output {
+        OutputMode::Text => print_break_glass_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

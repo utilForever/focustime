@@ -726,6 +726,7 @@ impl App {
         app.clamp_break_template_selection();
         app.recompute_blocker_sites_from_active_profile();
         app.restore_in_progress_session();
+        app.restore_cli_workflow_state();
         app.sync_planner_selection_to_selected_label();
         app.sync_recovery_snapshot();
         app.apply_blocking_for_phase();

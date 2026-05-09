@@ -1,6 +1,6 @@
 use crate::app::{
-    App, DateTime, Local, ScheduleDisplayState, ShortcutAction, TimerPhase, TimerState,
-    TimerStatus, WindowOccurrence, active_occurrence, active_one_time_occurrence,
+    App, DateTime, Local, SCHEDULE_DELAY_SECS, ScheduleDisplayState, ShortcutAction, TimerPhase,
+    TimerState, TimerStatus, WindowOccurrence, active_occurrence, active_one_time_occurrence,
     next_occurrence_after, next_one_time_occurrence_after, occurrence_key, pick_active_occurrence,
     pick_next_occurrence,
 };
@@ -101,6 +101,42 @@ impl App {
         }
     }
 
+    pub(super) fn delay_active_schedule_start_for_workflow(
+        &mut self,
+        now: DateTime<Local>,
+    ) -> Result<DateTime<Local>, String> {
+        if self.focus_session_active_for_current_state() {
+            return Err(
+                "Schedule delay is unavailable while a focus session is already active."
+                    .to_string(),
+            );
+        }
+
+        let Some(active_window) = self.active_schedule_occurrence_at(now) else {
+            return Err("No active schedule window to delay.".to_string());
+        };
+        let active_occurrence_key = occurrence_key(&active_window);
+        let delayed_from = match (
+            self.schedule_delayed_occurrence_key.as_deref(),
+            self.schedule_delay_until,
+        ) {
+            (Some(existing_key), Some(existing_until))
+                if existing_key == active_occurrence_key && existing_until > now =>
+            {
+                existing_until
+            }
+            _ => now,
+        };
+        let requested_until = delayed_from + chrono::Duration::seconds(SCHEDULE_DELAY_SECS as i64);
+        let delayed_until = requested_until.min(active_window.end);
+
+        self.schedule_armed_occurrence_key = None;
+        self.schedule_delayed_occurrence_key = Some(active_occurrence_key);
+        self.schedule_delay_until = Some(delayed_until);
+        self.last_schedule_occurrence_key = None;
+        Ok(delayed_until)
+    }
+
     fn schedule_delay_until_for_occurrence_key(
         &self,
         occurrence_key: &str,
@@ -122,6 +158,9 @@ impl App {
     pub(super) fn clear_schedule_delay_state(&mut self) {
         self.schedule_delayed_occurrence_key = None;
         self.schedule_delay_until = None;
+        if let Err(error) = self.sync_cli_workflow_state() {
+            self.config_error = Some(error);
+        }
     }
 
     fn sync_schedule_delay_state_for_occurrence(

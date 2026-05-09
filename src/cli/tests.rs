@@ -511,6 +511,42 @@ fn parse_schedule_reads_current_schedule() {
 }
 
 #[test]
+fn parse_schedule_delay_supports_json_mode() {
+    let parsed = parse(&["--schedule-delay", "--json"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::ScheduleDelay,
+            output: OutputMode::Json
+        })
+    );
+}
+
+#[test]
+fn parse_break_glass_trigger_supports_json_mode() {
+    let parsed = parse(&["--break-glass-trigger", "--json"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BreakGlassTrigger,
+            output: OutputMode::Json
+        })
+    );
+}
+
+#[test]
+fn parse_break_glass_cancel_defaults_to_text_mode() {
+    let parsed = parse(&["--break-glass-cancel"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::BreakGlassCancel,
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
 fn parse_schedule_set_accepts_json_payload() {
     let payload = r#"{"windows":[{"days":["mon","wed"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"]}"#;
     let parsed = parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap();
@@ -1236,6 +1272,12 @@ fn parse_rejects_multiple_primary_commands() {
 #[test]
 fn parse_rejects_multiple_primary_commands_for_backup_and_restore() {
     let error = parse(&["--backup", "--restore"]).unwrap_err();
+    assert!(error.contains("Multiple primary commands"));
+}
+
+#[test]
+fn parse_rejects_multiple_primary_commands_for_schedule_delay_and_break_glass() {
+    let error = parse(&["--schedule-delay", "--break-glass-trigger"]).unwrap_err();
     assert!(error.contains("Multiple primary commands"));
 }
 

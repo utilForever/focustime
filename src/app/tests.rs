@@ -7,7 +7,7 @@ use crate::session_recovery::{
 use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, TimeZone, Weekday};
 use std::{
     fs,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -3071,6 +3071,33 @@ fn schedule_delay_key_sets_delay_for_active_window() {
 }
 
 #[test]
+fn schedule_delay_clamps_until_active_window_end() {
+    let now = local_datetime_today(10, 15);
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "10:00".to_string(),
+                end: "10:20".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.sync_recurring_schedule(now);
+    app.current_frame_now = now;
+
+    app.handle_key(key(KeyCode::Char('z')));
+
+    let delayed_until = app
+        .schedule_delay_until
+        .expect("schedule delay should be set for active window");
+    let window_end = local_datetime_today(10, 20);
+    assert_eq!(delayed_until, window_end);
+}
+
+#[test]
 fn schedule_delay_suppresses_trigger_until_delay_expires() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {
@@ -3764,6 +3791,20 @@ fn focus_elapsed_accumulates_session_and_today_minutes() {
 }
 
 #[test]
+fn on_tick_without_phase_change_does_not_sync_workflow_state() {
+    let mut app = App::default();
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.timer.remaining_secs = app.timer.focus_secs;
+    app.break_glass_expires_at = Some(Instant::now() + Duration::from_secs(120));
+    session_recovery::clear_workflow_state().unwrap();
+
+    app.on_tick(false);
+
+    assert!(session_recovery::test_saved_workflow_snapshot().is_none());
+}
+
+#[test]
 fn completed_focus_session_tracks_active_profile_for_history_totals() {
     let config = AppConfig {
         selected_profile: ProfileId::DeepWork,
@@ -4231,6 +4272,239 @@ fn cli_next_records_session_interruption_reason() {
     );
     assert_eq!(interruptions[0].task_label.as_deref(), Some("Docs"));
     assert_eq!(interruptions[0].remaining_secs, 800);
+}
+
+#[test]
+fn cli_schedule_delay_requires_active_schedule_window() {
+    let mut app = App::default();
+
+    let error = app.schedule_delay_for_cli().unwrap_err();
+
+    assert_eq!(error, "No active schedule window to delay.");
+}
+
+#[test]
+fn cli_schedule_delay_sets_delay_for_active_window() {
+    let now = Local::now();
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "00:00".to_string(),
+                end: "23:59".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    let delayed_until = app.schedule_delay_for_cli().unwrap();
+
+    assert!(!delayed_until.is_empty());
+    assert!(app.schedule_delayed_occurrence_key.is_some());
+    assert!(
+        app.schedule_delay_until
+            .is_some_and(|delay_until| delay_until > now)
+    );
+}
+
+#[test]
+fn cli_schedule_delay_persists_workflow_state() {
+    let now = Local::now();
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "00:00".to_string(),
+                end: "23:59".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.schedule_delay_for_cli().unwrap();
+
+    let snapshot = session_recovery::test_saved_workflow_snapshot()
+        .expect("workflow snapshot should be saved");
+    assert!(snapshot.schedule_delayed_occurrence_key.is_some());
+    assert!(
+        snapshot
+            .schedule_delay_until_epoch_secs
+            .is_some_and(|epoch| epoch > now.timestamp())
+    );
+    assert!(!snapshot.break_glass_confirmation_pending);
+}
+
+#[test]
+fn cli_break_glass_trigger_requires_active_focus() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Idle;
+
+    let error = app.trigger_break_glass_for_cli().unwrap_err();
+
+    assert_eq!(
+        error,
+        "Break-glass override is available only during active focus."
+    );
+    assert!(!app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn cli_break_glass_trigger_persists_pending_confirmation() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+
+    app.trigger_break_glass_for_cli().unwrap();
+
+    let snapshot = session_recovery::test_saved_workflow_snapshot()
+        .expect("workflow snapshot should be saved");
+    assert!(snapshot.break_glass_confirmation_pending);
+}
+
+#[test]
+fn cli_break_glass_trigger_arms_confirmation_when_valid() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+
+    app.trigger_break_glass_for_cli().unwrap();
+
+    assert!(app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn cli_break_glass_cancel_clears_persisted_workflow_state() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.trigger_break_glass_for_cli().unwrap();
+    assert!(
+        session_recovery::test_saved_workflow_snapshot()
+            .is_some_and(|snapshot| snapshot.break_glass_confirmation_pending)
+    );
+
+    app.cancel_break_glass_for_cli().unwrap();
+
+    assert!(session_recovery::test_saved_workflow_snapshot().is_none());
+}
+
+#[test]
+fn cli_break_glass_cancel_requires_pending_confirmation() {
+    let mut app = App::default();
+
+    let error = app.cancel_break_glass_for_cli().unwrap_err();
+
+    assert_eq!(
+        error,
+        "Cannot cancel break-glass: no confirmation is pending."
+    );
+}
+
+#[test]
+fn app_restores_cli_workflow_state_from_snapshot() {
+    let now = Local::now();
+    session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
+        TimerPhase::Focus,
+        TimerStatus::Running,
+        300,
+        Some("Docs"),
+        ProfileId::Classic,
+    )));
+    session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
+        schedule_delayed_occurrence_key: Some("recurring:0:2026-05-10".to_string()),
+        schedule_delay_until_epoch_secs: Some((now + ChronoDuration::minutes(5)).timestamp()),
+        break_glass_expires_at_epoch_secs: None,
+        break_glass_confirmation_pending: true,
+    }));
+
+    let app = App::default();
+
+    assert_eq!(
+        app.schedule_delayed_occurrence_key.as_deref(),
+        Some("recurring:0:2026-05-10")
+    );
+    assert!(
+        app.schedule_delay_until
+            .is_some_and(|delay_until| delay_until > now)
+    );
+    assert!(app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn cli_break_glass_cancel_clears_pending_confirmation() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.trigger_break_glass_for_cli().unwrap();
+    assert!(app.break_glass_confirmation_pending());
+
+    app.cancel_break_glass_for_cli().unwrap();
+
+    assert!(!app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn cli_break_glass_trigger_reports_active_override() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.break_glass_expires_at = Some(Instant::now() + Duration::from_secs(90));
+
+    let error = app.trigger_break_glass_for_cli().unwrap_err();
+
+    assert!(error.contains("Break-glass override already active"));
+    assert!(!app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn cli_break_glass_trigger_pending_confirm_rechecks_focus_state() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.trigger_break_glass_for_cli().unwrap();
+    assert!(app.break_glass_confirmation_pending());
+    app.timer.status = TimerStatus::Idle;
+
+    let error = app.trigger_break_glass_for_cli().unwrap_err();
+
+    assert_eq!(
+        error,
+        "Break-glass override is available only during active focus."
+    );
+    assert!(!app.break_glass_confirmation_pending());
 }
 
 #[test]
