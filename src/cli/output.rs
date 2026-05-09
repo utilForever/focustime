@@ -2,13 +2,14 @@ use std::collections::HashSet;
 
 use crate::cli::{
     BackupOutput, BlockingPreviewAction, BlockingPreviewCommandOutput,
-    BlocklistProfileCommandOutput, BlocklistProfileConfig, DiagnosticsCommandOutput, ExportOutput,
-    FeatureFlagsOutput, FocusScoreOutput, GoalCarryCommandOutput, GoalCommandOutput, GoalOutput,
-    ProfileOutput, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
-    ScheduleInspectionOutput, Serialize, SessionMetadataCommandOutput, SetupCheck, SetupCheckLevel,
-    SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
-    SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput,
-    StatusOutput, StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
+    BlocklistProfileCommandOutput, BlocklistProfileConfig, BreakGlassCommandOutput,
+    DiagnosticsCommandOutput, ExportOutput, FeatureFlagsOutput, FocusScoreOutput,
+    GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, ProfileOutput, RecurringScheduleConfig,
+    RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput,
+    Serialize, SessionMetadataCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput,
+    SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput,
+    SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput,
+    StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
     TimerStateOutput, Write, format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 
@@ -454,6 +455,34 @@ pub(super) fn print_timer_state_output(timer: &TimerStateOutput) {
         "Profile: {} ({})",
         timer.selected_profile.label, timer.selected_profile.id
     );
+}
+
+pub(super) fn print_schedule_delay_command_output(payload: &ScheduleDelayCommandOutput) {
+    println!(
+        "Schedule delay applied: next scheduled start deferred until {}.",
+        payload.delayed_until
+    );
+    print_timer_state_output(&payload.timer);
+}
+
+pub(super) fn print_break_glass_command_output(payload: &BreakGlassCommandOutput) {
+    if payload.pending_confirmation {
+        println!("Break-glass armed. Run `--break-glass-trigger` again to confirm.");
+    } else if payload.active {
+        if let Some(remaining_secs) = payload.remaining_secs {
+            println!(
+                "Break-glass active: blocking paused for {} more.",
+                format_duration(remaining_secs)
+            );
+        } else {
+            println!("Break-glass active: blocking is currently paused.");
+        }
+    } else if payload.action == "break-glass-cancel" {
+        println!("Break-glass confirmation canceled.");
+    } else {
+        println!("Break-glass state unchanged.");
+    }
+    print_timer_state_output(&payload.timer);
 }
 
 pub(super) fn print_export_output(payload: &ExportOutput) {
