@@ -10,7 +10,7 @@ This file provides context and instructions for AI coding agents working on the 
 - 🚫 **Site Blocking** – block distracting websites during focus sessions
 - 📊 **Wakatime Tracking** – integrates with Wakatime to log coding activity
 
-The project is in early-stage development.
+The project is actively developed with frequent incremental releases.
 
 ## Tech Stack
 
@@ -106,6 +106,15 @@ cargo audit
 - Split commits by behavior or another meaningful unit of change.
 - Release commits: `feat: vX.Y.Z — short summary`
 - Hotfix: `fix: description` (no version in message)
+
+## Release Documentation Checklist
+
+When preparing a release update, keep these files aligned:
+
+- `Cargo.toml` package version
+- `README.md` release automation and latest-release references
+- `CHANGELOG.md` release section and compare links
+- `ARCHITECTURE.md` when release-facing guidance changes
 
 ## CI Pipeline
 

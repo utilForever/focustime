@@ -2,8 +2,8 @@
 
 `focustime` is a single-binary Rust TUI application organized around stable
 top-level facades (`app.rs`, `cli.rs`, `stats.rs`, `ui.rs`) plus focused
-submodules introduced in **#240**. The refactor kept runtime behavior and public
-entry points stable while splitting large files by responsibility.
+domain submodules. This structure keeps runtime behavior and public entry points
+stable while splitting implementation details by responsibility.
 
 ## Visual overview
 
@@ -55,7 +55,7 @@ flowchart LR
 | `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including non-interactive backup/restore data-file workflows                                                                                    | `app`, `config`, `stats`, `blocker`                                            |
 | `stats.rs` + `stats/*`          | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers                                                                                                                                                            | `app`, `task_labels`, filesystem                                               |
 | `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                   | `app`, `timer`, `wakatime`                                                     |
-| `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including task-label-aware WakaTime metadata mapping rules                                                                                                                 | `app`, `cli`, filesystem/env                                                   |
+| `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including feature-flag compatibility defaults and task-label-aware WakaTime metadata mapping rules                                                                           | `app`, `cli`, filesystem/env                                                   |
 | `timer.rs`                      | Pomodoro timer domain model and phase transitions                                                                                                                                                                                                    | `app`, `ui`                                                                    |
 | `blocker.rs`                    | Hosts-file blocking/unblocking and diagnostics                                                                                                                                                                                                       | `app`, `cli`, OS/filesystem                                                    |
 | `schedule.rs`                   | Recurring/one-time schedule compile and conflict/occurrence logic                                                                                                                                                                                    | `app`, `cli`, `config`                                                         |
