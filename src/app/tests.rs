@@ -4269,6 +4269,35 @@ fn cli_schedule_delay_sets_delay_for_active_window() {
 }
 
 #[test]
+fn cli_schedule_delay_persists_workflow_state() {
+    let now = Local::now();
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "00:00".to_string(),
+                end: "23:59".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.schedule_delay_for_cli().unwrap();
+
+    let snapshot = session_recovery::test_saved_workflow_snapshot()
+        .expect("workflow snapshot should be saved");
+    assert!(snapshot.schedule_delayed_occurrence_key.is_some());
+    assert!(
+        snapshot
+            .schedule_delay_until_epoch_secs
+            .is_some_and(|epoch| epoch > now.timestamp())
+    );
+    assert!(!snapshot.break_glass_confirmation_pending);
+}
+
+#[test]
 fn cli_break_glass_trigger_requires_active_focus() {
     let config = AppConfig {
         blocked_sites: vec!["example.com".to_string()],
@@ -4288,6 +4317,23 @@ fn cli_break_glass_trigger_requires_active_focus() {
 }
 
 #[test]
+fn cli_break_glass_trigger_persists_pending_confirmation() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+
+    app.trigger_break_glass_for_cli().unwrap();
+
+    let snapshot = session_recovery::test_saved_workflow_snapshot()
+        .expect("workflow snapshot should be saved");
+    assert!(snapshot.break_glass_confirmation_pending);
+}
+
+#[test]
 fn cli_break_glass_trigger_arms_confirmation_when_valid() {
     let config = AppConfig {
         blocked_sites: vec!["example.com".to_string()],
@@ -4303,6 +4349,26 @@ fn cli_break_glass_trigger_arms_confirmation_when_valid() {
 }
 
 #[test]
+fn cli_break_glass_cancel_clears_persisted_workflow_state() {
+    let config = AppConfig {
+        blocked_sites: vec!["example.com".to_string()],
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.trigger_break_glass_for_cli().unwrap();
+    assert!(
+        session_recovery::test_saved_workflow_snapshot()
+            .is_some_and(|snapshot| snapshot.break_glass_confirmation_pending)
+    );
+
+    app.cancel_break_glass_for_cli().unwrap();
+
+    assert!(session_recovery::test_saved_workflow_snapshot().is_none());
+}
+
+#[test]
 fn cli_break_glass_cancel_requires_pending_confirmation() {
     let mut app = App::default();
 
@@ -4312,6 +4378,36 @@ fn cli_break_glass_cancel_requires_pending_confirmation() {
         error,
         "Cannot cancel break-glass: no confirmation is pending."
     );
+}
+
+#[test]
+fn app_restores_cli_workflow_state_from_snapshot() {
+    let now = Local::now();
+    session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
+        TimerPhase::Focus,
+        TimerStatus::Running,
+        300,
+        Some("Docs"),
+        ProfileId::Classic,
+    )));
+    session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
+        schedule_delayed_occurrence_key: Some("recurring:0:2026-05-10".to_string()),
+        schedule_delay_until_epoch_secs: Some((now + ChronoDuration::minutes(5)).timestamp()),
+        break_glass_expires_at_epoch_secs: None,
+        break_glass_confirmation_pending: true,
+    }));
+
+    let app = App::default();
+
+    assert_eq!(
+        app.schedule_delayed_occurrence_key.as_deref(),
+        Some("recurring:0:2026-05-10")
+    );
+    assert!(
+        app.schedule_delay_until
+            .is_some_and(|delay_until| delay_until > now)
+    );
+    assert!(app.break_glass_confirmation_pending());
 }
 
 #[test]

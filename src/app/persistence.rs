@@ -1,9 +1,11 @@
 use crate::app::{
-    App, AppConfig, BlocklistProfileConfig, DEFAULT_BLOCKLIST_PROFILE_NAME, Local, TimerPhase,
-    TimerState, effective_blocked_sites_for_profile, format_duration_label, profile_index,
-    profile_spec_for, task_label_index,
+    App, AppConfig, BlocklistProfileConfig, DEFAULT_BLOCKLIST_PROFILE_NAME, Local,
+    PendingTimerAction, TimerPhase, TimerState, effective_blocked_sites_for_profile,
+    format_duration_label, profile_index, profile_spec_for, task_label_index,
 };
-use crate::session_recovery::{self, InProgressSessionSnapshot};
+use crate::session_recovery::{self, InProgressSessionSnapshot, WorkflowStateSnapshot};
+use chrono::{LocalResult, TimeZone};
+use std::time::Instant;
 
 impl App {
     pub(super) fn restore_in_progress_session(&mut self) {
@@ -40,6 +42,61 @@ impl App {
             snapshot.phase().label(),
             format_duration_label(snapshot.remaining_secs)
         ));
+    }
+
+    pub(super) fn restore_cli_workflow_state(&mut self) {
+        let loaded_snapshot = match session_recovery::load_workflow_state() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.config_error = Some(format!("workflow state load failed: {error}"));
+                if let Err(clear_error) = session_recovery::clear_workflow_state() {
+                    self.config_error = Some(format!(
+                        "workflow state cleanup failed after load error: {clear_error}"
+                    ));
+                }
+                return;
+            }
+        };
+
+        let Some(snapshot) = loaded_snapshot else {
+            return;
+        };
+
+        self.current_frame_now = Local::now();
+        self.schedule_delayed_occurrence_key = None;
+        self.schedule_delay_until = None;
+
+        if let (Some(delayed_key), Some(delay_until_epoch_secs)) = (
+            snapshot.schedule_delayed_occurrence_key,
+            snapshot.schedule_delay_until_epoch_secs,
+        ) && let Some(delay_until) = local_datetime_from_epoch_secs(delay_until_epoch_secs)
+            && delay_until > self.current_frame_now
+        {
+            self.schedule_delayed_occurrence_key = Some(delayed_key);
+            self.schedule_delay_until = Some(delay_until);
+        }
+
+        self.pending_timer_action = None;
+        self.break_glass_expires_at = None;
+        if self.focus_session_active_for_current_state() {
+            if let Some(expires_at_epoch_secs) = snapshot.break_glass_expires_at_epoch_secs
+                && let Some(expires_at) = local_datetime_from_epoch_secs(expires_at_epoch_secs)
+                && expires_at > self.current_frame_now
+            {
+                let remaining = expires_at
+                    .signed_duration_since(self.current_frame_now)
+                    .to_std()
+                    .ok();
+                self.break_glass_expires_at = remaining.map(|remaining| Instant::now() + remaining);
+            }
+            if snapshot.break_glass_confirmation_pending && self.break_glass_expires_at.is_none() {
+                self.pending_timer_action = Some(PendingTimerAction::BreakGlassOverride);
+            }
+        }
+
+        if let Err(error) = self.sync_cli_workflow_state() {
+            self.config_error = Some(error);
+        }
     }
 
     fn try_apply_recovery_snapshot(
@@ -181,6 +238,49 @@ impl App {
         }
     }
 
+    pub(super) fn sync_cli_workflow_state(&mut self) -> Result<(), String> {
+        let now = Local::now();
+        let schedule_state = match (
+            self.schedule_delayed_occurrence_key.clone(),
+            self.schedule_delay_until,
+        ) {
+            (Some(delayed_key), Some(delayed_until)) if delayed_until > now => {
+                Some((Some(delayed_key), Some(delayed_until.timestamp())))
+            }
+            _ => None,
+        };
+
+        let break_glass_expires_at_epoch_secs = self
+            .break_glass_expires_at
+            .and_then(|deadline| deadline.checked_duration_since(Instant::now()))
+            .and_then(|remaining| chrono::Duration::from_std(remaining).ok())
+            .map(|remaining| (now + remaining).timestamp());
+
+        let break_glass_confirmation_pending = self.break_glass_confirmation_pending()
+            && self.focus_session_active_for_current_state();
+        let snapshot = WorkflowStateSnapshot {
+            schedule_delayed_occurrence_key: schedule_state
+                .as_ref()
+                .and_then(|(delayed_key, _)| delayed_key.clone()),
+            schedule_delay_until_epoch_secs: schedule_state
+                .as_ref()
+                .and_then(|(_, delayed_until)| *delayed_until),
+            break_glass_expires_at_epoch_secs,
+            break_glass_confirmation_pending,
+        };
+
+        let should_persist = snapshot.schedule_delayed_occurrence_key.is_some()
+            || snapshot.break_glass_expires_at_epoch_secs.is_some()
+            || snapshot.break_glass_confirmation_pending;
+        if should_persist {
+            session_recovery::save_workflow_state(&snapshot)
+                .map_err(|error| format!("workflow state save failed: {error}"))
+        } else {
+            session_recovery::clear_workflow_state()
+                .map_err(|error| format!("workflow state clear failed: {error}"))
+        }
+    }
+
     /// Persist the current blocked-sites list and timer preferences to disk.
     /// Failures are best-effort; the error is surfaced through `config_error`.
     pub(super) fn persisted_config(&self) -> AppConfig {
@@ -294,5 +394,13 @@ impl App {
             self.stats_dirty = false;
             self.stats_has_unsaved_elapsed = false;
         }
+    }
+}
+
+fn local_datetime_from_epoch_secs(epoch_secs: i64) -> Option<chrono::DateTime<Local>> {
+    match Local.timestamp_opt(epoch_secs, 0) {
+        LocalResult::Single(value) => Some(value),
+        LocalResult::Ambiguous(earliest, _) => Some(earliest),
+        LocalResult::None => None,
     }
 }

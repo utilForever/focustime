@@ -17,6 +17,9 @@ impl App {
             self.handle_phase_change(completed_phase, completed_focus_secs, is_catchup);
         }
         self.sync_recovery_snapshot();
+        if let Err(error) = self.sync_cli_workflow_state() {
+            self.config_error = Some(error);
+        }
         self.flush_stats_if_dirty(false);
     }
 
@@ -152,6 +155,9 @@ impl App {
         }
         self.apply_blocking_for_phase();
         self.sync_recovery_snapshot();
+        if let Err(error) = self.sync_cli_workflow_state() {
+            self.config_error = Some(error);
+        }
     }
 
     pub(super) fn record_focus_elapsed(&mut self, elapsed_secs: u64) {

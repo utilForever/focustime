@@ -133,6 +133,9 @@ impl App {
     pub(super) fn sync_break_glass_override(&mut self) {
         if !self.focus_session_active_for_current_state() {
             self.break_glass_expires_at = None;
+            if let Err(error) = self.sync_cli_workflow_state() {
+                self.config_error = Some(error);
+            }
             return;
         }
         if self.break_glass_expires_at.is_none() || self.break_glass_override_active_now() {
@@ -143,5 +146,8 @@ impl App {
         self.phase_notification =
             Some("Break-glass override expired. Blocking resumed.".to_string());
         self.apply_blocking_for_phase();
+        if let Err(error) = self.sync_cli_workflow_state() {
+            self.config_error = Some(error);
+        }
     }
 }

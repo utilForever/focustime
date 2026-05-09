@@ -19,6 +19,8 @@ use crate::config::app_data_path;
 
 #[cfg(not(test))]
 const RECOVERY_FILE_NAME: &str = "session-recovery.toml";
+#[cfg(not(test))]
+const WORKFLOW_STATE_FILE_NAME: &str = "workflow-state.toml";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -85,6 +87,18 @@ pub struct InProgressSessionSnapshot {
     #[serde(default)]
     pub task_note: Option<String>,
     pub selected_profile: ProfileId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct WorkflowStateSnapshot {
+    #[serde(default)]
+    pub schedule_delayed_occurrence_key: Option<String>,
+    #[serde(default)]
+    pub schedule_delay_until_epoch_secs: Option<i64>,
+    #[serde(default)]
+    pub break_glass_expires_at_epoch_secs: Option<i64>,
+    #[serde(default)]
+    pub break_glass_confirmation_pending: bool,
 }
 
 impl InProgressSessionSnapshot {
@@ -273,10 +287,42 @@ pub fn clear() -> io::Result<()> {
     }
 }
 
+#[cfg(not(test))]
+pub fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
+    let path = workflow_state_path().map_err(|e| format!("workflow state path failed: {e}"))?;
+    match fs::read_to_string(path) {
+        Ok(content) => toml::from_str(&content)
+            .map(Some)
+            .map_err(|e| format!("workflow state parse failed: {e}")),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("workflow state read failed: {e}")),
+    }
+}
+
+#[cfg(not(test))]
+pub fn save_workflow_state(snapshot: &WorkflowStateSnapshot) -> io::Result<()> {
+    let path = workflow_state_path()?;
+    let content = toml::to_string_pretty(snapshot)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    write_atomic_text(&path, &content)
+}
+
+#[cfg(not(test))]
+pub fn clear_workflow_state() -> io::Result<()> {
+    let path = workflow_state_path()?;
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
 #[cfg(test)]
 thread_local! {
     static TEST_LOAD_OVERRIDE: RefCell<Option<Result<Option<InProgressSessionSnapshot>, String>>> = const { RefCell::new(None) };
     static TEST_SAVED_SNAPSHOT: RefCell<Option<InProgressSessionSnapshot>> = const { RefCell::new(None) };
+    static TEST_WORKFLOW_LOAD_OVERRIDE: RefCell<Option<Result<Option<WorkflowStateSnapshot>, String>>> = const { RefCell::new(None) };
+    static TEST_SAVED_WORKFLOW_SNAPSHOT: RefCell<Option<WorkflowStateSnapshot>> = const { RefCell::new(None) };
 }
 
 #[cfg(test)]
@@ -301,6 +347,27 @@ pub fn clear() -> io::Result<()> {
 }
 
 #[cfg(test)]
+pub fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
+    TEST_WORKFLOW_LOAD_OVERRIDE.with(|slot| slot.borrow_mut().take().unwrap_or(Ok(None)))
+}
+
+#[cfg(test)]
+pub fn save_workflow_state(snapshot: &WorkflowStateSnapshot) -> io::Result<()> {
+    TEST_SAVED_WORKFLOW_SNAPSHOT.with(|slot| {
+        *slot.borrow_mut() = Some(snapshot.clone());
+    });
+    Ok(())
+}
+
+#[cfg(test)]
+pub fn clear_workflow_state() -> io::Result<()> {
+    TEST_SAVED_WORKFLOW_SNAPSHOT.with(|slot| {
+        *slot.borrow_mut() = None;
+    });
+    Ok(())
+}
+
+#[cfg(test)]
 pub(crate) fn set_test_load_snapshot(snapshot: Option<InProgressSessionSnapshot>) {
     TEST_LOAD_OVERRIDE.with(|slot| {
         *slot.borrow_mut() = Some(Ok(snapshot));
@@ -319,12 +386,34 @@ pub(crate) fn test_saved_snapshot() -> Option<InProgressSessionSnapshot> {
     TEST_SAVED_SNAPSHOT.with(|slot| slot.borrow().clone())
 }
 
+#[cfg(test)]
+pub(crate) fn set_test_load_workflow_state(snapshot: Option<WorkflowStateSnapshot>) {
+    TEST_WORKFLOW_LOAD_OVERRIDE.with(|slot| {
+        *slot.borrow_mut() = Some(Ok(snapshot));
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn test_saved_workflow_snapshot() -> Option<WorkflowStateSnapshot> {
+    TEST_SAVED_WORKFLOW_SNAPSHOT.with(|slot| slot.borrow().clone())
+}
+
 #[cfg(not(test))]
 fn recovery_path() -> io::Result<std::path::PathBuf> {
     app_data_path(RECOVERY_FILE_NAME).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,
             "cannot determine session recovery directory",
+        )
+    })
+}
+
+#[cfg(not(test))]
+fn workflow_state_path() -> io::Result<std::path::PathBuf> {
+    app_data_path(WORKFLOW_STATE_FILE_NAME).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "cannot determine workflow state directory",
         )
     })
 }

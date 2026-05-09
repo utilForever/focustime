@@ -157,6 +157,9 @@ impl App {
     pub(super) fn clear_schedule_delay_state(&mut self) {
         self.schedule_delayed_occurrence_key = None;
         self.schedule_delay_until = None;
+        if let Err(error) = self.sync_cli_workflow_state() {
+            self.config_error = Some(error);
+        }
     }
 
     fn sync_schedule_delay_state_for_occurrence(
