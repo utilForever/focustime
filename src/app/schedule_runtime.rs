@@ -127,7 +127,8 @@ impl App {
             }
             _ => now,
         };
-        let delayed_until = delayed_from + chrono::Duration::seconds(SCHEDULE_DELAY_SECS as i64);
+        let requested_until = delayed_from + chrono::Duration::seconds(SCHEDULE_DELAY_SECS as i64);
+        let delayed_until = requested_until.min(active_window.end);
 
         self.schedule_armed_occurrence_key = None;
         self.schedule_delayed_occurrence_key = Some(active_occurrence_key);

@@ -3071,6 +3071,33 @@ fn schedule_delay_key_sets_delay_for_active_window() {
 }
 
 #[test]
+fn schedule_delay_clamps_until_active_window_end() {
+    let now = local_datetime_today(10, 15);
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "10:00".to_string(),
+                end: "10:20".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.sync_recurring_schedule(now);
+    app.current_frame_now = now;
+
+    app.handle_key(key(KeyCode::Char('z')));
+
+    let delayed_until = app
+        .schedule_delay_until
+        .expect("schedule delay should be set for active window");
+    let window_end = local_datetime_today(10, 20);
+    assert_eq!(delayed_until, window_end);
+}
+
+#[test]
 fn schedule_delay_suppresses_trigger_until_delay_expires() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {
