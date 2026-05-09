@@ -159,7 +159,14 @@ cargo run -- --allowlist-site-delete reddit.com
 # Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"16:00"}]}'
+cargo run -- --schedule-delay
 cargo run -- --schedule --json
+
+# Break-glass workflow controls from CLI (first call arms, second confirms)
+cargo run -- --break-glass-trigger
+cargo run -- --break-glass-trigger --json
+# Cancel a pending break-glass confirmation
+cargo run -- --break-glass-cancel
 
 # Show setup diagnostics checks (including hosts and WakaTime readiness)
 cargo run -- --diagnostics
@@ -340,8 +347,9 @@ quick session note.
 Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
-CLI parity is available via `--focus-intention` and `--task-note` for non-interactive
-inspection and in-session updates (updates require an active or paused focus session).
+CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`,
+`--break-glass-trigger`, and `--break-glass-cancel` for non-interactive inspection and
+in-session workflow control.
 
 ### Example config
 
@@ -591,6 +599,9 @@ During an active focus session, you can temporarily pause site blocking with an 
 
 - press `u` to arm break-glass
 - press `u` again to confirm and temporarily unblock
+
+The same workflow is available in CLI mode using `--break-glass-trigger` (arm/confirm) and
+`--break-glass-cancel` (cancel pending confirmation).
 
 While active, timer status shows a live countdown. When the countdown expires, blocking resumes automatically if focus is still active.
 
