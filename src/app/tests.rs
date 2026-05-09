@@ -3791,6 +3791,20 @@ fn focus_elapsed_accumulates_session_and_today_minutes() {
 }
 
 #[test]
+fn on_tick_without_phase_change_does_not_sync_workflow_state() {
+    let mut app = App::default();
+    app.timer.phase = TimerPhase::Focus;
+    app.timer.status = TimerStatus::Running;
+    app.timer.remaining_secs = app.timer.focus_secs;
+    app.break_glass_expires_at = Some(Instant::now() + Duration::from_secs(120));
+    session_recovery::clear_workflow_state().unwrap();
+
+    app.on_tick(false);
+
+    assert!(session_recovery::test_saved_workflow_snapshot().is_none());
+}
+
+#[test]
 fn completed_focus_session_tracks_active_profile_for_history_totals() {
     let config = AppConfig {
         selected_profile: ProfileId::DeepWork,

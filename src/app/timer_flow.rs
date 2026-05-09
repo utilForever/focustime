@@ -15,11 +15,11 @@ impl App {
         let phase_changed = self.timer.tick();
         if phase_changed {
             self.handle_phase_change(completed_phase, completed_focus_secs, is_catchup);
+            if let Err(error) = self.sync_cli_workflow_state() {
+                self.config_error = Some(error);
+            }
         }
         self.sync_recovery_snapshot();
-        if let Err(error) = self.sync_cli_workflow_state() {
-            self.config_error = Some(error);
-        }
         self.flush_stats_if_dirty(false);
     }
 
