@@ -348,7 +348,15 @@ pub fn clear() -> io::Result<()> {
 
 #[cfg(test)]
 pub fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
-    TEST_WORKFLOW_LOAD_OVERRIDE.with(|slot| slot.borrow_mut().take().unwrap_or(Ok(None)))
+    let override_value = TEST_WORKFLOW_LOAD_OVERRIDE.with(|slot| slot.borrow_mut().take());
+    if let Some(result) = override_value {
+        return result;
+    }
+
+    TEST_SAVED_WORKFLOW_SNAPSHOT.with(|slot| {
+        *slot.borrow_mut() = None;
+    });
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -609,5 +617,20 @@ mod tests {
                 .validate_for_timer_with_fallback(&timer, false)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn load_workflow_state_without_override_clears_saved_snapshot() {
+        save_workflow_state(&WorkflowStateSnapshot {
+            schedule_delayed_occurrence_key: Some("recurring:0:2026-05-10".to_string()),
+            schedule_delay_until_epoch_secs: Some(1_700_000_000),
+            break_glass_expires_at_epoch_secs: None,
+            break_glass_confirmation_pending: true,
+        })
+        .expect("save should succeed");
+
+        let loaded = load_workflow_state().expect("load should succeed");
+        assert!(loaded.is_none());
+        assert!(test_saved_workflow_snapshot().is_none());
     }
 }
