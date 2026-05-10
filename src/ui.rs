@@ -40,8 +40,7 @@ use timer::{format_duration_label, format_wakatime_heartbeat_timestamp, render_t
 #[cfg(test)]
 use timer::{
     note_phase_notice_text, timer_primary_hint, timer_secondary_hint, timer_status_text,
-    timer_tertiary_hint,
-    wakatime_status_line,
+    timer_tertiary_hint, wakatime_status_line,
 };
 
 const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
