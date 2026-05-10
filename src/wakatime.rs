@@ -10,15 +10,15 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::{Deserialize, Serialize};
 
 const HEARTBEAT_INTERVAL_SECS: u64 = 120;
-const HEARTBEAT_RETRY_BACKOFF_SECS: [u64; 2] = [1, 2];
-const HEARTBEAT_MAX_ATTEMPTS: u8 = 3;
-const HEARTBEAT_QUEUE_CAPACITY: usize = 256;
+const DEFAULT_HEARTBEAT_RETRY_BACKOFF_SECS: [u64; 2] = [1, 2];
+const DEFAULT_HEARTBEAT_QUEUE_CAPACITY: usize = 256;
+const DEFAULT_HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 10;
+const MAX_HEARTBEAT_RETRY_BACKOFF_ENTRIES: usize = 8;
+const MAX_HEARTBEAT_RETRY_BACKOFF_SECS: u64 = 300;
+const MAX_HEARTBEAT_QUEUE_CAPACITY: usize = 4096;
+const MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 3600;
 const HEARTBEAT_QUEUE_SNAPSHOT_FILE_NAME: &str = "wakatime-queue.toml";
 const HEARTBEAT_QUEUE_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
-#[cfg(not(test))]
-const HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 10;
-#[cfg(test)]
-const HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 0;
 const DEFAULT_API_URL: &str = "https://wakatime.com";
 const DEFAULT_HEARTBEAT_ENTITY: &str = "focustime";
 const DEFAULT_HEARTBEAT_PROJECT: &str = "focustime";
@@ -101,6 +101,56 @@ impl Default for WakatimeHeartbeatMetadata {
         Self {
             project: DEFAULT_HEARTBEAT_PROJECT.to_string(),
             language: DEFAULT_HEARTBEAT_LANGUAGE.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WakatimeRuntimeOptions {
+    pub retry_backoff_secs: Vec<u64>,
+    pub queue_capacity: usize,
+    pub queue_retry_delay_secs: u64,
+}
+
+impl WakatimeRuntimeOptions {
+    pub fn normalized(&self) -> Self {
+        let retry_backoff_secs = self
+            .retry_backoff_secs
+            .iter()
+            .take(MAX_HEARTBEAT_RETRY_BACKOFF_ENTRIES)
+            .filter_map(|secs| {
+                if *secs == 0 {
+                    None
+                } else {
+                    Some((*secs).clamp(1, MAX_HEARTBEAT_RETRY_BACKOFF_SECS))
+                }
+            })
+            .collect::<Vec<_>>();
+        Self {
+            retry_backoff_secs: if retry_backoff_secs.is_empty() {
+                DEFAULT_HEARTBEAT_RETRY_BACKOFF_SECS.to_vec()
+            } else {
+                retry_backoff_secs
+            },
+            queue_capacity: self.queue_capacity.clamp(1, MAX_HEARTBEAT_QUEUE_CAPACITY),
+            queue_retry_delay_secs: self
+                .queue_retry_delay_secs
+                .clamp(0, MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS),
+        }
+    }
+
+    fn max_attempts(&self) -> u8 {
+        let attempts = self.retry_backoff_secs.len().saturating_add(1);
+        attempts.min(u8::MAX as usize) as u8
+    }
+}
+
+impl Default for WakatimeRuntimeOptions {
+    fn default() -> Self {
+        Self {
+            retry_backoff_secs: DEFAULT_HEARTBEAT_RETRY_BACKOFF_SECS.to_vec(),
+            queue_capacity: DEFAULT_HEARTBEAT_QUEUE_CAPACITY,
+            queue_retry_delay_secs: DEFAULT_HEARTBEAT_QUEUE_RETRY_DELAY_SECS,
         }
     }
 }
@@ -258,6 +308,7 @@ pub struct WakatimeTracker {
     /// Latches an immediate heartbeat request while another worker is in flight.
     pending_immediate_heartbeat: bool,
     heartbeat_metadata: WakatimeHeartbeatMetadata,
+    runtime: WakatimeRuntimeOptions,
     /// Startup-only warning (for example, invalid persisted queue state).
     startup_warning: Option<String>,
     /// Last queue snapshot persistence failure message.
@@ -268,10 +319,16 @@ pub struct WakatimeTracker {
 
 impl WakatimeTracker {
     pub fn new() -> Self {
-        Self::new_with_metadata(WakatimeHeartbeatMetadata::default())
+        Self::new_with_settings(
+            WakatimeHeartbeatMetadata::default(),
+            WakatimeRuntimeOptions::default(),
+        )
     }
 
-    pub fn new_with_metadata(metadata: WakatimeHeartbeatMetadata) -> Self {
+    pub fn new_with_settings(
+        metadata: WakatimeHeartbeatMetadata,
+        runtime: WakatimeRuntimeOptions,
+    ) -> Self {
         let config = WakatimeConfig::load();
         let (result_tx, result_rx) = mpsc::channel();
         let mut tracker = Self {
@@ -292,6 +349,7 @@ impl WakatimeTracker {
             queue_snapshot_path: heartbeat_queue_snapshot_path(),
             pending_immediate_heartbeat: false,
             heartbeat_metadata: metadata.normalized(),
+            runtime: runtime.normalized(),
             startup_warning: None,
             queue_persistence_error: None,
             #[cfg(test)]
@@ -370,18 +428,27 @@ impl WakatimeTracker {
         };
         match read_heartbeat_queue_snapshot(path) {
             Ok(Some(snapshot)) => {
+                let queue_capacity = self.runtime.queue_capacity;
                 self.queued_heartbeats = snapshot.queued_heartbeats.into_iter().fold(
                     VecDeque::new(),
                     |mut queue, heartbeat| {
-                        push_back_with_capacity(&mut queue, heartbeat);
+                        push_back_with_capacity(&mut queue, heartbeat, queue_capacity);
                         queue
                     },
                 );
                 if let Some(in_flight) = snapshot.in_flight_heartbeat {
                     if snapshot.in_flight_from_queue {
-                        push_front_with_capacity(&mut self.queued_heartbeats, in_flight);
+                        push_front_with_capacity(
+                            &mut self.queued_heartbeats,
+                            in_flight,
+                            queue_capacity,
+                        );
                     } else {
-                        push_back_with_capacity(&mut self.queued_heartbeats, in_flight);
+                        push_back_with_capacity(
+                            &mut self.queued_heartbeats,
+                            in_flight,
+                            queue_capacity,
+                        );
                     }
                 }
                 self.heartbeat_in_flight = false;
@@ -479,7 +546,7 @@ impl WakatimeTracker {
                         self.requeue_in_flight_heartbeat();
                         self.queue_retry_not_before_epoch_secs = Some(
                             current_unix_epoch_secs()
-                                .saturating_add(HEARTBEAT_QUEUE_RETRY_DELAY_SECS),
+                                .saturating_add(self.runtime.queue_retry_delay_secs),
                         );
                     } else {
                         self.in_flight_heartbeat = None;
@@ -574,7 +641,11 @@ impl WakatimeTracker {
     }
 
     fn enqueue_heartbeat(&mut self, heartbeat: Heartbeat) {
-        push_back_with_capacity(&mut self.queued_heartbeats, heartbeat);
+        push_back_with_capacity(
+            &mut self.queued_heartbeats,
+            heartbeat,
+            self.runtime.queue_capacity,
+        );
         self.sync_queue_snapshot();
     }
 
@@ -582,7 +653,11 @@ impl WakatimeTracker {
         let Some(in_flight_heartbeat) = self.in_flight_heartbeat.take() else {
             return;
         };
-        push_front_with_capacity(&mut self.queued_heartbeats, in_flight_heartbeat);
+        push_front_with_capacity(
+            &mut self.queued_heartbeats,
+            in_flight_heartbeat,
+            self.runtime.queue_capacity,
+        );
     }
 
     fn queue_retry_is_due(&self) -> bool {
@@ -644,9 +719,12 @@ impl WakatimeTracker {
         );
         let hostname = get_hostname();
         let result_tx = self.result_tx.clone();
+        let runtime = self.runtime.clone();
 
         std::thread::spawn(move || {
-            send_heartbeat_with_retries(result_tx, url, auth, user_agent, hostname, heartbeat);
+            send_heartbeat_with_retries(
+                result_tx, url, auth, user_agent, hostname, heartbeat, runtime,
+            );
         });
     }
 
@@ -678,6 +756,10 @@ impl WakatimeTracker {
             queue_snapshot_path: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
+            runtime: WakatimeRuntimeOptions {
+                queue_retry_delay_secs: 0,
+                ..WakatimeRuntimeOptions::default()
+            },
             startup_warning: None,
             queue_persistence_error: None,
             disable_network_io: true,
@@ -705,6 +787,10 @@ impl WakatimeTracker {
             queue_snapshot_path: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
+            runtime: WakatimeRuntimeOptions {
+                queue_retry_delay_secs: 0,
+                ..WakatimeRuntimeOptions::default()
+            },
             startup_warning: None,
             queue_persistence_error: None,
             disable_network_io: true,
@@ -727,6 +813,11 @@ impl WakatimeTracker {
     #[cfg(test)]
     pub(crate) fn heartbeat_metadata_for_tests(&self) -> WakatimeHeartbeatMetadata {
         self.heartbeat_metadata.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn runtime_options_for_tests(&self) -> WakatimeRuntimeOptions {
+        self.runtime.clone()
     }
 
     #[cfg(test)]
@@ -771,6 +862,7 @@ fn send_heartbeat_with_retries(
     user_agent: String,
     hostname: String,
     heartbeat: Heartbeat,
+    runtime: WakatimeRuntimeOptions,
 ) {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(10)))
@@ -797,11 +889,11 @@ fn send_heartbeat_with_retries(
                 let retryable = is_retryable_error(&error);
                 let backoff_index = attempt.saturating_sub(1) as usize;
                 if retryable
-                    && let Some(backoff_secs) = HEARTBEAT_RETRY_BACKOFF_SECS.get(backoff_index)
+                    && let Some(backoff_secs) = runtime.retry_backoff_secs.get(backoff_index)
                 {
                     let _ = result_tx.send(HeartbeatEvent::Retrying {
                         attempt,
-                        max_attempts: HEARTBEAT_MAX_ATTEMPTS,
+                        max_attempts: runtime.max_attempts(),
                         next_backoff_secs: *backoff_secs,
                         error: error_message.clone(),
                     });
@@ -951,15 +1043,19 @@ fn sync_parent_dir_to_disk(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn push_back_with_capacity(queue: &mut VecDeque<Heartbeat>, heartbeat: Heartbeat) {
-    if queue.len() >= HEARTBEAT_QUEUE_CAPACITY {
+fn push_back_with_capacity(queue: &mut VecDeque<Heartbeat>, heartbeat: Heartbeat, capacity: usize) {
+    if queue.len() >= capacity {
         let _ = queue.pop_front();
     }
     queue.push_back(heartbeat);
 }
 
-fn push_front_with_capacity(queue: &mut VecDeque<Heartbeat>, heartbeat: Heartbeat) {
-    if queue.len() >= HEARTBEAT_QUEUE_CAPACITY {
+fn push_front_with_capacity(
+    queue: &mut VecDeque<Heartbeat>,
+    heartbeat: Heartbeat,
+    capacity: usize,
+) {
+    if queue.len() >= capacity {
         let _ = queue.pop_front();
     }
     queue.push_front(heartbeat);
@@ -1085,6 +1181,10 @@ mod tests {
             queue_snapshot_path: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
+            runtime: WakatimeRuntimeOptions {
+                queue_retry_delay_secs: 0,
+                ..WakatimeRuntimeOptions::default()
+            },
             startup_warning: None,
             queue_persistence_error: None,
             disable_network_io: true,
@@ -1260,7 +1360,7 @@ mod tests {
         tracker.heartbeat_in_flight = true;
         tracker.retry_state = Some(RetryState {
             attempt: 1,
-            max_attempts: HEARTBEAT_MAX_ATTEMPTS,
+            max_attempts: tracker.runtime.max_attempts(),
             next_backoff_secs: 1,
             error: "HTTP 503".to_string(),
         });
@@ -1349,13 +1449,14 @@ mod tests {
     #[test]
     fn queue_capacity_drops_oldest_entries_when_full() {
         let mut tracker = tracker_with(Some("test-key"), true, 0);
-        for index in 0..(HEARTBEAT_QUEUE_CAPACITY + 5) {
+        let queue_capacity = tracker.runtime.queue_capacity;
+        for index in 0..(queue_capacity + 5) {
             tracker.enqueue_heartbeat(build_heartbeat_payload(
                 index as f64,
                 &tracker.heartbeat_metadata,
             ));
         }
-        assert_eq!(tracker.queued_heartbeats.len(), HEARTBEAT_QUEUE_CAPACITY);
+        assert_eq!(tracker.queued_heartbeats.len(), queue_capacity);
         let oldest = tracker
             .queued_heartbeats
             .front()
@@ -1366,7 +1467,8 @@ mod tests {
     #[test]
     fn requeue_overflow_drops_oldest_queued_heartbeat() {
         let mut tracker = tracker_with(Some("test-key"), true, 0);
-        tracker.queued_heartbeats = (0..HEARTBEAT_QUEUE_CAPACITY)
+        let queue_capacity = tracker.runtime.queue_capacity;
+        tracker.queued_heartbeats = (0..queue_capacity)
             .map(|index| build_heartbeat_payload(index as f64, &tracker.heartbeat_metadata))
             .collect();
         tracker.in_flight_heartbeat =
@@ -1374,7 +1476,7 @@ mod tests {
 
         tracker.requeue_in_flight_heartbeat();
 
-        assert_eq!(tracker.queued_heartbeats.len(), HEARTBEAT_QUEUE_CAPACITY);
+        assert_eq!(tracker.queued_heartbeats.len(), queue_capacity);
         assert_eq!(
             tracker
                 .queued_heartbeats
@@ -1397,7 +1499,7 @@ mod tests {
                 .back()
                 .expect("latest queued heartbeat should remain")
                 .time,
-            (HEARTBEAT_QUEUE_CAPACITY - 1) as f64
+            (queue_capacity - 1) as f64
         );
     }
 
@@ -1415,7 +1517,7 @@ mod tests {
             .result_tx
             .send(HeartbeatEvent::Retrying {
                 attempt: 1,
-                max_attempts: HEARTBEAT_MAX_ATTEMPTS,
+                max_attempts: tracker.runtime.max_attempts(),
                 next_backoff_secs: 1,
                 error: "HTTP 503".to_string(),
             })
@@ -1427,7 +1529,7 @@ mod tests {
             tracker.runtime_state(),
             WakatimeRuntimeState::Retrying {
                 attempt: 1,
-                max_attempts: HEARTBEAT_MAX_ATTEMPTS,
+                max_attempts: tracker.runtime.max_attempts(),
                 next_backoff_secs: 1,
                 error: "HTTP 503".to_string(),
             }
@@ -1586,9 +1688,10 @@ mod tests {
     #[test]
     fn queue_snapshot_restore_is_bounded_by_queue_capacity() {
         let snapshot_path = unique_temp_queue_snapshot_path("restore-capacity");
+        let queue_capacity = WakatimeRuntimeOptions::default().queue_capacity;
         let oversized = HeartbeatQueueSnapshot {
             schema_version: HEARTBEAT_QUEUE_SNAPSHOT_SCHEMA_VERSION,
-            queued_heartbeats: (0..(HEARTBEAT_QUEUE_CAPACITY + 5))
+            queued_heartbeats: (0..(queue_capacity + 5))
                 .map(|index| {
                     build_heartbeat_payload(index as f64, &WakatimeHeartbeatMetadata::default())
                 })
@@ -1604,7 +1707,7 @@ mod tests {
         restored.queue_snapshot_path = Some(snapshot_path.clone());
         restored.restore_persisted_queue_state();
 
-        assert_eq!(restored.queued_heartbeats.len(), HEARTBEAT_QUEUE_CAPACITY);
+        assert_eq!(restored.queued_heartbeats.len(), queue_capacity);
         assert_eq!(
             restored
                 .queued_heartbeats
