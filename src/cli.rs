@@ -69,7 +69,7 @@ use status::{
 
 const USAGE_TEXT: &str = r#"Usage:
   focustime
-  focustime --start
+  focustime --start [--json]
   focustime --pause [--json]
   focustime --resume [--json]
   focustime --stop [--json]
@@ -122,7 +122,7 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --export[=DIR] [--json]
 
 Options:
-  --start         Launch TUI with focus timer already started
+  --start         Start a focus timer without launching TUI
   --pause         Pause a running timer
   --resume        Resume a paused timer
   --stop          Stop/reset the current phase
@@ -215,6 +215,7 @@ struct CliErrorPayload {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandKind {
+    Start,
     Pause,
     Resume,
     Stop,
@@ -296,7 +297,7 @@ pub struct CliCommand {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliAction {
-    RunTui { start_immediately: bool },
+    RunTui,
     RunCommand(CliCommand),
     ShowHelp,
 }

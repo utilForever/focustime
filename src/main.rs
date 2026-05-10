@@ -29,8 +29,7 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use app::App;
 use app::should_handle_key;
 use cli::{
-    CliAction, OutputMode, emit_cli_error, execute_command, parse_args_with_contract,
-    runtime_error, usage_text,
+    CliAction, emit_cli_error, execute_command, parse_args_with_contract, runtime_error, usage_text,
 };
 
 /// RAII guard that restores the terminal on drop, ensuring cleanup on any exit path.
@@ -95,7 +94,6 @@ fn main() -> io::Result<()> {
         }
     };
 
-    let mut app = App::new();
     match cli_action {
         CliAction::ShowHelp => {
             println!("{}", usage_text());
@@ -112,19 +110,11 @@ fn main() -> io::Result<()> {
             }
             return Ok(());
         }
-        CliAction::RunTui { start_immediately } => {
-            if start_immediately && let Err(error) = app.start_focus_for_cli() {
-                let cli_error = runtime_error(OutputMode::Text, error);
-                if let Err(render_error) = emit_cli_error(&cli_error) {
-                    eprintln!("{render_error}");
-                }
-                process::exit(cli_error.exit_code());
-            }
-        }
+        CliAction::RunTui => {}
     }
 
     let mut guard = TerminalGuard::new()?;
-    run_app(&mut guard.terminal, app)
+    run_app(&mut guard.terminal, App::new())
 }
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) -> io::Result<()> {
