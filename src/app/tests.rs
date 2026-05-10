@@ -3945,6 +3945,27 @@ fn history_view_toggles_from_timer_mode() {
 }
 
 #[test]
+fn custom_cancel_shortcut_controls_history_back_navigation() {
+    let config = AppConfig {
+        shortcuts: ShortcutConfig {
+            cancel: "v".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.handle_key(key(KeyCode::Char('h')));
+    assert_eq!(app.mode, AppMode::StatsHistory);
+
+    app.handle_key(key(KeyCode::Esc));
+    assert_eq!(app.mode, AppMode::StatsHistory);
+
+    app.handle_key(key(KeyCode::Char('v')));
+    assert_eq!(app.mode, AppMode::Timer);
+}
+
+#[test]
 fn custom_history_shortcut_opens_history_view() {
     let config = AppConfig {
         shortcuts: ShortcutConfig {
@@ -4133,6 +4154,32 @@ fn mid_session_note_input_commits_and_syncs_recovery_snapshot() {
     let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
     assert_eq!(
         snapshot.task_note.as_deref(),
+        Some("Capture blockers for retro")
+    );
+}
+
+#[test]
+fn mid_session_note_input_uses_custom_confirm_shortcut() {
+    let config = AppConfig {
+        shortcuts: ShortcutConfig {
+            confirm: "v".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.task_labels = vec!["Docs".to_string()];
+    app.selected_task_label = Some("Docs".to_string());
+    app.handle_key(key(KeyCode::Char(' ')));
+
+    app.handle_key(key(KeyCode::Char('m')));
+    assert!(app.timer_note_input_active);
+    app.timer_note_input = "Capture blockers for retro".to_string();
+    app.handle_key(key(KeyCode::Char('v')));
+
+    assert!(!app.timer_note_input_active);
+    assert_eq!(
+        app.active_focus_task_note.as_deref(),
         Some("Capture blockers for retro")
     );
 }

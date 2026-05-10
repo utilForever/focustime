@@ -1,6 +1,7 @@
 use crate::app::{
-    App, AppMode, KeyCode, KeyEvent, KeyModifiers, PendingTimerAction, SessionInterruptionReason,
-    ShortcutAction, TimerPhase, TimerState, TimerStatus, format_duration_label,
+    App, AppMode, KeyCode, KeyEvent, KeyModifiers, NavigationAction, PendingTimerAction,
+    SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
+    format_duration_label,
 };
 
 const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 11] = [
@@ -143,12 +144,14 @@ impl App {
 
     fn handle_timer_note_input_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Enter => self.commit_timer_note_input(),
-            KeyCode::Esc => {
+            _ if self.navigation_matches(NavigationAction::Confirm, &key) => {
+                self.commit_timer_note_input();
+            }
+            _ if self.navigation_matches(NavigationAction::Cancel, &key) => {
                 self.clear_timer_note_input();
                 self.phase_notification = Some("Session note edit canceled.".to_string());
             }
-            KeyCode::Backspace => {
+            _ if self.navigation_matches(NavigationAction::Backspace, &key) => {
                 self.timer_note_input.pop();
             }
             KeyCode::Char(c)
@@ -215,7 +218,8 @@ impl App {
             return;
         }
 
-        if key.code == KeyCode::Esc || self.shortcut_matches(ShortcutAction::BackStatsHistory, &key)
+        if self.navigation_matches(NavigationAction::Cancel, &key)
+            || self.shortcut_matches(ShortcutAction::BackStatsHistory, &key)
         {
             self.mode = AppMode::Timer;
         } else if self.shortcut_matches(ShortcutAction::ExportStatsHistory, &key) {
@@ -228,7 +232,7 @@ impl App {
             return;
         }
 
-        if key.code == KeyCode::Esc
+        if self.navigation_matches(NavigationAction::Cancel, &key)
             || self.shortcut_matches(ShortcutAction::BackSetupDiagnostics, &key)
         {
             self.mode = AppMode::Timer;
