@@ -78,6 +78,8 @@ cargo run
 
 `focustime` supports non-interactive CLI commands for scripting and automation.
 
+Before running `--start`, select a task label first (with `--task` or in the TUI).
+
 ```sh
 # Start focus timer without entering TUI
 cargo run -- --start
