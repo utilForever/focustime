@@ -564,7 +564,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - `profile_automation.<profile>.recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
 - `profile_automation.<profile>.recurring_schedule.one_time_windows[]` accepts one-time date windows with `date` (`YYYY-MM-DD`) plus `start`/`end` (`HH:MM`)
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
-- while a schedule window is active and focus is not already running, press `z` to delay the scheduled start (default `10m`, configurable via `[schedule_runtime].delay_secs`)
+- while a schedule window is active and focus is not already running, press `z` to delay the scheduled start (configurable via `[schedule_runtime].delay_secs`, default `10m`, clamped `60..43200` seconds)
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
@@ -582,13 +582,13 @@ You can configure notification and auto-start settings directly from the TUI:
   - **Schedule add/remove**: `→` adds a window, `←` removes selected window
   - **Schedule window**: `←/→` changes which window is selected
   - **Schedule day** + **Schedule day enabled**: choose day cursor and toggle it `Off/On`
-  - **Schedule start/end**: adjust times in 15-minute steps
+  - **Schedule start/end**: adjust times in `[schedule_runtime].time_step_minutes` steps (default `15`, clamped `1..60`)
   - **Schedule exception**: `←/→` changes which exception date is selected
   - **Exception date**: `←/→` moves selected exception date backward/forward by 1 day
   - **Exception add/remove**: `→` adds a date (starting from today), `←` removes selected date
   - **One-time window**: `←/→` changes which one-time window is selected
   - **One-time date**: `←/→` moves selected one-time window date backward/forward by 1 day
-  - **One-time start/end**: adjust one-time window times in 15-minute steps
+  - **One-time start/end**: adjust one-time window times in `[schedule_runtime].time_step_minutes` steps (default `15`, clamped `1..60`)
   - **One-time add/remove**: `→` adds a one-time window (starting from today), `←` removes selected window
   - **Conflict inspector**: read-only summary of detected schedule overlaps/conflicts
 
