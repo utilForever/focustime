@@ -10,7 +10,7 @@ on:
 
 jobs:
   check:
-    name: ✅ Check
+    name: ✅ Check (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -21,7 +21,7 @@ jobs:
         run: cargo check --all
 
   lint:
-    name: 🚨 Lint
+    name: 🚨 Lint (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -34,8 +34,18 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
   test:
-    name: 🧪 Test Suite
-    runs-on: ubuntu-latest
+    name: 🧪 Test Suite (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: Linux
+          - os: windows-latest
+            platform: Windows
+          - os: macos-latest
+            platform: macOS
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6
@@ -44,19 +54,8 @@ jobs:
       - name: Run cargo test
         run: cargo test --all
 
-  windows_build:
-    name: 🪟 Windows Build
-    runs-on: windows-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v6
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Run cargo build
-        run: cargo build --all-targets
-
   security_audit:
-    name: 👮 Audit
+    name: 👮 Audit (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
