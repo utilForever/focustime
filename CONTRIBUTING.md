@@ -66,6 +66,15 @@ cargo test --all
 - Use Conventional Commit prefixes in commit messages:
   - `feat:`, `fix:`, `refactor:`, `perf:`, `test:`, `docs:`, `chore:`
 
+### CI platform parity and caveats
+
+- Pull request CI runs `cargo test --all` on Linux, Windows, and macOS.
+- Test parity means each platform runs the same test command; it does not require
+  identical test counts, because some tests are intentionally OS-gated with
+  `#[cfg(unix)]`, `#[cfg(target_os = "windows")]`, and similar attributes.
+- If a failure appears only on one platform, treat it as a platform-specific
+  regression and include that platform in your local reproduction notes.
+
 ## Releasing
 
 The project uses Conventional Commit-style release commits:
