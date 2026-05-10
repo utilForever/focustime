@@ -36,6 +36,7 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.notifications, NotificationConfig::default());
     assert_eq!(cfg.auto_start, AutoStartConfig::default());
     assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
+    assert_eq!(cfg.schedule_runtime, ScheduleRuntimeConfig::default());
     assert!(cfg.profile_automation.is_none());
     assert!(!cfg.strict_mode);
     assert_eq!(
@@ -48,6 +49,7 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.stats_retention, StatsRetentionConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
+    assert_eq!(cfg.wakatime_runtime, WakatimeRuntimeConfig::default());
     assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
     assert_eq!(cfg.shortcuts, ShortcutConfig::default());
 }
@@ -155,6 +157,10 @@ fn round_trip_full_config() {
                 end: "15:00".to_string(),
             }],
         },
+        schedule_runtime: ScheduleRuntimeConfig {
+            time_step_minutes: 20,
+            delay_secs: 15 * 60,
+        },
         profile_automation: Some(ProfileAutomationSettingsConfig {
             classic: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig {
@@ -237,6 +243,11 @@ fn round_trip_full_config() {
                 },
             ],
         },
+        wakatime_runtime: WakatimeRuntimeConfig {
+            retry_backoff_secs: vec![2, 5, 10],
+            queue_capacity: 512,
+            queue_retry_delay_secs: 30,
+        },
         feature_flags: FeatureFlagsConfig {
             legacy_automation_mirror: true,
             legacy_blocked_sites_mirror: true,
@@ -274,6 +285,7 @@ fn round_trip_full_config() {
     assert_eq!(parsed.notifications, original.notifications);
     assert_eq!(parsed.auto_start, original.auto_start);
     assert_eq!(parsed.recurring_schedule, original.recurring_schedule);
+    assert_eq!(parsed.schedule_runtime, original.schedule_runtime);
     assert_eq!(parsed.profile_automation, original.profile_automation);
     assert_eq!(parsed.strict_mode, original.strict_mode);
     assert_eq!(
@@ -286,6 +298,7 @@ fn round_trip_full_config() {
     assert_eq!(parsed.goal_carry_over, original.goal_carry_over);
     assert_eq!(parsed.stats_retention, original.stats_retention);
     assert_eq!(parsed.wakatime, original.wakatime);
+    assert_eq!(parsed.wakatime_runtime, original.wakatime_runtime);
     assert_eq!(parsed.feature_flags, original.feature_flags);
     assert_eq!(parsed.shortcuts, original.shortcuts);
 }
@@ -635,6 +648,70 @@ fn normalize_drops_one_time_windows_with_invalid_entries() {
 }
 
 #[test]
+fn normalize_clamps_schedule_runtime_knobs_to_safe_bounds() {
+    let cfg = AppConfig {
+        schedule_runtime: ScheduleRuntimeConfig {
+            time_step_minutes: 0,
+            delay_secs: 0,
+        },
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(
+        cfg.schedule_runtime,
+        ScheduleRuntimeConfig {
+            time_step_minutes: 1,
+            delay_secs: 60,
+        }
+    );
+
+    let cfg = AppConfig {
+        schedule_runtime: ScheduleRuntimeConfig {
+            time_step_minutes: 200,
+            delay_secs: 24 * 60 * 60,
+        },
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(
+        cfg.schedule_runtime,
+        ScheduleRuntimeConfig {
+            time_step_minutes: 60,
+            delay_secs: 12 * 60 * 60,
+        }
+    );
+}
+
+#[test]
+fn normalize_clamps_wakatime_runtime_knobs_and_falls_back_for_invalid_backoff() {
+    let cfg = AppConfig {
+        wakatime_runtime: WakatimeRuntimeConfig {
+            retry_backoff_secs: vec![0, 900, 2, 0],
+            queue_capacity: 0,
+            queue_retry_delay_secs: 24 * 60 * 60,
+        },
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(cfg.wakatime_runtime.retry_backoff_secs, vec![300, 2]);
+    assert_eq!(cfg.wakatime_runtime.queue_capacity, 1);
+    assert_eq!(cfg.wakatime_runtime.queue_retry_delay_secs, 60 * 60);
+
+    let cfg = AppConfig {
+        wakatime_runtime: WakatimeRuntimeConfig {
+            retry_backoff_secs: vec![0, 0],
+            ..WakatimeRuntimeConfig::default()
+        },
+        ..AppConfig::default()
+    }
+    .normalize();
+    assert_eq!(cfg.wakatime_runtime.retry_backoff_secs, vec![1, 2]);
+}
+
+#[test]
 fn unknown_selected_profile_falls_back_to_custom_without_dropping_config() {
     let config = r#"
 focus_secs = 1500
@@ -702,6 +779,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
+        schedule_runtime: ScheduleRuntimeConfig::default(),
         profile_automation: None,
         strict_mode: false,
         break_glass_duration_secs: default_break_glass_duration_secs(),
@@ -711,6 +789,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         goal_carry_over: GoalCarryOverConfig::default(),
         stats_retention: StatsRetentionConfig::default(),
         wakatime: WakatimeMetadataConfig::default(),
+        wakatime_runtime: WakatimeRuntimeConfig::default(),
         feature_flags: FeatureFlagsConfig::default(),
         shortcuts: ShortcutConfig::default(),
     };

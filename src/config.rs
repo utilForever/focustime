@@ -16,6 +16,16 @@ use paths::env_path_from_value;
 
 const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 1;
 const LEGACY_CONFIG_SCHEMA_VERSION: u32 = 0;
+const SCHEDULE_TIME_STEP_MIN_MINUTES: u16 = 1;
+const SCHEDULE_TIME_STEP_MAX_MINUTES: u16 = 60;
+const SCHEDULE_DELAY_MIN_SECS: u64 = 60;
+const SCHEDULE_DELAY_MAX_SECS: u64 = 12 * 60 * 60;
+const WAKATIME_QUEUE_CAPACITY_MIN: usize = 1;
+const WAKATIME_QUEUE_CAPACITY_MAX: usize = 4096;
+const WAKATIME_RETRY_DELAY_MAX_SECS: u64 = 60 * 60;
+const WAKATIME_RETRY_BACKOFF_MIN_SECS: u64 = 1;
+const WAKATIME_RETRY_BACKOFF_MAX_SECS: u64 = 300;
+const WAKATIME_RETRY_BACKOFF_MAX_ENTRIES: usize = 8;
 
 /// Persistent application configuration stored as TOML.
 ///
@@ -75,6 +85,9 @@ pub struct AppConfig {
     /// Recurring schedule windows for automatic focus startup.
     #[serde(default)]
     pub recurring_schedule: RecurringScheduleConfig,
+    /// Runtime tuning knobs for schedule editing and delay behavior.
+    #[serde(default)]
+    pub schedule_runtime: ScheduleRuntimeConfig,
     /// Profile-scoped automation settings.
     ///
     /// When absent, legacy global automation fields are used as shared defaults
@@ -116,6 +129,9 @@ pub struct AppConfig {
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
     pub wakatime: WakatimeMetadataConfig,
+    /// Runtime tuning knobs for WakaTime retry/queue behavior.
+    #[serde(default)]
+    pub wakatime_runtime: WakatimeRuntimeConfig,
     /// Feature flags used to safely gate compatibility-sensitive behavior.
     #[serde(default)]
     pub feature_flags: FeatureFlagsConfig,
@@ -529,6 +545,37 @@ impl RecurringScheduleConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScheduleRuntimeConfig {
+    #[serde(default = "default_schedule_time_step_minutes")]
+    pub time_step_minutes: u16,
+    #[serde(default = "default_schedule_delay_secs")]
+    pub delay_secs: u64,
+}
+
+impl ScheduleRuntimeConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            time_step_minutes: self.time_step_minutes.clamp(
+                SCHEDULE_TIME_STEP_MIN_MINUTES,
+                SCHEDULE_TIME_STEP_MAX_MINUTES,
+            ),
+            delay_secs: self
+                .delay_secs
+                .clamp(SCHEDULE_DELAY_MIN_SECS, SCHEDULE_DELAY_MAX_SECS),
+        }
+    }
+}
+
+impl Default for ScheduleRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            time_step_minutes: default_schedule_time_step_minutes(),
+            delay_secs: default_schedule_delay_secs(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct ProfileAutomationConfig {
     #[serde(default)]
@@ -798,6 +845,40 @@ pub struct WakatimeTaskMappingConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WakatimeRuntimeConfig {
+    #[serde(default = "default_wakatime_retry_backoff_secs")]
+    pub retry_backoff_secs: Vec<u64>,
+    #[serde(default = "default_wakatime_queue_capacity")]
+    pub queue_capacity: usize,
+    #[serde(default = "default_wakatime_queue_retry_delay_secs")]
+    pub queue_retry_delay_secs: u64,
+}
+
+impl WakatimeRuntimeConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            retry_backoff_secs: normalize_wakatime_retry_backoff_secs(&self.retry_backoff_secs),
+            queue_capacity: self
+                .queue_capacity
+                .clamp(WAKATIME_QUEUE_CAPACITY_MIN, WAKATIME_QUEUE_CAPACITY_MAX),
+            queue_retry_delay_secs: self
+                .queue_retry_delay_secs
+                .clamp(0, WAKATIME_RETRY_DELAY_MAX_SECS),
+        }
+    }
+}
+
+impl Default for WakatimeRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            retry_backoff_secs: default_wakatime_retry_backoff_secs(),
+            queue_capacity: default_wakatime_queue_capacity(),
+            queue_retry_delay_secs: default_wakatime_queue_retry_delay_secs(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WakatimeMetadataConfig {
     #[serde(default = "default_wakatime_project")]
     pub project: String,
@@ -884,6 +965,26 @@ fn default_wakatime_project() -> String {
 
 fn default_wakatime_language() -> String {
     "Pomodoro".to_string()
+}
+
+fn default_wakatime_retry_backoff_secs() -> Vec<u64> {
+    vec![1, 2]
+}
+
+fn default_wakatime_queue_capacity() -> usize {
+    256
+}
+
+fn default_wakatime_queue_retry_delay_secs() -> u64 {
+    10
+}
+
+fn default_schedule_time_step_minutes() -> u16 {
+    15
+}
+
+fn default_schedule_delay_secs() -> u64 {
+    10 * 60
 }
 
 fn default_schedule_window_days() -> Vec<String> {
@@ -1314,6 +1415,7 @@ impl Default for AppConfig {
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
             recurring_schedule: RecurringScheduleConfig::default(),
+            schedule_runtime: ScheduleRuntimeConfig::default(),
             profile_automation: None,
             strict_mode: false,
             break_glass_duration_secs: default_break_glass_duration_secs(),
@@ -1323,6 +1425,7 @@ impl Default for AppConfig {
             goal_carry_over: GoalCarryOverConfig::default(),
             stats_retention: StatsRetentionConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
+            wakatime_runtime: WakatimeRuntimeConfig::default(),
             feature_flags: FeatureFlagsConfig::default(),
             shortcuts: ShortcutConfig::default(),
         }
@@ -1517,7 +1620,9 @@ impl AppConfig {
                 .map(effective_blocked_sites_for_profile)
                 .unwrap_or_default();
         }
+        self.schedule_runtime = self.schedule_runtime.normalized();
         self.wakatime = self.wakatime.normalized();
+        self.wakatime_runtime = self.wakatime_runtime.normalized();
         self.shortcuts = self.shortcuts.normalized();
         self
     }
@@ -1635,6 +1740,28 @@ fn normalize_wakatime_task_mappings(
         }
     }
     normalized
+}
+
+fn normalize_wakatime_retry_backoff_secs(backoff_secs: &[u64]) -> Vec<u64> {
+    let normalized = backoff_secs
+        .iter()
+        .take(WAKATIME_RETRY_BACKOFF_MAX_ENTRIES)
+        .filter_map(|secs| {
+            if *secs == 0 {
+                None
+            } else {
+                Some((*secs).clamp(
+                    WAKATIME_RETRY_BACKOFF_MIN_SECS,
+                    WAKATIME_RETRY_BACKOFF_MAX_SECS,
+                ))
+            }
+        })
+        .collect::<Vec<_>>();
+    if normalized.is_empty() {
+        default_wakatime_retry_backoff_secs()
+    } else {
+        normalized
+    }
 }
 
 fn parse_shortcut_char(value: &str) -> Option<char> {

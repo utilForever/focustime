@@ -425,6 +425,10 @@ date = "2026-05-02"
 start = "14:00"
 end = "16:00"
 
+[schedule_runtime]
+time_step_minutes = 15
+delay_secs = 600
+
 [daily_goal]
 minutes = 120
 pomodoros = 4
@@ -443,6 +447,11 @@ preset = "balanced" # keep_all | balanced | aggressive
 [wakatime]
 project = "focustime"
 language = "Pomodoro"
+
+[wakatime_runtime]
+retry_backoff_secs = [1, 2]
+queue_capacity = 256
+queue_retry_delay_secs = 10
 
 [[wakatime.task_mappings]]
 task_label = "Docs"
@@ -471,6 +480,18 @@ field:
 
 Mappings with blank `task_label` or blank override values are ignored. If
 duplicate task labels are configured, the first valid mapping is used.
+
+`[schedule_runtime]` is optional. When omitted, focustime keeps existing
+schedule runtime defaults (`time_step_minutes = 15`, `delay_secs = 600`).
+`time_step_minutes` is clamped to `1..60`; `delay_secs` is clamped to
+`60..43200`.
+
+`[wakatime_runtime]` is optional. When omitted, focustime keeps existing
+WakaTime runtime defaults (`retry_backoff_secs = [1, 2]`,
+`queue_capacity = 256`, `queue_retry_delay_secs = 10`). Backoff entries are
+bounded to `1..300` seconds (up to 8 entries, empty/invalid falls back to
+defaults), queue capacity is clamped to `1..4096`, and queue replay delay is
+clamped to `0..3600`.
 
 ## Site manager workflow
 
@@ -543,7 +564,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - `profile_automation.<profile>.recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
 - `profile_automation.<profile>.recurring_schedule.one_time_windows[]` accepts one-time date windows with `date` (`YYYY-MM-DD`) plus `start`/`end` (`HH:MM`)
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
-- while a schedule window is active and focus is not already running, press `z` to delay the scheduled start by 10 minutes
+- while a schedule window is active and focus is not already running, press `z` to delay the scheduled start (default `10m`, configurable via `[schedule_runtime].delay_secs`)
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
@@ -691,10 +712,14 @@ When WakaTime is configured, heartbeats are still best-effort and non-blocking.
 The timer never waits on network calls.
 
 - transient heartbeat failures (`429`, `5xx`, and connectivity/timeout errors)
-  retry with bounded backoff (`1s`, then `2s`)
+  retry with bounded backoff (default `1s`, then `2s`, configurable via
+  `[wakatime_runtime].retry_backoff_secs`)
 - retryable failures that still cannot be delivered are queued in a durable local
-  backlog (bounded, drop-oldest at capacity) and replayed oldest-first after
-  restart and when connectivity recovers
+  backlog (bounded, drop-oldest at capacity; default `256`, configurable via
+  `[wakatime_runtime].queue_capacity`) and replayed oldest-first after restart
+  and when connectivity recovers
+- queued heartbeat replay delay after retryable failure defaults to `10s` and is
+  configurable via `[wakatime_runtime].queue_retry_delay_secs`
 - invalid/corrupt persisted queue snapshots are dropped on startup and surfaced
   as a runtime warning in WakaTime status
 - non-retryable failures are surfaced in the timer view status line
