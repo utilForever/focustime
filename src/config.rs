@@ -1746,7 +1746,6 @@ fn normalize_wakatime_task_mappings(
 fn normalize_wakatime_retry_backoff_secs(backoff_secs: &[u64]) -> Vec<u64> {
     let normalized = backoff_secs
         .iter()
-        .take(WAKATIME_RETRY_BACKOFF_MAX_ENTRIES)
         .filter_map(|secs| {
             if *secs == 0 {
                 None
@@ -1757,6 +1756,7 @@ fn normalize_wakatime_retry_backoff_secs(backoff_secs: &[u64]) -> Vec<u64> {
                 ))
             }
         })
+        .take(WAKATIME_RETRY_BACKOFF_MAX_ENTRIES)
         .collect::<Vec<_>>();
     if normalized.is_empty() {
         default_wakatime_retry_backoff_secs()

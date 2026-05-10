@@ -118,7 +118,6 @@ impl WakatimeRuntimeOptions {
         let retry_backoff_secs = self
             .retry_backoff_secs
             .iter()
-            .take(MAX_HEARTBEAT_RETRY_BACKOFF_ENTRIES)
             .filter_map(|secs| {
                 if *secs == 0 {
                     None
@@ -126,6 +125,7 @@ impl WakatimeRuntimeOptions {
                     Some((*secs).clamp(1, MAX_HEARTBEAT_RETRY_BACKOFF_SECS))
                 }
             })
+            .take(MAX_HEARTBEAT_RETRY_BACKOFF_ENTRIES)
             .collect::<Vec<_>>();
         Self {
             retry_backoff_secs: if retry_backoff_secs.is_empty() {
@@ -1356,6 +1356,13 @@ mod tests {
             normalized.queue_retry_delay_secs,
             MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS
         );
+
+        let normalized = WakatimeRuntimeOptions {
+            retry_backoff_secs: vec![0, 0, 0, 0, 0, 0, 0, 0, 5],
+            ..WakatimeRuntimeOptions::default()
+        }
+        .normalized();
+        assert_eq!(normalized.retry_backoff_secs, vec![5]);
 
     }
 
