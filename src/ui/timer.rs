@@ -1,8 +1,8 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Gauge, Layout, Line,
-    Local, Modifier, Paragraph, Rect, ShortcutAction, Style, TimeZone, TimerPhase, TimerStatus,
-    WakatimeRuntimeState, Wrap, app_color, centered_rect, format_timer_goal_streak_line,
-    readable_goal_streak_text, render_hint_lines,
+    Local, Modifier, NavigationAction, Paragraph, Rect, ShortcutAction, Style, TimeZone,
+    TimerPhase, TimerStatus, WakatimeRuntimeState, Wrap, app_color, centered_rect,
+    format_timer_goal_streak_line, readable_goal_streak_text, render_hint_lines,
 };
 
 pub(super) fn render_timer(frame: &mut Frame, app: &App) {
@@ -261,7 +261,11 @@ fn phase_notice_line(app: &App) -> (String, Style) {
         let draft = app.timer_note_input_value().trim();
         let draft = if draft.is_empty() { "<empty>" } else { draft };
         return (
-            format!("📝 Note: {draft}   [Enter] Save   [Esc] Cancel"),
+            format!(
+                "📝 Note: {draft}   {} Save   {} Cancel",
+                app.navigation_hint(NavigationAction::Confirm),
+                app.navigation_hint(NavigationAction::Cancel)
+            ),
             Style::default().fg(app_color(app, Color::Cyan)),
         );
     }
@@ -405,7 +409,11 @@ pub(super) fn timer_primary_hint(app: &App) -> String {
     let timer_delay = app.shortcut_hint(ShortcutAction::DelayScheduleStart);
 
     if app.timer_note_input_active() {
-        "Note: Type text  [Enter] Save  [Esc] Cancel".to_string()
+        format!(
+            "Note: Type text  {} Save  {} Cancel",
+            app.navigation_hint(NavigationAction::Confirm),
+            app.navigation_hint(NavigationAction::Cancel)
+        )
     } else if app.break_glass_confirmation_pending() {
         format!(
             "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note  {timer_unblock} Confirm unblock  {timer_delay} Delay 10m"
@@ -452,7 +460,10 @@ pub(super) fn timer_secondary_hint(app: &App) -> String {
 pub(super) fn timer_tertiary_hint(app: &App) -> String {
     let quit = app.shortcut_label(ShortcutAction::Quit);
     if app.timer_note_input_active() {
-        "Note edit: [Esc] Cancel".to_string()
+        format!(
+            "Note edit: {} Cancel",
+            app.navigation_hint(NavigationAction::Cancel)
+        )
     } else if app.strict_mode_enforced_for_focus() {
         format!("Navigate: [{quit}/Esc] Quit (Locked during active focus)")
     } else {

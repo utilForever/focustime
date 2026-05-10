@@ -1,7 +1,8 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
-    ListItem, ListState, Modifier, PROFILE_EDIT_GROUPS, PROFILE_IDS, Paragraph, ShortcutAction,
-    Span, Style, Wrap, app_color, centered_rect, render_centered_error, render_hint_lines,
+    ListItem, ListState, Modifier, NavigationAction, PROFILE_EDIT_GROUPS, PROFILE_IDS, Paragraph,
+    ShortcutAction, Span, Style, Wrap, app_color, centered_rect, render_centered_error,
+    render_hint_lines,
 };
 
 pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
@@ -114,7 +115,10 @@ fn profile_editor_block(app: &App) -> Block<'static> {
 fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
     if !app.profile_edit_active {
         return vec![
-            Line::from("Press [e] to edit the selected profile."),
+            Line::from(format!(
+                "Press {} to edit the selected profile.",
+                app.shortcut_hint(ShortcutAction::ProfileEdit)
+            )),
             Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule · Appearance"),
             Line::from("Editor is compact for smaller terminals."),
         ];
@@ -180,15 +184,26 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
     if app.profile_edit_active {
         vec![
             Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule · Appearance"),
-            Line::from("Edit: [↑/↓] Field  [←/→] Change value  [Type/Backspace] WakaTime text"),
+            Line::from(format!(
+                "Edit: {}/{} Field  {}/{} Change value  [Type/{}] WakaTime text",
+                app.navigation_hint(NavigationAction::MoveUp),
+                app.navigation_hint(NavigationAction::MoveDown),
+                app.navigation_hint(NavigationAction::MoveLeft),
+                app.navigation_hint(NavigationAction::MoveRight),
+                app.navigation_label(NavigationAction::Backspace),
+            )),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
-                    "[Enter] Save  [Esc] Cancel  [{}/Ctrl-C] Quit (Locked)",
+                    "{} Save  {} Cancel  [{}/Ctrl-C] Quit (Locked)",
+                    app.navigation_hint(NavigationAction::Confirm),
+                    app.navigation_hint(NavigationAction::Cancel),
                     app.shortcut_label(ShortcutAction::Quit)
                 )
             } else {
                 format!(
-                    "[Enter] Save  [Esc] Cancel  [{}/Ctrl-C] Quit",
+                    "{} Save  {} Cancel  [{}/Ctrl-C] Quit",
+                    app.navigation_hint(NavigationAction::Confirm),
+                    app.navigation_hint(NavigationAction::Cancel),
                     app.shortcut_label(ShortcutAction::Quit)
                 )
             }),
@@ -197,12 +212,18 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
         vec![
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
-                    "Profiles: [↑/↓] Move  [Enter] Apply (Locked)  {} Edit",
+                    "Profiles: {}/{} Move  {} Apply (Locked)  {} Edit",
+                    app.navigation_hint(NavigationAction::MoveUp),
+                    app.navigation_hint(NavigationAction::MoveDown),
+                    app.navigation_hint(NavigationAction::Confirm),
                     app.shortcut_hint(ShortcutAction::ProfileEdit)
                 )
             } else {
                 format!(
-                    "Profiles: [↑/↓] Move  [Enter] Apply  {} Edit",
+                    "Profiles: {}/{} Move  {} Apply  {} Edit",
+                    app.navigation_hint(NavigationAction::MoveUp),
+                    app.navigation_hint(NavigationAction::MoveDown),
+                    app.navigation_hint(NavigationAction::Confirm),
                     app.shortcut_hint(ShortcutAction::ProfileEdit)
                 )
             }),
@@ -213,14 +234,16 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
             )),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
-                    "View: [{}/Esc] Back  [{}] Quit (Locked)",
+                    "View: [{}/{}] Back  [{}] Quit (Locked)",
                     app.shortcut_label(ShortcutAction::BackProfileManager),
+                    app.navigation_label(NavigationAction::Cancel),
                     app.shortcut_label(ShortcutAction::Quit),
                 )
             } else {
                 format!(
-                    "View: [{}/Esc] Back  [{}] Quit",
+                    "View: [{}/{}] Back  [{}] Quit",
                     app.shortcut_label(ShortcutAction::BackProfileManager),
+                    app.navigation_label(NavigationAction::Cancel),
                     app.shortcut_label(ShortcutAction::Quit),
                 )
             }),

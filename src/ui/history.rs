@@ -1,8 +1,8 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, HistoryFeedbackLevel,
-    Layout, Line, List, ListItem, Modifier, Paragraph, Rect, ShortcutAction, Span, Style, Wrap,
-    app_color, centered_rect, format_duration_label, format_goal_period_progress,
-    format_wakatime_heartbeat_timestamp, render_hint_lines,
+    Layout, Line, List, ListItem, Modifier, NavigationAction, Paragraph, Rect, ShortcutAction,
+    Span, Style, Wrap, app_color, centered_rect, format_duration_label,
+    format_goal_period_progress, format_wakatime_heartbeat_timestamp, render_hint_lines,
 };
 
 pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
@@ -264,14 +264,16 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
             )),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
-                    "View: [{}/Esc] Back  [{}/Ctrl-C] Quit (Locked)",
+                    "View: [{}/{}] Back  [{}/Ctrl-C] Quit (Locked)",
                     app.shortcut_label(ShortcutAction::BackStatsHistory),
+                    app.navigation_label(NavigationAction::Cancel),
                     app.shortcut_label(ShortcutAction::Quit),
                 )
             } else {
                 format!(
-                    "View: [{}/Esc] Back  [{}/Ctrl-C] Quit",
+                    "View: [{}/{}] Back  [{}/Ctrl-C] Quit",
                     app.shortcut_label(ShortcutAction::BackStatsHistory),
+                    app.navigation_label(NavigationAction::Cancel),
                     app.shortcut_label(ShortcutAction::Quit),
                 )
             }),
