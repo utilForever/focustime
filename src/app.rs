@@ -56,8 +56,8 @@ mod session_planner;
 mod shortcuts;
 mod site_manager;
 mod timer_flow;
-pub use shortcuts::ShortcutAction;
 use shortcuts::ShortcutBindings;
+pub use shortcuts::{NavigationAction, ShortcutAction};
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
@@ -615,7 +615,16 @@ impl App {
         let active_blocklist_profile =
             blocklist_profile_index(&blocklist_profiles, &config.selected_blocklist_profile);
         let break_templates = config.break_templates.clone();
-        let shortcuts = ShortcutBindings::from_config(&config.shortcuts);
+        let (shortcuts, shortcut_diagnostics) =
+            ShortcutBindings::from_config_with_diagnostics(&config.shortcuts);
+        let shortcut_config_error = if shortcut_diagnostics.is_empty() {
+            None
+        } else {
+            Some(format!(
+                "shortcut config adjusted: {}",
+                shortcut_diagnostics.join(" ")
+            ))
+        };
         let active_break_template = resolve_active_break_template(
             &break_templates,
             &config.selected_break_template,
@@ -678,7 +687,7 @@ impl App {
             block_error: None,
             setup_diagnostics,
             blocking_preview: BlockingPreviewSnapshot::default(),
-            config_error: None,
+            config_error: shortcut_config_error,
             stats_error,
             history_feedback: None,
             phase_notification: None,
@@ -821,6 +830,18 @@ impl App {
 
     pub fn shortcut_label(&self, action: ShortcutAction) -> String {
         self.shortcuts.label(action)
+    }
+
+    pub fn navigation_matches(&self, action: NavigationAction, key: &KeyEvent) -> bool {
+        self.shortcuts.navigation_matches(action, key)
+    }
+
+    pub fn navigation_hint(&self, action: NavigationAction) -> String {
+        self.shortcuts.navigation_hint(action)
+    }
+
+    pub fn navigation_label(&self, action: NavigationAction) -> String {
+        self.shortcuts.navigation_label(action)
     }
 
     pub fn timer_note_input_value(&self) -> &str {
@@ -1049,15 +1070,19 @@ impl App {
     }
 
     pub(super) fn handle_profile_edit_metadata_input(&mut self, key: &KeyEvent) -> bool {
+        if self.navigation_matches(NavigationAction::Backspace, key) {
+            let Some(field_value) = self.profile_edit_metadata_field_mut() else {
+                return false;
+            };
+            field_value.pop();
+            return true;
+        }
+
         let Some(field_value) = self.profile_edit_metadata_field_mut() else {
             return false;
         };
 
         match key.code {
-            KeyCode::Backspace => {
-                field_value.pop();
-                true
-            }
             KeyCode::Char(c)
                 if !key
                     .modifiers
