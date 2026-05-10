@@ -18,22 +18,18 @@ fn parse_with_contract(values: &[&str]) -> Result<CliAction, CliError> {
 #[test]
 fn parse_without_arguments_runs_default_tui() {
     let parsed = parse(&[]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunTui {
-            start_immediately: false
-        }
-    );
+    assert_eq!(parsed, CliAction::RunTui);
 }
 
 #[test]
-fn parse_start_runs_tui_immediately() {
+fn parse_start_runs_as_noninteractive_command() {
     let parsed = parse(&["--start"]).unwrap();
     assert_eq!(
         parsed,
-        CliAction::RunTui {
-            start_immediately: true
-        }
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Start,
+            output: OutputMode::Text
+        })
     );
 }
 
@@ -1294,9 +1290,15 @@ fn parse_rejects_json_without_noninteractive_command() {
 }
 
 #[test]
-fn parse_rejects_json_with_start() {
-    let error = parse(&["--start", "--json"]).unwrap_err();
-    assert!(error.contains("not supported with `--start`"));
+fn parse_start_supports_json_mode() {
+    let parsed = parse(&["--start", "--json"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Start,
+            output: OutputMode::Json
+        })
+    );
 }
 
 #[test]

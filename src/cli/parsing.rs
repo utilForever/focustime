@@ -233,18 +233,12 @@ pub(super) fn finalize_cli_action(
                     "`--json` is only valid with non-interactive commands.",
                 ));
             }
-            Ok(CliAction::RunTui {
-                start_immediately: false,
-            })
+            Ok(CliAction::RunTui)
         }
-        Some(PrimaryCommand::Start) => {
-            if output == OutputMode::Json {
-                return Err(invalid_usage("`--json` is not supported with `--start`."));
-            }
-            Ok(CliAction::RunTui {
-                start_immediately: true,
-            })
-        }
+        Some(PrimaryCommand::Start) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::Start,
+            output,
+        })),
         Some(PrimaryCommand::Profile(profile)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Profile { profile },
             output,

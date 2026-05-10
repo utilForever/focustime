@@ -34,6 +34,7 @@ const STATS_FILE_NAME: &str = "stats.toml";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
     match cli_command.kind {
+        CommandKind::Start => execute_start_command(cli_command.output),
         CommandKind::Pause => execute_pause_command(cli_command.output),
         CommandKind::Resume => execute_resume_command(cli_command.output),
         CommandKind::Stop => execute_stop_command(cli_command.output),
@@ -82,6 +83,12 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
             execute_blocklist_sites_command(target, command, cli_command.output)
         }
     }
+}
+
+fn execute_start_command(output: OutputMode) -> Result<(), String> {
+    let mut app = App::new();
+    app.start_focus_for_cli()?;
+    emit_timer_command_output("start", &app, output)
 }
 
 fn execute_pause_command(output: OutputMode) -> Result<(), String> {
