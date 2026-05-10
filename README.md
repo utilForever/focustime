@@ -79,8 +79,9 @@ cargo run
 `focustime` supports non-interactive CLI commands for scripting and automation.
 
 ```sh
-# Launch TUI with focus timer already started
+# Start focus timer without entering TUI
 cargo run -- --start
+cargo run -- --start --json
 
 # Control timer flow without entering TUI
 cargo run -- --pause
