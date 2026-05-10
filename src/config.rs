@@ -22,6 +22,7 @@ const SCHEDULE_DELAY_MIN_SECS: u64 = 60;
 const SCHEDULE_DELAY_MAX_SECS: u64 = 12 * 60 * 60;
 const WAKATIME_QUEUE_CAPACITY_MIN: usize = 1;
 const WAKATIME_QUEUE_CAPACITY_MAX: usize = 4096;
+const WAKATIME_RETRY_DELAY_MIN_SECS: u64 = 1;
 const WAKATIME_RETRY_DELAY_MAX_SECS: u64 = 60 * 60;
 const WAKATIME_RETRY_BACKOFF_MIN_SECS: u64 = 1;
 const WAKATIME_RETRY_BACKOFF_MAX_SECS: u64 = 300;
@@ -863,7 +864,7 @@ impl WakatimeRuntimeConfig {
                 .clamp(WAKATIME_QUEUE_CAPACITY_MIN, WAKATIME_QUEUE_CAPACITY_MAX),
             queue_retry_delay_secs: self
                 .queue_retry_delay_secs
-                .clamp(0, WAKATIME_RETRY_DELAY_MAX_SECS),
+                .clamp(WAKATIME_RETRY_DELAY_MIN_SECS, WAKATIME_RETRY_DELAY_MAX_SECS),
         }
     }
 }

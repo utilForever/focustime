@@ -491,7 +491,7 @@ WakaTime runtime defaults (`retry_backoff_secs = [1, 2]`,
 `queue_capacity = 256`, `queue_retry_delay_secs = 10`). Backoff entries are
 bounded to `1..300` seconds (up to 8 entries, empty/invalid falls back to
 defaults), queue capacity is clamped to `1..4096`, and queue replay delay is
-clamped to `0..3600`.
+clamped to `1..3600`.
 
 ## Site manager workflow
 

@@ -16,6 +16,7 @@ const DEFAULT_HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 10;
 const MAX_HEARTBEAT_RETRY_BACKOFF_ENTRIES: usize = 8;
 const MAX_HEARTBEAT_RETRY_BACKOFF_SECS: u64 = 300;
 const MAX_HEARTBEAT_QUEUE_CAPACITY: usize = 4096;
+const MIN_HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 1;
 const MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 3600;
 const HEARTBEAT_QUEUE_SNAPSHOT_FILE_NAME: &str = "wakatime-queue.toml";
 const HEARTBEAT_QUEUE_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
@@ -135,7 +136,10 @@ impl WakatimeRuntimeOptions {
             queue_capacity: self.queue_capacity.clamp(1, MAX_HEARTBEAT_QUEUE_CAPACITY),
             queue_retry_delay_secs: self
                 .queue_retry_delay_secs
-                .clamp(0, MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS),
+                .clamp(
+                    MIN_HEARTBEAT_QUEUE_RETRY_DELAY_SECS,
+                    MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS,
+                ),
         }
     }
 
@@ -1329,6 +1333,30 @@ mod tests {
                 language: DEFAULT_HEARTBEAT_LANGUAGE.to_string(),
             }
         );
+    }
+
+    #[test]
+    fn runtime_options_normalization_clamps_queue_retry_delay_to_positive_bounds() {
+        let normalized = WakatimeRuntimeOptions {
+            queue_retry_delay_secs: 0,
+            ..WakatimeRuntimeOptions::default()
+        }
+        .normalized();
+        assert_eq!(
+            normalized.queue_retry_delay_secs,
+            MIN_HEARTBEAT_QUEUE_RETRY_DELAY_SECS
+        );
+
+        let normalized = WakatimeRuntimeOptions {
+            queue_retry_delay_secs: u64::MAX,
+            ..WakatimeRuntimeOptions::default()
+        }
+        .normalized();
+        assert_eq!(
+            normalized.queue_retry_delay_secs,
+            MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS
+        );
+
     }
 
     #[test]
