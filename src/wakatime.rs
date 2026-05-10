@@ -134,12 +134,10 @@ impl WakatimeRuntimeOptions {
                 retry_backoff_secs
             },
             queue_capacity: self.queue_capacity.clamp(1, MAX_HEARTBEAT_QUEUE_CAPACITY),
-            queue_retry_delay_secs: self
-                .queue_retry_delay_secs
-                .clamp(
-                    MIN_HEARTBEAT_QUEUE_RETRY_DELAY_SECS,
-                    MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS,
-                ),
+            queue_retry_delay_secs: self.queue_retry_delay_secs.clamp(
+                MIN_HEARTBEAT_QUEUE_RETRY_DELAY_SECS,
+                MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS,
+            ),
         }
     }
 
@@ -1363,7 +1361,6 @@ mod tests {
         }
         .normalized();
         assert_eq!(normalized.retry_backoff_secs, vec![5]);
-
     }
 
     #[test]
