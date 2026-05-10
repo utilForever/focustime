@@ -10,7 +10,7 @@ on:
 
 jobs:
   check:
-    name: ✅ Check (Linux)
+    name: ✅ Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -21,7 +21,7 @@ jobs:
         run: cargo check --all
 
   lint:
-    name: 🚨 Lint (Linux)
+    name: 🚨 Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -55,7 +55,7 @@ jobs:
         run: cargo test --all
 
   security_audit:
-    name: 👮 Audit (Linux)
+    name: 👮 Audit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
