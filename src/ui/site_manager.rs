@@ -1,8 +1,9 @@
 use crate::ui::{
     Alignment, App, Block, BlocklistProfileInputMode, Borders, Color, Constraint, Direction, Frame,
-    Layout, Line, List, ListItem, ListState, Modifier, Paragraph, Rect, ShortcutAction,
-    SiteFeedbackLevel, SiteInputMode, SiteListMode, Span, Style, TimerPhase, TimerStatus,
-    app_color, centered_rect, format_duration_label, render_centered_error, render_hint_lines,
+    Layout, Line, List, ListItem, ListState, Modifier, NavigationAction, Paragraph, Rect,
+    ShortcutAction, SiteFeedbackLevel, SiteInputMode, SiteListMode, Span, Style, TimerPhase,
+    TimerStatus, app_color, centered_rect, format_duration_label, render_centered_error,
+    render_hint_lines,
 };
 
 pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
@@ -342,12 +343,26 @@ fn site_manager_hint_lines(
     if app.site_input_active {
         return vec![
             Line::from(match input_mode {
-                SiteInputMode::Add => "Input: [Enter] Add/Import  [Esc] Cancel",
-                SiteInputMode::Edit => "Input: [Enter] Save  [Esc] Cancel",
+                SiteInputMode::Add => format!(
+                    "Input: {} Add/Import  {} Cancel",
+                    app.navigation_hint(NavigationAction::Confirm),
+                    app.navigation_hint(NavigationAction::Cancel)
+                ),
+                SiteInputMode::Edit => format!(
+                    "Input: {} Save  {} Cancel",
+                    app.navigation_hint(NavigationAction::Confirm),
+                    app.navigation_hint(NavigationAction::Cancel)
+                ),
             }),
             Line::from(match input_mode {
-                SiteInputMode::Add => "Tip: paste comma/newline hostnames, then press [Enter]",
-                SiteInputMode::Edit => "Tip: enter one hostname, then press [Enter]",
+                SiteInputMode::Add => format!(
+                    "Tip: paste comma/newline hostnames, then press {}",
+                    app.navigation_hint(NavigationAction::Confirm)
+                ),
+                SiteInputMode::Edit => format!(
+                    "Tip: enter one hostname, then press {}",
+                    app.navigation_hint(NavigationAction::Confirm)
+                ),
             }),
             Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
         ];
@@ -355,7 +370,11 @@ fn site_manager_hint_lines(
 
     if app.blocklist_profile_input_active {
         return vec![
-            Line::from("Profile: [Enter] Save  [Esc] Cancel"),
+            Line::from(format!(
+                "Profile: {} Save  {} Cancel",
+                app.navigation_hint(NavigationAction::Confirm),
+                app.navigation_hint(NavigationAction::Cancel)
+            )),
             Line::from("Tip: use descriptive names like Work, Study, or Deep Work"),
             Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
         ];
@@ -364,21 +383,25 @@ fn site_manager_hint_lines(
     if app.strict_mode_enforced_for_focus() {
         return vec![
             Line::from(format!(
-                "Mode: {} Toggle ({})  Sites: {} Add  {} Edit  {}/Del Remove  [↑/↓] Move",
+                "Mode: {} Toggle ({})  Sites: {} Add  {} Edit  {}/{} Remove  {}/{} Move",
                 app.shortcut_hint(ShortcutAction::ToggleSiteListMode),
                 site_list_mode.label(),
                 app.shortcut_hint(ShortcutAction::SiteAdd),
                 app.shortcut_hint(ShortcutAction::SiteEdit),
                 app.shortcut_hint(ShortcutAction::SiteDelete),
+                app.navigation_hint(NavigationAction::Delete),
+                app.navigation_hint(NavigationAction::MoveUp),
+                app.navigation_hint(NavigationAction::MoveDown),
             )),
             Line::from(format!(
-                "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/Esc] Back  [{}] Quit (Locked)",
+                "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/{}] Back  [{}] Quit (Locked)",
                 app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
                 app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
                 app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
                 app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
                 app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
                 app.shortcut_label(ShortcutAction::BackSiteManager),
+                app.navigation_label(NavigationAction::Cancel),
                 app.shortcut_label(ShortcutAction::Quit),
             )),
             Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
@@ -387,21 +410,25 @@ fn site_manager_hint_lines(
 
     vec![
         Line::from(format!(
-            "Mode: {} Toggle ({})  Sites: {} Add  {} Edit  {}/Del Remove  [↑/↓] Move",
+            "Mode: {} Toggle ({})  Sites: {} Add  {} Edit  {}/{} Remove  {}/{} Move",
             app.shortcut_hint(ShortcutAction::ToggleSiteListMode),
             site_list_mode.label(),
             app.shortcut_hint(ShortcutAction::SiteAdd),
             app.shortcut_hint(ShortcutAction::SiteEdit),
             app.shortcut_hint(ShortcutAction::SiteDelete),
+            app.navigation_hint(NavigationAction::Delete),
+            app.navigation_hint(NavigationAction::MoveUp),
+            app.navigation_hint(NavigationAction::MoveDown),
         )),
         Line::from(format!(
-            "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/Esc] Back",
+            "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/{}] Back",
             app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
             app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
             app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
             app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
             app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
             app.shortcut_label(ShortcutAction::BackSiteManager),
+            app.navigation_label(NavigationAction::Cancel),
         )),
         Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
     ]

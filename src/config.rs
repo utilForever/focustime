@@ -263,6 +263,22 @@ pub struct ShortcutConfig {
     pub back_setup_diagnostics: String,
     #[serde(default = "default_shortcut_refresh_setup_diagnostics")]
     pub refresh_setup_diagnostics: String,
+    #[serde(default = "default_shortcut_navigate_up")]
+    pub navigate_up: String,
+    #[serde(default = "default_shortcut_navigate_down")]
+    pub navigate_down: String,
+    #[serde(default = "default_shortcut_navigate_left")]
+    pub navigate_left: String,
+    #[serde(default = "default_shortcut_navigate_right")]
+    pub navigate_right: String,
+    #[serde(default = "default_shortcut_confirm")]
+    pub confirm: String,
+    #[serde(default = "default_shortcut_cancel")]
+    pub cancel: String,
+    #[serde(default = "default_shortcut_delete")]
+    pub delete: String,
+    #[serde(default = "default_shortcut_backspace")]
+    pub backspace: String,
 }
 
 impl ShortcutConfig {
@@ -407,6 +423,32 @@ impl ShortcutConfig {
                 &self.refresh_setup_diagnostics,
                 &default_shortcut_refresh_setup_diagnostics(),
             ),
+            navigate_up: normalize_navigation_shortcut_token(
+                &self.navigate_up,
+                &default_shortcut_navigate_up(),
+            ),
+            navigate_down: normalize_navigation_shortcut_token(
+                &self.navigate_down,
+                &default_shortcut_navigate_down(),
+            ),
+            navigate_left: normalize_navigation_shortcut_token(
+                &self.navigate_left,
+                &default_shortcut_navigate_left(),
+            ),
+            navigate_right: normalize_navigation_shortcut_token(
+                &self.navigate_right,
+                &default_shortcut_navigate_right(),
+            ),
+            confirm: normalize_navigation_shortcut_token(
+                &self.confirm,
+                &default_shortcut_confirm(),
+            ),
+            cancel: normalize_navigation_shortcut_token(&self.cancel, &default_shortcut_cancel()),
+            delete: normalize_navigation_shortcut_token(&self.delete, &default_shortcut_delete()),
+            backspace: normalize_navigation_shortcut_token(
+                &self.backspace,
+                &default_shortcut_backspace(),
+            ),
         }
     }
 }
@@ -451,6 +493,14 @@ impl Default for ShortcutConfig {
             export_stats_history: default_shortcut_export_stats_history(),
             back_setup_diagnostics: default_shortcut_back_setup_diagnostics(),
             refresh_setup_diagnostics: default_shortcut_refresh_setup_diagnostics(),
+            navigate_up: default_shortcut_navigate_up(),
+            navigate_down: default_shortcut_navigate_down(),
+            navigate_left: default_shortcut_navigate_left(),
+            navigate_right: default_shortcut_navigate_right(),
+            confirm: default_shortcut_confirm(),
+            cancel: default_shortcut_cancel(),
+            delete: default_shortcut_delete(),
+            backspace: default_shortcut_backspace(),
         }
     }
 }
@@ -1170,6 +1220,38 @@ fn default_shortcut_refresh_setup_diagnostics() -> String {
     "r".to_string()
 }
 
+fn default_shortcut_navigate_up() -> String {
+    "up".to_string()
+}
+
+fn default_shortcut_navigate_down() -> String {
+    "down".to_string()
+}
+
+fn default_shortcut_navigate_left() -> String {
+    "left".to_string()
+}
+
+fn default_shortcut_navigate_right() -> String {
+    "right".to_string()
+}
+
+fn default_shortcut_confirm() -> String {
+    "enter".to_string()
+}
+
+fn default_shortcut_cancel() -> String {
+    "esc".to_string()
+}
+
+fn default_shortcut_delete() -> String {
+    "delete".to_string()
+}
+
+fn default_shortcut_backspace() -> String {
+    "backspace".to_string()
+}
+
 fn default_break_templates() -> Vec<BreakTemplateConfig> {
     vec![
         BreakTemplateConfig {
@@ -1784,6 +1866,38 @@ fn parse_shortcut_char(value: &str) -> Option<char> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShortcutKeyToken {
+    Char(char),
+    Enter,
+    Esc,
+    Up,
+    Down,
+    Left,
+    Right,
+    Backspace,
+    Delete,
+}
+
+fn parse_shortcut_key_token(value: &str) -> Option<ShortcutKeyToken> {
+    let token = value.trim();
+    if token.is_empty() {
+        return None;
+    }
+
+    match token.to_ascii_lowercase().as_str() {
+        "enter" => Some(ShortcutKeyToken::Enter),
+        "esc" | "escape" => Some(ShortcutKeyToken::Esc),
+        "up" => Some(ShortcutKeyToken::Up),
+        "down" => Some(ShortcutKeyToken::Down),
+        "left" => Some(ShortcutKeyToken::Left),
+        "right" => Some(ShortcutKeyToken::Right),
+        "backspace" => Some(ShortcutKeyToken::Backspace),
+        "delete" | "del" => Some(ShortcutKeyToken::Delete),
+        _ => parse_shortcut_char(token).map(ShortcutKeyToken::Char),
+    }
+}
+
 fn normalize_shortcut_token(value: &str, default: &str) -> String {
     let Some(parsed) = parse_shortcut_char(value) else {
         return default.to_string();
@@ -1794,6 +1908,26 @@ fn normalize_shortcut_token(value: &str, default: &str) -> String {
         parsed.to_ascii_lowercase().to_string()
     } else {
         parsed.to_string()
+    }
+}
+
+fn normalize_navigation_shortcut_token(value: &str, default: &str) -> String {
+    let Some(parsed) = parse_shortcut_key_token(value) else {
+        return default.to_string();
+    };
+
+    match parsed {
+        ShortcutKeyToken::Char(' ') => "space".to_string(),
+        ShortcutKeyToken::Char(c) if c.is_ascii_alphabetic() => c.to_ascii_lowercase().to_string(),
+        ShortcutKeyToken::Char(c) => c.to_string(),
+        ShortcutKeyToken::Enter => "enter".to_string(),
+        ShortcutKeyToken::Esc => "esc".to_string(),
+        ShortcutKeyToken::Up => "up".to_string(),
+        ShortcutKeyToken::Down => "down".to_string(),
+        ShortcutKeyToken::Left => "left".to_string(),
+        ShortcutKeyToken::Right => "right".to_string(),
+        ShortcutKeyToken::Backspace => "backspace".to_string(),
+        ShortcutKeyToken::Delete => "delete".to_string(),
     }
 }
 

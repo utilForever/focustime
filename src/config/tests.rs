@@ -410,6 +410,8 @@ fn shortcut_config_normalizes_invalid_tokens_to_defaults() {
             timer_toggle_pause: "    ".to_string(),
             site_add: "Add".to_string(),
             planner_select_recent: "".to_string(),
+            navigate_up: "north".to_string(),
+            confirm: "accept".to_string(),
             ..ShortcutConfig::default()
         },
         ..AppConfig::default()
@@ -420,6 +422,8 @@ fn shortcut_config_normalizes_invalid_tokens_to_defaults() {
     assert_eq!(cfg.shortcuts.timer_toggle_pause, "space");
     assert_eq!(cfg.shortcuts.site_add, "a");
     assert_eq!(cfg.shortcuts.planner_select_recent, "r");
+    assert_eq!(cfg.shortcuts.navigate_up, "up");
+    assert_eq!(cfg.shortcuts.confirm, "enter");
 }
 
 #[test]
@@ -430,6 +434,10 @@ fn shortcut_config_normalizes_space_and_uppercase_tokens() {
 timer_toggle_pause = "SPACE"
 open_stats_history = "Y"
 select_previous_blocklist_profile = "["
+navigate_up = "UP"
+confirm = "ENTER"
+cancel = "ESCAPE"
+delete = "DEL"
 "#,
     )
     .unwrap();
@@ -438,6 +446,10 @@ select_previous_blocklist_profile = "["
     assert_eq!(normalized.shortcuts.timer_toggle_pause, "space");
     assert_eq!(normalized.shortcuts.open_stats_history, "y");
     assert_eq!(normalized.shortcuts.select_previous_blocklist_profile, "[");
+    assert_eq!(normalized.shortcuts.navigate_up, "up");
+    assert_eq!(normalized.shortcuts.confirm, "enter");
+    assert_eq!(normalized.shortcuts.cancel, "esc");
+    assert_eq!(normalized.shortcuts.delete, "delete");
 }
 
 #[test]

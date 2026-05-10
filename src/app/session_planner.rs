@@ -1,16 +1,20 @@
 use crate::app::{
-    App, AppMode, KeyCode, KeyEvent, PLANNER_RECENT_LABEL_LIMIT, PlannerFeedbackLevel,
-    PlannerInputMode, ShortcutAction, normalize_task_label, task_label_index, task_label_key,
-    task_label_state_labels,
+    App, AppMode, KeyCode, KeyEvent, NavigationAction, PLANNER_RECENT_LABEL_LIMIT,
+    PlannerFeedbackLevel, PlannerInputMode, ShortcutAction, normalize_task_label, task_label_index,
+    task_label_key, task_label_state_labels,
 };
 
 impl App {
     pub(super) fn handle_key_session_planner(&mut self, key: KeyEvent) {
         if self.planner_input_active {
             match key.code {
-                KeyCode::Enter => self.commit_planner_input(),
-                KeyCode::Esc => self.cancel_planner_input(),
-                KeyCode::Backspace => {
+                _ if self.navigation_matches(NavigationAction::Confirm, &key) => {
+                    self.commit_planner_input()
+                }
+                _ if self.navigation_matches(NavigationAction::Cancel, &key) => {
+                    self.cancel_planner_input()
+                }
+                _ if self.navigation_matches(NavigationAction::Backspace, &key) => {
                     self.planner_input.pop();
                 }
                 KeyCode::Char(c) => {
@@ -26,13 +30,15 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Esc => {
+            _ if self.navigation_matches(NavigationAction::Cancel, &key) => {
                 self.mode = AppMode::Timer;
             }
-            KeyCode::Up | KeyCode::Char('k') => {
+            _ if self.navigation_matches(NavigationAction::MoveUp, &key) => {
                 self.planner_selection_index = self.planner_selection_index.saturating_sub(1);
             }
-            KeyCode::Down | KeyCode::Char('j') if !self.planner_labels_for_display().is_empty() => {
+            _ if self.navigation_matches(NavigationAction::MoveDown, &key)
+                && !self.planner_labels_for_display().is_empty() =>
+            {
                 self.planner_selection_index = (self.planner_selection_index + 1)
                     .min(self.planner_labels_for_display().len().saturating_sub(1));
             }
@@ -40,7 +46,9 @@ impl App {
                 let index = (c as usize).saturating_sub('1' as usize);
                 self.select_recent_planner_label(index);
             }
-            KeyCode::Enter => self.select_planner_label(),
+            _ if self.navigation_matches(NavigationAction::Confirm, &key) => {
+                self.select_planner_label()
+            }
             _ => {
                 if self.shortcut_matches(ShortcutAction::BackSessionPlanner, &key) {
                     self.mode = AppMode::Timer;
@@ -52,7 +60,7 @@ impl App {
                     self.toggle_planner_favorite();
                 } else if self.shortcut_matches(ShortcutAction::PlannerArchive, &key) {
                     self.toggle_planner_archive();
-                } else if key.code == KeyCode::Delete
+                } else if self.navigation_matches(NavigationAction::Delete, &key)
                     || self.shortcut_matches(ShortcutAction::PlannerDelete, &key)
                 {
                     self.remove_planner_label();

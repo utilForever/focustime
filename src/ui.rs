@@ -9,8 +9,9 @@ use ratatui::{
 
 use crate::app::{
     App, AppMode, BlocklistProfileInputMode, DailyGoalProgress, HistoryFeedbackLevel,
-    PLANNER_RECENT_LABEL_LIMIT, PROFILE_IDS, PlannerFeedbackLevel, PlannerInputMode, SetupCheck,
-    SetupCheckLevel, ShortcutAction, SiteFeedbackLevel, SiteInputMode, SiteListMode,
+    NavigationAction, PLANNER_RECENT_LABEL_LIMIT, PROFILE_IDS, PlannerFeedbackLevel,
+    PlannerInputMode, SetupCheck, SetupCheckLevel, ShortcutAction, SiteFeedbackLevel,
+    SiteInputMode, SiteListMode,
 };
 use crate::blocker::BlockingPreviewAction;
 use crate::config::ThemePreset;
@@ -38,8 +39,8 @@ mod timer;
 use timer::{format_duration_label, format_wakatime_heartbeat_timestamp, render_timer};
 #[cfg(test)]
 use timer::{
-    timer_primary_hint, timer_secondary_hint, timer_status_text, timer_tertiary_hint,
-    wakatime_status_line,
+    note_phase_notice_text, timer_primary_hint, timer_secondary_hint, timer_status_text,
+    timer_tertiary_hint, wakatime_status_line,
 };
 
 const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];

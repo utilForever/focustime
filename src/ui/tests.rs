@@ -144,6 +144,38 @@ fn timer_hints_allow_note_edit_while_focus_is_paused() {
 }
 
 #[test]
+fn timer_note_hints_reflect_custom_confirm_and_cancel_shortcuts() {
+    let mut app = App::from_config_for_tests(AppConfig {
+        shortcuts: ShortcutConfig {
+            confirm: "v".to_string(),
+            cancel: "o".to_string(),
+            ..ShortcutConfig::default()
+        },
+        ..AppConfig::default()
+    });
+    app.task_labels = vec!["Docs".to_string()];
+    app.selected_task_label = Some("Docs".to_string());
+    app.handle_key(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char(' '),
+        crossterm::event::KeyModifiers::NONE,
+    ));
+    app.handle_key(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('m'),
+        crossterm::event::KeyModifiers::NONE,
+    ));
+
+    assert_eq!(
+        timer_primary_hint(&app),
+        "Note: Type text  [v] Save  [o] Cancel"
+    );
+    assert_eq!(
+        note_phase_notice_text(&app),
+        "📝 Note: Docs   [v] Save   [o] Cancel"
+    );
+    assert_eq!(timer_tertiary_hint(&app), "Note edit: [o] Cancel");
+}
+
+#[test]
 fn goal_streak_lines_show_off_when_all_goals_disabled() {
     let app = App::default();
 

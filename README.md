@@ -280,14 +280,13 @@ consistent screen structure:
 ## Keyboard shortcut customization
 
 Core command shortcuts are configurable in `config.toml` under `[shortcuts]`.
-This first pass covers command actions (timer controls, view switching, manager
-actions, export/refresh, and quit).
+Shortcut customization now also covers navigation/edit interactions used across
+manager/editor flows.
 
-For safety and editing ergonomics, these keys remain fixed in this version:
+For safety:
 
-- `Enter`, `Esc`, arrow keys, `Delete`
-- text-entry behavior (`Type`, `Backspace`, paste)
 - `Ctrl-C` as a quit fallback
+- text-entry `Type` and paste behavior stay native
 
 Example:
 
@@ -299,7 +298,18 @@ back_stats_history = "y"
 timer_stop_reset = "x"
 quit = "q"
 timer_toggle_pause = "space"
+navigate_up = "up"
+navigate_down = "down"
+navigate_left = "left"
+navigate_right = "right"
+confirm = "enter"
+cancel = "esc"
+delete = "delete"
+backspace = "backspace"
 ```
+
+Navigation/edit tokens accept either a single character or a named key:
+`enter`, `esc`, `up`, `down`, `left`, `right`, `delete`, `backspace`, `space`.
 
 ## Pomodoro profiles
 
@@ -311,11 +321,11 @@ timer_toggle_pause = "space"
 
 Open profile manager from timer view with **`p`**.
 
-- `↑/↓`: move between profiles
-- `Enter`: apply selected profile
+- `↑/↓` (default `navigate_up`/`navigate_down`): move between profiles
+- `Enter` (default `confirm`): apply selected profile
 - `e`: open profile/settings editor
 - `[` / `]`: cycle the active break template for fast short/long break switching
-- In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values (including **Theme preset**), `Type/Backspace` edits WakaTime project/language, `Enter` saves
+- In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values (including **Theme preset**), `Type/Backspace` edits WakaTime project/language, `Enter` saves (all defaults are configurable via navigation/edit shortcut fields)
 
 Profile selection, break template selection, theme preset selection, custom durations,
 and profile-scoped automation settings are persisted in `config.toml`.
@@ -330,10 +340,10 @@ Open the session planner from timer view with **`t`**.
 - `x`: toggle archive state for highlighted task label
 - `d` or `Delete`: delete highlighted task label
 - `r` or `1-5`: quick-pick recent task labels
-- `↑/↓`: move selection
-- `Enter`: select highlighted task label (archived labels are visible but cannot be selected)
-- `t` or `Esc`: return to timer view
-- while adding/renaming a label, `Enter` saves and `Esc` cancels
+- `↑/↓` (default `navigate_up`/`navigate_down`): move selection
+- `Enter` (default `confirm`): select highlighted task label (archived labels are visible but cannot be selected)
+- `t` or `Esc` (default `cancel`): return to timer view
+- while adding/renaming a label, `Enter` (default `confirm`) saves and `Esc` (default `cancel`) cancels
 
 Starting a focus session from idle now requires a selected task label. The timer
 view always shows the current task label (or a reminder to select one).
@@ -508,16 +518,16 @@ Open the site manager from timer view with **`b`**.
 - `n`: create a blocklist profile
 - `r`: rename the active blocklist profile
 - `x`: delete the active blocklist profile
-- `↑/↓`: move selection
+- `↑/↓` (default `navigate_up`/`navigate_down`): move selection
 - `b`: return to timer view
-- `Esc`: return to timer view only when add/edit mode is not active
+- `Esc` (default `cancel`): return to timer view only when add/edit mode is not active
 
 Add/import input supports:
 
 - single hostnames (`youtube.com`)
 - comma-separated lists (`youtube.com, reddit.com`)
 - newline-separated lists (paste multi-line blocklists, then press `Enter`)
-- while add/import or edit mode is active, `Enter` commits and `Esc` cancels the current draft
+- while add/import or edit mode is active, `Enter` (default `confirm`) commits and `Esc` (default `cancel`) cancels the current draft
 
 Invalid and duplicate entries are reported inline so you can fix them without leaving the view.
 
@@ -579,8 +589,8 @@ You can configure notification and auto-start settings directly from the TUI:
 - press `e` to open the editor
 - automation and schedule edits apply to the currently selected profile only
 - the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **Appearance**, **WakaTime**, **Schedule**) to keep settings easier to scan
-- use `↑/↓` to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily/Weekly/Monthly goal (minutes)**, **Daily/Weekly/Monthly goal (pomodoros)**, **Theme preset**, **WakaTime project/language**, or the **Schedule** fields
-- use `←/→` to adjust values (or toggle `Off`/`On` for boolean fields), use `Type/Backspace` for WakaTime text fields, then `Enter` to save
+- use `↑/↓` (default `navigate_up`/`navigate_down`) to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily/Weekly/Monthly goal (minutes)**, **Daily/Weekly/Monthly goal (pomodoros)**, **Theme preset**, **WakaTime project/language**, or the **Schedule** fields
+- use `←/→` (default `navigate_left`/`navigate_right`) to adjust values (or toggle `Off`/`On` for boolean fields), use `Type/Backspace` (default `backspace`) for WakaTime text fields, then `Enter` (default `confirm`) to save
 - schedule editing is in-app:
   - **Schedule add/remove**: `→` adds a window, `←` removes selected window
   - **Schedule window**: `←/→` changes which window is selected

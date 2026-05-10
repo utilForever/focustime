@@ -1,5 +1,5 @@
 use crate::app::{
-    App, AppMode, BreakTemplateConfig, KeyCode, KeyEvent, Local,
+    App, AppMode, BreakTemplateConfig, KeyEvent, Local, NavigationAction,
     PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX,
     PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX, PROFILE_EDIT_FIELD_LABELS,
     PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX,
@@ -149,21 +149,25 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Esc => self.cancel_profile_edit(),
-            KeyCode::Up | KeyCode::Char('k') => {
+            _ if self.navigation_matches(NavigationAction::Cancel, key) => {
+                self.cancel_profile_edit()
+            }
+            _ if self.navigation_matches(NavigationAction::MoveUp, key) => {
                 self.profile_edit_field = self.profile_edit_field.saturating_sub(1);
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            _ if self.navigation_matches(NavigationAction::MoveDown, key) => {
                 self.profile_edit_field = (self.profile_edit_field + 1)
                     .min(PROFILE_EDIT_FIELD_LABELS.len().saturating_sub(1));
             }
-            KeyCode::Left | KeyCode::Char('h') => {
+            _ if self.navigation_matches(NavigationAction::MoveLeft, key) => {
                 self.adjust_profile_edit_field(false);
             }
-            KeyCode::Right | KeyCode::Char('l') => {
+            _ if self.navigation_matches(NavigationAction::MoveRight, key) => {
                 self.adjust_profile_edit_field(true);
             }
-            KeyCode::Enter => self.commit_profile_edit(),
+            _ if self.navigation_matches(NavigationAction::Confirm, key) => {
+                self.commit_profile_edit()
+            }
             _ => {}
         }
     }
@@ -174,15 +178,17 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Esc => self.exit_profile_manager(),
-            KeyCode::Up | KeyCode::Char('k') => {
+            _ if self.navigation_matches(NavigationAction::Cancel, key) => {
+                self.exit_profile_manager()
+            }
+            _ if self.navigation_matches(NavigationAction::MoveUp, key) => {
                 self.profile_selection_index = self.profile_selection_index.saturating_sub(1);
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            _ if self.navigation_matches(NavigationAction::MoveDown, key) => {
                 self.profile_selection_index =
                     (self.profile_selection_index + 1).min(PROFILE_IDS.len().saturating_sub(1));
             }
-            KeyCode::Enter => {
+            _ if self.navigation_matches(NavigationAction::Confirm, key) => {
                 let selected = profile_for_index(self.profile_selection_index);
                 if self.apply_profile(selected) {
                     self.exit_profile_manager();

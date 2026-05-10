@@ -1,8 +1,8 @@
 use crate::app::{
     App, AppMode, BlocklistProfileConfig, BlocklistProfileInputMode, BulkAddResult, EditSiteResult,
-    KeyCode, KeyEvent, KeyModifiers, ShortcutAction, SiteBlocker, SiteFeedbackLevel, SiteInputMode,
-    SiteListMode, display_input_value, effective_blocked_sites_for_profile, format_count,
-    summarize_invalid_inputs,
+    KeyCode, KeyEvent, KeyModifiers, NavigationAction, ShortcutAction, SiteBlocker,
+    SiteFeedbackLevel, SiteInputMode, SiteListMode, display_input_value,
+    effective_blocked_sites_for_profile, format_count, summarize_invalid_inputs,
 };
 
 const SITE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 10] = [
@@ -36,7 +36,7 @@ impl App {
             return;
         }
 
-        if key.code == KeyCode::Delete {
+        if self.navigation_matches(NavigationAction::Delete, &key) {
             self.remove_selected_site();
             return;
         }
@@ -51,15 +51,15 @@ impl App {
 
         match key.code {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => false,
-            KeyCode::Enter => {
+            _ if self.navigation_matches(NavigationAction::Confirm, key) => {
                 self.commit_blocklist_profile_input();
                 true
             }
-            KeyCode::Esc => {
+            _ if self.navigation_matches(NavigationAction::Cancel, key) => {
                 self.cancel_blocklist_profile_input();
                 true
             }
-            KeyCode::Backspace => {
+            _ if self.navigation_matches(NavigationAction::Backspace, key) => {
                 self.blocklist_profile_input.pop();
                 true
             }
@@ -78,15 +78,15 @@ impl App {
 
         match key.code {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => false,
-            KeyCode::Enter => {
+            _ if self.navigation_matches(NavigationAction::Confirm, key) => {
                 self.commit_site_input();
                 true
             }
-            KeyCode::Esc => {
+            _ if self.navigation_matches(NavigationAction::Cancel, key) => {
                 self.cancel_site_input();
                 true
             }
-            KeyCode::Backspace => {
+            _ if self.navigation_matches(NavigationAction::Backspace, key) => {
                 self.site_input.pop();
                 true
             }
@@ -100,16 +100,18 @@ impl App {
 
     fn handle_site_manager_navigation_key(&mut self, key: &KeyEvent) -> bool {
         match key.code {
-            KeyCode::Down | KeyCode::Char('j') if !self.active_policy_sites().is_empty() => {
+            _ if self.navigation_matches(NavigationAction::MoveDown, key)
+                && !self.active_policy_sites().is_empty() =>
+            {
                 self.selected_site =
                     (self.selected_site + 1).min(self.active_policy_sites().len() - 1);
                 true
             }
-            KeyCode::Up | KeyCode::Char('k') => {
+            _ if self.navigation_matches(NavigationAction::MoveUp, key) => {
                 self.selected_site = self.selected_site.saturating_sub(1);
                 true
             }
-            KeyCode::Esc => {
+            _ if self.navigation_matches(NavigationAction::Cancel, key) => {
                 self.mode = AppMode::Timer;
                 true
             }
