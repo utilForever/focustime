@@ -138,8 +138,10 @@ impl App {
             .map(str::to_string)
             .unwrap_or_default();
         self.timer_note_input_active = true;
-        self.phase_notification =
-            Some("Editing session note: type text, then press [Enter] to save.".to_string());
+        self.phase_notification = Some(format!(
+            "Editing session note: type text, then press {} to save.",
+            self.navigation_hint(NavigationAction::Confirm)
+        ));
     }
 
     fn handle_timer_note_input_key(&mut self, key: KeyEvent) {

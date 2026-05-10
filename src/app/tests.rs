@@ -4174,6 +4174,10 @@ fn mid_session_note_input_uses_custom_confirm_shortcut() {
 
     app.handle_key(key(KeyCode::Char('m')));
     assert!(app.timer_note_input_active);
+    assert_eq!(
+        app.phase_notification.as_deref(),
+        Some("Editing session note: type text, then press [v] to save.")
+    );
     app.timer_note_input = "Capture blockers for retro".to_string();
     app.handle_key(key(KeyCode::Char('v')));
 
