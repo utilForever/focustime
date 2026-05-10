@@ -423,6 +423,35 @@ fn start_json_success_emits_timer_payload_on_stdout() {
 }
 
 #[test]
+fn start_then_status_json_reports_running_recovery_state_across_processes() {
+    let env = TestEnv::new("start-status-cross-process");
+    let select_output = env.run(&["--task", "Docs", "--json"]);
+    assert_eq!(select_output.status.code(), Some(0));
+    assert!(stderr_text(&select_output).trim().is_empty());
+
+    let start_output = env.run(&["--start", "--json"]);
+    assert_eq!(start_output.status.code(), Some(0));
+    assert!(stderr_text(&start_output).trim().is_empty());
+
+    let status_output = env.run(&["--status", "--json"]);
+    assert_eq!(status_output.status.code(), Some(0));
+    assert!(stderr_text(&status_output).trim().is_empty());
+
+    let payload: Value = serde_json::from_slice(&status_output.stdout).expect("stdout JSON");
+    assert_eq!(payload["live"]["state_source"], "recovery");
+    assert_eq!(payload["live"]["in_progress"], true);
+    assert_eq!(payload["live"]["phase"], "focus");
+    assert_eq!(payload["live"]["status"], "running");
+    assert_eq!(payload["live"]["selected_task_label"], "Docs");
+    assert!(
+        payload["live"]["remaining_secs"]
+            .as_u64()
+            .expect("remaining secs should be u64")
+            > 0
+    );
+}
+
+#[test]
 fn start_json_requires_selected_task_label() {
     let env = TestEnv::new("start-json-requires-task");
     let output = env.run(&["--start", "--json"]);
