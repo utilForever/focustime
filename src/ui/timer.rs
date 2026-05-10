@@ -283,6 +283,11 @@ fn phase_notice_line(app: &App) -> (String, Style) {
     }
 }
 
+#[cfg(test)]
+pub(super) fn note_phase_notice_text(app: &App) -> String {
+    phase_notice_line(app).0
+}
+
 fn timer_stats_line(app: &App) -> (String, Style) {
     if let Some(err) = app.stats_error.as_ref() {
         (

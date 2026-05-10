@@ -168,6 +168,10 @@ fn timer_note_hints_reflect_custom_confirm_and_cancel_shortcuts() {
         timer_primary_hint(&app),
         "Note: Type text  [v] Save  [o] Cancel"
     );
+    assert_eq!(
+        note_phase_notice_text(&app),
+        "📝 Note: Docs   [v] Save   [o] Cancel"
+    );
     assert_eq!(timer_tertiary_hint(&app), "Note edit: [o] Cancel");
 }
 

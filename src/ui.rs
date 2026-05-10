@@ -39,7 +39,8 @@ mod timer;
 use timer::{format_duration_label, format_wakatime_heartbeat_timestamp, render_timer};
 #[cfg(test)]
 use timer::{
-    timer_primary_hint, timer_secondary_hint, timer_status_text, timer_tertiary_hint,
+    note_phase_notice_text, timer_primary_hint, timer_secondary_hint, timer_status_text,
+    timer_tertiary_hint,
     wakatime_status_line,
 };
 
