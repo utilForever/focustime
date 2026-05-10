@@ -331,6 +331,7 @@ impl App {
             notifications: self.notification_settings,
             auto_start: self.auto_start,
             recurring_schedule: self.recurring_schedule.clone(),
+            schedule_runtime: self.schedule_runtime,
             profile_automation: Some(profile_automation),
             strict_mode: self.strict_mode,
             break_glass_duration_secs: self.break_glass_duration_secs,
@@ -340,6 +341,7 @@ impl App {
             goal_carry_over: self.goal_carry_over,
             stats_retention: self.stats_retention,
             wakatime: self.wakatime_metadata.clone(),
+            wakatime_runtime: self.wakatime_runtime.clone(),
             feature_flags: self.feature_flags,
             shortcuts: self.shortcuts.to_config(),
         }

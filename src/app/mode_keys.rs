@@ -1,7 +1,6 @@
 use crate::app::{
-    App, AppMode, KeyCode, KeyEvent, KeyModifiers, PendingTimerAction, SCHEDULE_DELAY_SECS,
-    SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
-    format_duration_label,
+    App, AppMode, KeyCode, KeyEvent, KeyModifiers, PendingTimerAction, SessionInterruptionReason,
+    ShortcutAction, TimerPhase, TimerState, TimerStatus, format_duration_label,
 };
 
 const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 11] = [
@@ -201,7 +200,7 @@ impl App {
             Ok(delayed_until) => {
                 self.phase_notification = Some(format!(
                     "Scheduled start delayed for {} (until {}).",
-                    format_duration_label(SCHEDULE_DELAY_SECS),
+                    format_duration_label(self.schedule_runtime.delay_secs),
                     delayed_until.format("%H:%M")
                 ));
             }

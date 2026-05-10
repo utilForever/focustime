@@ -1,8 +1,8 @@
 use crate::app::{
-    App, DateTime, Local, SCHEDULE_DELAY_SECS, ScheduleDisplayState, ShortcutAction, TimerPhase,
-    TimerState, TimerStatus, WindowOccurrence, active_occurrence, active_one_time_occurrence,
-    next_occurrence_after, next_one_time_occurrence_after, occurrence_key, pick_active_occurrence,
-    pick_next_occurrence,
+    App, DateTime, Local, ScheduleDisplayState, ShortcutAction, TimerPhase, TimerState,
+    TimerStatus, WindowOccurrence, active_occurrence, active_one_time_occurrence,
+    format_duration_label, next_occurrence_after, next_one_time_occurrence_after, occurrence_key,
+    pick_active_occurrence, pick_next_occurrence,
 };
 
 struct ScheduleShortcutLabels {
@@ -19,6 +19,7 @@ impl App {
 
     pub(super) fn recurring_schedule_texts_at(&self, now: DateTime<Local>) -> (String, String) {
         let state = self.schedule_display_state_at(now);
+        let delay_label = format_duration_label(self.schedule_runtime.delay_secs);
         let labels = ScheduleShortcutLabels {
             planner: self.shortcut_hint(ShortcutAction::OpenSessionPlanner),
             toggle_pause: self.shortcut_hint(ShortcutAction::TimerTogglePause),
@@ -27,7 +28,7 @@ impl App {
         };
         (
             schedule_next_window_text_from_state(&state, now),
-            schedule_status_text_from_state(&state, &labels),
+            schedule_status_text_from_state(&state, &labels, &delay_label),
         )
     }
 
@@ -127,7 +128,8 @@ impl App {
             }
             _ => now,
         };
-        let requested_until = delayed_from + chrono::Duration::seconds(SCHEDULE_DELAY_SECS as i64);
+        let requested_until =
+            delayed_from + chrono::Duration::seconds(self.schedule_runtime.delay_secs as i64);
         let delayed_until = requested_until.min(active_window.end);
 
         self.schedule_armed_occurrence_key = None;
@@ -210,18 +212,21 @@ impl App {
     }
 
     fn schedule_arm_notification(&self) -> String {
+        let delay_label = format_duration_label(self.schedule_runtime.delay_secs);
         if !self.has_selectable_task_label_for_focus() {
             format!(
-                "Scheduled window started. Select a task label with {}, then press {} to start focus or {} to delay 10m.",
+                "Scheduled window started. Select a task label with {}, then press {} to start focus or {} to delay {}.",
                 self.shortcut_hint(ShortcutAction::OpenSessionPlanner),
                 self.shortcut_hint(ShortcutAction::TimerTogglePause),
                 self.shortcut_hint(ShortcutAction::DelayScheduleStart),
+                delay_label,
             )
         } else {
             format!(
-                "Scheduled window started. Press {} to start focus or {} to delay 10m.",
+                "Scheduled window started. Press {} to start focus or {} to delay {}.",
                 self.shortcut_hint(ShortcutAction::TimerTogglePause),
                 self.shortcut_hint(ShortcutAction::DelayScheduleStart),
+                delay_label,
             )
         }
     }
@@ -262,13 +267,19 @@ fn schedule_next_window_text_from_state(
 fn schedule_status_text_from_state(
     state: &ScheduleDisplayState,
     labels: &ScheduleShortcutLabels,
+    delay_label: &str,
 ) -> String {
     if !state.has_schedule_windows {
         return "⚙  Schedule status: off".to_string();
     }
 
     if let Some(delayed_until) = state.delayed_until.as_ref() {
-        return schedule_delayed_status_text(*delayed_until, state.has_selected_task, labels);
+        return schedule_delayed_status_text(
+            *delayed_until,
+            state.has_selected_task,
+            labels,
+            delay_label,
+        );
     }
 
     if state.active_window.is_some() {
@@ -313,21 +324,24 @@ fn schedule_delayed_status_text(
     delayed_until: DateTime<Local>,
     has_selected_task: bool,
     labels: &ScheduleShortcutLabels,
+    delay_label: &str,
 ) -> String {
     if has_selected_task {
         format!(
-            "⚙  Schedule status: delayed until {}; press {} to start now or {} to delay 10m",
+            "⚙  Schedule status: delayed until {}; press {} to start now or {} to delay {}",
             delayed_until.format("%H:%M"),
             labels.toggle_pause,
             labels.delay,
+            delay_label,
         )
     } else {
         format!(
-            "⚙  Schedule status: delayed until {}; select {} then {}, or press {} to delay 10m",
+            "⚙  Schedule status: delayed until {}; select {} then {}, or press {} to delay {}",
             delayed_until.format("%H:%M"),
             labels.planner,
             labels.toggle_pause,
             labels.delay,
+            delay_label,
         )
     }
 }
