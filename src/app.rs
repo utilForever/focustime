@@ -15,8 +15,8 @@ use crate::config::{
     DailyGoalConfig, FeatureFlagsConfig, GoalCarryOverConfig, MonthlyGoalConfig,
     NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
     ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
-    WeeklyGoalConfig,
+    RecurringScheduleConfig, ScheduleRuntimeConfig, StatsRetentionConfig, ThemePreset,
+    WakatimeMetadataConfig, WakatimeRuntimeConfig, WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -38,7 +38,9 @@ use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
 };
-use crate::wakatime::{WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeTracker};
+use crate::wakatime::{
+    WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, WakatimeTracker,
+};
 
 mod break_glass;
 mod cli_api;
@@ -129,10 +131,8 @@ const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
 const UNLINKED_BREAK_TEMPLATE_NAME: &str = "Custom";
 pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
-const SCHEDULE_TIME_STEP_MINUTES: u16 = 15;
 const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const SCHEDULE_DAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const SCHEDULE_DELAY_SECS: u64 = 10 * 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
@@ -546,6 +546,7 @@ pub struct App {
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
     recurring_schedule: RecurringScheduleConfig,
+    schedule_runtime: ScheduleRuntimeConfig,
     recurring_windows: Vec<RecurringWindow>,
     recurring_exception_dates: HashSet<NaiveDate>,
     one_time_windows: Vec<OneTimeWindow>,
@@ -563,6 +564,7 @@ pub struct App {
     goal_carry_over: GoalCarryOverConfig,
     stats_retention: StatsRetentionConfig,
     wakatime_metadata: WakatimeMetadataConfig,
+    wakatime_runtime: WakatimeRuntimeConfig,
     pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
     stats: FocusStats,
@@ -600,6 +602,7 @@ impl App {
             compile_exception_dates(&recurring_schedule.exception_dates);
         let one_time_windows = compile_one_time_windows(&recurring_schedule.one_time_windows);
         let strict_mode = selected_automation.strict_mode;
+        let schedule_runtime = config.schedule_runtime;
         let break_glass_duration_secs = config.break_glass_duration_secs;
         let daily_goal = config.daily_goal;
         let weekly_goal = config.weekly_goal;
@@ -607,6 +610,7 @@ impl App {
         let goal_carry_over = config.goal_carry_over;
         let stats_retention = config.stats_retention;
         let wakatime_metadata = config.wakatime;
+        let wakatime_runtime = config.wakatime_runtime;
         let blocklist_profiles = config.blocklist_profiles.clone();
         let active_blocklist_profile =
             blocklist_profile_index(&blocklist_profiles, &config.selected_blocklist_profile);
@@ -678,10 +682,17 @@ impl App {
             stats_error,
             history_feedback: None,
             phase_notification: None,
-            wakatime: WakatimeTracker::new_with_metadata(WakatimeHeartbeatMetadata {
-                project: wakatime_metadata.project.clone(),
-                language: wakatime_metadata.language.clone(),
-            }),
+            wakatime: WakatimeTracker::new_with_settings(
+                WakatimeHeartbeatMetadata {
+                    project: wakatime_metadata.project.clone(),
+                    language: wakatime_metadata.language.clone(),
+                },
+                WakatimeRuntimeOptions {
+                    retry_backoff_secs: wakatime_runtime.retry_backoff_secs.clone(),
+                    queue_capacity: wakatime_runtime.queue_capacity,
+                    queue_retry_delay_secs: wakatime_runtime.queue_retry_delay_secs,
+                },
+            ),
             selected_profile,
             selected_theme_preset,
             feature_flags,
@@ -699,6 +710,7 @@ impl App {
             notification_settings,
             auto_start,
             recurring_schedule,
+            schedule_runtime,
             recurring_windows,
             recurring_exception_dates,
             one_time_windows,
@@ -716,6 +728,7 @@ impl App {
             goal_carry_over,
             stats_retention,
             wakatime_metadata,
+            wakatime_runtime,
             pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
             stats,

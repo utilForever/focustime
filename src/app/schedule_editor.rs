@@ -7,11 +7,10 @@ use crate::app::{
     PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX,
     PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX,
     PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
-    RecurringFocusWindowConfig, SCHEDULE_DAY_LABELS, SCHEDULE_DAY_TOKENS,
-    SCHEDULE_TIME_STEP_MINUTES, bool_label, format_hhmm, format_schedule_conflict,
-    format_schedule_days_for_display, inspect_schedule_conflicts_from_config, parse_hhmm_minutes,
-    parse_schedule_exception_date, sort_one_time_windows, sort_schedule_days,
-    sort_schedule_exception_dates,
+    RecurringFocusWindowConfig, SCHEDULE_DAY_LABELS, SCHEDULE_DAY_TOKENS, bool_label, format_hhmm,
+    format_schedule_conflict, format_schedule_days_for_display,
+    inspect_schedule_conflicts_from_config, parse_hhmm_minutes, parse_schedule_exception_date,
+    sort_one_time_windows, sort_schedule_days, sort_schedule_exception_dates,
 };
 
 impl App {
@@ -309,6 +308,7 @@ impl App {
     }
 
     pub(super) fn adjust_selected_schedule_time(&mut self, is_start: bool, increase: bool) {
+        let step_minutes = self.schedule_runtime.time_step_minutes;
         let Some(window) = self.selected_schedule_window_mut() else {
             return;
         };
@@ -322,19 +322,19 @@ impl App {
         if is_start {
             if increase {
                 start = start
-                    .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                    .saturating_add(step_minutes)
                     .min(end.saturating_sub(1));
             } else {
-                start = start.saturating_sub(SCHEDULE_TIME_STEP_MINUTES);
+                start = start.saturating_sub(step_minutes);
             }
         } else if increase {
             end = end
-                .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                .saturating_add(step_minutes)
                 .min(23 * 60 + 59)
                 .max(start.saturating_add(1));
         } else {
             end = end
-                .saturating_sub(SCHEDULE_TIME_STEP_MINUTES)
+                .saturating_sub(step_minutes)
                 .max(start.saturating_add(1));
         }
 
@@ -453,6 +453,7 @@ impl App {
         let Some(current_window) = self.selected_one_time_window().cloned() else {
             return;
         };
+        let step_minutes = self.schedule_runtime.time_step_minutes;
 
         let mut start = parse_hhmm_minutes(&current_window.start).unwrap_or(9 * 60);
         let mut end = parse_hhmm_minutes(&current_window.end).unwrap_or(10 * 60);
@@ -463,19 +464,19 @@ impl App {
         if is_start {
             if increase {
                 start = start
-                    .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                    .saturating_add(step_minutes)
                     .min(end.saturating_sub(1));
             } else {
-                start = start.saturating_sub(SCHEDULE_TIME_STEP_MINUTES);
+                start = start.saturating_sub(step_minutes);
             }
         } else if increase {
             end = end
-                .saturating_add(SCHEDULE_TIME_STEP_MINUTES)
+                .saturating_add(step_minutes)
                 .min(23 * 60 + 59)
                 .max(start.saturating_add(1));
         } else {
             end = end
-                .saturating_sub(SCHEDULE_TIME_STEP_MINUTES)
+                .saturating_sub(step_minutes)
                 .max(start.saturating_add(1));
         }
 

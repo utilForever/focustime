@@ -115,6 +115,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
+        schedule_runtime: ScheduleRuntimeConfig::default(),
         profile_automation: None,
         strict_mode: false,
         break_glass_duration_secs: 5 * 60,
@@ -125,6 +126,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         stats_retention: StatsRetentionConfig::default(),
         selected_theme_preset: ThemePreset::Classic,
         wakatime: WakatimeMetadataConfig::default(),
+        wakatime_runtime: WakatimeRuntimeConfig::default(),
         feature_flags: FeatureFlagsConfig::default(),
         shortcuts: ShortcutConfig::default(),
     };
@@ -134,6 +136,27 @@ fn selected_builtin_profile_is_applied_on_startup() {
     assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
     assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
     assert_eq!(app.timer.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
+}
+
+#[test]
+fn app_from_config_applies_wakatime_runtime_knobs() {
+    let app = App::from_config(AppConfig {
+        wakatime_runtime: WakatimeRuntimeConfig {
+            retry_backoff_secs: vec![2, 4, 8],
+            queue_capacity: 512,
+            queue_retry_delay_secs: 25,
+        },
+        ..AppConfig::default()
+    });
+
+    assert_eq!(
+        app.wakatime.runtime_options_for_tests(),
+        crate::wakatime::WakatimeRuntimeOptions {
+            retry_backoff_secs: vec![2, 4, 8],
+            queue_capacity: 512,
+            queue_retry_delay_secs: 25,
+        }
+    );
 }
 
 #[test]
@@ -3071,6 +3094,46 @@ fn schedule_delay_key_sets_delay_for_active_window() {
 }
 
 #[test]
+fn schedule_delay_key_uses_configured_runtime_delay_duration() {
+    let now = local_datetime_today(10, 15);
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "10:00".to_string(),
+                end: "11:00".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        schedule_runtime: ScheduleRuntimeConfig {
+            time_step_minutes: 15,
+            delay_secs: 90,
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.sync_recurring_schedule(now);
+    app.current_frame_now = now;
+
+    app.handle_key(key(KeyCode::Char('z')));
+
+    assert_eq!(
+        app.schedule_delay_until,
+        Some(now + ChronoDuration::seconds(90))
+    );
+    assert!(
+        app.phase_notification
+            .as_deref()
+            .is_some_and(|message| message.contains("delayed for 1:30"))
+    );
+    assert!(
+        app.recurring_schedule_texts_at(now + ChronoDuration::seconds(30))
+            .1
+            .contains("delay 1:30")
+    );
+}
+
+#[test]
 fn schedule_delay_clamps_until_active_window_end() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {
@@ -3173,6 +3236,30 @@ fn recurring_schedule_status_text_shows_delayed_state() {
         .1;
     assert!(status.contains("Schedule status: delayed until"));
     assert!(status.contains("[z] to delay 10m"));
+}
+
+#[test]
+fn schedule_editor_uses_configured_runtime_step_minutes() {
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec!["mon".to_string()],
+                start: "09:00".to_string(),
+                end: "11:00".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        schedule_runtime: ScheduleRuntimeConfig {
+            time_step_minutes: 30,
+            delay_secs: 10 * 60,
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+
+    app.adjust_selected_schedule_time(true, true);
+
+    assert_eq!(app.recurring_schedule.windows[0].start, "09:30");
 }
 
 #[test]
