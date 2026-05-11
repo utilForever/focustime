@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [0.10.0] - 2026-05-11
+
+### Added
+
+- **CLI schedule-delay and break-glass workflow controls (#282):** added reusable app APIs and non-interactive CLI commands to delay active schedule windows and toggle break-glass mode across invocations.
+- **Runtime-tunable schedule and WakaTime queue knobs (#283):** added config/runtime controls for schedule granularity and WakaTime retry queue replay behavior, with validation and runtime application.
+- **Headless session start command contract (#284):** made `--start` fully non-interactive and documented/tested the process-safe contract for CLI-driven session start/recovery flows.
+- **Configurable navigation and edit shortcuts (#285):** added user-configurable navigation/edit key bindings and propagated those bindings through timer note prompts and related UI interactions.
+
+### Changed
+
+- **Cross-platform CI test parity documentation and workflow alignment (#286):** updated CI test matrix expectations and contributor documentation for Linux/Windows/macOS parity behavior.
+
 ## [0.9.1] - 2026-05-08
 
 ### Added
@@ -240,7 +253,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/utilForever/focustime/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/utilForever/focustime/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/utilForever/focustime/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/utilForever/focustime/compare/v0.8.0...v0.8.1
