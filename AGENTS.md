@@ -114,6 +114,8 @@ When preparing a release update, keep these files aligned:
 - `Cargo.toml` package version
 - `README.md` release automation and latest-release references
 - `CHANGELOG.md` release section and compare links
+- `CONTRIBUTING.md` release workflow/tag examples
+- `AGENTS.md` release checklist and process guidance
 - `ARCHITECTURE.md` when release-facing guidance changes
 
 ## CI Pipeline
