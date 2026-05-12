@@ -1430,123 +1430,16 @@ fn apply_migration_plan(
     plan: &MigrationPlan,
     steps: &mut [MigrationStepOutput],
 ) -> Result<(), String> {
-    let mut config_snapshot = None;
-    let mut canonical_stats_snapshot = None;
-    let mut staged_canonical_stats_path = None;
-    let mut applied_canonical_stats = false;
-
-    if plan.copy_legacy_stats_to_canonical {
-        canonical_stats_snapshot = match snapshot_existing_file(
-            &plan.canonical_stats_path,
-            "snapshot existing canonical stats.toml for migration rollback",
-        ) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                return Err(migration_setup_failure(
-                    format!("could not prepare canonical stats snapshot: {error}"),
-                    config_snapshot.as_deref(),
-                    canonical_stats_snapshot.as_deref(),
-                    staged_canonical_stats_path.as_deref(),
-                ));
-            }
-        };
-        let staged_path = temp_restore_path(&plan.canonical_stats_path, "staged");
-        staged_canonical_stats_path = Some(staged_path.clone());
-        let legacy_stats_path = match plan.legacy_stats_path.as_ref() {
-            Some(path) => path,
-            None => {
-                return Err(migration_setup_failure(
-                    "missing legacy stats path for planned copy step".to_string(),
-                    config_snapshot.as_deref(),
-                    canonical_stats_snapshot.as_deref(),
-                    staged_canonical_stats_path.as_deref(),
-                ));
-            }
-        };
-        if let Err(error) = copy_file_with_context(
-            legacy_stats_path,
-            &staged_path,
-            "stage migration copy of stats.toml",
-        ) {
-            return Err(migration_setup_failure(
-                format!("could not stage canonical stats update: {error}"),
-                config_snapshot.as_deref(),
-                canonical_stats_snapshot.as_deref(),
-                staged_canonical_stats_path.as_deref(),
-            ));
-        }
-    }
-
-    if plan.requires_config_update() {
-        config_snapshot = match snapshot_existing_file(
-            &plan.config_path,
-            "snapshot existing config.toml for migration rollback",
-        ) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                return Err(migration_setup_failure(
-                    format!("could not prepare config snapshot: {error}"),
-                    config_snapshot.as_deref(),
-                    canonical_stats_snapshot.as_deref(),
-                    staged_canonical_stats_path.as_deref(),
-                ));
-            }
-        };
-    }
-
-    if let Some(staged_path) = staged_canonical_stats_path.as_deref() {
-        if let Err(error) = replace_file_atomically(
-            staged_path,
-            &plan.canonical_stats_path,
-            "apply migration copy of stats.toml",
-        ) {
-            return Err(migration_failure_with_rollback(
-                format!("could not update canonical stats.toml: {error}"),
-                rollback_migration_files(
-                    config_snapshot.as_deref(),
-                    &plan.config_path,
-                    false,
-                    canonical_stats_snapshot.as_deref(),
-                    &plan.canonical_stats_path,
-                    true,
-                ),
-            ));
-        }
-        applied_canonical_stats = true;
-    }
-
-    if plan.requires_config_update() {
-        let mut migrated = config.clone();
-        if plan.disable_stats_legacy_path_read_fallback {
-            migrated.feature_flags.stats_legacy_path_read_fallback = false;
-        }
-        if plan.disable_stats_legacy_path_dual_write {
-            migrated.feature_flags.stats_legacy_path_dual_write = false;
-        }
-        if let Err(error) = migrated.save() {
-            return Err(migration_failure_with_rollback(
-                format!("could not save migrated config.toml: {error}"),
-                rollback_migration_files(
-                    config_snapshot.as_deref(),
-                    &plan.config_path,
-                    true,
-                    canonical_stats_snapshot.as_deref(),
-                    &plan.canonical_stats_path,
-                    applied_canonical_stats,
-                ),
-            ));
-        }
-    }
-
-    if let Some(snapshot) = config_snapshot.as_deref() {
-        let _ = remove_file_if_exists(snapshot);
-    }
-    if let Some(snapshot) = canonical_stats_snapshot.as_deref() {
-        let _ = remove_file_if_exists(snapshot);
-    }
-    if let Some(staged_path) = staged_canonical_stats_path.as_deref() {
-        let _ = remove_file_if_exists(staged_path);
-    }
+    let mut state = MigrationExecutionState::default();
+    prepare_migration_staging(plan, &mut state)?;
+    capture_config_snapshot_if_needed(plan, &mut state)?;
+    apply_staged_canonical_stats(plan, &mut state)?;
+    save_migrated_config_if_needed(config, plan, &state)?;
+    let _ = cleanup_migration_temp_files(
+        state.config_snapshot.as_deref(),
+        state.canonical_stats_snapshot.as_deref(),
+        state.staged_canonical_stats_path.as_deref(),
+    );
 
     for step in steps {
         if step.status == MigrationStepStatus::Planned {
@@ -1554,6 +1447,146 @@ fn apply_migration_plan(
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Default)]
+struct MigrationExecutionState {
+    config_snapshot: Option<PathBuf>,
+    canonical_stats_snapshot: Option<PathBuf>,
+    staged_canonical_stats_path: Option<PathBuf>,
+    applied_canonical_stats: bool,
+}
+
+fn prepare_migration_staging(
+    plan: &MigrationPlan,
+    state: &mut MigrationExecutionState,
+) -> Result<(), String> {
+    if !plan.copy_legacy_stats_to_canonical {
+        return Ok(());
+    }
+
+    state.canonical_stats_snapshot = snapshot_existing_file(
+        &plan.canonical_stats_path,
+        "snapshot existing canonical stats.toml for migration rollback",
+    )
+    .map_err(|error| {
+        migration_setup_failure_from_state(
+            format!("could not prepare canonical stats snapshot: {error}"),
+            state,
+        )
+    })?;
+
+    let staged_path = temp_restore_path(&plan.canonical_stats_path, "staged");
+    state.staged_canonical_stats_path = Some(staged_path.clone());
+    let legacy_stats_path = plan.legacy_stats_path.as_ref().ok_or_else(|| {
+        migration_setup_failure_from_state(
+            "missing legacy stats path for planned copy step".to_string(),
+            state,
+        )
+    })?;
+
+    copy_file_with_context(
+        legacy_stats_path,
+        &staged_path,
+        "stage migration copy of stats.toml",
+    )
+    .map_err(|error| {
+        migration_setup_failure_from_state(
+            format!("could not stage canonical stats update: {error}"),
+            state,
+        )
+    })
+}
+
+fn capture_config_snapshot_if_needed(
+    plan: &MigrationPlan,
+    state: &mut MigrationExecutionState,
+) -> Result<(), String> {
+    if !plan.requires_config_update() {
+        return Ok(());
+    }
+
+    state.config_snapshot = snapshot_existing_file(
+        &plan.config_path,
+        "snapshot existing config.toml for migration rollback",
+    )
+    .map_err(|error| {
+        migration_setup_failure_from_state(
+            format!("could not prepare config snapshot: {error}"),
+            state,
+        )
+    })?;
+    Ok(())
+}
+
+fn apply_staged_canonical_stats(
+    plan: &MigrationPlan,
+    state: &mut MigrationExecutionState,
+) -> Result<(), String> {
+    let Some(staged_path) = state.staged_canonical_stats_path.as_deref() else {
+        return Ok(());
+    };
+
+    replace_file_atomically(
+        staged_path,
+        &plan.canonical_stats_path,
+        "apply migration copy of stats.toml",
+    )
+    .map_err(|error| {
+        migration_failure_with_rollback(
+            format!("could not update canonical stats.toml: {error}"),
+            rollback_migration_files(
+                state.config_snapshot.as_deref(),
+                &plan.config_path,
+                false,
+                state.canonical_stats_snapshot.as_deref(),
+                &plan.canonical_stats_path,
+                true,
+            ),
+        )
+    })?;
+    state.applied_canonical_stats = true;
+    Ok(())
+}
+
+fn save_migrated_config_if_needed(
+    config: &AppConfig,
+    plan: &MigrationPlan,
+    state: &MigrationExecutionState,
+) -> Result<(), String> {
+    if !plan.requires_config_update() {
+        return Ok(());
+    }
+
+    let mut migrated = config.clone();
+    if plan.disable_stats_legacy_path_read_fallback {
+        migrated.feature_flags.stats_legacy_path_read_fallback = false;
+    }
+    if plan.disable_stats_legacy_path_dual_write {
+        migrated.feature_flags.stats_legacy_path_dual_write = false;
+    }
+    migrated.save().map_err(|error| {
+        migration_failure_with_rollback(
+            format!("could not save migrated config.toml: {error}"),
+            rollback_migration_files(
+                state.config_snapshot.as_deref(),
+                &plan.config_path,
+                true,
+                state.canonical_stats_snapshot.as_deref(),
+                &plan.canonical_stats_path,
+                state.applied_canonical_stats,
+            ),
+        )
+    })
+}
+
+fn migration_setup_failure_from_state(error: String, state: &MigrationExecutionState) -> String {
+    migration_setup_failure(
+        error,
+        state.config_snapshot.as_deref(),
+        state.canonical_stats_snapshot.as_deref(),
+        state.staged_canonical_stats_path.as_deref(),
+    )
 }
 
 fn rollback_migration_files(
