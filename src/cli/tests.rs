@@ -652,6 +652,26 @@ fn diagnostics_output_includes_effective_feature_flags() {
     assert!(payload.feature_flags.metadata_task_label_fallback);
     assert!(payload.feature_flags.stats_legacy_path_read_fallback);
     assert!(payload.feature_flags.stats_legacy_path_dual_write);
+    assert!(payload.deprecation_warnings.is_empty());
+}
+
+#[test]
+fn diagnostics_output_includes_deprecation_warnings() {
+    let mut app = App::default();
+    app.setup_diagnostics.deprecation_warnings = vec![
+        "Deprecated top-level timer fields are in use.".to_string(),
+        "Deprecated legacy stats path detected.".to_string(),
+    ];
+
+    let payload = build_diagnostics_command_output(&app.setup_diagnostics);
+
+    assert_eq!(
+        payload.deprecation_warnings,
+        vec![
+            "Deprecated top-level timer fields are in use.".to_string(),
+            "Deprecated legacy stats path detected.".to_string()
+        ]
+    );
 }
 
 #[test]

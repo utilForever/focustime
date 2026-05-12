@@ -25,6 +25,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             Constraint::Length(2), // hosts write capability
             Constraint::Length(2), // wakatime config status
             Constraint::Length(3), // feature flags
+            Constraint::Length(4), // deprecation warnings
             Constraint::Length(1), // preview summary
             Constraint::Min(0),    // preview section
             Constraint::Length(2), // key hints
@@ -95,6 +96,25 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         inner[5],
     );
 
+    let deprecation_lines = if app.setup_diagnostics.deprecation_warnings.is_empty() {
+        vec![Line::from("Deprecation warnings: none")]
+    } else {
+        let mut lines = vec![Line::from("Deprecation warnings:")];
+        lines.extend(
+            app.setup_diagnostics
+                .deprecation_warnings
+                .iter()
+                .map(|warning| Line::from(format!("- {warning}"))),
+        );
+        lines
+    };
+    frame.render_widget(
+        Paragraph::new(deprecation_lines)
+            .style(Style::default().fg(app_color(app, Color::Yellow)))
+            .wrap(Wrap { trim: true }),
+        inner[6],
+    );
+
     let (preview_summary, preview_style) = if let Some(error) = app.blocking_preview.error.as_ref()
     {
         (
@@ -124,7 +144,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         Paragraph::new(preview_summary)
             .alignment(Alignment::Left)
             .style(preview_style),
-        inner[6],
+        inner[7],
     );
 
     let preview_section_text = if app.blocking_preview.error.is_some() {
@@ -143,13 +163,13 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             )
             .style(Style::default().fg(app_color(app, Color::Gray)))
             .wrap(Wrap { trim: false }),
-        inner[7],
+        inner[8],
     );
 
     render_hint_lines(
         frame,
         app,
-        inner[8],
+        inner[9],
         vec![
             Line::from(format!(
                 "Diagnostics: {} Refresh checks + preview",

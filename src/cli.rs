@@ -762,6 +762,7 @@ struct DiagnosticsCommandOutput {
     hosts_write_capability: SetupCheckOutput,
     wakatime_config: SetupCheckOutput,
     feature_flags: FeatureFlagsOutput,
+    deprecation_warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
