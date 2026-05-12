@@ -383,6 +383,10 @@ legacy_automation_mirror = true
 legacy_blocked_sites_mirror = true
 # Backfill legacy metadata from task_label when missing.
 metadata_task_label_fallback = true
+# Read stats from legacy config-dir path when canonical stats path is missing.
+stats_legacy_path_read_fallback = true
+# Mirror stats writes to legacy config-dir path during migration window.
+stats_legacy_path_dual_write = true
 
 [shortcuts]
 timer_toggle_pause = "space"
@@ -647,7 +651,7 @@ Override events are recorded for audit visibility in the History view and includ
 
 - completed pomodoros for the current app session
 - focused minutes for the current app session
-- daily aggregates persisted in `stats.toml` (in the same config directory as `config.toml`)
+- daily aggregates persisted in `stats.toml` (canonical data/state directory with optional legacy config-dir mirror during migration)
 - weekly totals derived from daily aggregates in the History view
 - weekly consistency score (`active_days / 7`, rounded to `%`) derived from daily activity
 - weekly focus score KPI (50/50 blend of consistency and weekly goal completion; `n/a` when weekly goal is off)
