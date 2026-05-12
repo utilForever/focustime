@@ -650,6 +650,8 @@ fn diagnostics_output_includes_effective_feature_flags() {
     assert!(payload.feature_flags.legacy_automation_mirror);
     assert!(payload.feature_flags.legacy_blocked_sites_mirror);
     assert!(payload.feature_flags.metadata_task_label_fallback);
+    assert!(payload.feature_flags.stats_legacy_path_read_fallback);
+    assert!(payload.feature_flags.stats_legacy_path_dual_write);
 }
 
 #[test]

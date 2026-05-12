@@ -61,7 +61,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
     );
     frame.render_widget(
         Paragraph::new(format!(
-            "Feature flags: automation-mirror={} · blocked-sites-mirror={} · metadata-fallback={}",
+            "Feature flags: automation-mirror={} · blocked-sites-mirror={} · metadata-fallback={} · stats-read-fallback={} · stats-dual-write={}",
             bool_label(app.setup_diagnostics.feature_flags.legacy_automation_mirror),
             bool_label(
                 app.setup_diagnostics
@@ -72,6 +72,16 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
                 app.setup_diagnostics
                     .feature_flags
                     .metadata_task_label_fallback
+            ),
+            bool_label(
+                app.setup_diagnostics
+                    .feature_flags
+                    .stats_legacy_path_read_fallback
+            ),
+            bool_label(
+                app.setup_diagnostics
+                    .feature_flags
+                    .stats_legacy_path_dual_write
             )
         ))
         .style(Style::default().fg(app_color(app, Color::DarkGray)))

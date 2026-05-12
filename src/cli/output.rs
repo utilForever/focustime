@@ -623,10 +623,12 @@ pub(super) fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutpu
     print_diagnostics_check("Hosts write capability", &payload.hosts_write_capability);
     print_diagnostics_check("WakaTime config", &payload.wakatime_config);
     println!(
-        "Feature flags: automation-mirror={}, blocked-sites-mirror={}, metadata-fallback={}",
+        "Feature flags: automation-mirror={}, blocked-sites-mirror={}, metadata-fallback={}, stats-read-fallback={}, stats-dual-write={}",
         bool_label(payload.feature_flags.legacy_automation_mirror),
         bool_label(payload.feature_flags.legacy_blocked_sites_mirror),
         bool_label(payload.feature_flags.metadata_task_label_fallback),
+        bool_label(payload.feature_flags.stats_legacy_path_read_fallback),
+        bool_label(payload.feature_flags.stats_legacy_path_dual_write),
     );
 }
 
@@ -646,6 +648,10 @@ pub(super) fn build_diagnostics_command_output(
             legacy_automation_mirror: diagnostics.feature_flags.legacy_automation_mirror,
             legacy_blocked_sites_mirror: diagnostics.feature_flags.legacy_blocked_sites_mirror,
             metadata_task_label_fallback: diagnostics.feature_flags.metadata_task_label_fallback,
+            stats_legacy_path_read_fallback: diagnostics
+                .feature_flags
+                .stats_legacy_path_read_fallback,
+            stats_legacy_path_dual_write: diagnostics.feature_flags.stats_legacy_path_dual_write,
         },
     }
 }
