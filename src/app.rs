@@ -634,6 +634,10 @@ impl App {
         let (mut stats, stats_error) =
             match FocusStats::load_with_options(crate::stats::StatsLoadOptions {
                 metadata_task_label_fallback: feature_flags.metadata_task_label_fallback,
+                path_compatibility: crate::stats::StatsPathCompatibilityOptions {
+                    legacy_path_read_fallback: feature_flags.stats_legacy_path_read_fallback,
+                    legacy_path_dual_write: feature_flags.stats_legacy_path_dual_write,
+                },
             }) {
                 Ok(stats) => (stats, None),
                 Err(e) => (FocusStats::default(), Some(e)),
