@@ -674,6 +674,14 @@ pub(super) fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutpu
         bool_label(payload.feature_flags.stats_legacy_path_read_fallback),
         bool_label(payload.feature_flags.stats_legacy_path_dual_write),
     );
+    if payload.deprecation_warnings.is_empty() {
+        println!("Deprecation warnings: none");
+    } else {
+        println!("Deprecation warnings:");
+        for warning in &payload.deprecation_warnings {
+            println!("  - {warning}");
+        }
+    }
 }
 
 fn print_diagnostics_check(label: &str, check: &SetupCheckOutput) {
@@ -697,6 +705,7 @@ pub(super) fn build_diagnostics_command_output(
                 .stats_legacy_path_read_fallback,
             stats_legacy_path_dual_write: diagnostics.feature_flags.stats_legacy_path_dual_write,
         },
+        deprecation_warnings: diagnostics.deprecation_warnings.clone(),
     }
 }
 

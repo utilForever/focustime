@@ -212,6 +212,23 @@ Backup/restore behavior:
 - `--migrate` applies compatibility migration updates for canonical stats persistence and disables migration-window feature flags after success.
 - `--migrate --dry-run` reports planned migration steps without mutating any files.
 
+### Legacy compatibility deprecation milestones
+
+`focustime --diagnostics` and the TUI Setup Diagnostics screen now report targeted
+deprecation warnings when legacy compatibility fields/paths are detected.
+
+| Legacy field/path                                                                                               | Canonical replacement                                                                                         | Removal milestone      |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`                          | `[custom_profile]`                                                                                            | v0.12.0 (planned)      |
+| Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`                                  | `[profile_automation.<profile>.notifications]`, `[profile_automation.<profile>.auto_start]`, and per-profile `strict_mode` / `recurring_schedule` | v0.12.0 (planned)      |
+| Top-level `blocked_sites` (without canonical profiles)                                                         | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                      | v0.12.0 (planned)      |
+| Legacy config-dir `stats.toml` path + migration-window flags (`stats_legacy_path_read_fallback`, `stats_legacy_path_dual_write`) | Canonical state/data `stats.toml` path and `focustime --migrate`                                             | v0.12.0 (planned)      |
+
+Milestone policy:
+
+- **v0.11.x:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
+- **v0.12.0 (planned):** remove legacy field/path compatibility after the warning window
+
 ### CLI JSON/error contract
 
 - `--json` success responses are emitted to `stdout` as JSON and exit with code `0`.

@@ -430,6 +430,52 @@ fn setup_diagnostics_view_wraps_long_status_messages() {
 }
 
 #[test]
+fn setup_diagnostics_view_renders_deprecation_warnings() {
+    let width = 100;
+    let height = 30;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+    let mut app = App::default();
+    app.mode = AppMode::SetupDiagnostics;
+    app.setup_diagnostics.deprecation_warnings = vec![
+        "Deprecated top-level timer fields are in use.".to_string(),
+        "Deprecated legacy stats path detected.".to_string(),
+    ];
+
+    terminal
+        .draw(|frame| render(frame, &app))
+        .expect("render should succeed");
+
+    let text = terminal_text(&terminal, width, height);
+    assert!(text.contains("Deprecation warnings:"));
+    assert!(text.contains("Deprecated top-level timer fields"));
+}
+
+#[test]
+fn setup_diagnostics_view_shows_truncation_indicator_for_many_warnings() {
+    let width = 120;
+    let height = 50;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+    let mut app = App::default();
+    app.mode = AppMode::SetupDiagnostics;
+    app.setup_diagnostics.deprecation_warnings = vec![
+        "warning one".to_string(),
+        "warning two".to_string(),
+        "warning three".to_string(),
+        "warning four".to_string(),
+    ];
+
+    terminal
+        .draw(|frame| render(frame, &app))
+        .expect("render should succeed");
+
+    let text = terminal_text(&terminal, width, height);
+    assert!(text.contains("warning one"));
+    assert!(text.contains("+2 more"));
+}
+
+#[test]
 fn setup_diagnostics_view_renders_blocking_preview_section() {
     let width = 100;
     let height = 40;
