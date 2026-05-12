@@ -1436,27 +1436,62 @@ fn apply_migration_plan(
     let mut applied_canonical_stats = false;
 
     if plan.copy_legacy_stats_to_canonical {
-        canonical_stats_snapshot = snapshot_existing_file(
+        canonical_stats_snapshot = match snapshot_existing_file(
             &plan.canonical_stats_path,
             "snapshot existing canonical stats.toml for migration rollback",
-        )?;
+        ) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                return Err(migration_setup_failure(
+                    format!("could not prepare canonical stats snapshot: {error}"),
+                    config_snapshot.as_deref(),
+                    canonical_stats_snapshot.as_deref(),
+                    staged_canonical_stats_path.as_deref(),
+                ));
+            }
+        };
         let staged_path = temp_restore_path(&plan.canonical_stats_path, "staged");
-        let legacy_stats_path = plan.legacy_stats_path.as_ref().ok_or_else(|| {
-            "Migration failed: missing legacy stats path for planned copy step.".to_string()
-        })?;
-        copy_file_with_context(
+        staged_canonical_stats_path = Some(staged_path.clone());
+        let legacy_stats_path = match plan.legacy_stats_path.as_ref() {
+            Some(path) => path,
+            None => {
+                return Err(migration_setup_failure(
+                    "missing legacy stats path for planned copy step".to_string(),
+                    config_snapshot.as_deref(),
+                    canonical_stats_snapshot.as_deref(),
+                    staged_canonical_stats_path.as_deref(),
+                ));
+            }
+        };
+        if let Err(error) = copy_file_with_context(
             legacy_stats_path,
             &staged_path,
             "stage migration copy of stats.toml",
-        )?;
-        staged_canonical_stats_path = Some(staged_path);
+        ) {
+            return Err(migration_setup_failure(
+                format!("could not stage canonical stats update: {error}"),
+                config_snapshot.as_deref(),
+                canonical_stats_snapshot.as_deref(),
+                staged_canonical_stats_path.as_deref(),
+            ));
+        }
     }
 
     if plan.requires_config_update() {
-        config_snapshot = snapshot_existing_file(
+        config_snapshot = match snapshot_existing_file(
             &plan.config_path,
             "snapshot existing config.toml for migration rollback",
-        )?;
+        ) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                return Err(migration_setup_failure(
+                    format!("could not prepare config snapshot: {error}"),
+                    config_snapshot.as_deref(),
+                    canonical_stats_snapshot.as_deref(),
+                    staged_canonical_stats_path.as_deref(),
+                ));
+            }
+        };
     }
 
     if let Some(staged_path) = staged_canonical_stats_path.as_deref() {
@@ -1569,6 +1604,46 @@ fn migration_failure_with_rollback(error: String, rollback_errors: Vec<String>) 
         ". Next steps: run `focustime --backup`, inspect `config.toml` and `stats.toml`, then retry with `focustime --migrate --dry-run`.",
     );
     message
+}
+
+fn migration_setup_failure(
+    error: String,
+    config_snapshot: Option<&Path>,
+    canonical_stats_snapshot: Option<&Path>,
+    staged_canonical_stats_path: Option<&Path>,
+) -> String {
+    migration_failure_with_rollback(
+        error,
+        cleanup_migration_temp_files(
+            config_snapshot,
+            canonical_stats_snapshot,
+            staged_canonical_stats_path,
+        ),
+    )
+}
+
+fn cleanup_migration_temp_files(
+    config_snapshot: Option<&Path>,
+    canonical_stats_snapshot: Option<&Path>,
+    staged_canonical_stats_path: Option<&Path>,
+) -> Vec<String> {
+    let mut cleanup_errors = Vec::new();
+    let cleanup_targets = [
+        ("config snapshot", config_snapshot),
+        ("canonical stats snapshot", canonical_stats_snapshot),
+        ("staged canonical stats", staged_canonical_stats_path),
+    ];
+    for (label, path) in cleanup_targets {
+        if let Some(path) = path
+            && let Err(error) = remove_file_if_exists(path)
+        {
+            cleanup_errors.push(format!(
+                "cleanup failed for {label} `{}`: {error}",
+                path.display()
+            ));
+        }
+    }
+    cleanup_errors
 }
 
 fn ensure_regular_file_if_exists(path: &Path, context: &str) -> Result<(), String> {
@@ -2014,6 +2089,30 @@ mod tests {
             fs::read_to_string(&canonical_stats_path).expect("restored stats should exist");
         assert_eq!(restored_config, "schema_version = 0\n");
         assert_eq!(restored_stats, "daily = { old = true }\n");
+
+        fs::remove_dir_all(temp_dir).expect("temp dir should be removed");
+    }
+
+    #[test]
+    fn cleanup_migration_temp_files_removes_snapshot_artifacts() {
+        let temp_dir = create_temp_dir("migrate-cleanup");
+        let config_snapshot = temp_dir.join("config.original.tmp");
+        let canonical_snapshot = temp_dir.join("stats.original.tmp");
+        let staged_stats = temp_dir.join("stats.staged.tmp");
+        fs::write(&config_snapshot, "config").expect("config snapshot should be writable");
+        fs::write(&canonical_snapshot, "stats").expect("stats snapshot should be writable");
+        fs::write(&staged_stats, "staged").expect("staged stats should be writable");
+
+        let cleanup_errors = cleanup_migration_temp_files(
+            Some(config_snapshot.as_path()),
+            Some(canonical_snapshot.as_path()),
+            Some(staged_stats.as_path()),
+        );
+
+        assert!(cleanup_errors.is_empty());
+        assert!(!config_snapshot.exists());
+        assert!(!canonical_snapshot.exists());
+        assert!(!staged_stats.exists());
 
         fs::remove_dir_all(temp_dir).expect("temp dir should be removed");
     }
