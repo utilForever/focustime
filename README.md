@@ -637,10 +637,11 @@ You can configure notification and auto-start settings directly from the TUI:
 `focustime` persists in-progress timer sessions so restart/crash recovery can resume where you left off.
 
 - while a focus/break phase is running or paused, the app saves phase, remaining time, task metadata (`task_label`, `focus_intention`, `task_note`), and active profile
+- startup recovery also reconciles transient workflow runtime artifacts when still valid (schedule delay + arming continuity, break-glass state, and strict-reset confirmation state)
 - while editing with `m`, pressing `Enter` replaces the in-progress session `task_note` and immediately syncs recovery metadata; if the draft is blank or only whitespace, the note is not saved and the task label is used instead
 - on startup, valid in-progress state is restored and shown in the timer notice line
 - on startup, blocking is reconciled with recovered timer state: recovered active focus re-applies blocking, while non-recovered startup attempts to remove stale crash-era block entries
-- stale or invalid saved recovery state is ignored safely with a warning notice
+- stale or invalid saved recovery/runtime artifacts are ignored safely with a startup warning notice
 - recovery state is cleared when an in-progress phase ends naturally or when you reset/skip out of the active session
 
 ## Strict focus mode
