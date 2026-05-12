@@ -24,7 +24,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             Constraint::Length(2), // blocking permissions
             Constraint::Length(2), // hosts write capability
             Constraint::Length(2), // wakatime config status
-            Constraint::Length(2), // feature flags
+            Constraint::Length(3), // feature flags
             Constraint::Length(1), // preview summary
             Constraint::Min(0),    // preview section
             Constraint::Length(2), // key hints
@@ -59,9 +59,9 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         "WakaTime config status",
         &app.setup_diagnostics.wakatime_config,
     );
-    frame.render_widget(
-        Paragraph::new(format!(
-            "Feature flags: automation-mirror={} · blocked-sites-mirror={} · metadata-fallback={} · stats-read-fallback={} · stats-dual-write={}",
+    let feature_flags_lines = vec![
+        Line::from(format!(
+            "Feature flags: automation-mirror={} · blocked-sites-mirror={} · metadata-fallback={}",
             bool_label(app.setup_diagnostics.feature_flags.legacy_automation_mirror),
             bool_label(
                 app.setup_diagnostics
@@ -73,6 +73,9 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
                     .feature_flags
                     .metadata_task_label_fallback
             ),
+        )),
+        Line::from(format!(
+            "               stats-read-fallback={} · stats-dual-write={}",
             bool_label(
                 app.setup_diagnostics
                     .feature_flags
@@ -83,9 +86,12 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
                     .feature_flags
                     .stats_legacy_path_dual_write
             )
-        ))
-        .style(Style::default().fg(app_color(app, Color::DarkGray)))
-        .wrap(Wrap { trim: true }),
+        )),
+    ];
+    frame.render_widget(
+        Paragraph::new(feature_flags_lines)
+            .style(Style::default().fg(app_color(app, Color::DarkGray)))
+            .wrap(Wrap { trim: true }),
         inner[5],
     );
 
