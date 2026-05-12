@@ -1771,11 +1771,19 @@ fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> Vec<String> 
         );
     }
 
-    let legacy_automation_in_use = config.profile_automation.is_none()
-        && (config.notifications != NotificationConfig::default()
-            || config.auto_start != AutoStartConfig::default()
-            || config.strict_mode
-            || config.recurring_schedule != RecurringScheduleConfig::default());
+    let legacy_automation_values_configured = config.notifications != NotificationConfig::default()
+        || config.auto_start != AutoStartConfig::default()
+        || config.strict_mode
+        || config.recurring_schedule != RecurringScheduleConfig::default();
+    let profile_automation_incomplete = config
+        .profile_automation
+        .as_ref()
+        .map(|settings| {
+            settings.classic.is_none() || settings.deep_work.is_none() || settings.custom.is_none()
+        })
+        .unwrap_or(true);
+    let legacy_automation_in_use =
+        legacy_automation_values_configured && profile_automation_incomplete;
     if legacy_automation_in_use {
         warnings.push(
             "Deprecated top-level automation fields (`notifications`, `auto_start`, `strict_mode`, `recurring_schedule`) are in use. Move them under `[profile_automation.<profile>]`.".to_string(),
