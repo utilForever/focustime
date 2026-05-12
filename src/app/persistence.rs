@@ -1,7 +1,7 @@
 use crate::app::{
     App, AppConfig, BlocklistProfileConfig, DEFAULT_BLOCKLIST_PROFILE_NAME, Local,
     PendingTimerAction, TimerPhase, TimerState, effective_blocked_sites_for_profile,
-    format_duration_label, profile_index, profile_spec_for, task_label_index,
+    format_duration_label, occurrence_key, profile_index, profile_spec_for, task_label_index,
 };
 use crate::session_recovery::{self, InProgressSessionSnapshot, WorkflowStateSnapshot};
 use chrono::{LocalResult, TimeZone};
@@ -45,7 +45,51 @@ impl App {
     }
 
     pub(super) fn restore_cli_workflow_state(&mut self) {
-        let loaded_snapshot = match session_recovery::load_workflow_state() {
+        let Some(snapshot) = self.load_cli_workflow_snapshot_for_restore() else {
+            return;
+        };
+        let WorkflowStateSnapshot {
+            schedule_delayed_occurrence_key,
+            schedule_delay_until_epoch_secs,
+            schedule_armed_occurrence_key,
+            last_schedule_occurrence_key,
+            break_glass_expires_at_epoch_secs,
+            break_glass_confirmation_pending,
+            strict_reset_confirmation_pending,
+        } = snapshot;
+
+        self.reset_cli_workflow_runtime_state_for_restore();
+        let mut ignored_runtime_artifacts: Vec<&'static str> = Vec::new();
+        self.restore_schedule_delay_runtime_state(
+            schedule_delayed_occurrence_key,
+            schedule_delay_until_epoch_secs,
+            &mut ignored_runtime_artifacts,
+        );
+
+        let active_occurrence_key = self
+            .active_schedule_occurrence_at(self.current_frame_now)
+            .map(|occurrence| occurrence_key(&occurrence));
+        self.restore_schedule_continuity_runtime_state(
+            schedule_armed_occurrence_key,
+            last_schedule_occurrence_key,
+            active_occurrence_key.as_deref(),
+            &mut ignored_runtime_artifacts,
+        );
+        self.restore_break_glass_runtime_state(
+            break_glass_expires_at_epoch_secs,
+            break_glass_confirmation_pending,
+            &mut ignored_runtime_artifacts,
+        );
+        self.restore_strict_reset_runtime_state(
+            strict_reset_confirmation_pending,
+            &mut ignored_runtime_artifacts,
+        );
+        self.sync_restored_cli_workflow_state();
+        self.append_ignored_runtime_artifact_notice(&ignored_runtime_artifacts);
+    }
+
+    fn load_cli_workflow_snapshot_for_restore(&mut self) -> Option<WorkflowStateSnapshot> {
+        match session_recovery::load_workflow_state() {
             Ok(snapshot) => snapshot,
             Err(error) => {
                 self.config_error = Some(format!("workflow state load failed: {error}"));
@@ -54,48 +98,139 @@ impl App {
                         "workflow state cleanup failed after load error: {clear_error}"
                     ));
                 }
-                return;
+                None
             }
-        };
+        }
+    }
 
-        let Some(snapshot) = loaded_snapshot else {
-            return;
-        };
-
+    fn reset_cli_workflow_runtime_state_for_restore(&mut self) {
         self.current_frame_now = Local::now();
         self.schedule_delayed_occurrence_key = None;
         self.schedule_delay_until = None;
+        self.schedule_armed_occurrence_key = None;
+        self.last_schedule_occurrence_key = None;
+        self.pending_timer_action = None;
+        self.break_glass_expires_at = None;
+    }
 
+    fn restore_schedule_delay_runtime_state(
+        &mut self,
+        schedule_delayed_occurrence_key: Option<String>,
+        schedule_delay_until_epoch_secs: Option<i64>,
+        ignored_runtime_artifacts: &mut Vec<&'static str>,
+    ) {
+        let has_saved_schedule_delay_state =
+            schedule_delayed_occurrence_key.is_some() || schedule_delay_until_epoch_secs.is_some();
         if let (Some(delayed_key), Some(delay_until_epoch_secs)) = (
-            snapshot.schedule_delayed_occurrence_key,
-            snapshot.schedule_delay_until_epoch_secs,
+            schedule_delayed_occurrence_key,
+            schedule_delay_until_epoch_secs,
         ) && let Some(delay_until) = local_datetime_from_epoch_secs(delay_until_epoch_secs)
             && delay_until > self.current_frame_now
         {
             self.schedule_delayed_occurrence_key = Some(delayed_key);
             self.schedule_delay_until = Some(delay_until);
+        } else if has_saved_schedule_delay_state {
+            push_ignored_artifact(ignored_runtime_artifacts, "schedule delay state");
         }
+    }
 
-        self.pending_timer_action = None;
-        self.break_glass_expires_at = None;
-        if self.focus_session_active_for_current_state() {
-            if let Some(expires_at_epoch_secs) = snapshot.break_glass_expires_at_epoch_secs
-                && let Some(expires_at) = local_datetime_from_epoch_secs(expires_at_epoch_secs)
-                && expires_at > self.current_frame_now
+    fn restore_schedule_continuity_runtime_state(
+        &mut self,
+        schedule_armed_occurrence_key: Option<String>,
+        last_schedule_occurrence_key: Option<String>,
+        active_occurrence_key: Option<&str>,
+        ignored_runtime_artifacts: &mut Vec<&'static str>,
+    ) {
+        if let Some(armed_key) = schedule_armed_occurrence_key {
+            if !self.focus_session_active_for_current_state()
+                && active_occurrence_key == Some(armed_key.as_str())
             {
-                let remaining = expires_at
-                    .signed_duration_since(self.current_frame_now)
-                    .to_std()
-                    .ok();
-                self.break_glass_expires_at = remaining.map(|remaining| Instant::now() + remaining);
-            }
-            if snapshot.break_glass_confirmation_pending && self.break_glass_expires_at.is_none() {
-                self.pending_timer_action = Some(PendingTimerAction::BreakGlassOverride);
+                self.schedule_armed_occurrence_key = Some(armed_key);
+            } else {
+                push_ignored_artifact(ignored_runtime_artifacts, "schedule arm state");
             }
         }
+        if let Some(last_key) = last_schedule_occurrence_key {
+            if active_occurrence_key == Some(last_key.as_str()) {
+                self.last_schedule_occurrence_key = Some(last_key);
+            } else {
+                push_ignored_artifact(ignored_runtime_artifacts, "schedule trigger continuity");
+            }
+        }
+    }
 
+    fn restore_break_glass_runtime_state(
+        &mut self,
+        break_glass_expires_at_epoch_secs: Option<i64>,
+        break_glass_confirmation_pending: bool,
+        ignored_runtime_artifacts: &mut Vec<&'static str>,
+    ) {
+        if !self.focus_session_active_for_current_state() {
+            if break_glass_expires_at_epoch_secs.is_some() {
+                push_ignored_artifact(ignored_runtime_artifacts, "break-glass override timer");
+            }
+            if break_glass_confirmation_pending {
+                push_ignored_artifact(ignored_runtime_artifacts, "break-glass confirmation");
+            }
+            return;
+        }
+
+        if let Some(expires_at_epoch_secs) = break_glass_expires_at_epoch_secs
+            && let Some(expires_at) = local_datetime_from_epoch_secs(expires_at_epoch_secs)
+            && expires_at > self.current_frame_now
+        {
+            let remaining = expires_at
+                .signed_duration_since(self.current_frame_now)
+                .to_std()
+                .ok();
+            self.break_glass_expires_at = remaining.map(|remaining| Instant::now() + remaining);
+        } else if break_glass_expires_at_epoch_secs.is_some() {
+            push_ignored_artifact(ignored_runtime_artifacts, "break-glass override timer");
+        }
+
+        if break_glass_confirmation_pending && self.break_glass_expires_at.is_none() {
+            self.pending_timer_action = Some(PendingTimerAction::BreakGlassOverride);
+        } else if break_glass_confirmation_pending {
+            push_ignored_artifact(ignored_runtime_artifacts, "break-glass confirmation");
+        }
+    }
+
+    fn restore_strict_reset_runtime_state(
+        &mut self,
+        strict_reset_confirmation_pending: bool,
+        ignored_runtime_artifacts: &mut Vec<&'static str>,
+    ) {
+        if !strict_reset_confirmation_pending {
+            return;
+        }
+
+        if self.strict_mode_enforced_for_focus() && self.pending_timer_action.is_none() {
+            self.pending_timer_action = Some(PendingTimerAction::Reset);
+        } else {
+            push_ignored_artifact(ignored_runtime_artifacts, "strict reset confirmation");
+        }
+    }
+
+    fn sync_restored_cli_workflow_state(&mut self) {
         if let Err(error) = self.sync_cli_workflow_state() {
             self.config_error = Some(error);
+        }
+    }
+
+    fn append_ignored_runtime_artifact_notice(&mut self, ignored_runtime_artifacts: &[&str]) {
+        if ignored_runtime_artifacts.is_empty() {
+            return;
+        }
+
+        let notice = format!(
+            "Ignored saved runtime artifacts: {}.",
+            ignored_runtime_artifacts.join(", ")
+        );
+        if let Some(existing_notice) = self.phase_notification.as_mut() {
+            existing_notice.push(' ');
+            existing_notice.push_str(&notice);
+        } else {
+            self.phase_notification = Some(notice);
         }
     }
 
@@ -240,6 +375,10 @@ impl App {
 
     pub(super) fn sync_cli_workflow_state(&mut self) -> Result<(), String> {
         let now = Local::now();
+        let focus_active = self.focus_session_active_for_current_state();
+        let active_occurrence_key = self
+            .active_schedule_occurrence_at(now)
+            .map(|occurrence| occurrence_key(&occurrence));
         let schedule_state = match (
             self.schedule_delayed_occurrence_key.clone(),
             self.schedule_delay_until,
@@ -256,8 +395,27 @@ impl App {
             .and_then(|remaining| chrono::Duration::from_std(remaining).ok())
             .map(|remaining| (now + remaining).timestamp());
 
-        let break_glass_confirmation_pending = self.break_glass_confirmation_pending()
-            && self.focus_session_active_for_current_state();
+        let break_glass_confirmation_pending =
+            self.break_glass_confirmation_pending() && focus_active;
+        let strict_reset_confirmation_pending =
+            self.strict_reset_confirmation_pending() && self.strict_mode_enforced_for_focus();
+        let schedule_armed_occurrence_key = if !focus_active {
+            self.schedule_armed_occurrence_key
+                .clone()
+                .filter(|armed_key| active_occurrence_key.as_deref() == Some(armed_key.as_str()))
+        } else {
+            None
+        };
+        let delayed_occurrence_key = schedule_state
+            .as_ref()
+            .and_then(|(delayed_key, _)| delayed_key.as_deref());
+        let last_schedule_occurrence_key =
+            self.last_schedule_occurrence_key
+                .clone()
+                .filter(|last_key| {
+                    active_occurrence_key.as_deref() == Some(last_key.as_str())
+                        && delayed_occurrence_key != Some(last_key.as_str())
+                });
         let snapshot = WorkflowStateSnapshot {
             schedule_delayed_occurrence_key: schedule_state
                 .as_ref()
@@ -265,13 +423,19 @@ impl App {
             schedule_delay_until_epoch_secs: schedule_state
                 .as_ref()
                 .and_then(|(_, delayed_until)| *delayed_until),
+            schedule_armed_occurrence_key,
+            last_schedule_occurrence_key,
             break_glass_expires_at_epoch_secs,
             break_glass_confirmation_pending,
+            strict_reset_confirmation_pending,
         };
 
         let should_persist = snapshot.schedule_delayed_occurrence_key.is_some()
+            || snapshot.schedule_armed_occurrence_key.is_some()
+            || snapshot.last_schedule_occurrence_key.is_some()
             || snapshot.break_glass_expires_at_epoch_secs.is_some()
-            || snapshot.break_glass_confirmation_pending;
+            || snapshot.break_glass_confirmation_pending
+            || snapshot.strict_reset_confirmation_pending;
         if should_persist {
             session_recovery::save_workflow_state(&snapshot)
                 .map_err(|error| format!("workflow state save failed: {error}"))
@@ -412,5 +576,11 @@ fn local_datetime_from_epoch_secs(epoch_secs: i64) -> Option<chrono::DateTime<Lo
         LocalResult::Single(value) => Some(value),
         LocalResult::Ambiguous(earliest, _) => Some(earliest),
         LocalResult::None => None,
+    }
+}
+
+fn push_ignored_artifact(ignored_artifacts: &mut Vec<&'static str>, artifact: &'static str) {
+    if !ignored_artifacts.contains(&artifact) {
+        ignored_artifacts.push(artifact);
     }
 }

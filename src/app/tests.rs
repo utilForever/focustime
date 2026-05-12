@@ -4486,7 +4486,7 @@ fn cli_schedule_delay_sets_delay_for_active_window() {
 
 #[test]
 fn cli_schedule_delay_persists_workflow_state() {
-    let now = Local::now();
+    let now = local_datetime_today(0, 0);
     let config = AppConfig {
         recurring_schedule: RecurringScheduleConfig {
             windows: vec![crate::config::RecurringFocusWindowConfig {
@@ -4511,6 +4511,37 @@ fn cli_schedule_delay_persists_workflow_state() {
             .is_some_and(|epoch| epoch > now.timestamp())
     );
     assert!(!snapshot.break_glass_confirmation_pending);
+}
+
+#[test]
+fn cli_workflow_snapshot_skips_last_occurrence_for_active_delayed_window() {
+    let now = Local::now();
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "00:00".to_string(),
+                end: "23:59".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    let active_occurrence = app
+        .active_schedule_occurrence_at(now)
+        .expect("schedule window should be active");
+    let active_occurrence_key = occurrence_key(&active_occurrence);
+    app.schedule_delayed_occurrence_key = Some(active_occurrence_key.clone());
+    app.schedule_delay_until = Some(now + ChronoDuration::minutes(5));
+    app.last_schedule_occurrence_key = Some(active_occurrence_key);
+
+    app.sync_cli_workflow_state().unwrap();
+
+    let snapshot = session_recovery::test_saved_workflow_snapshot()
+        .expect("workflow snapshot should be saved");
+    assert!(snapshot.schedule_delayed_occurrence_key.is_some());
+    assert!(snapshot.last_schedule_occurrence_key.is_none());
 }
 
 #[test]
@@ -4609,8 +4640,11 @@ fn app_restores_cli_workflow_state_from_snapshot() {
     session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
         schedule_delayed_occurrence_key: Some("recurring:0:2026-05-10".to_string()),
         schedule_delay_until_epoch_secs: Some((now + ChronoDuration::minutes(5)).timestamp()),
+        schedule_armed_occurrence_key: None,
+        last_schedule_occurrence_key: None,
         break_glass_expires_at_epoch_secs: None,
         break_glass_confirmation_pending: true,
+        strict_reset_confirmation_pending: false,
     }));
 
     let app = App::default();
@@ -4624,6 +4658,103 @@ fn app_restores_cli_workflow_state_from_snapshot() {
             .is_some_and(|delay_until| delay_until > now)
     );
     assert!(app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn app_restores_schedule_arming_continuity_from_workflow_snapshot() {
+    let now = local_datetime_today(10, 15);
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "00:00".to_string(),
+                end: "23:59".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let probe_app = App::from_config(config.clone());
+    let active_occurrence = probe_app
+        .active_schedule_occurrence_at(now)
+        .expect("schedule window should be active");
+    let active_occurrence_key = occurrence_key(&active_occurrence);
+
+    session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
+        schedule_delayed_occurrence_key: None,
+        schedule_delay_until_epoch_secs: None,
+        schedule_armed_occurrence_key: Some(active_occurrence_key.clone()),
+        last_schedule_occurrence_key: Some(active_occurrence_key.clone()),
+        break_glass_expires_at_epoch_secs: None,
+        break_glass_confirmation_pending: false,
+        strict_reset_confirmation_pending: false,
+    }));
+
+    let app = App::from_config(config);
+
+    assert_eq!(
+        app.schedule_armed_occurrence_key.as_deref(),
+        Some(active_occurrence_key.as_str())
+    );
+    assert_eq!(
+        app.last_schedule_occurrence_key.as_deref(),
+        Some(active_occurrence_key.as_str())
+    );
+}
+
+#[test]
+fn app_restores_strict_reset_confirmation_from_workflow_snapshot() {
+    session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
+        TimerPhase::Focus,
+        TimerStatus::Running,
+        300,
+        Some("Docs"),
+        ProfileId::Classic,
+    )));
+    session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
+        schedule_delayed_occurrence_key: None,
+        schedule_delay_until_epoch_secs: None,
+        schedule_armed_occurrence_key: None,
+        last_schedule_occurrence_key: None,
+        break_glass_expires_at_epoch_secs: None,
+        break_glass_confirmation_pending: false,
+        strict_reset_confirmation_pending: true,
+    }));
+
+    let app = App::from_config(AppConfig {
+        strict_mode: true,
+        ..AppConfig::default()
+    });
+
+    assert!(app.strict_reset_confirmation_pending());
+}
+
+#[test]
+fn app_reports_partial_runtime_recovery_notice_for_ignored_workflow_artifacts() {
+    session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
+        schedule_delayed_occurrence_key: Some("recurring:stale".to_string()),
+        schedule_delay_until_epoch_secs: Some(
+            (Local::now() - ChronoDuration::minutes(5)).timestamp(),
+        ),
+        schedule_armed_occurrence_key: Some("recurring:stale".to_string()),
+        last_schedule_occurrence_key: Some("recurring:stale".to_string()),
+        break_glass_expires_at_epoch_secs: None,
+        break_glass_confirmation_pending: true,
+        strict_reset_confirmation_pending: true,
+    }));
+
+    let app = App::default();
+
+    let notice = app
+        .phase_notification
+        .as_deref()
+        .expect("partial recovery should emit a startup notice");
+    assert!(notice.contains("Ignored saved runtime artifacts"));
+    assert!(notice.contains("schedule delay state"));
+    assert!(notice.contains("schedule arm state"));
+    assert!(notice.contains("schedule trigger continuity"));
+    assert!(notice.contains("break-glass confirmation"));
+    assert!(notice.contains("strict reset confirmation"));
 }
 
 #[test]

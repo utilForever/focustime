@@ -96,9 +96,15 @@ pub struct WorkflowStateSnapshot {
     #[serde(default)]
     pub schedule_delay_until_epoch_secs: Option<i64>,
     #[serde(default)]
+    pub schedule_armed_occurrence_key: Option<String>,
+    #[serde(default)]
+    pub last_schedule_occurrence_key: Option<String>,
+    #[serde(default)]
     pub break_glass_expires_at_epoch_secs: Option<i64>,
     #[serde(default)]
     pub break_glass_confirmation_pending: bool,
+    #[serde(default)]
+    pub strict_reset_confirmation_pending: bool,
 }
 
 impl InProgressSessionSnapshot {
@@ -624,13 +630,46 @@ mod tests {
         save_workflow_state(&WorkflowStateSnapshot {
             schedule_delayed_occurrence_key: Some("recurring:0:2026-05-10".to_string()),
             schedule_delay_until_epoch_secs: Some(1_700_000_000),
+            schedule_armed_occurrence_key: None,
+            last_schedule_occurrence_key: None,
             break_glass_expires_at_epoch_secs: None,
             break_glass_confirmation_pending: true,
+            strict_reset_confirmation_pending: false,
         })
         .expect("save should succeed");
 
         let loaded = load_workflow_state().expect("load should succeed");
         assert!(loaded.is_none());
         assert!(test_saved_workflow_snapshot().is_none());
+    }
+
+    #[test]
+    fn workflow_state_snapshot_deserializes_legacy_payload_without_new_fields() {
+        let snapshot: WorkflowStateSnapshot = toml::from_str(
+            r#"
+schedule_delayed_occurrence_key = "recurring:0:2026-05-10"
+schedule_delay_until_epoch_secs = 1700000000
+break_glass_expires_at_epoch_secs = 1700000100
+break_glass_confirmation_pending = true
+"#,
+        )
+        .expect("legacy payload should deserialize");
+
+        assert_eq!(
+            snapshot.schedule_delayed_occurrence_key.as_deref(),
+            Some("recurring:0:2026-05-10")
+        );
+        assert_eq!(
+            snapshot.schedule_delay_until_epoch_secs,
+            Some(1_700_000_000)
+        );
+        assert!(snapshot.schedule_armed_occurrence_key.is_none());
+        assert!(snapshot.last_schedule_occurrence_key.is_none());
+        assert_eq!(
+            snapshot.break_glass_expires_at_epoch_secs,
+            Some(1_700_000_100)
+        );
+        assert!(snapshot.break_glass_confirmation_pending);
+        assert!(!snapshot.strict_reset_confirmation_pending);
     }
 }
