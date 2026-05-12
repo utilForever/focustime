@@ -7,6 +7,7 @@ use crate::session_recovery::{
 use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, TimeZone, Weekday};
 use std::{
     fs,
+    path::Path,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -78,6 +79,42 @@ fn app_default_uses_canonical_config_in_tests() {
     assert_eq!(app.daily_goal, DailyGoalConfig::default());
     assert_eq!(app.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(app.monthly_goal, MonthlyGoalConfig::default());
+}
+
+#[test]
+fn legacy_stats_path_warning_mentions_read_fallback_when_canonical_is_missing() {
+    let warning = format_legacy_stats_path_deprecation_warning(
+        Path::new("state/stats.toml"),
+        Path::new("config/stats.toml"),
+        false,
+        FeatureFlagsConfig {
+            stats_legacy_path_read_fallback: true,
+            stats_legacy_path_dual_write: false,
+            ..FeatureFlagsConfig::default()
+        },
+    );
+
+    assert!(warning.contains("Deprecated legacy stats path detected"));
+    assert!(warning.contains("reads may still fall back"));
+    assert!(!warning.contains("Legacy stats mirror writes are still enabled"));
+    assert!(warning.contains("run `focustime --migrate`"));
+}
+
+#[test]
+fn legacy_stats_path_warning_mentions_dual_write_when_enabled() {
+    let warning = format_legacy_stats_path_deprecation_warning(
+        Path::new("state/stats.toml"),
+        Path::new("config/stats.toml"),
+        true,
+        FeatureFlagsConfig {
+            stats_legacy_path_read_fallback: true,
+            stats_legacy_path_dual_write: true,
+            ..FeatureFlagsConfig::default()
+        },
+    );
+
+    assert!(!warning.contains("reads may still fall back"));
+    assert!(warning.contains("Legacy stats mirror writes are still enabled"));
 }
 
 #[test]

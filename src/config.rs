@@ -1528,11 +1528,15 @@ impl AppConfig {
         self.normalize()
     }
 
+    pub(crate) fn load_with_deprecation_warnings() -> (Self, Vec<String>) {
+        Self::try_load_with_deprecation_warnings().unwrap_or_else(|| (Self::default(), Vec::new()))
+    }
+
     /// Load the config from disk, falling back to [`AppConfig::default`] on any
     /// error (missing file, parse error, corrupt data, etc.).
     #[cfg_attr(test, allow(dead_code))]
     pub fn load() -> Self {
-        Self::try_load().unwrap_or_default()
+        Self::load_with_deprecation_warnings().0
     }
 
     /// Returns the effective custom profile configuration.
@@ -1597,23 +1601,33 @@ impl AppConfig {
         self.recurring_schedule = selected.recurring_schedule;
     }
 
-    #[cfg_attr(test, allow(dead_code))]
-    fn try_load() -> Option<Self> {
-        Self::try_load_with_env(|key| std::env::var_os(key))
+    fn try_load_with_deprecation_warnings() -> Option<(Self, Vec<String>)> {
+        Self::try_load_with_env_and_deprecation_warnings(|key| std::env::var_os(key))
     }
 
     #[cfg(test)]
     fn load_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Self {
-        Self::try_load_with_env(get_var).unwrap_or_default()
+        Self::load_with_env_and_deprecation_warnings(get_var).0
     }
 
-    fn try_load_with_env(get_var: impl FnMut(&str) -> Option<OsString>) -> Option<Self> {
+    #[cfg(test)]
+    fn load_with_env_and_deprecation_warnings(
+        get_var: impl FnMut(&str) -> Option<OsString>,
+    ) -> (Self, Vec<String>) {
+        Self::try_load_with_env_and_deprecation_warnings(get_var)
+            .unwrap_or_else(|| (Self::default(), Vec::new()))
+    }
+
+    fn try_load_with_env_and_deprecation_warnings(
+        get_var: impl FnMut(&str) -> Option<OsString>,
+    ) -> Option<(Self, Vec<String>)> {
         let path = Self::config_path_with_env(get_var)?;
         let content = fs::read_to_string(path).ok()?;
         let config_toml: toml::Value = toml::from_str(&content).ok()?;
         let migrated_toml = migrate_config_toml_to_current(config_toml)?;
         let disk: AppConfigDisk = migrated_toml.try_into().ok()?;
-        Some(disk.config.normalize())
+        let deprecation_warnings = detect_legacy_config_deprecation_warnings(&disk.config);
+        Some((disk.config.normalize(), deprecation_warnings))
     }
 
     /// Persist the current config to disk.
@@ -1742,6 +1756,39 @@ fn migrate_config_toml_to_current(mut config_toml: toml::Value) -> Option<toml::
         from_schema_version += 1;
     }
     Some(config_toml)
+}
+
+fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> Vec<String> {
+    let mut warnings = Vec::new();
+    let duration_override_without_custom_profile = config.custom_profile.is_none()
+        && (config.focus_secs != default_focus_secs()
+            || config.short_break_secs != default_short_break_secs()
+            || config.long_break_secs != default_long_break_secs()
+            || config.long_break_interval != default_long_break_interval());
+    if duration_override_without_custom_profile {
+        warnings.push(
+            "Deprecated top-level timer fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) are in use. Move these values into `[custom_profile]`.".to_string(),
+        );
+    }
+
+    let legacy_automation_in_use = config.profile_automation.is_none()
+        && (config.notifications != NotificationConfig::default()
+            || config.auto_start != AutoStartConfig::default()
+            || config.strict_mode
+            || config.recurring_schedule != RecurringScheduleConfig::default());
+    if legacy_automation_in_use {
+        warnings.push(
+            "Deprecated top-level automation fields (`notifications`, `auto_start`, `strict_mode`, `recurring_schedule`) are in use. Move them under `[profile_automation.<profile>]`.".to_string(),
+        );
+    }
+
+    if config.blocklist_profiles.is_empty() && !config.blocked_sites.is_empty() {
+        warnings.push(
+            "Deprecated `blocked_sites` is in use without `[[blocklist_profiles]]`. Move entries into a blocklist profile (for example `Default`).".to_string(),
+        );
+    }
+
+    warnings
 }
 
 fn detect_config_schema_version(config_toml: &toml::Value) -> Option<u32> {

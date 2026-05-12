@@ -129,6 +129,8 @@ const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 35;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
+#[cfg(not(test))]
+const STATS_FILE_NAME: &str = "stats.toml";
 const UNLINKED_BREAK_TEMPLATE_NAME: &str = "Custom";
 pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
 const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -433,10 +435,15 @@ pub struct SetupDiagnostics {
     pub hosts_write_capability: SetupCheck,
     pub wakatime_config: SetupCheck,
     pub feature_flags: FeatureFlagsConfig,
+    pub deprecation_warnings: Vec<String>,
 }
 
 impl SetupDiagnostics {
-    fn collect(blocker: &SiteBlocker, feature_flags: FeatureFlagsConfig) -> Self {
+    fn collect(
+        blocker: &SiteBlocker,
+        feature_flags: FeatureFlagsConfig,
+        deprecation_warnings: Vec<String>,
+    ) -> Self {
         let hosts_diagnostics = blocker.hosts_file_diagnostics();
         let blocking_permissions = blocking_permissions_check(&hosts_diagnostics);
         let hosts_write_capability = hosts_write_capability_check(&hosts_diagnostics);
@@ -457,6 +464,7 @@ impl SetupDiagnostics {
             hosts_write_capability,
             wakatime_config,
             feature_flags,
+            deprecation_warnings,
         }
     }
 }
@@ -532,6 +540,7 @@ pub struct App {
     pub selected_profile: ProfileId,
     selected_theme_preset: ThemePreset,
     feature_flags: FeatureFlagsConfig,
+    config_deprecation_warnings: Vec<String>,
     legacy_blocked_sites: Vec<String>,
     profile_automation: ProfileAutomationSettingsConfig,
     pub custom_profile: CustomProfileConfig,
@@ -581,15 +590,26 @@ impl App {
         }
         #[cfg(not(test))]
         {
-            Self::from_config(AppConfig::load())
+            let (config, deprecation_warnings) = AppConfig::load_with_deprecation_warnings();
+            Self::from_config_with_deprecation_warnings(config, deprecation_warnings)
         }
     }
 
+    #[cfg(test)]
     fn from_config(config: AppConfig) -> Self {
+        Self::from_config_with_deprecation_warnings(config, Vec::new())
+    }
+
+    fn from_config_with_deprecation_warnings(
+        config: AppConfig,
+        config_deprecation_warnings: Vec<String>,
+    ) -> Self {
         let config = config.normalized();
         let selected_profile = config.selected_profile;
         let selected_theme_preset = config.selected_theme_preset;
         let feature_flags = config.feature_flags;
+        let setup_deprecation_warnings =
+            setup_deprecation_warnings(&config_deprecation_warnings, feature_flags);
         let legacy_blocked_sites = config.blocked_sites.clone();
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
@@ -654,7 +674,8 @@ impl App {
             profile_spec.long_break_interval,
         );
         let blocker = SiteBlocker::new();
-        let setup_diagnostics = SetupDiagnostics::collect(&blocker, feature_flags);
+        let setup_diagnostics =
+            SetupDiagnostics::collect(&blocker, feature_flags, setup_deprecation_warnings.clone());
         let mut app = Self {
             timer,
             should_quit: false,
@@ -709,6 +730,7 @@ impl App {
             selected_profile,
             selected_theme_preset,
             feature_flags,
+            config_deprecation_warnings,
             legacy_blocked_sites,
             profile_automation,
             custom_profile,
@@ -1562,6 +1584,64 @@ fn permission_remediation_guidance() -> &'static str {
     } else {
         "Run focustime with elevated privileges (e.g. sudo), verify hosts-file permissions, then press [r] Refresh."
     }
+}
+
+pub(super) fn setup_deprecation_warnings(
+    config_deprecation_warnings: &[String],
+    feature_flags: FeatureFlagsConfig,
+) -> Vec<String> {
+    let mut warnings = config_deprecation_warnings.to_vec();
+    if let Some(stats_warning) = legacy_stats_path_deprecation_warning(feature_flags) {
+        warnings.push(stats_warning);
+    }
+    warnings
+}
+
+pub(super) fn format_legacy_stats_path_deprecation_warning(
+    canonical_path: &std::path::Path,
+    legacy_path: &std::path::Path,
+    canonical_exists: bool,
+    feature_flags: FeatureFlagsConfig,
+) -> String {
+    let mut warning = format!(
+        "Deprecated legacy stats path detected at `{}`.",
+        legacy_path.display()
+    );
+    if !canonical_exists && feature_flags.stats_legacy_path_read_fallback {
+        warning
+            .push_str(" Canonical stats are missing, so reads may still fall back to this path.");
+    }
+    if feature_flags.stats_legacy_path_dual_write {
+        warning.push_str(" Legacy stats mirror writes are still enabled.");
+    }
+    warning.push_str(&format!(
+        " Move stats to `{}` and run `focustime --migrate`.",
+        canonical_path.display()
+    ));
+    warning
+}
+
+#[cfg(not(test))]
+fn legacy_stats_path_deprecation_warning(feature_flags: FeatureFlagsConfig) -> Option<String> {
+    let canonical_path = crate::config::stats_data_path(STATS_FILE_NAME)?;
+    let legacy_path =
+        crate::config::app_data_path(STATS_FILE_NAME).filter(|path| path != &canonical_path)?;
+    if !legacy_path.exists() {
+        return None;
+    }
+
+    let canonical_exists = canonical_path.exists();
+    Some(format_legacy_stats_path_deprecation_warning(
+        &canonical_path,
+        &legacy_path,
+        canonical_exists,
+        feature_flags,
+    ))
+}
+
+#[cfg(test)]
+fn legacy_stats_path_deprecation_warning(_feature_flags: FeatureFlagsConfig) -> Option<String> {
+    None
 }
 
 impl Drop for App {

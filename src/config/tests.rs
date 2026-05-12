@@ -896,6 +896,107 @@ fn load_with_env_migrates_legacy_config_without_schema_version() {
 }
 
 #[test]
+fn load_with_env_reports_deprecation_warnings_for_legacy_fields() {
+    let temp_base = unique_temp_base("legacy-deprecation-warnings");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(
+        app_dir.join("config.toml"),
+        r#"
+focus_secs = 1800
+short_break_secs = 360
+long_break_secs = 900
+long_break_interval = 3
+strict_mode = true
+blocked_sites = ["youtube.com", "reddit.com"]
+"#,
+    )
+    .unwrap();
+
+    let (_, warnings) = AppConfig::load_with_env_and_deprecation_warnings(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("Deprecated top-level timer fields"))
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("Deprecated top-level automation fields"))
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("Deprecated `blocked_sites` is in use"))
+    );
+}
+
+#[test]
+fn load_with_env_avoids_duration_deprecation_warning_when_custom_profile_exists() {
+    let temp_base = unique_temp_base("custom-profile-no-duration-warning");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(
+        app_dir.join("config.toml"),
+        r#"
+focus_secs = 1800
+short_break_secs = 360
+long_break_secs = 900
+long_break_interval = 3
+
+[custom_profile]
+focus_secs = 1800
+short_break_secs = 360
+long_break_secs = 900
+long_break_interval = 3
+"#,
+    )
+    .unwrap();
+
+    let (_, warnings) = AppConfig::load_with_env_and_deprecation_warnings(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert!(
+        !warnings
+            .iter()
+            .any(|warning| warning.contains("Deprecated top-level timer fields"))
+    );
+}
+
+#[test]
+fn load_with_env_defaults_do_not_emit_deprecation_warnings() {
+    let temp_base = unique_temp_base("default-no-deprecation-warning");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(app_dir.join("config.toml"), "").unwrap();
+
+    let (_, warnings) = AppConfig::load_with_env_and_deprecation_warnings(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert!(warnings.is_empty());
+}
+
+#[test]
 fn load_with_env_migrates_explicit_legacy_schema_version() {
     let temp_base = unique_temp_base("legacy-version-zero");
     let app_dir = temp_base.join("focustime");
