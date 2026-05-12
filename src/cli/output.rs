@@ -4,13 +4,14 @@ use crate::cli::{
     BackupOutput, BlockingPreviewAction, BlockingPreviewCommandOutput,
     BlocklistProfileCommandOutput, BlocklistProfileConfig, BreakGlassCommandOutput,
     DiagnosticsCommandOutput, ExportOutput, FeatureFlagsOutput, FocusScoreOutput,
-    GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, ProfileOutput, RecurringScheduleConfig,
-    RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput,
-    Serialize, SessionMetadataCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput,
-    SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput,
-    SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput,
-    StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
-    TimerStateOutput, Write, format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
+    GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, MigrationCommandOutput,
+    MigrationStepStatus, ProfileOutput, RecurringScheduleConfig, RestoreOutput,
+    ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput, Serialize,
+    SessionMetadataCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
+    SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
+    StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput, StrictCommandOutput,
+    TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, TimerStateOutput, Write,
+    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -501,6 +502,49 @@ pub(super) fn print_restore_output(payload: &RestoreOutput) {
     println!("Restored app data from {}", payload.restore_dir.display());
     println!("Config: {}", payload.config_restored_path.display());
     println!("Stats: {}", payload.stats_restored_path.display());
+}
+
+pub(super) fn print_migration_output(payload: &MigrationCommandOutput) {
+    if payload.dry_run {
+        println!("Migration dry-run complete. No files were changed.");
+    } else if payload.changed {
+        println!("Migration completed.");
+    } else {
+        println!("Migration completed. No changes were required.");
+    }
+    println!("Config: {}", payload.config_path.display());
+    println!(
+        "Canonical stats: {}",
+        payload.canonical_stats_path.display()
+    );
+    if let Some(legacy_stats_path) = payload.legacy_stats_path.as_deref() {
+        println!("Legacy stats: {}", legacy_stats_path.display());
+    } else {
+        println!("Legacy stats: n/a");
+    }
+    println!("Steps:");
+    for step in &payload.steps {
+        println!(
+            "  - [{}] {}: {}",
+            migration_step_status_id(step.status),
+            step.operation,
+            step.detail
+        );
+    }
+    if !payload.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &payload.warnings {
+            println!("  - {warning}");
+        }
+    }
+}
+
+fn migration_step_status_id(status: MigrationStepStatus) -> &'static str {
+    match status {
+        MigrationStepStatus::Planned => "planned",
+        MigrationStepStatus::Applied => "applied",
+        MigrationStepStatus::Skipped => "skipped",
+    }
 }
 
 pub(super) fn print_goal_command_output(label: &str, payload: &GoalCommandOutput) {
