@@ -4486,7 +4486,7 @@ fn cli_schedule_delay_sets_delay_for_active_window() {
 
 #[test]
 fn cli_schedule_delay_persists_workflow_state() {
-    let now = Local::now();
+    let now = local_datetime_today(0, 0);
     let config = AppConfig {
         recurring_schedule: RecurringScheduleConfig {
             windows: vec![crate::config::RecurringFocusWindowConfig {
@@ -4662,7 +4662,7 @@ fn app_restores_cli_workflow_state_from_snapshot() {
 
 #[test]
 fn app_restores_schedule_arming_continuity_from_workflow_snapshot() {
-    let now = Local::now();
+    let now = local_datetime_today(10, 15);
     let config = AppConfig {
         recurring_schedule: RecurringScheduleConfig {
             windows: vec![RecurringFocusWindowConfig {
