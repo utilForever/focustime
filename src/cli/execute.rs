@@ -7,8 +7,9 @@ use crate::cli::{
     BlocklistProfileConfig, BlocklistProfileSummaryOutput, BlocklistSiteCommandKind,
     BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig, DailyGoalSnapshot,
     EditSiteResult, ExportOutput, FocusStats, GoalCarryCommandOutput, GoalCommandOutput,
-    InvalidSiteEntryOutput, InvalidSiteInput, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId,
-    ProfileOutput, ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
+    InvalidSiteEntryOutput, InvalidSiteInput, MigrationCommandOutput, MigrationStepOutput,
+    MigrationStepStatus, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId, ProfileOutput,
+    ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
     ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SiteAddCommandOutput, SiteBlocker,
     SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
     SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
@@ -20,13 +21,14 @@ use crate::cli::{
     print_blocking_preview_command_output, print_blocklist_profile_command_output,
     print_break_glass_command_output, print_diagnostics_command_output, print_export_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
-    print_profile_output, print_restore_output, print_schedule_command_output,
-    print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
-    print_timer_state_output, profile_id, profile_view, selected_break_template_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    print_migration_output, print_profile_output, print_restore_output,
+    print_schedule_command_output, print_schedule_delay_command_output,
+    print_session_metadata_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
+    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
+    timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -37,6 +39,34 @@ struct StatsPersistencePaths {
     canonical: PathBuf,
     legacy: Option<PathBuf>,
 }
+
+#[derive(Debug, Clone)]
+struct MigrationPlan {
+    config_path: PathBuf,
+    canonical_stats_path: PathBuf,
+    legacy_stats_path: Option<PathBuf>,
+    copy_legacy_stats_to_canonical: bool,
+    disable_stats_legacy_path_read_fallback: bool,
+    disable_stats_legacy_path_dual_write: bool,
+    stats_copy_skip_reason: String,
+    warnings: Vec<String>,
+}
+
+impl MigrationPlan {
+    fn has_changes(&self) -> bool {
+        self.copy_legacy_stats_to_canonical
+            || self.disable_stats_legacy_path_read_fallback
+            || self.disable_stats_legacy_path_dual_write
+    }
+
+    fn requires_config_update(&self) -> bool {
+        self.disable_stats_legacy_path_read_fallback || self.disable_stats_legacy_path_dual_write
+    }
+}
+
+const MIGRATION_OPERATION_COPY_LEGACY_STATS: &str = "copy_legacy_stats_to_canonical";
+const MIGRATION_OPERATION_DISABLE_READ_FALLBACK: &str = "disable_stats_legacy_path_read_fallback";
+const MIGRATION_OPERATION_DISABLE_DUAL_WRITE: &str = "disable_stats_legacy_path_dual_write";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
     match cli_command.kind {
@@ -81,6 +111,7 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         } => execute_status_command(cli_command.output, watch_interval_secs),
         CommandKind::Backup { dir } => execute_backup_command(dir, cli_command.output),
         CommandKind::Restore { dir } => execute_restore_command(dir, cli_command.output),
+        CommandKind::Migrate { dry_run } => execute_migrate_command(dry_run, cli_command.output),
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
@@ -1233,6 +1264,323 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
     Ok(())
 }
 
+fn execute_migrate_command(dry_run: bool, output: OutputMode) -> Result<(), String> {
+    let config = AppConfig::load().normalized();
+    let plan = build_migration_plan(&config)?;
+    let mut steps = migration_steps_for_plan(&plan);
+    if !dry_run && plan.has_changes() {
+        apply_migration_plan(&config, &plan, &mut steps)?;
+    }
+    let payload = MigrationCommandOutput {
+        action: "migrate",
+        dry_run,
+        changed: plan.has_changes(),
+        config_path: plan.config_path.clone(),
+        canonical_stats_path: plan.canonical_stats_path.clone(),
+        legacy_stats_path: plan.legacy_stats_path.clone(),
+        steps,
+        warnings: plan.warnings.clone(),
+    };
+    match output {
+        OutputMode::Text => print_migration_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn build_migration_plan(config: &AppConfig) -> Result<MigrationPlan, String> {
+    let config_path = config_file_path()?;
+    ensure_regular_file_if_exists(&config_path, "config path")?;
+    let stats_paths = stats_persistence_paths()?;
+    ensure_regular_file_if_exists(&stats_paths.canonical, "canonical stats path")?;
+    if let Some(legacy) = stats_paths.legacy.as_deref() {
+        ensure_regular_file_if_exists(legacy, "legacy stats path")?;
+    }
+
+    let mut copy_legacy_stats_to_canonical = false;
+    let mut stats_copy_skip_reason = "No legacy stats file was found to migrate.".to_string();
+    let mut warnings = Vec::new();
+
+    let canonical_exists = stats_paths.canonical.exists();
+    let legacy_exists = stats_paths
+        .legacy
+        .as_ref()
+        .is_some_and(|path| path.exists());
+    if let Some(legacy) = stats_paths.legacy.as_ref() {
+        if legacy_exists && !canonical_exists {
+            copy_legacy_stats_to_canonical = true;
+            stats_copy_skip_reason.clear();
+        } else if legacy_exists && canonical_exists {
+            let canonical_bytes = fs::read(&stats_paths.canonical).map_err(|error| {
+                format!(
+                    "Migration planning failed: could not read canonical stats file `{}`: {error}",
+                    stats_paths.canonical.display()
+                )
+            })?;
+            let legacy_bytes = fs::read(legacy).map_err(|error| {
+                format!(
+                    "Migration planning failed: could not read legacy stats file `{}`: {error}",
+                    legacy.display()
+                )
+            })?;
+            if canonical_bytes != legacy_bytes {
+                return Err(format!(
+                    "Migration failed: canonical stats `{}` and legacy stats `{}` differ. Run `focustime --backup`, reconcile the two files, and rerun `focustime --migrate`.",
+                    stats_paths.canonical.display(),
+                    legacy.display()
+                ));
+            }
+            stats_copy_skip_reason =
+                "Canonical and legacy stats files already match; copy is not required.".to_string();
+        } else if !legacy_exists && !canonical_exists {
+            stats_copy_skip_reason = format!(
+                "Neither canonical (`{}`) nor legacy (`{}`) stats files exist.",
+                stats_paths.canonical.display(),
+                legacy.display()
+            );
+        } else {
+            stats_copy_skip_reason =
+                "Canonical stats file already exists; legacy copy is not required.".to_string();
+        }
+    } else {
+        stats_copy_skip_reason =
+            "No distinct legacy stats path exists for this environment.".to_string();
+    }
+
+    if !copy_legacy_stats_to_canonical {
+        warnings.push(stats_copy_skip_reason.clone());
+    }
+
+    Ok(MigrationPlan {
+        config_path,
+        canonical_stats_path: stats_paths.canonical,
+        legacy_stats_path: stats_paths.legacy,
+        copy_legacy_stats_to_canonical,
+        disable_stats_legacy_path_read_fallback: config
+            .feature_flags
+            .stats_legacy_path_read_fallback,
+        disable_stats_legacy_path_dual_write: config.feature_flags.stats_legacy_path_dual_write,
+        stats_copy_skip_reason,
+        warnings,
+    })
+}
+
+fn migration_steps_for_plan(plan: &MigrationPlan) -> Vec<MigrationStepOutput> {
+    let mut steps = Vec::new();
+    let status_for_apply = MigrationStepStatus::Planned;
+
+    if plan.copy_legacy_stats_to_canonical {
+        let legacy = plan
+            .legacy_stats_path
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "<unavailable>".to_string());
+        steps.push(MigrationStepOutput {
+            operation: MIGRATION_OPERATION_COPY_LEGACY_STATS,
+            status: status_for_apply,
+            detail: format!(
+                "Copy legacy stats `{legacy}` to canonical path `{}`.",
+                plan.canonical_stats_path.display()
+            ),
+        });
+    } else {
+        steps.push(MigrationStepOutput {
+            operation: MIGRATION_OPERATION_COPY_LEGACY_STATS,
+            status: MigrationStepStatus::Skipped,
+            detail: plan.stats_copy_skip_reason.clone(),
+        });
+    }
+
+    if plan.disable_stats_legacy_path_read_fallback {
+        steps.push(MigrationStepOutput {
+            operation: MIGRATION_OPERATION_DISABLE_READ_FALLBACK,
+            status: status_for_apply,
+            detail: "Set `feature_flags.stats_legacy_path_read_fallback = false` in config.toml."
+                .to_string(),
+        });
+    } else {
+        steps.push(MigrationStepOutput {
+            operation: MIGRATION_OPERATION_DISABLE_READ_FALLBACK,
+            status: MigrationStepStatus::Skipped,
+            detail: "`feature_flags.stats_legacy_path_read_fallback` is already disabled."
+                .to_string(),
+        });
+    }
+
+    if plan.disable_stats_legacy_path_dual_write {
+        steps.push(MigrationStepOutput {
+            operation: MIGRATION_OPERATION_DISABLE_DUAL_WRITE,
+            status: status_for_apply,
+            detail: "Set `feature_flags.stats_legacy_path_dual_write = false` in config.toml."
+                .to_string(),
+        });
+    } else {
+        steps.push(MigrationStepOutput {
+            operation: MIGRATION_OPERATION_DISABLE_DUAL_WRITE,
+            status: MigrationStepStatus::Skipped,
+            detail: "`feature_flags.stats_legacy_path_dual_write` is already disabled.".to_string(),
+        });
+    }
+
+    steps
+}
+
+fn apply_migration_plan(
+    config: &AppConfig,
+    plan: &MigrationPlan,
+    steps: &mut [MigrationStepOutput],
+) -> Result<(), String> {
+    let mut config_snapshot = None;
+    let mut canonical_stats_snapshot = None;
+    let mut staged_canonical_stats_path = None;
+    let mut applied_canonical_stats = false;
+
+    if plan.copy_legacy_stats_to_canonical {
+        canonical_stats_snapshot = snapshot_existing_file(
+            &plan.canonical_stats_path,
+            "snapshot existing canonical stats.toml for migration rollback",
+        )?;
+        let staged_path = temp_restore_path(&plan.canonical_stats_path, "staged");
+        let legacy_stats_path = plan.legacy_stats_path.as_ref().ok_or_else(|| {
+            "Migration failed: missing legacy stats path for planned copy step.".to_string()
+        })?;
+        copy_file_with_context(
+            legacy_stats_path,
+            &staged_path,
+            "stage migration copy of stats.toml",
+        )?;
+        staged_canonical_stats_path = Some(staged_path);
+    }
+
+    if plan.requires_config_update() {
+        config_snapshot = snapshot_existing_file(
+            &plan.config_path,
+            "snapshot existing config.toml for migration rollback",
+        )?;
+    }
+
+    if let Some(staged_path) = staged_canonical_stats_path.as_deref() {
+        if let Err(error) = replace_file_atomically(
+            staged_path,
+            &plan.canonical_stats_path,
+            "apply migration copy of stats.toml",
+        ) {
+            return Err(migration_failure_with_rollback(
+                format!("could not update canonical stats.toml: {error}"),
+                rollback_migration_files(
+                    config_snapshot.as_deref(),
+                    &plan.config_path,
+                    false,
+                    canonical_stats_snapshot.as_deref(),
+                    &plan.canonical_stats_path,
+                    true,
+                ),
+            ));
+        }
+        applied_canonical_stats = true;
+    }
+
+    if plan.requires_config_update() {
+        let mut migrated = config.clone();
+        if plan.disable_stats_legacy_path_read_fallback {
+            migrated.feature_flags.stats_legacy_path_read_fallback = false;
+        }
+        if plan.disable_stats_legacy_path_dual_write {
+            migrated.feature_flags.stats_legacy_path_dual_write = false;
+        }
+        if let Err(error) = migrated.save() {
+            return Err(migration_failure_with_rollback(
+                format!("could not save migrated config.toml: {error}"),
+                rollback_migration_files(
+                    config_snapshot.as_deref(),
+                    &plan.config_path,
+                    true,
+                    canonical_stats_snapshot.as_deref(),
+                    &plan.canonical_stats_path,
+                    applied_canonical_stats,
+                ),
+            ));
+        }
+    }
+
+    if let Some(snapshot) = config_snapshot.as_deref() {
+        let _ = remove_file_if_exists(snapshot);
+    }
+    if let Some(snapshot) = canonical_stats_snapshot.as_deref() {
+        let _ = remove_file_if_exists(snapshot);
+    }
+    if let Some(staged_path) = staged_canonical_stats_path.as_deref() {
+        let _ = remove_file_if_exists(staged_path);
+    }
+
+    for step in steps {
+        if step.status == MigrationStepStatus::Planned {
+            step.status = MigrationStepStatus::Applied;
+        }
+    }
+    Ok(())
+}
+
+fn rollback_migration_files(
+    config_snapshot: Option<&Path>,
+    config_path: &Path,
+    config_was_updated: bool,
+    canonical_stats_snapshot: Option<&Path>,
+    canonical_stats_path: &Path,
+    canonical_stats_was_updated: bool,
+) -> Vec<String> {
+    let mut rollback_errors = Vec::new();
+    if config_was_updated
+        && let Err(error) = rollback_file(
+            config_snapshot,
+            config_path,
+            "roll back migrated config.toml",
+        )
+    {
+        rollback_errors.push(error);
+    }
+    if canonical_stats_was_updated
+        && let Err(error) = rollback_file(
+            canonical_stats_snapshot,
+            canonical_stats_path,
+            "roll back migrated canonical stats.toml",
+        )
+    {
+        rollback_errors.push(error);
+    }
+    rollback_errors
+}
+
+fn rollback_file(snapshot: Option<&Path>, destination: &Path, context: &str) -> Result<(), String> {
+    if let Some(snapshot) = snapshot {
+        replace_file_atomically(snapshot, destination, context)
+    } else {
+        remove_file_if_exists(destination)
+    }
+}
+
+fn migration_failure_with_rollback(error: String, rollback_errors: Vec<String>) -> String {
+    let mut message = format!("Migration failed: {error}");
+    if !rollback_errors.is_empty() {
+        message.push_str("; rollback failed: ");
+        message.push_str(&rollback_errors.join("; "));
+    }
+    message.push_str(
+        ". Next steps: run `focustime --backup`, inspect `config.toml` and `stats.toml`, then retry with `focustime --migrate --dry-run`.",
+    );
+    message
+}
+
+fn ensure_regular_file_if_exists(path: &Path, context: &str) -> Result<(), String> {
+    if path.exists() && !path.is_file() {
+        return Err(format!(
+            "Migration failed: {context} `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
 fn ensure_restore_source_file(path: &Path, file_name: &str) -> Result<(), String> {
     if !path.exists() {
         return Err(format!(
@@ -1577,5 +1925,96 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
         selected_task_label,
         focus_intention,
         task_note,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn create_temp_dir(test_name: &str) -> PathBuf {
+        let unique = format!(
+            "focustime-{test_name}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("current time should be after unix epoch")
+                .as_nanos()
+        );
+        let path = std::env::temp_dir().join(unique);
+        fs::create_dir_all(&path).expect("temp dir should be created");
+        path
+    }
+
+    #[test]
+    fn apply_migration_plan_copies_legacy_stats_to_canonical() {
+        let temp_dir = create_temp_dir("migrate-copy");
+        let config_path = temp_dir.join("config.toml");
+        let legacy_stats_path = temp_dir.join("legacy-stats.toml");
+        let canonical_stats_path = temp_dir.join("state").join("stats.toml");
+        fs::write(&legacy_stats_path, "daily = {}\n")
+            .expect("legacy stats file should be writable");
+
+        let plan = MigrationPlan {
+            config_path,
+            canonical_stats_path: canonical_stats_path.clone(),
+            legacy_stats_path: Some(legacy_stats_path),
+            copy_legacy_stats_to_canonical: true,
+            disable_stats_legacy_path_read_fallback: false,
+            disable_stats_legacy_path_dual_write: false,
+            stats_copy_skip_reason: String::new(),
+            warnings: Vec::new(),
+        };
+        let mut steps = migration_steps_for_plan(&plan);
+        apply_migration_plan(&AppConfig::default(), &plan, &mut steps)
+            .expect("migration copy should succeed");
+
+        let canonical_bytes =
+            fs::read(&canonical_stats_path).expect("canonical stats file should be readable");
+        assert_eq!(canonical_bytes, b"daily = {}\n");
+
+        let copy_step = steps
+            .iter()
+            .find(|step| step.operation == MIGRATION_OPERATION_COPY_LEGACY_STATS)
+            .expect("copy step should exist");
+        assert_eq!(copy_step.status, MigrationStepStatus::Applied);
+
+        fs::remove_dir_all(temp_dir).expect("temp dir should be removed");
+    }
+
+    #[test]
+    fn rollback_migration_files_restores_snapshots() {
+        let temp_dir = create_temp_dir("migrate-rollback");
+        let config_path = temp_dir.join("config.toml");
+        let config_snapshot = temp_dir.join("config.snapshot.toml");
+        let canonical_stats_path = temp_dir.join("stats.toml");
+        let canonical_snapshot = temp_dir.join("stats.snapshot.toml");
+        fs::write(&config_path, "schema_version = 1\n").expect("config file should be writable");
+        fs::write(&canonical_stats_path, "daily = {}\n")
+            .expect("canonical stats file should be writable");
+        fs::write(&config_snapshot, "schema_version = 0\n")
+            .expect("config snapshot should be writable");
+        fs::write(&canonical_snapshot, "daily = { old = true }\n")
+            .expect("stats snapshot should be writable");
+
+        let rollback_errors = rollback_migration_files(
+            Some(config_snapshot.as_path()),
+            &config_path,
+            true,
+            Some(canonical_snapshot.as_path()),
+            &canonical_stats_path,
+            true,
+        );
+
+        assert!(rollback_errors.is_empty());
+        let restored_config =
+            fs::read_to_string(&config_path).expect("restored config should exist");
+        let restored_stats =
+            fs::read_to_string(&canonical_stats_path).expect("restored stats should exist");
+        assert_eq!(restored_config, "schema_version = 0\n");
+        assert_eq!(restored_stats, "daily = { old = true }\n");
+
+        fs::remove_dir_all(temp_dir).expect("temp dir should be removed");
     }
 }
