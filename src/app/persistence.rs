@@ -340,10 +340,16 @@ impl App {
         } else {
             None
         };
+        let delayed_occurrence_key = schedule_state
+            .as_ref()
+            .and_then(|(delayed_key, _)| delayed_key.as_deref());
         let last_schedule_occurrence_key = self
             .last_schedule_occurrence_key
             .clone()
-            .filter(|last_key| active_occurrence_key.as_deref() == Some(last_key.as_str()));
+            .filter(|last_key| {
+                active_occurrence_key.as_deref() == Some(last_key.as_str())
+                    && delayed_occurrence_key != Some(last_key.as_str())
+            });
         let snapshot = WorkflowStateSnapshot {
             schedule_delayed_occurrence_key: schedule_state
                 .as_ref()

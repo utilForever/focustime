@@ -4514,6 +4514,37 @@ fn cli_schedule_delay_persists_workflow_state() {
 }
 
 #[test]
+fn cli_workflow_snapshot_skips_last_occurrence_for_active_delayed_window() {
+    let now = Local::now();
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "00:00".to_string(),
+                end: "23:59".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    let active_occurrence = app
+        .active_schedule_occurrence_at(now)
+        .expect("schedule window should be active");
+    let active_occurrence_key = occurrence_key(&active_occurrence);
+    app.schedule_delayed_occurrence_key = Some(active_occurrence_key.clone());
+    app.schedule_delay_until = Some(now + ChronoDuration::minutes(5));
+    app.last_schedule_occurrence_key = Some(active_occurrence_key);
+
+    app.sync_cli_workflow_state().unwrap();
+
+    let snapshot = session_recovery::test_saved_workflow_snapshot()
+        .expect("workflow snapshot should be saved");
+    assert!(snapshot.schedule_delayed_occurrence_key.is_some());
+    assert!(snapshot.last_schedule_occurrence_key.is_none());
+}
+
+#[test]
 fn cli_break_glass_trigger_requires_active_focus() {
     let config = AppConfig {
         blocked_sites: vec!["example.com".to_string()],
