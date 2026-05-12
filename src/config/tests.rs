@@ -252,6 +252,8 @@ fn round_trip_full_config() {
             legacy_automation_mirror: true,
             legacy_blocked_sites_mirror: true,
             metadata_task_label_fallback: true,
+            stats_legacy_path_read_fallback: true,
+            stats_legacy_path_dual_write: true,
         },
         shortcuts: ShortcutConfig {
             timer_toggle_pause: "space".to_string(),
@@ -1128,6 +1130,71 @@ fn config_dir_uses_absolute_appdata_when_set() {
         _ => None,
     });
     assert_eq!(dir, Some(PathBuf::from(r"C:\Users\test\AppData\Roaming")));
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn stats_state_dir_uses_absolute_xdg_state_home_when_set() {
+    let dir = stats_state_dir_from_env(|key| match key {
+        "XDG_STATE_HOME" => Some(OsString::from("/tmp/state")),
+        _ => None,
+    });
+    assert_eq!(dir, Some(PathBuf::from("/tmp/state")));
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn stats_state_dir_falls_back_to_absolute_xdg_data_home() {
+    let dir = stats_state_dir_from_env(|key| match key {
+        "XDG_STATE_HOME" => Some(OsString::from("relative-state")),
+        "XDG_DATA_HOME" => Some(OsString::from("/tmp/data")),
+        _ => None,
+    });
+    assert_eq!(dir, Some(PathBuf::from("/tmp/data")));
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn stats_state_dir_falls_back_to_home_local_state() {
+    let dir = stats_state_dir_from_env(|key| match key {
+        "XDG_STATE_HOME" => None,
+        "XDG_DATA_HOME" => None,
+        "HOME" => Some(OsString::from("/tmp/home")),
+        _ => None,
+    });
+    assert_eq!(dir, Some(PathBuf::from("/tmp/home/.local/state")));
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn stats_state_dir_uses_absolute_localappdata_when_set() {
+    let dir = stats_state_dir_from_env(|key| match key {
+        "LOCALAPPDATA" => Some(OsString::from(r"C:\Users\test\AppData\Local")),
+        _ => None,
+    });
+    assert_eq!(dir, Some(PathBuf::from(r"C:\Users\test\AppData\Local")));
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn stats_state_dir_falls_back_to_absolute_appdata_when_localappdata_missing() {
+    let dir = stats_state_dir_from_env(|key| match key {
+        "LOCALAPPDATA" => None,
+        "APPDATA" => Some(OsString::from(r"C:\Users\test\AppData\Roaming")),
+        _ => None,
+    });
+    assert_eq!(dir, Some(PathBuf::from(r"C:\Users\test\AppData\Roaming")));
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn stats_state_dir_returns_none_when_all_candidates_are_relative() {
+    let dir = stats_state_dir_from_env(|key| match key {
+        "LOCALAPPDATA" => Some(OsString::from("AppData\\Local")),
+        "APPDATA" => Some(OsString::from("AppData\\Roaming")),
+        _ => None,
+    });
+    assert!(dir.is_none());
 }
 
 #[cfg(unix)]

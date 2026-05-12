@@ -714,6 +714,8 @@ struct FeatureFlagsOutput {
     legacy_automation_mirror: bool,
     legacy_blocked_sites_mirror: bool,
     metadata_task_label_fallback: bool,
+    stats_legacy_path_read_fallback: bool,
+    stats_legacy_path_dual_write: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

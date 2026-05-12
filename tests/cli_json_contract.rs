@@ -30,12 +30,38 @@ impl TestEnv {
         Self { root }
     }
 
+    fn app_data_dir(&self) -> PathBuf {
+        self.root.join("focustime")
+    }
+
+    fn stats_canonical_dir(&self) -> PathBuf {
+        #[cfg(target_os = "windows")]
+        {
+            self.root.join("localappdata").join("focustime")
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            self.root.join(".state").join("focustime")
+        }
+    }
+
+    fn legacy_stats_path(&self) -> PathBuf {
+        self.app_data_dir().join("stats.toml")
+    }
+
+    fn canonical_stats_path(&self) -> PathBuf {
+        self.stats_canonical_dir().join("stats.toml")
+    }
+
     fn run(&self, args: &[&str]) -> Output {
         let mut command = Command::new(focustime_bin_path());
         command.args(args);
         command.current_dir(&self.root);
         command.env("APPDATA", &self.root);
+        command.env("LOCALAPPDATA", self.root.join("localappdata"));
         command.env("XDG_CONFIG_HOME", &self.root);
+        command.env("XDG_STATE_HOME", self.root.join(".state"));
+        command.env("XDG_DATA_HOME", self.root.join(".data"));
         command.env("HOME", &self.root);
         command
             .output()
@@ -47,7 +73,10 @@ impl TestEnv {
         command.args(args);
         command.current_dir(&self.root);
         command.env("APPDATA", &self.root);
+        command.env("LOCALAPPDATA", self.root.join("localappdata"));
         command.env("XDG_CONFIG_HOME", &self.root);
+        command.env("XDG_STATE_HOME", self.root.join(".state"));
+        command.env("XDG_DATA_HOME", self.root.join(".data"));
         command.env("HOME", &self.root);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
@@ -84,10 +113,20 @@ fn stderr_text(output: &Output) -> String {
 }
 
 fn write_recovery_snapshot(env: &TestEnv, content: &str) {
-    let app_data_dir = env.root.join("focustime");
+    let app_data_dir = env.app_data_dir();
     fs::create_dir_all(&app_data_dir).expect("failed to create app data directory");
     fs::write(app_data_dir.join("session-recovery.toml"), content)
         .expect("failed to write recovery snapshot");
+}
+
+fn write_stats_snapshot(path: &std::path::Path, day: &str, pomodoros: u32, focused_seconds: u64) {
+    let content = format!(
+        "[daily.\"{day}\"]\npomodoros_completed = {pomodoros}\nfocused_seconds = {focused_seconds}\n"
+    );
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("failed to create stats parent directory");
+    }
+    fs::write(path, content).expect("failed to write stats snapshot");
 }
 
 #[test]
@@ -353,9 +392,62 @@ fn backup_and_restore_json_round_trip_config_and_stats_files() {
 }
 
 #[test]
+fn task_goal_json_dual_writes_stats_to_canonical_and_legacy_paths() {
+    let env = TestEnv::new("stats-dual-write");
+
+    let output = env.run(&["--task-goal=Docs:90,3", "--json"]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(stderr_text(&output).trim().is_empty());
+
+    let canonical_stats_path = env.canonical_stats_path();
+    let legacy_stats_path = env.legacy_stats_path();
+    assert!(canonical_stats_path.is_file());
+    assert!(legacy_stats_path.is_file());
+    assert_eq!(
+        fs::read_to_string(&canonical_stats_path).unwrap(),
+        fs::read_to_string(&legacy_stats_path).unwrap()
+    );
+}
+
+#[test]
+fn status_json_prefers_canonical_stats_and_falls_back_to_legacy() {
+    let env = TestEnv::new("stats-read-precedence");
+
+    let baseline_status = env.run(&["--status", "--json"]);
+    assert_eq!(baseline_status.status.code(), Some(0));
+    assert!(stderr_text(&baseline_status).trim().is_empty());
+    let baseline_payload: Value =
+        serde_json::from_slice(&baseline_status.stdout).expect("stdout should be JSON");
+    let day = baseline_payload["day"]
+        .as_str()
+        .expect("day should be a string")
+        .to_string();
+
+    let canonical_stats_path = env.canonical_stats_path();
+    let legacy_stats_path = env.legacy_stats_path();
+    write_stats_snapshot(&legacy_stats_path, &day, 7, 4200);
+    write_stats_snapshot(&canonical_stats_path, &day, 3, 1800);
+
+    let canonical_status = env.run(&["--status", "--json"]);
+    assert_eq!(canonical_status.status.code(), Some(0));
+    assert!(stderr_text(&canonical_status).trim().is_empty());
+    let canonical_payload: Value =
+        serde_json::from_slice(&canonical_status.stdout).expect("stdout should be JSON");
+    assert_eq!(canonical_payload["today"]["pomodoros_completed"], 3);
+
+    fs::remove_file(&canonical_stats_path).expect("failed to remove canonical stats file");
+    let fallback_status = env.run(&["--status", "--json"]);
+    assert_eq!(fallback_status.status.code(), Some(0));
+    assert!(stderr_text(&fallback_status).trim().is_empty());
+    let fallback_payload: Value =
+        serde_json::from_slice(&fallback_status.stdout).expect("stdout should be JSON");
+    assert_eq!(fallback_payload["today"]["pomodoros_completed"], 7);
+}
+
+#[test]
 fn backup_json_copies_raw_files_even_when_malformed() {
     let env = TestEnv::new("backup-raw-malformed");
-    let app_data_dir = env.root.join("focustime");
+    let app_data_dir = env.app_data_dir();
     fs::create_dir_all(&app_data_dir).expect("failed to create app data directory");
     let seed_output = env.run(&["--task", "Docs", "--json"]);
     assert_eq!(seed_output.status.code(), Some(0));

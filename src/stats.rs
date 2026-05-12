@@ -39,16 +39,38 @@ const EXPORT_SCHEMA_VERSION: u32 = 5;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StatsPathCompatibilityOptions {
+    pub legacy_path_read_fallback: bool,
+    pub legacy_path_dual_write: bool,
+}
+
+impl Default for StatsPathCompatibilityOptions {
+    fn default() -> Self {
+        Self {
+            legacy_path_read_fallback: true,
+            legacy_path_dual_write: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StatsLoadOptions {
     pub metadata_task_label_fallback: bool,
+    pub path_compatibility: StatsPathCompatibilityOptions,
 }
 
 impl Default for StatsLoadOptions {
     fn default() -> Self {
         Self {
             metadata_task_label_fallback: true,
+            path_compatibility: StatsPathCompatibilityOptions::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StatsSaveOptions {
+    pub path_compatibility: StatsPathCompatibilityOptions,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

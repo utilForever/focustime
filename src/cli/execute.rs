@@ -32,6 +32,12 @@ use crate::cli::{
 const CONFIG_FILE_NAME: &str = "config.toml";
 const STATS_FILE_NAME: &str = "stats.toml";
 
+#[derive(Debug, Clone)]
+struct StatsPersistencePaths {
+    canonical: PathBuf,
+    legacy: Option<PathBuf>,
+}
+
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
     match cli_command.kind {
         CommandKind::Start => execute_start_command(cli_command.output),
@@ -151,9 +157,7 @@ fn execute_task_goal_command(
     output: OutputMode,
 ) -> Result<(), String> {
     let config = AppConfig::load().normalized();
-    let mut stats = FocusStats::load_with_options(crate::stats::StatsLoadOptions {
-        metadata_task_label_fallback: config.feature_flags.metadata_task_label_fallback,
-    })?;
+    let mut stats = FocusStats::load_with_options(stats_load_options(&config))?;
     let selected_task_label = stats.task_planner_state().1;
     let requested_label = label.or(selected_task_label).ok_or_else(|| {
         "No task label selected. Use `--task LABEL` first or pass `--task-goal LABEL`.".to_string()
@@ -167,7 +171,7 @@ fn execute_task_goal_command(
         };
         let canonical = stats.set_task_goal_target(&requested_label, target)?;
         stats
-            .save()
+            .save_with_options(stats_save_options(&config))
             .map_err(|error| format!("Failed to save task goals: {error}"))?;
         updated = true;
         canonical
@@ -1013,10 +1017,8 @@ fn execute_status_watch_command(output: OutputMode, interval_secs: u64) -> Resul
 
 fn load_status_output() -> Result<StatusOutput, String> {
     let config = AppConfig::load().normalized();
-    let stats = FocusStats::load_with_options(crate::stats::StatsLoadOptions {
-        metadata_task_label_fallback: config.feature_flags.metadata_task_label_fallback,
-    })
-    .map_err(|error| format!("Failed to load stats: {error}"))?;
+    let stats = FocusStats::load_with_options(stats_load_options(&config))
+        .map_err(|error| format!("Failed to load stats: {error}"))?;
     Ok(build_status_output(&config, &stats))
 }
 
@@ -1045,10 +1047,8 @@ fn emit_status_output(
 
 fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
     let config = AppConfig::load().normalized();
-    let stats = FocusStats::load_with_options(crate::stats::StatsLoadOptions {
-        metadata_task_label_fallback: config.feature_flags.metadata_task_label_fallback,
-    })
-    .map_err(|error| format!("Failed to load stats: {error}"))?;
+    let stats = FocusStats::load_with_options(stats_load_options(&config))
+        .map_err(|error| format!("Failed to load stats: {error}"))?;
     let target_dir = match dir {
         Some(path) => path,
         None => env::current_dir()
@@ -1071,6 +1071,7 @@ fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
 }
 
 fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
+    let config = AppConfig::load().normalized();
     let backup_dir = match dir {
         Some(path) => path,
         None => env::current_dir().map_err(|error| {
@@ -1080,8 +1081,12 @@ fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
     fs::create_dir_all(&backup_dir)
         .map_err(|error| format!("Backup failed: could not create backup directory: {error}"))?;
 
-    let source_config = app_data_file_path(CONFIG_FILE_NAME)?;
-    let source_stats = app_data_file_path(STATS_FILE_NAME)?;
+    let source_config = config_file_path()?;
+    let stats_paths = stats_persistence_paths()?;
+    let source_stats = resolve_stats_backup_source_path(
+        &stats_paths,
+        config.feature_flags.stats_legacy_path_read_fallback,
+    );
     ensure_backup_source_file(&source_config, CONFIG_FILE_NAME)?;
     ensure_backup_source_file(&source_stats, STATS_FILE_NAME)?;
     let config_backup_path = backup_dir.join(CONFIG_FILE_NAME);
@@ -1103,6 +1108,7 @@ fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
 }
 
 fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
+    let config = AppConfig::load().normalized();
     let restore_dir = match dir {
         Some(path) => path,
         None => env::current_dir().map_err(|error| {
@@ -1114,10 +1120,19 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
     ensure_restore_source_file(&source_config, CONFIG_FILE_NAME)?;
     ensure_restore_source_file(&source_stats, STATS_FILE_NAME)?;
 
-    let config_restored_path = app_data_file_path(CONFIG_FILE_NAME)?;
-    let stats_restored_path = app_data_file_path(STATS_FILE_NAME)?;
+    let config_restored_path = config_file_path()?;
+    let stats_paths = stats_persistence_paths()?;
+    let stats_restored_path = stats_paths.canonical.clone();
+    let stats_legacy_restored_path = if config.feature_flags.stats_legacy_path_dual_write {
+        stats_paths.legacy.clone()
+    } else {
+        None
+    };
     let staged_config_path = temp_restore_path(&config_restored_path, "staged");
     let staged_stats_path = temp_restore_path(&stats_restored_path, "staged");
+    let staged_legacy_stats_path = stats_legacy_restored_path
+        .as_ref()
+        .map(|path| temp_restore_path(path, "staged"));
     copy_file_with_context(
         &source_config,
         &staged_config_path,
@@ -1128,6 +1143,13 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
         &staged_stats_path,
         "stage restore stats.toml",
     )?;
+    if let Some(staged_legacy) = staged_legacy_stats_path.as_deref() {
+        copy_file_with_context(
+            &source_stats,
+            staged_legacy,
+            "stage restore legacy stats.toml mirror",
+        )?;
+    }
 
     let original_config_snapshot = snapshot_existing_file(
         &config_restored_path,
@@ -1137,6 +1159,15 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
         &stats_restored_path,
         "snapshot existing stats.toml for rollback",
     )?;
+    let original_legacy_stats_snapshot =
+        if let Some(legacy_stats_path) = stats_legacy_restored_path.as_deref() {
+            snapshot_existing_file(
+                legacy_stats_path,
+                "snapshot existing legacy stats.toml for rollback",
+            )?
+        } else {
+            None
+        };
 
     replace_file_atomically(
         &staged_config_path,
@@ -1148,31 +1179,45 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
         &stats_restored_path,
         "restore stats.toml",
     ) {
-        if let Some(snapshot) = original_config_snapshot.as_deref() {
-            let _ = replace_file_atomically(
-                snapshot,
-                &config_restored_path,
-                "roll back restored config.toml",
+        rollback_restored_file(
+            original_config_snapshot.as_deref(),
+            &config_restored_path,
+            "roll back restored config.toml",
+        );
+        rollback_restored_file(
+            original_stats_snapshot.as_deref(),
+            &stats_restored_path,
+            "roll back restored stats.toml",
+        );
+        if let Some(legacy_stats_path) = stats_legacy_restored_path.as_deref() {
+            rollback_restored_file(
+                original_legacy_stats_snapshot.as_deref(),
+                legacy_stats_path,
+                "roll back restored legacy stats.toml",
             );
-        } else {
-            let _ = remove_file_if_exists(&config_restored_path);
-        }
-        if let Some(snapshot) = original_stats_snapshot.as_deref() {
-            let _ = replace_file_atomically(
-                snapshot,
-                &stats_restored_path,
-                "roll back restored stats.toml",
-            );
-        } else {
-            let _ = remove_file_if_exists(&stats_restored_path);
         }
         let _ = remove_file_if_exists(&staged_stats_path);
+        if let Some(staged_legacy) = staged_legacy_stats_path.as_deref() {
+            let _ = remove_file_if_exists(staged_legacy);
+        }
         return Err(error);
     }
+    restore_legacy_stats_mirror_if_enabled(
+        stats_legacy_restored_path.as_deref(),
+        staged_legacy_stats_path.as_deref(),
+        original_legacy_stats_snapshot.as_deref(),
+        original_config_snapshot.as_deref(),
+        &config_restored_path,
+        original_stats_snapshot.as_deref(),
+        &stats_restored_path,
+    )?;
     if let Some(snapshot) = original_config_snapshot.as_deref() {
         let _ = remove_file_if_exists(snapshot);
     }
     if let Some(snapshot) = original_stats_snapshot.as_deref() {
+        let _ = remove_file_if_exists(snapshot);
+    }
+    if let Some(snapshot) = original_legacy_stats_snapshot.as_deref() {
         let _ = remove_file_if_exists(snapshot);
     }
 
@@ -1310,12 +1355,105 @@ fn remove_file_if_exists(path: &Path) -> Result<(), String> {
     fs::remove_file(path).map_err(|error| format!("Failed to remove `{}`: {error}", path.display()))
 }
 
-fn app_data_file_path(file_name: &str) -> Result<PathBuf, String> {
-    crate::config::app_data_path(file_name).ok_or_else(|| {
+fn rollback_restored_file(snapshot: Option<&Path>, destination: &Path, rollback_context: &str) {
+    if let Some(snapshot) = snapshot {
+        let _ = replace_file_atomically(snapshot, destination, rollback_context);
+    } else {
+        let _ = remove_file_if_exists(destination);
+    }
+}
+
+fn restore_legacy_stats_mirror_if_enabled(
+    legacy_stats_path: Option<&Path>,
+    staged_legacy_stats_path: Option<&Path>,
+    original_legacy_stats_snapshot: Option<&Path>,
+    original_config_snapshot: Option<&Path>,
+    config_restored_path: &Path,
+    original_stats_snapshot: Option<&Path>,
+    stats_restored_path: &Path,
+) -> Result<(), String> {
+    let (Some(legacy_stats_path), Some(staged_legacy_stats_path)) =
+        (legacy_stats_path, staged_legacy_stats_path)
+    else {
+        return Ok(());
+    };
+    if let Err(error) = replace_file_atomically(
+        staged_legacy_stats_path,
+        legacy_stats_path,
+        "restore legacy stats.toml mirror",
+    ) {
+        rollback_restored_file(
+            original_config_snapshot,
+            config_restored_path,
+            "roll back restored config.toml",
+        );
+        rollback_restored_file(
+            original_stats_snapshot,
+            stats_restored_path,
+            "roll back restored stats.toml",
+        );
+        rollback_restored_file(
+            original_legacy_stats_snapshot,
+            legacy_stats_path,
+            "roll back restored legacy stats.toml",
+        );
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn config_file_path() -> Result<PathBuf, String> {
+    crate::config::app_data_path(CONFIG_FILE_NAME).ok_or_else(|| {
         format!(
-            "could not determine application data path for `{file_name}` (environment is not configured)"
+            "could not determine application data path for `{CONFIG_FILE_NAME}` (environment is not configured)"
         )
     })
+}
+
+fn stats_persistence_paths() -> Result<StatsPersistencePaths, String> {
+    let canonical = crate::config::stats_data_path(STATS_FILE_NAME).ok_or_else(|| {
+        format!(
+            "could not determine application data path for `{STATS_FILE_NAME}` (environment is not configured)"
+        )
+    })?;
+    let legacy = crate::config::app_data_path(STATS_FILE_NAME).filter(|path| path != &canonical);
+    Ok(StatsPersistencePaths { canonical, legacy })
+}
+
+fn resolve_stats_backup_source_path(
+    paths: &StatsPersistencePaths,
+    legacy_read_fallback: bool,
+) -> PathBuf {
+    if paths.canonical.exists() {
+        return paths.canonical.clone();
+    }
+    if legacy_read_fallback
+        && let Some(legacy) = paths.legacy.as_ref()
+        && legacy.exists()
+    {
+        return legacy.clone();
+    }
+    paths.canonical.clone()
+}
+
+fn stats_path_compatibility(config: &AppConfig) -> crate::stats::StatsPathCompatibilityOptions {
+    crate::stats::StatsPathCompatibilityOptions {
+        legacy_path_read_fallback: config.feature_flags.stats_legacy_path_read_fallback,
+        legacy_path_dual_write: config.feature_flags.stats_legacy_path_dual_write,
+    }
+}
+
+fn stats_load_options(config: &AppConfig) -> crate::stats::StatsLoadOptions {
+    crate::stats::StatsLoadOptions {
+        metadata_task_label_fallback: config.feature_flags.metadata_task_label_fallback,
+        path_compatibility: stats_path_compatibility(config),
+    }
+}
+
+fn stats_save_options(config: &AppConfig) -> crate::stats::StatsSaveOptions {
+    crate::stats::StatsSaveOptions {
+        path_compatibility: stats_path_compatibility(config),
+    }
 }
 
 fn copy_file_with_context(source: &Path, destination: &Path, context: &str) -> Result<(), String> {

@@ -367,7 +367,15 @@ impl App {
 
     #[cfg(not(test))]
     fn save_stats(&mut self) {
-        if let Err(e) = self.stats.save() {
+        if let Err(e) = self
+            .stats
+            .save_with_options(crate::stats::StatsSaveOptions {
+                path_compatibility: crate::stats::StatsPathCompatibilityOptions {
+                    legacy_path_read_fallback: self.feature_flags.stats_legacy_path_read_fallback,
+                    legacy_path_dual_write: self.feature_flags.stats_legacy_path_dual_write,
+                },
+            })
+        {
             self.stats_error = Some(format!("stats save failed: {e}"));
         } else {
             self.stats_error = None;

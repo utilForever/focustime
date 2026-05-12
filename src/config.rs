@@ -8,11 +8,11 @@ use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Deserializer, Serialize};
 
 mod paths;
-use paths::app_dir_with_env;
-#[cfg(test)]
-use paths::config_dir_from_env;
 #[cfg(all(test, not(target_os = "windows")))]
 use paths::env_path_from_value;
+use paths::{app_dir_with_env, stats_app_dir_with_env};
+#[cfg(test)]
+use paths::{config_dir_from_env, stats_state_dir_from_env};
 
 const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 1;
 const LEGACY_CONFIG_SCHEMA_VERSION: u32 = 0;
@@ -169,6 +169,12 @@ pub struct FeatureFlagsConfig {
     /// Backfill missing metadata fields from task labels for legacy records/snapshots.
     #[serde(default = "default_true")]
     pub metadata_task_label_fallback: bool,
+    /// Allow stats loading to fall back to legacy config-directory persistence path.
+    #[serde(default = "default_true")]
+    pub stats_legacy_path_read_fallback: bool,
+    /// Mirror stats writes to legacy config-directory persistence path.
+    #[serde(default = "default_true")]
+    pub stats_legacy_path_dual_write: bool,
 }
 
 impl FeatureFlagsConfig {
@@ -183,6 +189,8 @@ impl Default for FeatureFlagsConfig {
             legacy_automation_mirror: true,
             legacy_blocked_sites_mirror: true,
             metadata_task_label_fallback: true,
+            stats_legacy_path_read_fallback: true,
+            stats_legacy_path_dual_write: true,
         }
     }
 }
@@ -1769,8 +1777,18 @@ pub(crate) fn app_data_path(file_name: &str) -> Option<PathBuf> {
     Some(app_dir.join(file_name))
 }
 
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) fn stats_data_path(file_name: &str) -> Option<PathBuf> {
+    let app_dir = stats_app_dir()?;
+    Some(app_dir.join(file_name))
+}
+
 fn app_dir() -> Option<PathBuf> {
     app_dir_with_env(|key| std::env::var_os(key))
+}
+
+fn stats_app_dir() -> Option<PathBuf> {
+    stats_app_dir_with_env(|key| std::env::var_os(key))
 }
 
 fn nonzero_or_default_u64(value: u64, default: u64) -> u64 {
