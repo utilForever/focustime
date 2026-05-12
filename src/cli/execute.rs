@@ -1202,31 +1202,15 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
         }
         return Err(error);
     }
-    if let (Some(legacy_stats_path), Some(staged_legacy_stats_path)) = (
+    restore_legacy_stats_mirror_if_enabled(
         stats_legacy_restored_path.as_deref(),
         staged_legacy_stats_path.as_deref(),
-    ) && let Err(error) = replace_file_atomically(
-        staged_legacy_stats_path,
-        legacy_stats_path,
-        "restore legacy stats.toml mirror",
-    ) {
-        rollback_restored_file(
-            original_config_snapshot.as_deref(),
-            &config_restored_path,
-            "roll back restored config.toml",
-        );
-        rollback_restored_file(
-            original_stats_snapshot.as_deref(),
-            &stats_restored_path,
-            "roll back restored stats.toml",
-        );
-        rollback_restored_file(
-            original_legacy_stats_snapshot.as_deref(),
-            legacy_stats_path,
-            "roll back restored legacy stats.toml",
-        );
-        return Err(error);
-    }
+        original_legacy_stats_snapshot.as_deref(),
+        original_config_snapshot.as_deref(),
+        &config_restored_path,
+        original_stats_snapshot.as_deref(),
+        &stats_restored_path,
+    )?;
     if let Some(snapshot) = original_config_snapshot.as_deref() {
         let _ = remove_file_if_exists(snapshot);
     }
@@ -1377,6 +1361,45 @@ fn rollback_restored_file(snapshot: Option<&Path>, destination: &Path, rollback_
     } else {
         let _ = remove_file_if_exists(destination);
     }
+}
+
+fn restore_legacy_stats_mirror_if_enabled(
+    legacy_stats_path: Option<&Path>,
+    staged_legacy_stats_path: Option<&Path>,
+    original_legacy_stats_snapshot: Option<&Path>,
+    original_config_snapshot: Option<&Path>,
+    config_restored_path: &Path,
+    original_stats_snapshot: Option<&Path>,
+    stats_restored_path: &Path,
+) -> Result<(), String> {
+    let (Some(legacy_stats_path), Some(staged_legacy_stats_path)) =
+        (legacy_stats_path, staged_legacy_stats_path)
+    else {
+        return Ok(());
+    };
+    if let Err(error) = replace_file_atomically(
+        staged_legacy_stats_path,
+        legacy_stats_path,
+        "restore legacy stats.toml mirror",
+    ) {
+        rollback_restored_file(
+            original_config_snapshot,
+            config_restored_path,
+            "roll back restored config.toml",
+        );
+        rollback_restored_file(
+            original_stats_snapshot,
+            stats_restored_path,
+            "roll back restored stats.toml",
+        );
+        rollback_restored_file(
+            original_legacy_stats_snapshot,
+            legacy_stats_path,
+            "roll back restored legacy stats.toml",
+        );
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn config_file_path() -> Result<PathBuf, String> {
