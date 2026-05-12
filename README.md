@@ -196,6 +196,10 @@ cargo run -- --backup=./reports --json
 cargo run -- --restore
 cargo run -- --restore=./reports --json
 
+# Run stats-path compatibility migration (legacy -> canonical) with optional dry-run preview
+cargo run -- --migrate
+cargo run -- --migrate --dry-run --json
+
 # Export stats to current directory or a target directory
 cargo run -- --export
 cargo run -- --export=./reports --json
@@ -205,6 +209,8 @@ Backup/restore behavior:
 
 - `--backup` creates the target directory if needed, then copies `config.toml` and `stats.toml` into it.
 - `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
+- `--migrate` applies compatibility migration updates for canonical stats persistence and disables migration-window feature flags after success.
+- `--migrate --dry-run` reports planned migration steps without mutating any files.
 
 ### CLI JSON/error contract
 
