@@ -4,6 +4,9 @@ use crate::ui::{
     ShortcutAction, Span, Style, Wrap, app_color, centered_rect, render_hint_lines,
 };
 
+const DEPRECATION_WARNING_PANEL_LINES: usize = 4;
+const MAX_VISIBLE_DEPRECATION_WARNINGS: usize = DEPRECATION_WARNING_PANEL_LINES - 2;
+
 pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let outer = centered_rect(72, 68, area);
@@ -19,16 +22,16 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1), // hosts path
-            Constraint::Length(1), // spacer
-            Constraint::Length(2), // blocking permissions
-            Constraint::Length(2), // hosts write capability
-            Constraint::Length(2), // wakatime config status
-            Constraint::Length(3), // feature flags
-            Constraint::Length(4), // deprecation warnings
-            Constraint::Length(1), // preview summary
-            Constraint::Min(0),    // preview section
-            Constraint::Length(2), // key hints
+            Constraint::Length(1),                                      // hosts path
+            Constraint::Length(1),                                      // spacer
+            Constraint::Length(2),                                      // blocking permissions
+            Constraint::Length(2),                                      // hosts write capability
+            Constraint::Length(2),                                      // wakatime config status
+            Constraint::Length(3),                                      // feature flags
+            Constraint::Length(DEPRECATION_WARNING_PANEL_LINES as u16), // deprecation warnings
+            Constraint::Length(1),                                      // preview summary
+            Constraint::Min(0),                                         // preview section
+            Constraint::Length(2),                                      // key hints
         ])
         .split(outer);
 
@@ -100,12 +103,21 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         vec![Line::from("Deprecation warnings: none")]
     } else {
         let mut lines = vec![Line::from("Deprecation warnings:")];
+        let warnings = &app.setup_diagnostics.deprecation_warnings;
+        let hidden = warnings
+            .len()
+            .saturating_sub(MAX_VISIBLE_DEPRECATION_WARNINGS);
         lines.extend(
-            app.setup_diagnostics
-                .deprecation_warnings
+            warnings
                 .iter()
+                .take(MAX_VISIBLE_DEPRECATION_WARNINGS)
                 .map(|warning| Line::from(format!("- {warning}"))),
         );
+        if hidden > 0 {
+            lines.push(Line::from(format!(
+                "- +{hidden} more (run --diagnostics for full list)"
+            )));
+        }
         lines
     };
     frame.render_widget(
