@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Dual-read/dual-write stats persistence compatibility path (#262):** added canonical data/state stats persistence with legacy-path read fallback and dual-write mirroring controls, including CLI backup/restore and diagnostics visibility updates for migration windows.
 - **Migration tooling with dry-run and rollback safety (#263):** added `--migrate` with explicit `--dry-run` preview mode, structured migration step reporting, and rollback-aware migration execution/diagnostics for stats-path compatibility finalization.
+- **Deprecation warnings and migration docs for legacy fields/paths (#264):** added targeted setup/CLI diagnostics warnings for detected legacy config and stats-path compatibility usage, plus README mapping and planned removal milestones.
 
 ## [0.10.0] - 2026-05-11
 
