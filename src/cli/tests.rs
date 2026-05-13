@@ -647,11 +647,7 @@ fn diagnostics_output_includes_effective_feature_flags() {
     let app = App::default();
     let payload = build_diagnostics_command_output(&app.setup_diagnostics);
 
-    assert!(payload.feature_flags.legacy_automation_mirror);
-    assert!(payload.feature_flags.legacy_blocked_sites_mirror);
     assert!(payload.feature_flags.metadata_task_label_fallback);
-    assert!(payload.feature_flags.stats_legacy_path_read_fallback);
-    assert!(payload.feature_flags.stats_legacy_path_dual_write);
     assert!(payload.deprecation_warnings.is_empty());
 }
 
@@ -1971,7 +1967,6 @@ fn build_status_output_disables_task_label_metadata_mirror_when_flag_disabled() 
     let config = AppConfig {
         feature_flags: FeatureFlagsConfig {
             metadata_task_label_fallback: false,
-            ..FeatureFlagsConfig::default()
         },
         ..AppConfig::default()
     };

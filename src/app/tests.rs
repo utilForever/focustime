@@ -82,39 +82,27 @@ fn app_default_uses_canonical_config_in_tests() {
 }
 
 #[test]
-fn legacy_stats_path_warning_mentions_read_fallback_when_canonical_is_missing() {
+fn legacy_stats_path_warning_mentions_migration_when_canonical_is_missing() {
     let warning = format_legacy_stats_path_deprecation_warning(
         Path::new("state/stats.toml"),
         Path::new("config/stats.toml"),
         false,
-        FeatureFlagsConfig {
-            stats_legacy_path_read_fallback: true,
-            stats_legacy_path_dual_write: false,
-            ..FeatureFlagsConfig::default()
-        },
     );
 
     assert!(warning.contains("Deprecated legacy stats path detected"));
-    assert!(warning.contains("reads may still fall back"));
-    assert!(!warning.contains("Legacy stats mirror writes are still enabled"));
+    assert!(warning.contains("must be migrated"));
     assert!(warning.contains("run `focustime --migrate`"));
 }
 
 #[test]
-fn legacy_stats_path_warning_mentions_dual_write_when_enabled() {
+fn legacy_stats_path_warning_omits_missing_canonical_hint_when_canonical_exists() {
     let warning = format_legacy_stats_path_deprecation_warning(
         Path::new("state/stats.toml"),
         Path::new("config/stats.toml"),
         true,
-        FeatureFlagsConfig {
-            stats_legacy_path_read_fallback: true,
-            stats_legacy_path_dual_write: true,
-            ..FeatureFlagsConfig::default()
-        },
     );
 
-    assert!(!warning.contains("reads may still fall back"));
-    assert!(warning.contains("Legacy stats mirror writes are still enabled"));
+    assert!(!warning.contains("must be migrated"));
 }
 
 #[test]
@@ -2396,7 +2384,7 @@ fn site_manager_create_rename_and_delete_blocklist_profile() {
 }
 
 #[test]
-fn persisted_config_mirrors_active_profile_sites_to_legacy_blocked_sites() {
+fn persisted_config_does_not_write_legacy_blocked_sites_mirror() {
     let mut app = App::default();
     app.handle_key(key(KeyCode::Char('b')));
     app.handle_key(key(KeyCode::Char('a')));
@@ -2407,7 +2395,7 @@ fn persisted_config_mirrors_active_profile_sites_to_legacy_blocked_sites() {
 
     let persisted = app.persisted_config();
     assert_eq!(persisted.selected_blocklist_profile, "Default");
-    assert_eq!(persisted.blocked_sites, vec!["example.com".to_string()]);
+    assert!(persisted.blocked_sites.is_empty());
     assert_eq!(persisted.blocklist_profiles.len(), 1);
     assert_eq!(
         persisted.blocklist_profiles[0].sites,
@@ -2416,13 +2404,9 @@ fn persisted_config_mirrors_active_profile_sites_to_legacy_blocked_sites() {
 }
 
 #[test]
-fn persisted_config_keeps_legacy_blocked_sites_when_mirror_flag_is_disabled() {
+fn persisted_config_keeps_blocklist_profiles_for_blocked_sites() {
     let mut app = App::from_config(AppConfig {
         blocked_sites: vec!["legacy-only.com".to_string()],
-        feature_flags: FeatureFlagsConfig {
-            legacy_blocked_sites_mirror: false,
-            ..FeatureFlagsConfig::default()
-        },
         ..AppConfig::default()
     });
     app.handle_key(key(KeyCode::Char('b')));
@@ -2433,7 +2417,7 @@ fn persisted_config_keeps_legacy_blocked_sites_when_mirror_flag_is_disabled() {
     app.handle_key(key(KeyCode::Enter));
 
     let persisted = app.persisted_config();
-    assert_eq!(persisted.blocked_sites, vec!["legacy-only.com".to_string()]);
+    assert!(persisted.blocked_sites.is_empty());
     assert!(
         persisted.blocklist_profiles[0]
             .sites
@@ -5409,7 +5393,6 @@ fn planner_label_change_during_running_break_does_not_backfill_metadata_when_dis
     let mut app = App::from_config(AppConfig {
         feature_flags: FeatureFlagsConfig {
             metadata_task_label_fallback: false,
-            ..FeatureFlagsConfig::default()
         },
         ..AppConfig::default()
     });

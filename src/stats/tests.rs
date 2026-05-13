@@ -905,7 +905,6 @@ fn legacy_focus_sessions_keep_empty_metadata_when_fallback_is_disabled() {
         legacy_toml,
         StatsLoadOptions {
             metadata_task_label_fallback: false,
-            ..StatsLoadOptions::default()
         },
     )
     .unwrap();
