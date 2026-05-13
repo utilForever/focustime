@@ -1,12 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
+#[cfg(not(test))]
 use crate::stats::fs;
 use crate::stats::{
     BreakGlassOverrideEvent, FocusSessionRecord, FocusStats, PersistedStats, STATS_FILE_NAME,
-    SessionInterruptionEvent, SessionStats, StatsLoadOptions, StatsPathCompatibilityOptions,
-    StatsSaveOptions, io, normalize_session_metadata_text, normalize_task_goal_targets,
-    normalize_task_label, normalize_task_planner_state, planner_state_labels_for_keys,
-    write_atomic_bytes,
+    SessionInterruptionEvent, SessionStats, StatsLoadOptions, StatsSaveOptions, io,
+    normalize_session_metadata_text, normalize_task_goal_targets, normalize_task_label,
+    normalize_task_planner_state, planner_state_labels_for_keys, write_atomic_bytes,
 };
 
 impl FocusStats {
@@ -34,29 +34,15 @@ impl FocusStats {
 
     #[cfg(not(test))]
     fn try_load(options: StatsLoadOptions) -> Result<Self, String> {
-        let read_paths = stats_read_paths(options.path_compatibility)
-            .ok_or_else(|| "cannot determine stats directory".to_string())?;
-        let mut failures = Vec::new();
-        for path in &read_paths {
-            match fs::read_to_string(path) {
-                Ok(content) => match Self::try_from_toml_with_options(&content, options) {
-                    Ok(stats) => return Ok(stats),
-                    Err(error) => failures.push(format!(
-                        "stats parse failed at `{}`: {error}",
-                        path.display()
-                    )),
-                },
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                Err(error) => failures.push(format!(
-                    "stats read failed at `{}`: {error}",
-                    path.display()
-                )),
-            }
-        }
-        if failures.is_empty() {
-            Ok(Self::default())
-        } else {
-            Err(failures.join(" | "))
+        let path = stats_path().ok_or_else(|| "cannot determine stats directory".to_string())?;
+        match fs::read_to_string(&path) {
+            Ok(content) => Self::try_from_toml_with_options(&content, options)
+                .map_err(|error| format!("stats parse failed at `{}`: {error}", path.display())),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(format!(
+                "stats read failed at `{}`: {error}",
+                path.display()
+            )),
         }
     }
 
@@ -179,104 +165,16 @@ impl FocusStats {
         }
     }
 
-    pub fn save_with_options(&self, options: StatsSaveOptions) -> io::Result<()> {
-        let (canonical_path, legacy_path) = stats_write_paths(options.path_compatibility)
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::NotFound, "cannot determine stats directory")
-            })?;
+    pub fn save_with_options(&self, _options: StatsSaveOptions) -> io::Result<()> {
+        let path = stats_path().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "cannot determine stats directory")
+        })?;
         let content = toml::to_string_pretty(&self.to_persisted())
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        write_stats_with_rollback(&canonical_path, legacy_path.as_deref(), content.as_bytes())
+        write_atomic_bytes(&path, content.as_bytes())
     }
 }
 
-fn stats_paths() -> Option<(PathBuf, Option<PathBuf>)> {
-    let canonical_path = crate::config::stats_data_path(STATS_FILE_NAME)?;
-    let legacy_path =
-        crate::config::app_data_path(STATS_FILE_NAME).filter(|path| path != &canonical_path);
-    Some((canonical_path, legacy_path))
-}
-
-#[cfg(not(test))]
-fn stats_read_paths(path_compatibility: StatsPathCompatibilityOptions) -> Option<Vec<PathBuf>> {
-    let (canonical_path, legacy_path) = stats_paths()?;
-    let mut read_paths = vec![canonical_path];
-    if path_compatibility.legacy_path_read_fallback
-        && let Some(legacy_path) = legacy_path
-    {
-        read_paths.push(legacy_path);
-    }
-    Some(read_paths)
-}
-
-fn stats_write_paths(
-    path_compatibility: StatsPathCompatibilityOptions,
-) -> Option<(PathBuf, Option<PathBuf>)> {
-    let (canonical_path, legacy_path) = stats_paths()?;
-    let legacy_path = if path_compatibility.legacy_path_dual_write {
-        legacy_path
-    } else {
-        None
-    };
-    Some((canonical_path, legacy_path))
-}
-
-fn write_stats_with_rollback(
-    canonical_path: &Path,
-    legacy_path: Option<&Path>,
-    content: &[u8],
-) -> io::Result<()> {
-    let canonical_snapshot = read_existing_bytes(canonical_path)?;
-    let legacy_snapshot = if let Some(path) = legacy_path {
-        Some(read_existing_bytes(path)?)
-    } else {
-        None
-    };
-
-    write_atomic_bytes(canonical_path, content)?;
-    if let Some(path) = legacy_path
-        && let Err(error) = write_atomic_bytes(path, content)
-    {
-        let mut rollback_errors = Vec::new();
-        if let Err(rollback_error) = restore_existing_bytes(canonical_path, canonical_snapshot) {
-            rollback_errors.push(format!(
-                "rollback failed for `{}`: {rollback_error}",
-                canonical_path.display()
-            ));
-        }
-        if let Some(snapshot) = legacy_snapshot
-            && let Err(rollback_error) = restore_existing_bytes(path, snapshot)
-        {
-            rollback_errors.push(format!(
-                "rollback failed for `{}`: {rollback_error}",
-                path.display()
-            ));
-        }
-        let mut detail = format!("stats mirror write failed at `{}`: {error}", path.display());
-        if !rollback_errors.is_empty() {
-            detail.push_str("; ");
-            detail.push_str(&rollback_errors.join("; "));
-        }
-        return Err(io::Error::other(detail));
-    }
-    Ok(())
-}
-
-fn read_existing_bytes(path: &Path) -> io::Result<Option<Vec<u8>>> {
-    match fs::read(path) {
-        Ok(bytes) => Ok(Some(bytes)),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error),
-    }
-}
-
-fn restore_existing_bytes(path: &Path, snapshot: Option<Vec<u8>>) -> io::Result<()> {
-    if let Some(bytes) = snapshot {
-        return write_atomic_bytes(path, &bytes);
-    }
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-    }
+fn stats_path() -> Option<PathBuf> {
+    crate::config::stats_data_path(STATS_FILE_NAME)
 }

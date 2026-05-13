@@ -1,7 +1,7 @@
 use crate::app::{
     App, AppConfig, BlocklistProfileConfig, DEFAULT_BLOCKLIST_PROFILE_NAME, Local,
-    PendingTimerAction, TimerPhase, TimerState, effective_blocked_sites_for_profile,
-    format_duration_label, occurrence_key, profile_index, profile_spec_for, task_label_index,
+    PendingTimerAction, TimerPhase, TimerState, format_duration_label, occurrence_key,
+    profile_index, profile_spec_for, task_label_index,
 };
 use crate::session_recovery::{self, InProgressSessionSnapshot, WorkflowStateSnapshot};
 use chrono::{LocalResult, TimeZone};
@@ -465,15 +465,6 @@ impl App {
             .or_else(|| blocklist_profiles.first())
             .map(|profile| profile.name.clone())
             .unwrap_or_else(|| DEFAULT_BLOCKLIST_PROFILE_NAME.to_string());
-        let mirrored_blocked_sites = blocklist_profiles
-            .get(active_index)
-            .map(effective_blocked_sites_for_profile)
-            .unwrap_or_default();
-        let blocked_sites = if self.feature_flags.legacy_blocked_sites_mirror {
-            mirrored_blocked_sites
-        } else {
-            self.legacy_blocked_sites.clone()
-        };
         let mut profile_automation = self.profile_automation.clone();
         profile_automation
             .set_for_profile(self.selected_profile, self.selected_profile_automation());
@@ -484,7 +475,7 @@ impl App {
             short_break_secs: custom_profile.short_break_secs,
             long_break_secs: custom_profile.long_break_secs,
             long_break_interval: custom_profile.long_break_interval,
-            blocked_sites,
+            blocked_sites: Vec::new(),
             blocklist_profiles,
             selected_blocklist_profile,
             selected_profile: self.selected_profile,
@@ -533,12 +524,7 @@ impl App {
     fn save_stats(&mut self) {
         if let Err(e) = self
             .stats
-            .save_with_options(crate::stats::StatsSaveOptions {
-                path_compatibility: crate::stats::StatsPathCompatibilityOptions {
-                    legacy_path_read_fallback: self.feature_flags.stats_legacy_path_read_fallback,
-                    legacy_path_dual_write: self.feature_flags.stats_legacy_path_dual_write,
-                },
-            })
+            .save_with_options(crate::stats::StatsSaveOptions::default())
         {
             self.stats_error = Some(format!("stats save failed: {e}"));
         } else {

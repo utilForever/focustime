@@ -36,20 +36,20 @@ const WAKATIME_RETRY_BACKOFF_MAX_ENTRIES: usize = 8;
 /// - Windows:      `%APPDATA%\focustime\config.toml`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    /// Duration of a focus session in seconds (legacy compatibility field).
-    #[serde(default = "default_focus_secs")]
+    /// Duration of a focus session in seconds (legacy load-time compatibility field).
+    #[serde(default = "default_focus_secs", skip_serializing)]
     pub focus_secs: u64,
-    /// Duration of a short-break session in seconds (legacy compatibility field).
-    #[serde(default = "default_short_break_secs")]
+    /// Duration of a short-break session in seconds (legacy load-time compatibility field).
+    #[serde(default = "default_short_break_secs", skip_serializing)]
     pub short_break_secs: u64,
-    /// Duration of a long-break session in seconds (legacy compatibility field).
-    #[serde(default = "default_long_break_secs")]
+    /// Duration of a long-break session in seconds (legacy load-time compatibility field).
+    #[serde(default = "default_long_break_secs", skip_serializing)]
     pub long_break_secs: u64,
     /// Number of completed focus sessions before a long break.
-    #[serde(default = "default_long_break_interval")]
+    #[serde(default = "default_long_break_interval", skip_serializing)]
     pub long_break_interval: u32,
-    /// Sites that should be blocked during focus sessions.
-    #[serde(default)]
+    /// Deprecated blocked-sites mirror (legacy load-time compatibility field).
+    #[serde(default, skip_serializing)]
     pub blocked_sites: Vec<String>,
     /// Named blocklist profiles.
     ///
@@ -77,14 +77,14 @@ pub struct AppConfig {
     /// Selected UI theme preset.
     #[serde(default)]
     pub selected_theme_preset: ThemePreset,
-    /// Notification preferences for phase transitions.
-    #[serde(default)]
+    /// Deprecated top-level automation mirror (legacy load-time compatibility field).
+    #[serde(default, skip_serializing)]
     pub notifications: NotificationConfig,
-    /// Auto-start preferences for natural phase transitions.
-    #[serde(default)]
+    /// Deprecated top-level automation mirror (legacy load-time compatibility field).
+    #[serde(default, skip_serializing)]
     pub auto_start: AutoStartConfig,
-    /// Recurring schedule windows for automatic focus startup.
-    #[serde(default)]
+    /// Deprecated top-level automation mirror (legacy load-time compatibility field).
+    #[serde(default, skip_serializing)]
     pub recurring_schedule: RecurringScheduleConfig,
     /// Runtime tuning knobs for schedule editing and delay behavior.
     #[serde(default)]
@@ -95,11 +95,8 @@ pub struct AppConfig {
     /// for all profiles during normalization.
     #[serde(default)]
     pub profile_automation: Option<ProfileAutomationSettingsConfig>,
-    /// Whether strict focus mode is enabled.
-    ///
-    /// When enabled, active focus sessions disallow skip and require
-    /// confirmation before stop/reset.
-    #[serde(default)]
+    /// Deprecated top-level automation mirror (legacy load-time compatibility field).
+    #[serde(default, skip_serializing)]
     pub strict_mode: bool,
     /// Duration of a break-glass unblock override in seconds.
     ///
@@ -160,21 +157,9 @@ impl AppConfigDisk {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FeatureFlagsConfig {
-    /// Keep selected profile automation mirrored into legacy top-level automation fields.
-    #[serde(default = "default_true")]
-    pub legacy_automation_mirror: bool,
-    /// Keep selected blocklist profile mirrored into legacy `blocked_sites`.
-    #[serde(default = "default_true")]
-    pub legacy_blocked_sites_mirror: bool,
     /// Backfill missing metadata fields from task labels for legacy records/snapshots.
     #[serde(default = "default_true")]
     pub metadata_task_label_fallback: bool,
-    /// Allow stats loading to fall back to legacy config-directory persistence path.
-    #[serde(default = "default_true")]
-    pub stats_legacy_path_read_fallback: bool,
-    /// Mirror stats writes to legacy config-directory persistence path.
-    #[serde(default = "default_true")]
-    pub stats_legacy_path_dual_write: bool,
 }
 
 impl FeatureFlagsConfig {
@@ -186,11 +171,7 @@ impl FeatureFlagsConfig {
 impl Default for FeatureFlagsConfig {
     fn default() -> Self {
         Self {
-            legacy_automation_mirror: true,
-            legacy_blocked_sites_mirror: true,
             metadata_task_label_fallback: true,
-            stats_legacy_path_read_fallback: true,
-            stats_legacy_path_dual_write: true,
         }
     }
 }
@@ -1555,17 +1536,8 @@ impl AppConfig {
             .normalized()
     }
 
-    fn legacy_profile_automation(&self) -> ProfileAutomationConfig {
-        ProfileAutomationConfig::from_legacy(
-            self.notifications,
-            self.auto_start,
-            self.strict_mode,
-            self.recurring_schedule.clone(),
-        )
-    }
-
     pub fn profile_automation_for(&self, profile: ProfileId) -> ProfileAutomationConfig {
-        let fallback = self.legacy_profile_automation();
+        let fallback = ProfileAutomationConfig::default();
         self.profile_automation
             .as_ref()
             .map(|settings| settings.for_profile(profile, &fallback))
@@ -1577,7 +1549,7 @@ impl AppConfig {
         profile: ProfileId,
         automation: ProfileAutomationConfig,
     ) {
-        let fallback = self.legacy_profile_automation();
+        let fallback = ProfileAutomationConfig::default();
         let mut settings = self
             .profile_automation
             .clone()
@@ -1587,18 +1559,6 @@ impl AppConfig {
             .normalized_with_fallback(&fallback);
         settings.set_for_profile(profile, automation);
         self.profile_automation = Some(settings.normalized_with_fallback(&fallback));
-        self.align_legacy_automation_with_selected_profile();
-    }
-
-    pub(crate) fn align_legacy_automation_with_selected_profile(&mut self) {
-        if !self.feature_flags.legacy_automation_mirror {
-            return;
-        }
-        let selected = self.profile_automation_for(self.selected_profile);
-        self.notifications = selected.notifications;
-        self.auto_start = selected.auto_start;
-        self.strict_mode = selected.strict_mode;
-        self.recurring_schedule = selected.recurring_schedule;
     }
 
     fn try_load_with_deprecation_warnings() -> Option<(Self, Vec<String>)> {
@@ -1701,30 +1661,27 @@ impl AppConfig {
             &effective_custom_profile,
         );
         self.recurring_schedule = self.recurring_schedule.normalized();
-        let fallback_automation = self.legacy_profile_automation();
+        let legacy_automation = ProfileAutomationConfig::from_legacy(
+            self.notifications,
+            self.auto_start,
+            self.strict_mode,
+            self.recurring_schedule.clone(),
+        );
+        let fallback_automation = ProfileAutomationConfig::default();
         let normalized_profile_automation = self
             .profile_automation
             .clone()
             .unwrap_or_else(|| {
-                ProfileAutomationSettingsConfig::with_shared_defaults(fallback_automation.clone())
+                ProfileAutomationSettingsConfig::with_shared_defaults(legacy_automation)
             })
             .normalized_with_fallback(&fallback_automation);
         self.profile_automation = Some(normalized_profile_automation);
-        self.align_legacy_automation_with_selected_profile();
         self.blocklist_profiles =
             normalize_blocklist_profiles(&self.blocklist_profiles, &self.blocked_sites);
         self.selected_blocklist_profile = normalize_selected_blocklist_profile(
             &self.selected_blocklist_profile,
             &self.blocklist_profiles,
         );
-        if self.feature_flags.legacy_blocked_sites_mirror {
-            self.blocked_sites = self
-                .blocklist_profiles
-                .iter()
-                .find(|profile| profile.name == self.selected_blocklist_profile)
-                .map(effective_blocked_sites_for_profile)
-                .unwrap_or_default();
-        }
         self.schedule_runtime = self.schedule_runtime.normalized();
         self.wakatime = self.wakatime.normalized();
         self.wakatime_runtime = self.wakatime_runtime.normalized();
@@ -2183,20 +2140,6 @@ fn make_unique_profile_name(base_name: &str, seen_names: &mut HashSet<String>) -
         }
         suffix += 1;
     }
-}
-
-fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    let allowlist: HashSet<String> = profile
-        .allowlist_sites
-        .iter()
-        .map(|site| site.to_ascii_lowercase())
-        .collect();
-    profile
-        .sites
-        .iter()
-        .filter(|site| !allowlist.contains(&site.to_ascii_lowercase()))
-        .cloned()
-        .collect()
 }
 
 #[cfg(test)]

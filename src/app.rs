@@ -541,7 +541,6 @@ pub struct App {
     selected_theme_preset: ThemePreset,
     feature_flags: FeatureFlagsConfig,
     config_deprecation_warnings: Vec<String>,
-    legacy_blocked_sites: Vec<String>,
     profile_automation: ProfileAutomationSettingsConfig,
     pub custom_profile: CustomProfileConfig,
     pub profile_selection_index: usize,
@@ -608,9 +607,7 @@ impl App {
         let selected_profile = config.selected_profile;
         let selected_theme_preset = config.selected_theme_preset;
         let feature_flags = config.feature_flags;
-        let setup_deprecation_warnings =
-            setup_deprecation_warnings(&config_deprecation_warnings, feature_flags);
-        let legacy_blocked_sites = config.blocked_sites.clone();
+        let setup_deprecation_warnings = setup_deprecation_warnings(&config_deprecation_warnings);
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
         let selected_automation = config.profile_automation_for(selected_profile);
@@ -654,10 +651,6 @@ impl App {
         let (mut stats, stats_error) =
             match FocusStats::load_with_options(crate::stats::StatsLoadOptions {
                 metadata_task_label_fallback: feature_flags.metadata_task_label_fallback,
-                path_compatibility: crate::stats::StatsPathCompatibilityOptions {
-                    legacy_path_read_fallback: feature_flags.stats_legacy_path_read_fallback,
-                    legacy_path_dual_write: feature_flags.stats_legacy_path_dual_write,
-                },
             }) {
                 Ok(stats) => (stats, None),
                 Err(e) => (FocusStats::default(), Some(e)),
@@ -731,7 +724,6 @@ impl App {
             selected_theme_preset,
             feature_flags,
             config_deprecation_warnings,
-            legacy_blocked_sites,
             profile_automation,
             custom_profile,
             profile_selection_index: profile_index(selected_profile),
@@ -1586,12 +1578,9 @@ fn permission_remediation_guidance() -> &'static str {
     }
 }
 
-pub(super) fn setup_deprecation_warnings(
-    config_deprecation_warnings: &[String],
-    feature_flags: FeatureFlagsConfig,
-) -> Vec<String> {
+pub(super) fn setup_deprecation_warnings(config_deprecation_warnings: &[String]) -> Vec<String> {
     let mut warnings = config_deprecation_warnings.to_vec();
-    if let Some(stats_warning) = legacy_stats_path_deprecation_warning(feature_flags) {
+    if let Some(stats_warning) = legacy_stats_path_deprecation_warning() {
         warnings.push(stats_warning);
     }
     warnings
@@ -1601,18 +1590,13 @@ pub(super) fn format_legacy_stats_path_deprecation_warning(
     canonical_path: &std::path::Path,
     legacy_path: &std::path::Path,
     canonical_exists: bool,
-    feature_flags: FeatureFlagsConfig,
 ) -> String {
     let mut warning = format!(
         "Deprecated legacy stats path detected at `{}`.",
         legacy_path.display()
     );
-    if !canonical_exists && feature_flags.stats_legacy_path_read_fallback {
-        warning
-            .push_str(" Canonical stats are missing, so reads may still fall back to this path.");
-    }
-    if feature_flags.stats_legacy_path_dual_write {
-        warning.push_str(" Legacy stats mirror writes are still enabled.");
+    if !canonical_exists {
+        warning.push_str(" Canonical stats are missing and this path must be migrated.");
     }
     warning.push_str(&format!(
         " Move stats to `{}` and run `focustime --migrate`.",
@@ -1622,7 +1606,7 @@ pub(super) fn format_legacy_stats_path_deprecation_warning(
 }
 
 #[cfg(not(test))]
-fn legacy_stats_path_deprecation_warning(feature_flags: FeatureFlagsConfig) -> Option<String> {
+fn legacy_stats_path_deprecation_warning() -> Option<String> {
     let canonical_path = crate::config::stats_data_path(STATS_FILE_NAME)?;
     let legacy_path =
         crate::config::app_data_path(STATS_FILE_NAME).filter(|path| path != &canonical_path)?;
@@ -1635,12 +1619,11 @@ fn legacy_stats_path_deprecation_warning(feature_flags: FeatureFlagsConfig) -> O
         &canonical_path,
         &legacy_path,
         canonical_exists,
-        feature_flags,
     ))
 }
 
 #[cfg(test)]
-fn legacy_stats_path_deprecation_warning(_feature_flags: FeatureFlagsConfig) -> Option<String> {
+fn legacy_stats_path_deprecation_warning() -> Option<String> {
     None
 }
 

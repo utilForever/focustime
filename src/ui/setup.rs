@@ -63,35 +63,14 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         "WakaTime config status",
         &app.setup_diagnostics.wakatime_config,
     );
-    let feature_flags_lines = vec![
-        Line::from(format!(
-            "Feature flags: automation-mirror={} · blocked-sites-mirror={} · metadata-fallback={}",
-            bool_label(app.setup_diagnostics.feature_flags.legacy_automation_mirror),
-            bool_label(
-                app.setup_diagnostics
-                    .feature_flags
-                    .legacy_blocked_sites_mirror
-            ),
-            bool_label(
-                app.setup_diagnostics
-                    .feature_flags
-                    .metadata_task_label_fallback
-            ),
-        )),
-        Line::from(format!(
-            "               stats-read-fallback={} · stats-dual-write={}",
-            bool_label(
-                app.setup_diagnostics
-                    .feature_flags
-                    .stats_legacy_path_read_fallback
-            ),
-            bool_label(
-                app.setup_diagnostics
-                    .feature_flags
-                    .stats_legacy_path_dual_write
-            )
-        )),
-    ];
+    let feature_flags_lines = vec![Line::from(format!(
+        "Feature flags: metadata-fallback={}",
+        bool_label(
+            app.setup_diagnostics
+                .feature_flags
+                .metadata_task_label_fallback
+        ),
+    ))];
     frame.render_widget(
         Paragraph::new(feature_flags_lines)
             .style(Style::default().fg(app_color(app, Color::DarkGray)))
