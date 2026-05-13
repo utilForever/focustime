@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-05-13
+
 ### Added
 
 - **Expanded runtime recovery scope and startup reconciliation notices (#272):** recovery now includes schedule arming continuity and strict-reset pending confirmation alongside existing timer/schedule-delay/break-glass artifacts, with deterministic partial-recovery startup notices when saved runtime fragments are dropped.
@@ -258,7 +260,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/utilForever/focustime/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/utilForever/focustime/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/utilForever/focustime/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/utilForever/focustime/compare/v0.8.1...v0.9.0
