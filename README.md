@@ -222,7 +222,7 @@ deprecation warnings when legacy compatibility fields/paths are detected.
 | Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`                          | `[custom_profile]`                                                                                            | v0.12.0 (planned)      |
 | Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`                                  | `[profile_automation.<profile>.notifications]`, `[profile_automation.<profile>.auto_start]`, and per-profile `strict_mode` / `recurring_schedule` | v0.12.0 (planned)      |
 | Top-level `blocked_sites` (without canonical profiles)                                                         | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                      | v0.12.0 (planned)      |
-| Legacy config-dir `stats.toml` path + migration-window flags (`stats_legacy_path_read_fallback`, `stats_legacy_path_dual_write`) | Canonical state/data `stats.toml` path and `focustime --migrate`                                             | v0.12.0 (planned)      |
+| Legacy config-dir `stats.toml` path                                                                          | Canonical state/data `stats.toml` path and `focustime --migrate`                                             | v0.12.0 (planned)      |
 
 Milestone policy:
 
@@ -400,16 +400,8 @@ strict_mode = false
 break_glass_duration_secs = 300
 
 [feature_flags]
-# Preserve per-profile automation values in legacy top-level fields.
-legacy_automation_mirror = true
-# Preserve active blocklist profile values in legacy blocked_sites.
-legacy_blocked_sites_mirror = true
 # Backfill legacy metadata from task_label when missing.
 metadata_task_label_fallback = true
-# Read stats from legacy config-dir path when canonical stats path is missing.
-stats_legacy_path_read_fallback = true
-# Mirror stats writes to legacy config-dir path during migration window.
-stats_legacy_path_dual_write = true
 
 [shortcuts]
 timer_toggle_pause = "space"

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Removed legacy config mirror writes and compatibility-sync paths (#265):** canonical config/profile/blocklist and canonical stats persistence are now the only runtime/write paths, while legacy top-level config fields remain load-time compatibility input for migrated user configs.
+
 ## [0.10.1] - 2026-05-13
 
 ### Added
