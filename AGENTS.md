@@ -112,6 +112,7 @@ cargo audit
 When preparing a release update, keep these files aligned:
 
 - `Cargo.toml` package version
+- `Cargo.lock` root `focustime` package version
 - `README.md` release automation and latest-release references
 - `CHANGELOG.md` release section and compare links
 - `CONTRIBUTING.md` release workflow/tag examples
