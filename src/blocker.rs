@@ -469,13 +469,16 @@ impl SiteBlocker {
         record_test_blocking_action("block");
 
         if self.sites.is_empty() {
+            if let Some(active_backend) = self.active_backend {
+                let _ = self.apply_with_backend(BlockingIntent::Unblock, active_backend);
+            }
+            // Best-effort: strip any stale block section left by a prior run.
+            let _ = self.remove_hosts_block();
             self.is_blocking = false;
             self.active_backend = None;
             self.last_backend = None;
             self.last_fallback_used = false;
             self.last_error = None;
-            // Best-effort: strip any stale block section left by a prior run.
-            let _ = self.remove_hosts_block();
             return Ok(());
         }
         self.apply_with_fallback(BlockingIntent::Block)?;
