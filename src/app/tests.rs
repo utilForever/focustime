@@ -90,7 +90,8 @@ fn legacy_stats_path_migration_warning_includes_actionable_guidance() {
 
     assert!(warning.contains("Legacy stats path"));
     assert!(warning.contains("canonical stats"));
-    assert!(warning.contains("Run `focustime --migrate`"));
+    assert!(warning.contains("focustime --backup"));
+    assert!(warning.contains("focustime --restore"));
 }
 
 #[test]
