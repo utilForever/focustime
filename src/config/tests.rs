@@ -284,6 +284,7 @@ fn round_trip_full_config() {
         parsed.selected_blocklist_profile,
         original.selected_blocklist_profile
     );
+    assert_eq!(parsed.blocking_backend, original.blocking_backend);
     assert_eq!(parsed.selected_profile, original.selected_profile);
     assert_eq!(parsed.custom_profile, original.custom_profile);
     assert_eq!(parsed.break_templates, original.break_templates);
