@@ -249,11 +249,7 @@ fn round_trip_full_config() {
             queue_retry_delay_secs: 30,
         },
         feature_flags: FeatureFlagsConfig {
-            legacy_automation_mirror: true,
-            legacy_blocked_sites_mirror: true,
             metadata_task_label_fallback: true,
-            stats_legacy_path_read_fallback: true,
-            stats_legacy_path_dual_write: true,
         },
         shortcuts: ShortcutConfig {
             timer_toggle_pause: "space".to_string(),
@@ -265,12 +261,24 @@ fn round_trip_full_config() {
         },
     };
     let toml_str = toml::to_string_pretty(&original).unwrap();
+    let serialized: toml::Value = toml::from_str(&toml_str).unwrap();
+    let root = serialized.as_table().unwrap();
+    assert!(!root.contains_key("focus_secs"));
+    assert!(!root.contains_key("short_break_secs"));
+    assert!(!root.contains_key("long_break_secs"));
+    assert!(!root.contains_key("long_break_interval"));
+    assert!(!root.contains_key("blocked_sites"));
+    assert!(!root.contains_key("notifications"));
+    assert!(!root.contains_key("auto_start"));
+    assert!(!root.contains_key("strict_mode"));
+    assert!(!root.contains_key("recurring_schedule"));
+
     let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
-    assert_eq!(parsed.focus_secs, original.focus_secs);
-    assert_eq!(parsed.short_break_secs, original.short_break_secs);
-    assert_eq!(parsed.long_break_secs, original.long_break_secs);
-    assert_eq!(parsed.long_break_interval, original.long_break_interval);
-    assert_eq!(parsed.blocked_sites, original.blocked_sites);
+    assert_eq!(parsed.focus_secs, default_focus_secs());
+    assert_eq!(parsed.short_break_secs, default_short_break_secs());
+    assert_eq!(parsed.long_break_secs, default_long_break_secs());
+    assert_eq!(parsed.long_break_interval, default_long_break_interval());
+    assert!(parsed.blocked_sites.is_empty());
     assert_eq!(parsed.blocklist_profiles, original.blocklist_profiles);
     assert_eq!(
         parsed.selected_blocklist_profile,
@@ -284,12 +292,15 @@ fn round_trip_full_config() {
         original.selected_break_template
     );
     assert_eq!(parsed.selected_theme_preset, original.selected_theme_preset);
-    assert_eq!(parsed.notifications, original.notifications);
-    assert_eq!(parsed.auto_start, original.auto_start);
-    assert_eq!(parsed.recurring_schedule, original.recurring_schedule);
+    assert_eq!(parsed.notifications, NotificationConfig::default());
+    assert_eq!(parsed.auto_start, AutoStartConfig::default());
+    assert_eq!(
+        parsed.recurring_schedule,
+        RecurringScheduleConfig::default()
+    );
     assert_eq!(parsed.schedule_runtime, original.schedule_runtime);
     assert_eq!(parsed.profile_automation, original.profile_automation);
-    assert_eq!(parsed.strict_mode, original.strict_mode);
+    assert!(!parsed.strict_mode);
     assert_eq!(
         parsed.break_glass_duration_secs,
         original.break_glass_duration_secs
@@ -1147,7 +1158,7 @@ fn save_with_env_writes_current_schema_version() {
         saved_toml
             .get("focus_secs")
             .and_then(toml::Value::as_integer),
-        Some(2100)
+        None
     );
 }
 
@@ -1454,11 +1465,11 @@ fn normalize_deduplicates_profile_names_and_fixes_selection() {
     assert_eq!(cfg.blocklist_profiles[0].name, "Work");
     assert_eq!(cfg.blocklist_profiles[1].name, "work (2)");
     assert_eq!(cfg.selected_blocklist_profile, "Work");
-    assert_eq!(cfg.blocked_sites, vec!["a.com".to_string()]);
+    assert!(cfg.blocked_sites.is_empty());
 }
 
 #[test]
-fn normalize_derives_legacy_blocked_sites_from_effective_blocked_set() {
+fn normalize_keeps_legacy_blocked_sites_empty_for_profile_only_config() {
     let cfg = AppConfig {
         blocklist_profiles: vec![BlocklistProfileConfig {
             name: "Work".to_string(),
@@ -1470,7 +1481,7 @@ fn normalize_derives_legacy_blocked_sites_from_effective_blocked_set() {
     }
     .normalize();
 
-    assert_eq!(cfg.blocked_sites, vec!["a.com".to_string()]);
+    assert!(cfg.blocked_sites.is_empty());
 }
 
 #[test]
@@ -1527,7 +1538,7 @@ fn normalize_migrates_legacy_automation_into_per_profile_settings() {
 }
 
 #[test]
-fn normalize_selected_profile_automation_updates_legacy_view() {
+fn normalize_selected_profile_automation_keeps_top_level_legacy_fields() {
     let classic = ProfileAutomationConfig {
         notifications: NotificationConfig {
             enabled: true,
@@ -1576,14 +1587,14 @@ fn normalize_selected_profile_automation_updates_legacy_view() {
     }
     .normalize();
 
-    assert_eq!(cfg.notifications, deep_work.notifications);
-    assert_eq!(cfg.auto_start, deep_work.auto_start);
-    assert_eq!(cfg.strict_mode, deep_work.strict_mode);
-    assert_eq!(cfg.recurring_schedule, deep_work.recurring_schedule);
+    assert_eq!(cfg.notifications, NotificationConfig::default());
+    assert_eq!(cfg.auto_start, AutoStartConfig::default());
+    assert!(!cfg.strict_mode);
+    assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
 }
 
 #[test]
-fn normalize_keeps_legacy_automation_fields_when_mirror_flag_is_disabled() {
+fn normalize_legacy_automation_fields_do_not_override_profile_automation() {
     let deep_work = ProfileAutomationConfig {
         notifications: NotificationConfig {
             enabled: true,
@@ -1621,10 +1632,6 @@ fn normalize_keeps_legacy_automation_fields_when_mirror_flag_is_disabled() {
             deep_work: Some(deep_work.clone()),
             custom: None,
         }),
-        feature_flags: FeatureFlagsConfig {
-            legacy_automation_mirror: false,
-            ..FeatureFlagsConfig::default()
-        },
         ..AppConfig::default()
     }
     .normalize();
@@ -1649,7 +1656,7 @@ fn normalize_keeps_legacy_automation_fields_when_mirror_flag_is_disabled() {
 }
 
 #[test]
-fn normalize_keeps_legacy_blocked_sites_when_mirror_flag_is_disabled() {
+fn normalize_keeps_legacy_blocked_sites_when_profiles_exist() {
     let cfg = AppConfig {
         blocked_sites: vec!["legacy-only.com".to_string()],
         blocklist_profiles: vec![BlocklistProfileConfig {
@@ -1658,10 +1665,6 @@ fn normalize_keeps_legacy_blocked_sites_when_mirror_flag_is_disabled() {
             allowlist_sites: vec!["b.com".to_string()],
         }],
         selected_blocklist_profile: "Work".to_string(),
-        feature_flags: FeatureFlagsConfig {
-            legacy_blocked_sites_mirror: false,
-            ..FeatureFlagsConfig::default()
-        },
         ..AppConfig::default()
     }
     .normalize();

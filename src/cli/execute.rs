@@ -46,8 +46,6 @@ struct MigrationPlan {
     canonical_stats_path: PathBuf,
     legacy_stats_path: Option<PathBuf>,
     copy_legacy_stats_to_canonical: bool,
-    disable_stats_legacy_path_read_fallback: bool,
-    disable_stats_legacy_path_dual_write: bool,
     stats_copy_skip_reason: String,
     warnings: Vec<String>,
 }
@@ -55,18 +53,10 @@ struct MigrationPlan {
 impl MigrationPlan {
     fn has_changes(&self) -> bool {
         self.copy_legacy_stats_to_canonical
-            || self.disable_stats_legacy_path_read_fallback
-            || self.disable_stats_legacy_path_dual_write
-    }
-
-    fn requires_config_update(&self) -> bool {
-        self.disable_stats_legacy_path_read_fallback || self.disable_stats_legacy_path_dual_write
     }
 }
 
 const MIGRATION_OPERATION_COPY_LEGACY_STATS: &str = "copy_legacy_stats_to_canonical";
-const MIGRATION_OPERATION_DISABLE_READ_FALLBACK: &str = "disable_stats_legacy_path_read_fallback";
-const MIGRATION_OPERATION_DISABLE_DUAL_WRITE: &str = "disable_stats_legacy_path_dual_write";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
     match cli_command.kind {
@@ -353,7 +343,7 @@ pub(super) fn apply_blocklist_profile_command(
     };
 
     if updated {
-        sync_legacy_blocked_sites(config);
+        sync_selected_blocklist_profile(config);
     }
     Ok(build_blocklist_profile_command_output(
         config, action, updated,
@@ -458,7 +448,7 @@ pub(super) fn apply_site_add_command(
     let updated = !result.added.is_empty();
     *active_profile_sites_mut(config, index, target) = working.sites.clone();
     if updated {
-        sync_legacy_blocked_sites(config);
+        sync_selected_blocklist_profile(config);
     }
 
     let active_profile = &config.blocklist_profiles[index];
@@ -503,7 +493,7 @@ pub(super) fn apply_site_edit_command(
     match result {
         EditSiteResult::Updated { old, new } => {
             *active_profile_sites_mut(config, index, target) = working.sites.clone();
-            sync_legacy_blocked_sites(config);
+            sync_selected_blocklist_profile(config);
             let active_profile = &config.blocklist_profiles[index];
             Ok(SiteEditCommandOutput {
                 action: "site-edit",
@@ -565,7 +555,7 @@ pub(super) fn apply_site_delete_command(
         .remove_site(delete_index)
         .ok_or_else(|| format!("Site `{site}` was not found in {}.", target.id()))?;
     *active_profile_sites_mut(config, index, target) = working.sites.clone();
-    sync_legacy_blocked_sites(config);
+    sync_selected_blocklist_profile(config);
 
     let active_profile = &config.blocklist_profiles[index];
     Ok(SiteDeleteCommandOutput {
@@ -627,14 +617,10 @@ fn active_profile_sites_mut(
     }
 }
 
-fn sync_legacy_blocked_sites(config: &mut AppConfig) {
+fn sync_selected_blocklist_profile(config: &mut AppConfig) {
     ensure_blocklist_profiles(config);
     let index = selected_blocklist_profile_index(config);
     config.selected_blocklist_profile = config.blocklist_profiles[index].name.clone();
-    if config.feature_flags.legacy_blocked_sites_mirror {
-        config.blocked_sites =
-            effective_blocked_sites_for_profile(&config.blocklist_profiles[index]);
-    }
 }
 
 fn build_blocklist_profile_command_output(
@@ -712,7 +698,6 @@ fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Re
     let mut updated = false;
     if let Some(profile) = profile {
         config.selected_profile = profile;
-        config.align_legacy_automation_with_selected_profile();
         config
             .save()
             .map_err(|error| format!("Failed to save selected profile: {error}"))?;
@@ -1102,7 +1087,7 @@ fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
 }
 
 fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
-    let config = AppConfig::load().normalized();
+    let _config = AppConfig::load().normalized();
     let backup_dir = match dir {
         Some(path) => path,
         None => env::current_dir().map_err(|error| {
@@ -1114,10 +1099,7 @@ fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
 
     let source_config = config_file_path()?;
     let stats_paths = stats_persistence_paths()?;
-    let source_stats = resolve_stats_backup_source_path(
-        &stats_paths,
-        config.feature_flags.stats_legacy_path_read_fallback,
-    );
+    let source_stats = resolve_stats_backup_source_path(&stats_paths);
     ensure_backup_source_file(&source_config, CONFIG_FILE_NAME)?;
     ensure_backup_source_file(&source_stats, STATS_FILE_NAME)?;
     let config_backup_path = backup_dir.join(CONFIG_FILE_NAME);
@@ -1139,7 +1121,7 @@ fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
 }
 
 fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {
-    let config = AppConfig::load().normalized();
+    let _config = AppConfig::load().normalized();
     let restore_dir = match dir {
         Some(path) => path,
         None => env::current_dir().map_err(|error| {
@@ -1154,16 +1136,8 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
     let config_restored_path = config_file_path()?;
     let stats_paths = stats_persistence_paths()?;
     let stats_restored_path = stats_paths.canonical.clone();
-    let stats_legacy_restored_path = if config.feature_flags.stats_legacy_path_dual_write {
-        stats_paths.legacy.clone()
-    } else {
-        None
-    };
     let staged_config_path = temp_restore_path(&config_restored_path, "staged");
     let staged_stats_path = temp_restore_path(&stats_restored_path, "staged");
-    let staged_legacy_stats_path = stats_legacy_restored_path
-        .as_ref()
-        .map(|path| temp_restore_path(path, "staged"));
     copy_file_with_context(
         &source_config,
         &staged_config_path,
@@ -1174,13 +1148,6 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
         &staged_stats_path,
         "stage restore stats.toml",
     )?;
-    if let Some(staged_legacy) = staged_legacy_stats_path.as_deref() {
-        copy_file_with_context(
-            &source_stats,
-            staged_legacy,
-            "stage restore legacy stats.toml mirror",
-        )?;
-    }
 
     let original_config_snapshot = snapshot_existing_file(
         &config_restored_path,
@@ -1190,15 +1157,6 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
         &stats_restored_path,
         "snapshot existing stats.toml for rollback",
     )?;
-    let original_legacy_stats_snapshot =
-        if let Some(legacy_stats_path) = stats_legacy_restored_path.as_deref() {
-            snapshot_existing_file(
-                legacy_stats_path,
-                "snapshot existing legacy stats.toml for rollback",
-            )?
-        } else {
-            None
-        };
 
     replace_file_atomically(
         &staged_config_path,
@@ -1220,35 +1178,13 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
             &stats_restored_path,
             "roll back restored stats.toml",
         );
-        if let Some(legacy_stats_path) = stats_legacy_restored_path.as_deref() {
-            rollback_restored_file(
-                original_legacy_stats_snapshot.as_deref(),
-                legacy_stats_path,
-                "roll back restored legacy stats.toml",
-            );
-        }
         let _ = remove_file_if_exists(&staged_stats_path);
-        if let Some(staged_legacy) = staged_legacy_stats_path.as_deref() {
-            let _ = remove_file_if_exists(staged_legacy);
-        }
         return Err(error);
     }
-    restore_legacy_stats_mirror_if_enabled(
-        stats_legacy_restored_path.as_deref(),
-        staged_legacy_stats_path.as_deref(),
-        original_legacy_stats_snapshot.as_deref(),
-        original_config_snapshot.as_deref(),
-        &config_restored_path,
-        original_stats_snapshot.as_deref(),
-        &stats_restored_path,
-    )?;
     if let Some(snapshot) = original_config_snapshot.as_deref() {
         let _ = remove_file_if_exists(snapshot);
     }
     if let Some(snapshot) = original_stats_snapshot.as_deref() {
-        let _ = remove_file_if_exists(snapshot);
-    }
-    if let Some(snapshot) = original_legacy_stats_snapshot.as_deref() {
         let _ = remove_file_if_exists(snapshot);
     }
 
@@ -1288,7 +1224,7 @@ fn execute_migrate_command(dry_run: bool, output: OutputMode) -> Result<(), Stri
     Ok(())
 }
 
-fn build_migration_plan(config: &AppConfig) -> Result<MigrationPlan, String> {
+fn build_migration_plan(_config: &AppConfig) -> Result<MigrationPlan, String> {
     let config_path = config_file_path()?;
     ensure_regular_file_if_exists(&config_path, "config path")?;
     let stats_paths = stats_persistence_paths()?;
@@ -1356,10 +1292,6 @@ fn build_migration_plan(config: &AppConfig) -> Result<MigrationPlan, String> {
         canonical_stats_path: stats_paths.canonical,
         legacy_stats_path: stats_paths.legacy,
         copy_legacy_stats_to_canonical,
-        disable_stats_legacy_path_read_fallback: config
-            .feature_flags
-            .stats_legacy_path_read_fallback,
-        disable_stats_legacy_path_dual_write: config.feature_flags.stats_legacy_path_dual_write,
         stats_copy_skip_reason,
         warnings,
     })
@@ -1391,42 +1323,11 @@ fn migration_steps_for_plan(plan: &MigrationPlan) -> Vec<MigrationStepOutput> {
         });
     }
 
-    if plan.disable_stats_legacy_path_read_fallback {
-        steps.push(MigrationStepOutput {
-            operation: MIGRATION_OPERATION_DISABLE_READ_FALLBACK,
-            status: status_for_apply,
-            detail: "Set `feature_flags.stats_legacy_path_read_fallback = false` in config.toml."
-                .to_string(),
-        });
-    } else {
-        steps.push(MigrationStepOutput {
-            operation: MIGRATION_OPERATION_DISABLE_READ_FALLBACK,
-            status: MigrationStepStatus::Skipped,
-            detail: "`feature_flags.stats_legacy_path_read_fallback` is already disabled."
-                .to_string(),
-        });
-    }
-
-    if plan.disable_stats_legacy_path_dual_write {
-        steps.push(MigrationStepOutput {
-            operation: MIGRATION_OPERATION_DISABLE_DUAL_WRITE,
-            status: status_for_apply,
-            detail: "Set `feature_flags.stats_legacy_path_dual_write = false` in config.toml."
-                .to_string(),
-        });
-    } else {
-        steps.push(MigrationStepOutput {
-            operation: MIGRATION_OPERATION_DISABLE_DUAL_WRITE,
-            status: MigrationStepStatus::Skipped,
-            detail: "`feature_flags.stats_legacy_path_dual_write` is already disabled.".to_string(),
-        });
-    }
-
     steps
 }
 
 fn apply_migration_plan(
-    config: &AppConfig,
+    _config: &AppConfig,
     plan: &MigrationPlan,
     steps: &mut [MigrationStepOutput],
 ) -> Result<(), String> {
@@ -1434,7 +1335,7 @@ fn apply_migration_plan(
     prepare_migration_staging(plan, &mut state)?;
     capture_config_snapshot_if_needed(plan, &mut state)?;
     apply_staged_canonical_stats(plan, &mut state)?;
-    save_migrated_config_if_needed(config, plan, &state)?;
+    save_migrated_config_if_needed(_config, plan, &state)?;
     let _ = cleanup_migration_temp_files(
         state.config_snapshot.as_deref(),
         state.canonical_stats_snapshot.as_deref(),
@@ -1499,23 +1400,9 @@ fn prepare_migration_staging(
 }
 
 fn capture_config_snapshot_if_needed(
-    plan: &MigrationPlan,
-    state: &mut MigrationExecutionState,
+    _plan: &MigrationPlan,
+    _state: &mut MigrationExecutionState,
 ) -> Result<(), String> {
-    if !plan.requires_config_update() {
-        return Ok(());
-    }
-
-    state.config_snapshot = snapshot_existing_file(
-        &plan.config_path,
-        "snapshot existing config.toml for migration rollback",
-    )
-    .map_err(|error| {
-        migration_setup_failure_from_state(
-            format!("could not prepare config snapshot: {error}"),
-            state,
-        )
-    })?;
     Ok(())
 }
 
@@ -1550,34 +1437,11 @@ fn apply_staged_canonical_stats(
 }
 
 fn save_migrated_config_if_needed(
-    config: &AppConfig,
-    plan: &MigrationPlan,
-    state: &MigrationExecutionState,
+    _config: &AppConfig,
+    _plan: &MigrationPlan,
+    _state: &MigrationExecutionState,
 ) -> Result<(), String> {
-    if !plan.requires_config_update() {
-        return Ok(());
-    }
-
-    let mut migrated = config.clone();
-    if plan.disable_stats_legacy_path_read_fallback {
-        migrated.feature_flags.stats_legacy_path_read_fallback = false;
-    }
-    if plan.disable_stats_legacy_path_dual_write {
-        migrated.feature_flags.stats_legacy_path_dual_write = false;
-    }
-    migrated.save().map_err(|error| {
-        migration_failure_with_rollback(
-            format!("could not save migrated config.toml: {error}"),
-            rollback_migration_files(
-                state.config_snapshot.as_deref(),
-                &plan.config_path,
-                true,
-                state.canonical_stats_snapshot.as_deref(),
-                &plan.canonical_stats_path,
-                state.applied_canonical_stats,
-            ),
-        )
-    })
+    Ok(())
 }
 
 fn migration_setup_failure_from_state(error: String, state: &MigrationExecutionState) -> String {
@@ -1819,45 +1683,6 @@ fn rollback_restored_file(snapshot: Option<&Path>, destination: &Path, rollback_
     }
 }
 
-fn restore_legacy_stats_mirror_if_enabled(
-    legacy_stats_path: Option<&Path>,
-    staged_legacy_stats_path: Option<&Path>,
-    original_legacy_stats_snapshot: Option<&Path>,
-    original_config_snapshot: Option<&Path>,
-    config_restored_path: &Path,
-    original_stats_snapshot: Option<&Path>,
-    stats_restored_path: &Path,
-) -> Result<(), String> {
-    let (Some(legacy_stats_path), Some(staged_legacy_stats_path)) =
-        (legacy_stats_path, staged_legacy_stats_path)
-    else {
-        return Ok(());
-    };
-    if let Err(error) = replace_file_atomically(
-        staged_legacy_stats_path,
-        legacy_stats_path,
-        "restore legacy stats.toml mirror",
-    ) {
-        rollback_restored_file(
-            original_config_snapshot,
-            config_restored_path,
-            "roll back restored config.toml",
-        );
-        rollback_restored_file(
-            original_stats_snapshot,
-            stats_restored_path,
-            "roll back restored stats.toml",
-        );
-        rollback_restored_file(
-            original_legacy_stats_snapshot,
-            legacy_stats_path,
-            "roll back restored legacy stats.toml",
-        );
-        return Err(error);
-    }
-    Ok(())
-}
-
 fn config_file_path() -> Result<PathBuf, String> {
     crate::config::app_data_path(CONFIG_FILE_NAME).ok_or_else(|| {
         format!(
@@ -1876,15 +1701,11 @@ fn stats_persistence_paths() -> Result<StatsPersistencePaths, String> {
     Ok(StatsPersistencePaths { canonical, legacy })
 }
 
-fn resolve_stats_backup_source_path(
-    paths: &StatsPersistencePaths,
-    legacy_read_fallback: bool,
-) -> PathBuf {
+fn resolve_stats_backup_source_path(paths: &StatsPersistencePaths) -> PathBuf {
     if paths.canonical.exists() {
         return paths.canonical.clone();
     }
-    if legacy_read_fallback
-        && let Some(legacy) = paths.legacy.as_ref()
+    if let Some(legacy) = paths.legacy.as_ref()
         && legacy.exists()
     {
         return legacy.clone();
@@ -1892,24 +1713,14 @@ fn resolve_stats_backup_source_path(
     paths.canonical.clone()
 }
 
-fn stats_path_compatibility(config: &AppConfig) -> crate::stats::StatsPathCompatibilityOptions {
-    crate::stats::StatsPathCompatibilityOptions {
-        legacy_path_read_fallback: config.feature_flags.stats_legacy_path_read_fallback,
-        legacy_path_dual_write: config.feature_flags.stats_legacy_path_dual_write,
-    }
-}
-
 fn stats_load_options(config: &AppConfig) -> crate::stats::StatsLoadOptions {
     crate::stats::StatsLoadOptions {
         metadata_task_label_fallback: config.feature_flags.metadata_task_label_fallback,
-        path_compatibility: stats_path_compatibility(config),
     }
 }
 
-fn stats_save_options(config: &AppConfig) -> crate::stats::StatsSaveOptions {
-    crate::stats::StatsSaveOptions {
-        path_compatibility: stats_path_compatibility(config),
-    }
+fn stats_save_options(_config: &AppConfig) -> crate::stats::StatsSaveOptions {
+    crate::stats::StatsSaveOptions::default()
 }
 
 fn copy_file_with_context(source: &Path, destination: &Path, context: &str) -> Result<(), String> {
@@ -2069,8 +1880,6 @@ mod tests {
             canonical_stats_path: canonical_stats_path.clone(),
             legacy_stats_path: Some(legacy_stats_path),
             copy_legacy_stats_to_canonical: true,
-            disable_stats_legacy_path_read_fallback: false,
-            disable_stats_legacy_path_dual_write: false,
             stats_copy_skip_reason: String::new(),
             warnings: Vec::new(),
         };

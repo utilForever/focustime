@@ -647,11 +647,7 @@ fn diagnostics_output_includes_effective_feature_flags() {
     let app = App::default();
     let payload = build_diagnostics_command_output(&app.setup_diagnostics);
 
-    assert!(payload.feature_flags.legacy_automation_mirror);
-    assert!(payload.feature_flags.legacy_blocked_sites_mirror);
     assert!(payload.feature_flags.metadata_task_label_fallback);
-    assert!(payload.feature_flags.stats_legacy_path_read_fallback);
-    assert!(payload.feature_flags.stats_legacy_path_dual_write);
     assert!(payload.deprecation_warnings.is_empty());
 }
 
@@ -1468,7 +1464,7 @@ fn apply_blocklist_profile_select_updates_selection_case_insensitively() {
     assert!(payload.updated);
     assert_eq!(payload.selected_blocklist_profile, "Study");
     assert_eq!(config.selected_blocklist_profile, "Study");
-    assert_eq!(config.blocked_sites, vec!["study.com".to_string()]);
+    assert!(config.blocked_sites.is_empty());
 }
 
 #[test]
@@ -1503,7 +1499,7 @@ fn apply_blocklist_profile_rename_updates_selection_and_name() {
     assert_eq!(payload.selected_blocklist_profile, "Deep Work");
     assert_eq!(config.selected_blocklist_profile, "Deep Work");
     assert_eq!(config.blocklist_profiles[0].name, "Deep Work");
-    assert_eq!(config.blocked_sites, vec!["a.com".to_string()]);
+    assert!(config.blocked_sites.is_empty());
 }
 
 #[test]
@@ -1533,7 +1529,7 @@ fn apply_blocklist_profile_delete_switches_selection() {
     assert_eq!(payload.selected_blocklist_profile, "Study");
     assert_eq!(config.selected_blocklist_profile, "Study");
     assert_eq!(config.blocklist_profiles.len(), 1);
-    assert_eq!(config.blocked_sites, vec!["study.com".to_string()]);
+    assert!(config.blocked_sites.is_empty());
 }
 
 #[test]
@@ -1591,10 +1587,7 @@ fn apply_site_edit_command_updates_blocklist_sites() {
         config.blocklist_profiles[0].sites,
         vec!["news.ycombinator.com".to_string(), "b.com".to_string()]
     );
-    assert_eq!(
-        config.blocked_sites,
-        vec!["news.ycombinator.com".to_string(), "b.com".to_string()]
-    );
+    assert!(config.blocked_sites.is_empty());
 }
 
 #[test]
@@ -1630,10 +1623,7 @@ fn apply_site_edit_command_handles_duplicate_case_entries() {
         config.blocklist_profiles[0].sites,
         vec!["news.com".to_string(), "b.com".to_string()]
     );
-    assert_eq!(
-        config.blocked_sites,
-        vec!["news.com".to_string(), "b.com".to_string()]
-    );
+    assert!(config.blocked_sites.is_empty());
 }
 
 #[test]
@@ -1655,10 +1645,7 @@ fn apply_site_delete_command_updates_allowlist_and_effective_blocking() {
     assert!(payload.updated);
     assert_eq!(payload.removed, "b.com");
     assert!(config.blocklist_profiles[0].allowlist_sites.is_empty());
-    assert_eq!(
-        config.blocked_sites,
-        vec!["a.com".to_string(), "b.com".to_string()]
-    );
+    assert!(config.blocked_sites.is_empty());
     assert_eq!(payload.effective_blocked_sites_count, 2);
 }
 
@@ -1687,7 +1674,7 @@ fn apply_site_delete_command_handles_duplicate_case_entries() {
         config.blocklist_profiles[0].sites,
         vec!["other.com".to_string()]
     );
-    assert_eq!(config.blocked_sites, vec!["other.com".to_string()]);
+    assert!(config.blocked_sites.is_empty());
     assert_eq!(payload.effective_blocked_sites_count, 1);
 }
 
@@ -1971,7 +1958,6 @@ fn build_status_output_disables_task_label_metadata_mirror_when_flag_disabled() 
     let config = AppConfig {
         feature_flags: FeatureFlagsConfig {
             metadata_task_label_fallback: false,
-            ..FeatureFlagsConfig::default()
         },
         ..AppConfig::default()
     };

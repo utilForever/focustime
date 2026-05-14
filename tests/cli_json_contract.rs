@@ -392,8 +392,8 @@ fn backup_and_restore_json_round_trip_config_and_stats_files() {
 }
 
 #[test]
-fn task_goal_json_dual_writes_stats_to_canonical_and_legacy_paths() {
-    let env = TestEnv::new("stats-dual-write");
+fn task_goal_json_writes_stats_to_canonical_path_only() {
+    let env = TestEnv::new("stats-canonical-only");
 
     let output = env.run(&["--task-goal=Docs:90,3", "--json"]);
     assert_eq!(output.status.code(), Some(0));
@@ -402,16 +402,12 @@ fn task_goal_json_dual_writes_stats_to_canonical_and_legacy_paths() {
     let canonical_stats_path = env.canonical_stats_path();
     let legacy_stats_path = env.legacy_stats_path();
     assert!(canonical_stats_path.is_file());
-    assert!(legacy_stats_path.is_file());
-    assert_eq!(
-        fs::read_to_string(&canonical_stats_path).unwrap(),
-        fs::read_to_string(&legacy_stats_path).unwrap()
-    );
+    assert!(!legacy_stats_path.is_file());
 }
 
 #[test]
-fn status_json_prefers_canonical_stats_and_falls_back_to_legacy() {
-    let env = TestEnv::new("stats-read-precedence");
+fn status_json_uses_canonical_stats_without_legacy_fallback() {
+    let env = TestEnv::new("stats-canonical-read");
 
     let baseline_status = env.run(&["--status", "--json"]);
     assert_eq!(baseline_status.status.code(), Some(0));
@@ -441,7 +437,7 @@ fn status_json_prefers_canonical_stats_and_falls_back_to_legacy() {
     assert!(stderr_text(&fallback_status).trim().is_empty());
     let fallback_payload: Value =
         serde_json::from_slice(&fallback_status.stdout).expect("stdout should be JSON");
-    assert_eq!(fallback_payload["today"]["pomodoros_completed"], 7);
+    assert_eq!(fallback_payload["today"]["pomodoros_completed"], 0);
 }
 
 #[test]
