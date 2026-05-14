@@ -7,9 +7,8 @@ use crate::cli::{
     BlocklistProfileConfig, BlocklistProfileSummaryOutput, BlocklistSiteCommandKind,
     BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig, DailyGoalSnapshot,
     EditSiteResult, ExportOutput, FocusStats, GoalCarryCommandOutput, GoalCommandOutput,
-    InvalidSiteEntryOutput, InvalidSiteInput, MigrationCommandOutput, MigrationStepOutput,
-    MigrationStepStatus, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId, ProfileOutput,
-    ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
+    InvalidSiteEntryOutput, InvalidSiteInput, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId,
+    ProfileOutput, ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
     ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SiteAddCommandOutput, SiteBlocker,
     SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
     SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
@@ -21,33 +20,17 @@ use crate::cli::{
     print_blocking_preview_command_output, print_blocklist_profile_command_output,
     print_break_glass_command_output, print_diagnostics_command_output, print_export_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
-    print_migration_output, print_profile_output, print_restore_output,
-    print_schedule_command_output, print_schedule_delay_command_output,
-    print_session_metadata_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
-    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
-    timer_status_id,
+    print_profile_output, print_restore_output, print_schedule_command_output,
+    print_schedule_delay_command_output, print_session_metadata_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
+    print_timer_state_output, profile_id, profile_view, selected_break_template_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
 const STATS_FILE_NAME: &str = "stats.toml";
-
-#[derive(Debug, Clone)]
-struct MigrationPlan {
-    config_path: PathBuf,
-    canonical_stats_path: PathBuf,
-    warnings: Vec<String>,
-}
-
-impl MigrationPlan {
-    fn has_changes(&self) -> bool {
-        false
-    }
-}
-
-const MIGRATION_OPERATION_VERIFY_CANONICAL_STATS: &str = "verify_canonical_stats_path";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
     match cli_command.kind {
@@ -92,7 +75,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         } => execute_status_command(cli_command.output, watch_interval_secs),
         CommandKind::Backup { dir } => execute_backup_command(dir, cli_command.output),
         CommandKind::Restore { dir } => execute_restore_command(dir, cli_command.output),
-        CommandKind::Migrate { dry_run } => execute_migrate_command(dry_run, cli_command.output),
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
@@ -1189,71 +1171,6 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
     Ok(())
 }
 
-fn execute_migrate_command(dry_run: bool, output: OutputMode) -> Result<(), String> {
-    let config = AppConfig::load().normalized();
-    let plan = build_migration_plan(&config)?;
-    let steps = migration_steps_for_plan(&plan);
-    let payload = MigrationCommandOutput {
-        action: "migrate",
-        dry_run,
-        changed: plan.has_changes(),
-        config_path: plan.config_path.clone(),
-        canonical_stats_path: plan.canonical_stats_path.clone(),
-        steps,
-        warnings: plan.warnings.clone(),
-    };
-    match output {
-        OutputMode::Text => print_migration_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn build_migration_plan(_config: &AppConfig) -> Result<MigrationPlan, String> {
-    let config_path = config_file_path()?;
-    ensure_regular_file_if_exists(&config_path, "config path")?;
-    let canonical_stats_path = stats_persistence_path()?;
-    ensure_regular_file_if_exists(&canonical_stats_path, "canonical stats path")?;
-    let warnings = vec![
-        "Legacy stats-path migration has been retired. Runtime persistence is canonical-path only."
-            .to_string(),
-    ];
-    Ok(MigrationPlan {
-        config_path,
-        canonical_stats_path,
-        warnings,
-    })
-}
-
-fn migration_steps_for_plan(plan: &MigrationPlan) -> Vec<MigrationStepOutput> {
-    let detail = if plan.canonical_stats_path.exists() {
-        format!(
-            "Canonical stats path `{}` is active; no migration is required.",
-            plan.canonical_stats_path.display()
-        )
-    } else {
-        format!(
-            "Canonical stats path `{}` is not present yet; it will be created on next save.",
-            plan.canonical_stats_path.display()
-        )
-    };
-    vec![MigrationStepOutput {
-        operation: MIGRATION_OPERATION_VERIFY_CANONICAL_STATS,
-        status: MigrationStepStatus::Skipped,
-        detail,
-    }]
-}
-
-fn ensure_regular_file_if_exists(path: &Path, context: &str) -> Result<(), String> {
-    if path.exists() && !path.is_file() {
-        return Err(format!(
-            "Migration failed: {context} `{}` is not a regular file.",
-            path.display()
-        ));
-    }
-    Ok(())
-}
-
 fn ensure_restore_source_file(path: &Path, file_name: &str) -> Result<(), String> {
     if !path.exists() {
         return Err(format!(
@@ -1529,66 +1446,5 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
         selected_task_label,
         focus_intention,
         task_note,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn create_temp_dir(test_name: &str) -> PathBuf {
-        let unique = format!(
-            "focustime-{test_name}-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("current time should be after unix epoch")
-                .as_nanos()
-        );
-        let path = std::env::temp_dir().join(unique);
-        fs::create_dir_all(&path).expect("temp dir should be created");
-        path
-    }
-
-    #[test]
-    fn migration_plan_reports_canonical_only_behavior() {
-        let temp_dir = create_temp_dir("migrate-canonical-only");
-        let config_path = temp_dir.join("config.toml");
-        let canonical_stats_path = temp_dir.join("state").join("stats.toml");
-        fs::write(&config_path, "schema_version = 1\n").expect("config file should be writable");
-        fs::create_dir_all(
-            canonical_stats_path
-                .parent()
-                .expect("canonical path should have parent"),
-        )
-        .expect("canonical stats parent should be writable");
-        fs::write(&canonical_stats_path, "daily = {}\n")
-            .expect("canonical stats file should be writable");
-
-        let plan = MigrationPlan {
-            config_path,
-            canonical_stats_path: canonical_stats_path.clone(),
-            warnings: vec![
-                "Legacy stats-path migration has been retired. Runtime persistence is canonical-path only."
-                    .to_string(),
-            ],
-        };
-        let steps = migration_steps_for_plan(&plan);
-
-        assert!(!plan.has_changes());
-        assert!(
-            plan.warnings
-                .iter()
-                .any(|warning| warning.contains("Legacy stats-path migration has been retired"))
-        );
-        let verify_step = steps
-            .iter()
-            .find(|step| step.operation == MIGRATION_OPERATION_VERIFY_CANONICAL_STATS)
-            .expect("verify step should exist");
-        assert_eq!(verify_step.status, MigrationStepStatus::Skipped);
-        assert!(verify_step.detail.contains("Canonical stats path"));
-
-        fs::remove_dir_all(temp_dir).expect("temp dir should be removed");
     }
 }

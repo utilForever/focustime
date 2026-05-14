@@ -56,8 +56,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::BlockingPreview
             | ParsedToken::Backup(_)
             | ParsedToken::Restore(_)
-            | ParsedToken::Migrate
-            | ParsedToken::DryRun
             | ParsedToken::Export(_)
             | ParsedToken::BlocklistProfile(_)
             | ParsedToken::BlocklistProfileCreate(_)
@@ -157,7 +155,6 @@ pub(super) fn parse_primary_command(
             ParsedToken::Restore(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Restore(dir.clone()))?
             }
-            ParsedToken::Migrate => set_primary_command(&mut primary, PrimaryCommand::Migrate)?,
             ParsedToken::Export(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
             }
@@ -208,7 +205,6 @@ pub(super) fn parse_primary_command(
             )?,
             ParsedToken::Help
             | ParsedToken::Json
-            | ParsedToken::DryRun
             | ParsedToken::UnknownOption(_)
             | ParsedToken::Positional(_) => {}
         }
@@ -221,7 +217,6 @@ pub(super) fn finalize_cli_action(
     output: OutputMode,
     primary: Option<PrimaryCommand>,
     watch_interval_secs: Option<u64>,
-    dry_run: bool,
 ) -> Result<CliAction, String> {
     if show_help {
         return Ok(CliAction::ShowHelp);
@@ -229,9 +224,6 @@ pub(super) fn finalize_cli_action(
 
     if watch_interval_secs.is_some() && !matches!(primary, Some(PrimaryCommand::Status)) {
         return Err(invalid_usage("`--watch` is only valid with `--status`."));
-    }
-    if dry_run && !matches!(primary, Some(PrimaryCommand::Migrate)) {
-        return Err(invalid_usage("`--dry-run` is only valid with `--migrate`."));
     }
 
     match primary {
@@ -357,10 +349,6 @@ pub(super) fn finalize_cli_action(
         })),
         Some(PrimaryCommand::Restore(dir)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Restore { dir },
-            output,
-        })),
-        Some(PrimaryCommand::Migrate) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Migrate { dry_run },
             output,
         })),
         Some(PrimaryCommand::Export(dir)) => Ok(CliAction::RunCommand(CliCommand {
@@ -762,7 +750,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Backup(_) => "--backup",
         PrimaryCommand::Restore(_) => "--restore",
-        PrimaryCommand::Migrate => "--migrate",
         PrimaryCommand::Export(_) => "--export",
         PrimaryCommand::BlocklistProfile(_) => "--blocklist-profile",
         PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
@@ -794,19 +781,6 @@ pub(super) fn parse_watch_interval_option(tokens: &[ParsedToken]) -> Result<Opti
         }
     }
     Ok(interval)
-}
-
-pub(super) fn parse_dry_run_option(tokens: &[ParsedToken]) -> Result<bool, String> {
-    let mut count = 0u8;
-    for token in tokens {
-        if matches!(token, ParsedToken::DryRun) {
-            count += 1;
-            if count > 1 {
-                return Err(invalid_usage("`--dry-run` can only be specified once."));
-            }
-        }
-    }
-    Ok(count == 1)
 }
 
 pub(super) fn parse_watch_interval_secs(value: &str) -> Result<u64, String> {

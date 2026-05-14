@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Removed legacy config mirror writes and compatibility-sync paths (#265):** canonical config/profile/blocklist and canonical stats persistence are now the only runtime/write paths, while legacy top-level config fields remain load-time compatibility input for migrated user configs.
+- **Retired migration-window CLI compatibility flags (#267):** removed deprecated `--migrate`/`--dry-run` command paths and transitional migration output shims; `--backup`/`--restore` remain supported and docs/guidance now reflect canonical-path-only persistence.
 
 ## [0.10.1] - 2026-05-13
 

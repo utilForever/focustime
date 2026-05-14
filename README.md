@@ -196,10 +196,6 @@ cargo run -- --backup=./reports --json
 cargo run -- --restore
 cargo run -- --restore=./reports --json
 
-# Run canonical persistence migration diagnostics (optional dry-run preview)
-cargo run -- --migrate
-cargo run -- --migrate --dry-run --json
-
 # Export stats to current directory or a target directory
 cargo run -- --export
 cargo run -- --export=./reports --json
@@ -209,8 +205,7 @@ Backup/restore behavior:
 
 - `--backup` creates the target directory if needed, then copies `config.toml` and `stats.toml` into it.
 - `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
-- `--migrate` reports canonical persistence migration status; runtime persistence is canonical-path only.
-- `--migrate --dry-run` reports the same migration status in dry-run mode (no file changes).
+- Runtime persistence is canonical-path only; if only legacy `stats.toml` exists, copy it to the canonical stats path (the backup/restore commands can help).
 
 ### Legacy compatibility deprecation milestones
 
@@ -226,6 +221,7 @@ deprecation warnings when legacy compatibility fields are detected.
 Milestone policy:
 
 - **v0.11.x:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
+- **Post-migration cleanup:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
 - **v0.12.0 (planned):** remove legacy field/path compatibility after the warning window
 
 ### CLI JSON/error contract

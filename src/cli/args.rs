@@ -122,8 +122,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--break-glass-cancel" => Some(ParsedToken::BreakGlassCancel),
         "--diagnostics" => Some(ParsedToken::Diagnostics),
         "--blocking-preview" => Some(ParsedToken::BlockingPreview),
-        "--migrate" => Some(ParsedToken::Migrate),
-        "--dry-run" => Some(ParsedToken::DryRun),
         "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
         "--blocklist-sites" => Some(ParsedToken::BlocklistSites),
         "--allowlist-sites" => Some(ParsedToken::AllowlistSites),

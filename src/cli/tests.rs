@@ -775,30 +775,6 @@ fn parse_restore_with_equals_accepts_directory() {
 }
 
 #[test]
-fn parse_migrate_runs_command() {
-    let parsed = parse(&["--migrate"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Migrate { dry_run: false },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_migrate_supports_dry_run_and_json_mode() {
-    let parsed = parse(&["--migrate", "--dry-run", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Migrate { dry_run: true },
-            output: OutputMode::Json
-        })
-    );
-}
-
-#[test]
 fn parse_export_with_equals_accepts_directory() {
     let parsed = parse(&["--export=reports"]).unwrap();
     assert_eq!(
@@ -1312,12 +1288,6 @@ fn parse_rejects_multiple_primary_commands_for_backup_and_restore() {
 }
 
 #[test]
-fn parse_rejects_multiple_primary_commands_for_migrate_and_backup() {
-    let error = parse(&["--migrate", "--backup"]).unwrap_err();
-    assert!(error.contains("Multiple primary commands"));
-}
-
-#[test]
 fn parse_rejects_multiple_primary_commands_for_schedule_delay_and_break_glass() {
     let error = parse(&["--schedule-delay", "--break-glass-trigger"]).unwrap_err();
     assert!(error.contains("Multiple primary commands"));
@@ -1360,15 +1330,15 @@ fn parse_rejects_watch_with_non_status_command() {
 }
 
 #[test]
-fn parse_rejects_dry_run_without_migrate() {
-    let error = parse(&["--dry-run"]).unwrap_err();
-    assert!(error.contains("`--dry-run` is only valid with `--migrate`"));
+fn parse_rejects_removed_migrate_option() {
+    let error = parse(&["--migrate"]).unwrap_err();
+    assert!(error.contains("Unknown option `--migrate`"));
 }
 
 #[test]
-fn parse_rejects_duplicate_dry_run_flags() {
-    let error = parse(&["--migrate", "--dry-run", "--dry-run"]).unwrap_err();
-    assert!(error.contains("`--dry-run` can only be specified once"));
+fn parse_rejects_removed_dry_run_option() {
+    let error = parse(&["--dry-run"]).unwrap_err();
+    assert!(error.contains("Unknown option `--dry-run`"));
 }
 
 #[test]
