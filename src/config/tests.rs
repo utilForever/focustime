@@ -1158,7 +1158,7 @@ fn save_with_env_writes_current_schema_version() {
         saved_toml
             .get("focus_secs")
             .and_then(toml::Value::as_integer),
-        Some(2100)
+        None
     );
 }
 
@@ -1465,11 +1465,11 @@ fn normalize_deduplicates_profile_names_and_fixes_selection() {
     assert_eq!(cfg.blocklist_profiles[0].name, "Work");
     assert_eq!(cfg.blocklist_profiles[1].name, "work (2)");
     assert_eq!(cfg.selected_blocklist_profile, "Work");
-    assert_eq!(cfg.blocked_sites, vec!["a.com".to_string()]);
+    assert!(cfg.blocked_sites.is_empty());
 }
 
 #[test]
-fn normalize_derives_legacy_blocked_sites_from_effective_blocked_set() {
+fn normalize_keeps_legacy_blocked_sites_empty_for_profile_only_config() {
     let cfg = AppConfig {
         blocklist_profiles: vec![BlocklistProfileConfig {
             name: "Work".to_string(),
@@ -1481,7 +1481,7 @@ fn normalize_derives_legacy_blocked_sites_from_effective_blocked_set() {
     }
     .normalize();
 
-    assert_eq!(cfg.blocked_sites, vec!["a.com".to_string()]);
+    assert!(cfg.blocked_sites.is_empty());
 }
 
 #[test]
@@ -1538,7 +1538,7 @@ fn normalize_migrates_legacy_automation_into_per_profile_settings() {
 }
 
 #[test]
-fn normalize_selected_profile_automation_updates_legacy_view() {
+fn normalize_selected_profile_automation_keeps_top_level_legacy_fields() {
     let classic = ProfileAutomationConfig {
         notifications: NotificationConfig {
             enabled: true,
@@ -1587,10 +1587,10 @@ fn normalize_selected_profile_automation_updates_legacy_view() {
     }
     .normalize();
 
-    assert_eq!(cfg.notifications, deep_work.notifications);
-    assert_eq!(cfg.auto_start, deep_work.auto_start);
-    assert_eq!(cfg.strict_mode, deep_work.strict_mode);
-    assert_eq!(cfg.recurring_schedule, deep_work.recurring_schedule);
+    assert_eq!(cfg.notifications, NotificationConfig::default());
+    assert_eq!(cfg.auto_start, AutoStartConfig::default());
+    assert!(!cfg.strict_mode);
+    assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
 }
 
 #[test]

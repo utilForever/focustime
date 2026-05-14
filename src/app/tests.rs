@@ -626,10 +626,7 @@ fn persisted_config_seeds_fallback_profile_with_active_sites() {
         persisted.blocklist_profiles[0].sites,
         vec!["example.com".to_string(), "github.com".to_string()]
     );
-    assert_eq!(
-        persisted.blocked_sites,
-        vec!["example.com".to_string(), "github.com".to_string()]
-    );
+    assert!(persisted.blocked_sites.is_empty());
 }
 
 #[test]
