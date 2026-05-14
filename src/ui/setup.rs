@@ -23,7 +23,10 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         .margin(2)
         .constraints([
             Constraint::Length(1),                                      // hosts path
+            Constraint::Length(1),                                      // backend policy/order
             Constraint::Length(1),                                      // spacer
+            Constraint::Length(2),                                      // backend selection
+            Constraint::Length(2),                                      // command backend
             Constraint::Length(2),                                      // blocking permissions
             Constraint::Length(2),                                      // hosts write capability
             Constraint::Length(2),                                      // wakatime config status
@@ -40,25 +43,48 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
     ))
     .style(Style::default().fg(app_color(app, Color::DarkGray)));
     frame.render_widget(hosts_path, inner[0]);
+    frame.render_widget(
+        Paragraph::new(format!(
+            "Backend policy: {} (order: {})",
+            app.setup_diagnostics.backend_policy, app.setup_diagnostics.backend_order
+        ))
+        .style(Style::default().fg(app_color(app, Color::DarkGray))),
+        inner[1],
+    );
 
     render_setup_check(
         frame,
         app,
-        inner[2],
+        inner[3],
+        "Backend selection",
+        &app.setup_diagnostics.backend_selection,
+    );
+    render_setup_check(
+        frame,
+        app,
+        inner[4],
+        "Command backend readiness",
+        &app.setup_diagnostics.command_backend,
+    );
+
+    render_setup_check(
+        frame,
+        app,
+        inner[5],
         "Blocking permissions",
         &app.setup_diagnostics.blocking_permissions,
     );
     render_setup_check(
         frame,
         app,
-        inner[3],
+        inner[6],
         "Hosts write capability",
         &app.setup_diagnostics.hosts_write_capability,
     );
     render_setup_check(
         frame,
         app,
-        inner[4],
+        inner[7],
         "WakaTime config status",
         &app.setup_diagnostics.wakatime_config,
     );
@@ -87,7 +113,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         Paragraph::new(deprecation_lines)
             .style(Style::default().fg(app_color(app, Color::Yellow)))
             .wrap(Wrap { trim: true }),
-        inner[5],
+        inner[8],
     );
 
     let (preview_summary, preview_style) = if let Some(error) = app.blocking_preview.error.as_ref()
@@ -102,9 +128,19 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             BlockingPreviewAction::Unblock => "unblock",
             BlockingPreviewAction::NoChange => "no-change",
         };
+        let backend = app
+            .blocking_preview
+            .backend
+            .map(|backend| backend.id())
+            .unwrap_or("unknown");
         (
             format!(
-                "Preview action: {action} · changes: {} · effective blocked sites: {}",
+                "Preview backend: {backend} · action: {action} · fallback: {} · changes: {} · effective blocked sites: {}",
+                if app.blocking_preview.fallback_used {
+                    "yes"
+                } else {
+                    "no"
+                },
                 if app.blocking_preview.would_change {
                     "yes"
                 } else {
@@ -119,32 +155,36 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         Paragraph::new(preview_summary)
             .alignment(Alignment::Left)
             .style(preview_style),
-        inner[6],
+        inner[9],
     );
 
     let preview_section_text = if app.blocking_preview.error.is_some() {
-        "Preview section unavailable due to hosts-file access error.".to_string()
+        "Preview section unavailable due to backend-access error.".to_string()
     } else if let Some(section) = app.blocking_preview.section.as_ref() {
         section.clone()
     } else {
-        "No focustime block section changes are required for the current state.".to_string()
+        app.blocking_preview
+            .backend_target
+            .as_ref()
+            .map(|target| format!("No hosts section preview. Backend target: {target}"))
+            .unwrap_or_else(|| "No blocking preview details are available.".to_string())
     };
     frame.render_widget(
         Paragraph::new(preview_section_text)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Blocking preview (focustime section) "),
+                    .title(" Blocking preview details "),
             )
             .style(Style::default().fg(app_color(app, Color::Gray)))
             .wrap(Wrap { trim: false }),
-        inner[7],
+        inner[10],
     );
 
     render_hint_lines(
         frame,
         app,
-        inner[8],
+        inner[11],
         vec![
             Line::from(format!(
                 "Diagnostics: {} Refresh checks + preview",
