@@ -158,7 +158,7 @@ Options:
   --blocklist-site-delete     Delete blocklist hostname in active profile
   --allowlist-site-delete     Delete allowlist hostname in active profile
   --diagnostics   Show setup diagnostics checks
-  --blocking-preview  Preview focustime hosts-section changes without writing
+  --blocking-preview  Preview backend-selected blocking changes without writing
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
   --backup        Back up config.toml and stats.toml to current directory or DIR
@@ -712,6 +712,10 @@ struct SetupCheckOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct DiagnosticsCommandOutput {
     hosts_file_path: String,
+    backend_policy: String,
+    backend_order: String,
+    backend_selection: SetupCheckOutput,
+    command_backend: SetupCheckOutput,
     blocking_permissions: SetupCheckOutput,
     hosts_write_capability: SetupCheckOutput,
     wakatime_config: SetupCheckOutput,
@@ -720,6 +724,10 @@ struct DiagnosticsCommandOutput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct BlockingPreviewCommandOutput {
+    backend: &'static str,
+    backend_target: String,
+    attempted_backends: Vec<&'static str>,
+    fallback_used: bool,
     hosts_file_path: String,
     action: &'static str,
     would_change: bool,

@@ -171,11 +171,11 @@ cargo run -- --break-glass-trigger --json
 # Cancel a pending break-glass confirmation
 cargo run -- --break-glass-cancel
 
-# Show setup diagnostics checks (including hosts and WakaTime readiness)
+# Show setup diagnostics checks (backend selection, hosts/command readiness, WakaTime)
 cargo run -- --diagnostics
 cargo run -- --diagnostics --json
 
-# Preview focustime-managed hosts-file changes without writing
+# Preview backend-selected blocking changes without writing
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
 
@@ -390,6 +390,16 @@ selected_profile = "custom"
 selected_break_template = "Classic"
 selected_theme_preset = "classic"
 selected_blocklist_profile = "Work"
+ 
+[blocking_backend]
+# hosts_only | hosts_then_command | command_then_hosts | command_only
+policy = "hosts_then_command"
+
+[blocking_backend.command]
+block_command = ""
+unblock_command = ""
+diagnostics_command = ""
+
 # Legacy compatibility mirror for the selected profile's automation strict mode.
 strict_mode = false
 break_glass_duration_secs = 300
@@ -544,6 +554,7 @@ Invalid and duplicate entries are reported inline so you can fix them without le
 Allowlist entries act as explicit exceptions: effective focus blocking is computed as **blocklist sites minus allowlist sites** for the active profile.
 
 For hosts-based blocking to apply reliably, keep DNS-over-HTTPS disabled in your browser.
+If you configure the command backend, ensure your custom commands enforce equivalent restrictions.
 
 ## Setup diagnostics
 
@@ -554,11 +565,21 @@ Open the setup diagnostics screen from timer view with **`d`**.
 
 The diagnostics screen reports:
 
+- backend policy/order and last backend selection (including fallback usage)
+- command backend readiness
 - blocking permissions
 - hosts file write capability
-- blocking preview summary and focustime-managed hosts section
-- remediation guidance when hosts permissions are insufficient
+- blocking preview summary and backend target details
+- remediation guidance when hosts or command backend readiness is insufficient
 - WakaTime config status (`~/.wakatime.cfg` and `api_key` availability)
+
+Blocking backend policy is deterministic:
+
+- `hosts_then_command` (default): try hosts first, then command backend fallback
+- `command_then_hosts`: try command first, then hosts fallback
+- `hosts_only` / `command_only`: disable fallback
+
+Command backend templates support `{sites_csv}`, `{sites_lines}`, and `{site_count}` placeholders.
 
 ## Phase notifications
 

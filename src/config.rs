@@ -60,6 +60,9 @@ pub struct AppConfig {
     /// Name of the active blocklist profile.
     #[serde(default = "default_blocklist_profile_name")]
     pub selected_blocklist_profile: String,
+    /// Blocking backend selection and fallback behavior.
+    #[serde(default)]
+    pub blocking_backend: BlockingBackendConfig,
     /// Selected profile identifier.
     #[serde(default)]
     pub selected_profile: ProfileId,
@@ -161,6 +164,53 @@ pub struct FeatureFlagsConfig {}
 impl FeatureFlagsConfig {
     pub fn normalized(&self) -> Self {
         *self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct BlockingBackendConfig {
+    #[serde(default)]
+    pub policy: BlockingBackendPolicyConfig,
+    #[serde(default)]
+    pub command: CommandBlockingBackendConfig,
+}
+
+impl BlockingBackendConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            policy: self.policy,
+            command: self.command.normalized(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BlockingBackendPolicyConfig {
+    HostsOnly,
+    #[default]
+    HostsThenCommand,
+    CommandThenHosts,
+    CommandOnly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct CommandBlockingBackendConfig {
+    #[serde(default)]
+    pub block_command: String,
+    #[serde(default)]
+    pub unblock_command: String,
+    #[serde(default)]
+    pub diagnostics_command: String,
+}
+
+impl CommandBlockingBackendConfig {
+    pub fn normalized(&self) -> Self {
+        Self {
+            block_command: self.block_command.trim().to_string(),
+            unblock_command: self.unblock_command.trim().to_string(),
+            diagnostics_command: self.diagnostics_command.trim().to_string(),
+        }
     }
 }
 
@@ -1463,6 +1513,7 @@ impl Default for AppConfig {
             blocked_sites: Vec::new(),
             blocklist_profiles: Vec::new(),
             selected_blocklist_profile: default_blocklist_profile_name(),
+            blocking_backend: BlockingBackendConfig::default(),
             selected_profile: ProfileId::default(),
             custom_profile: None,
             break_templates: default_break_templates(),
@@ -1666,6 +1717,7 @@ impl AppConfig {
             &self.selected_blocklist_profile,
             &self.blocklist_profiles,
         );
+        self.blocking_backend = self.blocking_backend.normalized();
         self.schedule_runtime = self.schedule_runtime.normalized();
         self.wakatime = self.wakatime.normalized();
         self.wakatime_runtime = self.wakatime_runtime.normalized();

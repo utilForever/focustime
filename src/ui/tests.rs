@@ -411,7 +411,7 @@ fn render_setup_check_wraps_long_warning_message() {
 #[test]
 fn setup_diagnostics_view_wraps_long_status_messages() {
     let width = 80;
-    let height = 24;
+    let height = 30;
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
     let mut app = App::default();
@@ -426,7 +426,10 @@ fn setup_diagnostics_view_wraps_long_status_messages() {
         .expect("render should succeed");
 
     let text = terminal_text(&terminal, width, height);
-    assert!(text.contains("WRAP-END"));
+    assert!(
+        text.contains("WRAP-END"),
+        "rendered diagnostics text:\n{text}"
+    );
 }
 
 #[test]
@@ -494,7 +497,7 @@ fn setup_diagnostics_view_renders_blocking_preview_section() {
         .expect("render should succeed");
 
     let text = terminal_text(&terminal, width, height);
-    assert!(text.contains("Preview action: block"));
+    assert!(text.contains("action: block"));
     assert!(
         text.contains("# focustime-block-start"),
         "rendered diagnostics text:\n{text}"

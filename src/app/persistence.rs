@@ -1,7 +1,7 @@
 use crate::app::{
     App, AppConfig, BlocklistProfileConfig, DEFAULT_BLOCKLIST_PROFILE_NAME, Local,
-    PendingTimerAction, TimerPhase, TimerState, format_duration_label, occurrence_key,
-    profile_index, profile_spec_for, task_label_index,
+    PendingTimerAction, TimerPhase, TimerState, blocking_backend_config_for_persistence,
+    format_duration_label, occurrence_key, profile_index, profile_spec_for, task_label_index,
 };
 use crate::session_recovery::{self, InProgressSessionSnapshot, WorkflowStateSnapshot};
 use chrono::{LocalResult, TimeZone};
@@ -431,6 +431,9 @@ impl App {
         let mut profile_automation = self.profile_automation.clone();
         profile_automation
             .set_for_profile(self.selected_profile, self.selected_profile_automation());
+        let (backend_policy, command_backend) = self.blocker.backend_config();
+        let blocking_backend =
+            blocking_backend_config_for_persistence(backend_policy, &command_backend);
         AppConfig {
             // Keep legacy fields aligned with the editable custom profile so
             // older releases retain user-configured values.
@@ -441,6 +444,7 @@ impl App {
             blocked_sites: Vec::new(),
             blocklist_profiles,
             selected_blocklist_profile,
+            blocking_backend,
             selected_profile: self.selected_profile,
             custom_profile: Some(custom_profile),
             break_templates: self.break_templates.clone(),

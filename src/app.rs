@@ -7,11 +7,13 @@ use chrono::{DateTime, Datelike, Local, NaiveDate};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::blocker::{
-    BlockingIntent, BlockingPreview, BlockingPreviewAction, BulkAddResult, EditSiteResult,
+    BlockingBackendKind, BlockingBackendPolicy, BlockingIntent, BlockingPreview,
+    BlockingPreviewAction, BulkAddResult, CommandBlockingBackend, EditSiteResult,
     HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
 };
 use crate::config::{
-    AppConfig, AutoStartConfig, BlocklistProfileConfig, BreakTemplateConfig, CustomProfileConfig,
+    AppConfig, AutoStartConfig, BlockingBackendConfig, BlockingBackendPolicyConfig,
+    BlocklistProfileConfig, BreakTemplateConfig, CommandBlockingBackendConfig, CustomProfileConfig,
     DailyGoalConfig, FeatureFlagsConfig, GoalCarryOverConfig, MonthlyGoalConfig,
     NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
     ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
@@ -253,6 +255,54 @@ fn resolve_active_break_template(
     break_template_index_for_custom_profile(templates, custom_profile)
 }
 
+fn blocking_backend_policy_for_config(
+    policy: BlockingBackendPolicyConfig,
+) -> BlockingBackendPolicy {
+    match policy {
+        BlockingBackendPolicyConfig::HostsOnly => BlockingBackendPolicy::HostsOnly,
+        BlockingBackendPolicyConfig::HostsThenCommand => BlockingBackendPolicy::HostsThenCommand,
+        BlockingBackendPolicyConfig::CommandThenHosts => BlockingBackendPolicy::CommandThenHosts,
+        BlockingBackendPolicyConfig::CommandOnly => BlockingBackendPolicy::CommandOnly,
+    }
+}
+
+fn command_backend_for_config(config: &CommandBlockingBackendConfig) -> CommandBlockingBackend {
+    CommandBlockingBackend {
+        block_command: config.block_command.clone(),
+        unblock_command: config.unblock_command.clone(),
+        diagnostics_command: config.diagnostics_command.clone(),
+    }
+}
+
+fn blocking_backend_policy_to_config(policy: BlockingBackendPolicy) -> BlockingBackendPolicyConfig {
+    match policy {
+        BlockingBackendPolicy::HostsOnly => BlockingBackendPolicyConfig::HostsOnly,
+        BlockingBackendPolicy::HostsThenCommand => BlockingBackendPolicyConfig::HostsThenCommand,
+        BlockingBackendPolicy::CommandThenHosts => BlockingBackendPolicyConfig::CommandThenHosts,
+        BlockingBackendPolicy::CommandOnly => BlockingBackendPolicyConfig::CommandOnly,
+    }
+}
+
+fn command_backend_to_config(
+    command_backend: &CommandBlockingBackend,
+) -> CommandBlockingBackendConfig {
+    CommandBlockingBackendConfig {
+        block_command: command_backend.block_command.clone(),
+        unblock_command: command_backend.unblock_command.clone(),
+        diagnostics_command: command_backend.diagnostics_command.clone(),
+    }
+}
+
+fn blocking_backend_config_for_persistence(
+    policy: BlockingBackendPolicy,
+    command_backend: &CommandBlockingBackend,
+) -> BlockingBackendConfig {
+    BlockingBackendConfig {
+        policy: blocking_backend_policy_to_config(policy),
+        command: command_backend_to_config(command_backend),
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ProfileEditSnapshot {
     custom_profile: CustomProfileConfig,
@@ -431,8 +481,12 @@ impl SetupCheck {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetupDiagnostics {
     pub hosts_file_path: String,
+    pub backend_policy: String,
+    pub backend_order: String,
+    pub backend_selection: SetupCheck,
     pub blocking_permissions: SetupCheck,
     pub hosts_write_capability: SetupCheck,
+    pub command_backend: SetupCheck,
     pub wakatime_config: SetupCheck,
     pub deprecation_warnings: Vec<String>,
 }
@@ -440,9 +494,23 @@ pub struct SetupDiagnostics {
 impl SetupDiagnostics {
     fn collect(blocker: &SiteBlocker, deprecation_warnings: Vec<String>) -> Self {
         let hosts_diagnostics = blocker.hosts_file_diagnostics();
+        let backend_status = blocker.backend_status();
         let blocking_permissions = blocking_permissions_check(&hosts_diagnostics);
         let hosts_write_capability = hosts_write_capability_check(&hosts_diagnostics);
         let hosts_file_path = hosts_diagnostics.path.clone();
+        let backend_policy = backend_status.policy.id().to_string();
+        let backend_order = backend_status
+            .order
+            .iter()
+            .map(|backend| backend.id())
+            .collect::<Vec<_>>()
+            .join(" -> ");
+        let backend_selection = backend_selection_check(
+            backend_status.last_backend,
+            backend_status.fallback_used,
+            backend_status.last_error.as_deref(),
+        );
+        let command_backend = command_backend_check(blocker);
         let wakatime_diagnostics = WakatimeTracker::config_diagnostics();
         let wakatime_config = match wakatime_diagnostics.status {
             WakatimeConfigStatus::Configured => SetupCheck::ok(wakatime_diagnostics.detail),
@@ -455,8 +523,12 @@ impl SetupDiagnostics {
         };
         Self {
             hosts_file_path,
+            backend_policy,
+            backend_order,
+            backend_selection,
             blocking_permissions,
             hosts_write_capability,
+            command_backend,
             wakatime_config,
             deprecation_warnings,
         }
@@ -465,6 +537,10 @@ impl SetupDiagnostics {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockingPreviewSnapshot {
+    pub backend: Option<BlockingBackendKind>,
+    pub backend_target: Option<String>,
+    pub attempted_backends: Vec<BlockingBackendKind>,
+    pub fallback_used: bool,
     pub action: BlockingPreviewAction,
     pub would_change: bool,
     pub effective_blocked_sites_count: usize,
@@ -475,6 +551,10 @@ pub struct BlockingPreviewSnapshot {
 impl Default for BlockingPreviewSnapshot {
     fn default() -> Self {
         Self {
+            backend: None,
+            backend_target: None,
+            attempted_backends: Vec::new(),
+            fallback_used: false,
             action: BlockingPreviewAction::NoChange,
             would_change: false,
             effective_blocked_sites_count: 0,
@@ -658,7 +738,10 @@ impl App {
             profile_spec.long_break_secs,
             profile_spec.long_break_interval,
         );
-        let blocker = SiteBlocker::new();
+        let blocker = SiteBlocker::with_backend_config(
+            blocking_backend_policy_for_config(config.blocking_backend.policy),
+            command_backend_for_config(&config.blocking_backend.command),
+        );
         let setup_diagnostics =
             SetupDiagnostics::collect(&blocker, setup_deprecation_warnings.clone());
         let mut app = Self {
@@ -1634,6 +1717,37 @@ fn blocking_permissions_check(hosts_diagnostics: &HostsFileDiagnostics) -> Setup
             "Blocked: write permission unavailable ({reason}). {}",
             permission_remediation_guidance()
         ))
+    }
+}
+
+fn backend_selection_check(
+    last_backend: Option<BlockingBackendKind>,
+    fallback_used: bool,
+    last_error: Option<&str>,
+) -> SetupCheck {
+    if let Some(error) = last_error {
+        return SetupCheck::warning(format!("Blocked: backend selection failed ({error})"));
+    }
+    if let Some(backend) = last_backend {
+        if fallback_used {
+            return SetupCheck::warning(format!(
+                "Fallback active: using `{}` backend after primary backend failure",
+                backend.id()
+            ));
+        }
+        return SetupCheck::ok(format!("Ready: using `{}` backend", backend.id()));
+    }
+    SetupCheck::warning(
+        "Awaiting first block/unblock operation to confirm selected backend".to_string(),
+    )
+}
+
+fn command_backend_check(blocker: &SiteBlocker) -> SetupCheck {
+    match blocker.command_backend_diagnostics() {
+        Ok(()) => SetupCheck::ok("Ready: command backend diagnostics passed"),
+        Err(error) => SetupCheck::warning(format!(
+            "Blocked: command backend unavailable ({error}). Configure commands or use hosts backend."
+        )),
     }
 }
 
