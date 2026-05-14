@@ -16,7 +16,7 @@ flowchart LR
     ST["stats.rs + stats/*<br/>persistence/analytics/export"]
     CFG["config.rs + config/paths.rs<br/>config model + path resolution"]
     TM["timer.rs<br/>Pomodoro state machine"]
-    BL["blocker.rs<br/>hosts-file blocking"]
+    BL["blocker.rs<br/>multi-backend blocking (hosts + command fallback)"]
     WK["wakatime.rs<br/>heartbeat tracking"]
     NT["notifications.rs<br/>phase notifications"]
     SCH["schedule.rs<br/>window compilation/selection"]
@@ -57,7 +57,7 @@ flowchart LR
 | `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                   | `app`, `timer`, `wakatime`                                                     |
 | `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including feature-flag compatibility defaults, runtime knob settings, and task-label-aware WakaTime metadata mapping rules                                                 | `app`, `cli`, filesystem/env                                                   |
 | `timer.rs`                      | Pomodoro timer domain model and phase transitions                                                                                                                                                                                                    | `app`, `ui`                                                                    |
-| `blocker.rs`                    | Hosts-file blocking/unblocking and diagnostics                                                                                                                                                                                                       | `app`, `cli`, OS/filesystem                                                    |
+| `blocker.rs`                    | Blocking backend orchestration (hosts + command), deterministic fallback selection, preview generation, and backend diagnostics                                                                                                                      | `app`, `cli`, OS/filesystem                                                    |
 | `schedule.rs`                   | Recurring/one-time schedule compile and conflict/occurrence logic                                                                                                                                                                                    | `app`, `cli`, `config`                                                         |
 | `session_recovery.rs`           | Runtime recovery snapshot read/write, transient runtime artifact reconciliation, and startup warning notices for dropped invalid fragments                                                                                                           | `app`, `cli`, filesystem                                                       |
 | `task_labels.rs`                | Task-label normalization, canonicalization, and index helpers                                                                                                                                                                                        | `app`, `stats`, `cli`                                                          |
