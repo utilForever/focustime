@@ -7,7 +7,6 @@ use crate::session_recovery::{
 use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, TimeZone, Weekday};
 use std::{
     fs,
-    path::Path,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -79,30 +78,6 @@ fn app_default_uses_canonical_config_in_tests() {
     assert_eq!(app.daily_goal, DailyGoalConfig::default());
     assert_eq!(app.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(app.monthly_goal, MonthlyGoalConfig::default());
-}
-
-#[test]
-fn legacy_stats_path_warning_mentions_migration_when_canonical_is_missing() {
-    let warning = format_legacy_stats_path_deprecation_warning(
-        Path::new("state/stats.toml"),
-        Path::new("config/stats.toml"),
-        false,
-    );
-
-    assert!(warning.contains("Deprecated legacy stats path detected"));
-    assert!(warning.contains("must be migrated"));
-    assert!(warning.contains("run `focustime --migrate`"));
-}
-
-#[test]
-fn legacy_stats_path_warning_omits_missing_canonical_hint_when_canonical_exists() {
-    let warning = format_legacy_stats_path_deprecation_warning(
-        Path::new("state/stats.toml"),
-        Path::new("config/stats.toml"),
-        true,
-    );
-
-    assert!(!warning.contains("must be migrated"));
 }
 
 #[test]
@@ -5379,38 +5354,10 @@ fn planner_label_change_during_running_break_updates_recovery_snapshot() {
 
     let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
     assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task B"));
-    assert_eq!(snapshot.focus_intention.as_deref(), Some("Task B"));
-    assert_eq!(snapshot.task_note.as_deref(), Some("Task B"));
-    assert_eq!(snapshot.phase, RecoveryTimerPhase::ShortBreak);
-    assert_eq!(snapshot.status, RecoveryTimerStatus::Running);
-}
-
-#[test]
-fn planner_label_change_during_running_break_does_not_backfill_metadata_when_disabled() {
-    let mut app = App::from_config(AppConfig {
-        feature_flags: FeatureFlagsConfig {
-            metadata_task_label_fallback: false,
-        },
-        ..AppConfig::default()
-    });
-    app.task_labels = vec!["Task A".to_string(), "Task B".to_string()];
-    app.selected_task_label = Some("Task A".to_string());
-    app.sync_task_planner_state();
-
-    app.handle_key(key(KeyCode::Char(' '))); // focus running
-    app.handle_key(key(KeyCode::Char('n'))); // short break idle
-    app.handle_key(key(KeyCode::Char(' '))); // short break running
-    assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
-    assert_eq!(app.timer.status, TimerStatus::Running);
-
-    app.open_session_planner();
-    app.planner_selection_index = 1;
-    app.select_planner_label();
-
-    let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
-    assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task B"));
     assert_eq!(snapshot.focus_intention, None);
     assert_eq!(snapshot.task_note, None);
+    assert_eq!(snapshot.phase, RecoveryTimerPhase::ShortBreak);
+    assert_eq!(snapshot.status, RecoveryTimerStatus::Running);
 }
 
 #[test]

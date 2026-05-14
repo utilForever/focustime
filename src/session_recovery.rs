@@ -116,24 +116,6 @@ impl InProgressSessionSnapshot {
         task_note: Option<String>,
         selected_profile: ProfileId,
     ) -> Option<Self> {
-        Self::from_timer_state_with_metadata_with_fallback(
-            timer,
-            selected_task_label,
-            focus_intention,
-            task_note,
-            selected_profile,
-            true,
-        )
-    }
-
-    pub fn from_timer_state_with_metadata_with_fallback(
-        timer: &TimerState,
-        selected_task_label: Option<String>,
-        focus_intention: Option<String>,
-        task_note: Option<String>,
-        selected_profile: ProfileId,
-        metadata_fallback_to_task_label: bool,
-    ) -> Option<Self> {
         if timer.status == TimerStatus::Idle {
             return None;
         }
@@ -143,16 +125,6 @@ impl InProgressSessionSnapshot {
             .and_then(normalize_task_label)?;
         let focus_intention = focus_intention.as_deref().and_then(normalize_metadata_text);
         let task_note = task_note.as_deref().and_then(normalize_metadata_text);
-        let focus_intention = if focus_intention.is_some() || !metadata_fallback_to_task_label {
-            focus_intention
-        } else {
-            Some(selected_task_label.clone())
-        };
-        let task_note = if task_note.is_some() || !metadata_fallback_to_task_label {
-            task_note
-        } else {
-            Some(selected_task_label.clone())
-        };
 
         Some(Self {
             phase: RecoveryTimerPhase::from_timer_phase(timer.phase),
@@ -182,51 +154,18 @@ impl InProgressSessionSnapshot {
 
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn normalized_focus_intention(&self) -> Option<String> {
-        self.normalized_focus_intention_with_fallback(true)
-    }
-
-    pub fn normalized_focus_intention_with_fallback(
-        &self,
-        fallback_to_task_label: bool,
-    ) -> Option<String> {
-        let normalized = self
-            .focus_intention
+        self.focus_intention
             .as_deref()
-            .and_then(normalize_metadata_text);
-        if normalized.is_some() || !fallback_to_task_label {
-            normalized
-        } else {
-            self.normalized_task_label()
-        }
+            .and_then(normalize_metadata_text)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn normalized_task_note(&self) -> Option<String> {
-        self.normalized_task_note_with_fallback(true)
-    }
-
-    pub fn normalized_task_note_with_fallback(
-        &self,
-        fallback_to_task_label: bool,
-    ) -> Option<String> {
-        let normalized = self.task_note.as_deref().and_then(normalize_metadata_text);
-        if normalized.is_some() || !fallback_to_task_label {
-            normalized
-        } else {
-            self.normalized_task_label()
-        }
+        self.task_note.as_deref().and_then(normalize_metadata_text)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn validate_for_timer(&self, timer: &TimerState) -> Result<(), String> {
-        self.validate_for_timer_with_fallback(timer, true)
-    }
-
-    pub fn validate_for_timer_with_fallback(
-        &self,
-        timer: &TimerState,
-        fallback_to_task_label: bool,
-    ) -> Result<(), String> {
         if !matches!(
             self.status,
             RecoveryTimerStatus::Running | RecoveryTimerStatus::Paused
@@ -236,18 +175,6 @@ impl InProgressSessionSnapshot {
 
         if self.normalized_task_label().is_none() {
             return Err("saved task label is missing or invalid".to_string());
-        }
-        if self
-            .normalized_focus_intention_with_fallback(fallback_to_task_label)
-            .is_none()
-        {
-            return Err("saved focus intention is missing or invalid".to_string());
-        }
-        if self
-            .normalized_task_note_with_fallback(fallback_to_task_label)
-            .is_none()
-        {
-            return Err("saved task note is missing or invalid".to_string());
         }
 
         let phase_duration_secs = phase_duration_secs(timer, self.phase());
@@ -320,6 +247,79 @@ pub fn clear_workflow_state() -> io::Result<()> {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e),
+    }
+}
+
+#[cfg(not(test))]
+fn recovery_path() -> io::Result<std::path::PathBuf> {
+    app_data_path(RECOVERY_FILE_NAME).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "cannot determine session recovery directory",
+        )
+    })
+}
+
+#[cfg(not(test))]
+fn workflow_state_path() -> io::Result<std::path::PathBuf> {
+    app_data_path(WORKFLOW_STATE_FILE_NAME).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "cannot determine workflow state directory",
+        )
+    })
+}
+
+#[cfg(not(test))]
+fn write_atomic_text(path: &Path, content: &str) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let tmp_path = path.with_extension("toml.tmp");
+    fs::write(&tmp_path, content)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        match fs::rename(&tmp_path, path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                fs::remove_file(path)?;
+                fs::rename(&tmp_path, path)
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&tmp_path);
+                Err(e)
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        match fs::rename(&tmp_path, path) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let _ = fs::remove_file(&tmp_path);
+                Err(e)
+            }
+        }
+    }
+}
+
+fn phase_duration_secs(timer: &TimerState, phase: TimerPhase) -> u64 {
+    match phase {
+        TimerPhase::Focus => timer.focus_secs,
+        TimerPhase::ShortBreak => timer.short_break_secs,
+        TimerPhase::LongBreak => timer.long_break_secs,
+    }
+}
+
+fn normalize_metadata_text(value: &str) -> Option<String> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized.to_string())
     }
 }
 
@@ -412,75 +412,6 @@ pub(crate) fn test_saved_workflow_snapshot() -> Option<WorkflowStateSnapshot> {
     TEST_SAVED_WORKFLOW_SNAPSHOT.with(|slot| slot.borrow().clone())
 }
 
-#[cfg(not(test))]
-fn recovery_path() -> io::Result<std::path::PathBuf> {
-    app_data_path(RECOVERY_FILE_NAME).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "cannot determine session recovery directory",
-        )
-    })
-}
-
-#[cfg(not(test))]
-fn workflow_state_path() -> io::Result<std::path::PathBuf> {
-    app_data_path(WORKFLOW_STATE_FILE_NAME).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "cannot determine workflow state directory",
-        )
-    })
-}
-
-#[cfg(not(test))]
-fn write_atomic_text(path: &Path, content: &str) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    let tmp_path = path.with_extension("toml.tmp");
-    fs::write(&tmp_path, content)?;
-
-    #[cfg(target_os = "windows")]
-    {
-        match fs::rename(&tmp_path, path) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                fs::remove_file(path)?;
-                fs::rename(&tmp_path, path)
-            }
-            Err(e) => {
-                let _ = fs::remove_file(&tmp_path);
-                Err(e)
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        match fs::rename(&tmp_path, path) {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                let _ = fs::remove_file(&tmp_path);
-                Err(e)
-            }
-        }
-    }
-}
-
-fn phase_duration_secs(timer: &TimerState, phase: TimerPhase) -> u64 {
-    match phase {
-        TimerPhase::Focus => timer.focus_secs,
-        TimerPhase::ShortBreak => timer.short_break_secs,
-        TimerPhase::LongBreak => timer.long_break_secs,
-    }
-}
-
-fn normalize_metadata_text(value: &str) -> Option<String> {
-    let trimmed = value.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use crate::session_recovery::*;
@@ -571,7 +502,7 @@ mod tests {
     }
 
     #[test]
-    fn metadata_defaults_to_task_label_for_legacy_snapshots() {
+    fn metadata_remains_empty_for_legacy_snapshots_without_backfill() {
         let timer = TimerState::with_profile(60, 30, 90, 4);
         let snapshot = InProgressSessionSnapshot {
             phase: RecoveryTimerPhase::Focus,
@@ -584,45 +515,9 @@ mod tests {
             selected_profile: ProfileId::Classic,
         };
 
-        assert_eq!(
-            snapshot.normalized_focus_intention().as_deref(),
-            Some("Docs")
-        );
-        assert_eq!(snapshot.normalized_task_note().as_deref(), Some("Docs"));
+        assert_eq!(snapshot.normalized_focus_intention(), None);
+        assert_eq!(snapshot.normalized_task_note(), None);
         assert!(snapshot.validate_for_timer(&timer).is_ok());
-    }
-
-    #[test]
-    fn metadata_fallback_can_be_disabled_for_legacy_snapshots() {
-        let timer = TimerState::with_profile(60, 30, 90, 4);
-        let snapshot = InProgressSessionSnapshot {
-            phase: RecoveryTimerPhase::Focus,
-            status: RecoveryTimerStatus::Running,
-            remaining_secs: 60,
-            pomodoros_completed: 1,
-            selected_task_label: Some("Docs".to_string()),
-            focus_intention: None,
-            task_note: None,
-            selected_profile: ProfileId::Classic,
-        };
-
-        assert_eq!(
-            snapshot
-                .normalized_focus_intention_with_fallback(false)
-                .as_deref(),
-            None
-        );
-        assert_eq!(
-            snapshot
-                .normalized_task_note_with_fallback(false)
-                .as_deref(),
-            None
-        );
-        assert!(
-            snapshot
-                .validate_for_timer_with_fallback(&timer, false)
-                .is_err()
-        );
     }
 
     #[test]

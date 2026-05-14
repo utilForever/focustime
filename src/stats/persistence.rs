@@ -60,7 +60,7 @@ impl FocusStats {
         Ok(Self::from_persisted(persisted, options))
     }
 
-    fn from_persisted(persisted: PersistedStats, options: StatsLoadOptions) -> Self {
+    fn from_persisted(persisted: PersistedStats, _options: StatsLoadOptions) -> Self {
         let (task_labels, selected_task_label, task_label_favorites, task_label_archived) =
             normalize_task_planner_state(
                 persisted.task_labels,
@@ -74,16 +74,8 @@ impl FocusStats {
             if let Some(task_label) = normalize_task_label(&session.task_label) {
                 let focus_intention = normalize_session_metadata_text(&session.focus_intention);
                 let task_note = normalize_session_metadata_text(&session.task_note);
-                let focus_intention = if options.metadata_task_label_fallback {
-                    focus_intention.unwrap_or_else(|| task_label.clone())
-                } else {
-                    focus_intention.unwrap_or_default()
-                };
-                let task_note = if options.metadata_task_label_fallback {
-                    task_note.unwrap_or_else(|| task_label.clone())
-                } else {
-                    task_note.unwrap_or_default()
-                };
+                let focus_intention = focus_intention.unwrap_or_default();
+                let task_note = task_note.unwrap_or_default();
                 focus_sessions.push(FocusSessionRecord {
                     date: session.date.trim().to_string(),
                     task_label,

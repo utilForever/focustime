@@ -219,8 +219,8 @@ fn task_goal_json_reads_unconfigured_selected_task_goal() {
 }
 
 #[test]
-fn session_metadata_json_reads_fallback_from_selected_task_label() {
-    let env = TestEnv::new("metadata-json-read-fallback");
+fn session_metadata_json_does_not_fallback_from_selected_task_label() {
+    let env = TestEnv::new("metadata-json-read-no-fallback");
 
     let select_output = env.run(&["--task", "Docs", "--json"]);
     assert_eq!(select_output.status.code(), Some(0));
@@ -234,8 +234,8 @@ fn session_metadata_json_reads_fallback_from_selected_task_label() {
         serde_json::from_slice(&read_output.stdout).expect("stdout should be JSON");
     assert_eq!(payload["action"], "focus-intention");
     assert_eq!(payload["updated"], false);
-    assert_eq!(payload["focus_intention"], "Docs");
-    assert_eq!(payload["task_note"], "Docs");
+    assert!(payload["focus_intention"].is_null());
+    assert!(payload["task_note"].is_null());
     assert_eq!(payload["timer"]["selected_task_label"], "Docs");
 }
 
@@ -420,8 +420,6 @@ fn status_json_uses_canonical_stats_without_legacy_fallback() {
         .to_string();
 
     let canonical_stats_path = env.canonical_stats_path();
-    let legacy_stats_path = env.legacy_stats_path();
-    write_stats_snapshot(&legacy_stats_path, &day, 7, 4200);
     write_stats_snapshot(&canonical_stats_path, &day, 3, 1800);
 
     let canonical_status = env.run(&["--status", "--json"]);

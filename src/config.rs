@@ -155,24 +155,12 @@ impl AppConfigDisk {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FeatureFlagsConfig {
-    /// Backfill missing metadata fields from task labels for legacy records/snapshots.
-    #[serde(default = "default_true")]
-    pub metadata_task_label_fallback: bool,
-}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct FeatureFlagsConfig {}
 
 impl FeatureFlagsConfig {
     pub fn normalized(&self) -> Self {
         *self
-    }
-}
-
-impl Default for FeatureFlagsConfig {
-    fn default() -> Self {
-        Self {
-            metadata_task_label_fallback: true,
-        }
     }
 }
 
@@ -1463,10 +1451,6 @@ fn default_long_break_interval() -> u32 {
 }
 fn default_legacy_config_schema_version() -> u32 {
     LEGACY_CONFIG_SCHEMA_VERSION
-}
-
-fn default_true() -> bool {
-    true
 }
 
 impl Default for AppConfig {
