@@ -33,6 +33,12 @@ pub(crate) fn take_test_blocking_action() -> Option<&'static str> {
 pub struct SiteBlocker {
     pub sites: Vec<String>,
     pub is_blocking: bool,
+    backend_policy: BlockingBackendPolicy,
+    command_backend: CommandBlockingBackend,
+    active_backend: Option<BlockingBackendKind>,
+    last_backend: Option<BlockingBackendKind>,
+    last_fallback_used: bool,
+    last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,8 +116,92 @@ pub enum BlockingPreviewAction {
     NoChange,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockingBackendKind {
+    Hosts,
+    Command,
+}
+
+impl BlockingBackendKind {
+    pub fn id(self) -> &'static str {
+        match self {
+            BlockingBackendKind::Hosts => "hosts",
+            BlockingBackendKind::Command => "command",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlockingBackendPolicy {
+    HostsOnly,
+    #[default]
+    HostsThenCommand,
+    CommandThenHosts,
+    CommandOnly,
+}
+
+impl BlockingBackendPolicy {
+    pub fn id(self) -> &'static str {
+        match self {
+            BlockingBackendPolicy::HostsOnly => "hosts_only",
+            BlockingBackendPolicy::HostsThenCommand => "hosts_then_command",
+            BlockingBackendPolicy::CommandThenHosts => "command_then_hosts",
+            BlockingBackendPolicy::CommandOnly => "command_only",
+        }
+    }
+
+    fn backend_order(self) -> Vec<BlockingBackendKind> {
+        match self {
+            BlockingBackendPolicy::HostsOnly => vec![BlockingBackendKind::Hosts],
+            BlockingBackendPolicy::HostsThenCommand => {
+                vec![BlockingBackendKind::Hosts, BlockingBackendKind::Command]
+            }
+            BlockingBackendPolicy::CommandThenHosts => {
+                vec![BlockingBackendKind::Command, BlockingBackendKind::Hosts]
+            }
+            BlockingBackendPolicy::CommandOnly => vec![BlockingBackendKind::Command],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CommandBlockingBackend {
+    pub block_command: String,
+    pub unblock_command: String,
+    pub diagnostics_command: String,
+}
+
+impl CommandBlockingBackend {
+    pub fn normalized(&self) -> Self {
+        Self {
+            block_command: self.block_command.trim().to_string(),
+            unblock_command: self.unblock_command.trim().to_string(),
+            diagnostics_command: self.diagnostics_command.trim().to_string(),
+        }
+    }
+
+    pub fn is_configured(&self) -> bool {
+        !self.block_command.trim().is_empty() && !self.unblock_command.trim().is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockingBackendStatus {
+    pub policy: BlockingBackendPolicy,
+    pub order: Vec<BlockingBackendKind>,
+    pub active_backend: Option<BlockingBackendKind>,
+    pub last_backend: Option<BlockingBackendKind>,
+    pub fallback_used: bool,
+    pub last_error: Option<String>,
+    pub command_configured: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockingPreview {
+    pub backend: BlockingBackendKind,
+    pub backend_target: String,
+    pub attempted_backends: Vec<BlockingBackendKind>,
+    pub fallback_used: bool,
     pub hosts_file_path: String,
     pub action: BlockingPreviewAction,
     pub effective_blocked_sites: Vec<String>,
@@ -130,10 +220,55 @@ impl BlockingPreview {
 
 impl SiteBlocker {
     pub fn new() -> Self {
+        Self::with_backend_config(
+            BlockingBackendPolicy::default(),
+            CommandBlockingBackend::default(),
+        )
+    }
+
+    pub fn with_backend_config(
+        backend_policy: BlockingBackendPolicy,
+        command_backend: CommandBlockingBackend,
+    ) -> Self {
         Self {
             sites: Vec::new(),
             is_blocking: false,
+            backend_policy,
+            command_backend: command_backend.normalized(),
+            active_backend: None,
+            last_backend: None,
+            last_fallback_used: false,
+            last_error: None,
         }
+    }
+
+    pub fn backend_status(&self) -> BlockingBackendStatus {
+        BlockingBackendStatus {
+            policy: self.backend_policy,
+            order: self.backend_policy.backend_order(),
+            active_backend: self.active_backend,
+            last_backend: self.last_backend,
+            fallback_used: self.last_fallback_used,
+            last_error: self.last_error.clone(),
+            command_configured: self.command_backend.is_configured(),
+        }
+    }
+
+    pub fn backend_config(&self) -> (BlockingBackendPolicy, CommandBlockingBackend) {
+        (self.backend_policy, self.command_backend.clone())
+    }
+
+    pub fn command_backend_diagnostics(&self) -> io::Result<()> {
+        if self.command_backend.diagnostics_command.trim().is_empty() {
+            if self.command_backend.is_configured() {
+                return Ok(());
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "command backend block/unblock commands are not fully configured",
+            ));
+        }
+        run_shell_command(&self.command_backend.diagnostics_command)
     }
 
     pub fn add_site(&mut self, site: String) {
@@ -309,8 +444,22 @@ impl SiteBlocker {
     }
 
     pub fn preview_hosts_update(&self, intent: BlockingIntent) -> io::Result<BlockingPreview> {
-        let original = fs::read_to_string(HOSTS_FILE)?;
-        Ok(self.preview_from_content(HOSTS_FILE, &original, intent))
+        let order = self.backend_order_for_intent(intent);
+        let mut errors = Vec::new();
+        for (index, backend) in order.iter().copied().enumerate() {
+            match self.preview_with_backend(intent, backend) {
+                Ok(mut preview) => {
+                    preview.attempted_backends = order[..=index].to_vec();
+                    preview.fallback_used = index > 0;
+                    return Ok(preview);
+                }
+                Err(error) => errors.push(format!("{}: {error}", backend.id())),
+            }
+        }
+        Err(io::Error::other(format!(
+            "Failed to generate blocking preview ({})",
+            errors.join(" | ")
+        )))
     }
 
     /// Activate blocking by writing entries into the hosts file.
@@ -321,11 +470,15 @@ impl SiteBlocker {
 
         if self.sites.is_empty() {
             self.is_blocking = false;
+            self.active_backend = None;
+            self.last_backend = None;
+            self.last_fallback_used = false;
+            self.last_error = None;
             // Best-effort: strip any stale block section left by a prior run.
             let _ = self.remove_hosts_block();
             return Ok(());
         }
-        self.apply_hosts_block()?;
+        self.apply_with_fallback(BlockingIntent::Block)?;
         self.is_blocking = true;
         Ok(())
     }
@@ -337,14 +490,155 @@ impl SiteBlocker {
         #[cfg(test)]
         record_test_blocking_action("unblock");
 
-        self.remove_hosts_block()?;
+        self.apply_with_fallback(BlockingIntent::Unblock)?;
         self.is_blocking = false;
+        self.active_backend = None;
         Ok(())
     }
 
     /// Remove block entries on app exit (best-effort).
     pub fn cleanup(&mut self) {
         let _ = self.unblock();
+    }
+
+    fn apply_with_fallback(&mut self, intent: BlockingIntent) -> io::Result<()> {
+        let order = self.backend_order_for_intent(intent);
+        let mut errors = Vec::new();
+        for (index, backend) in order.iter().copied().enumerate() {
+            match self.apply_with_backend(intent, backend) {
+                Ok(()) => {
+                    self.last_backend = Some(backend);
+                    self.last_fallback_used = index > 0;
+                    self.last_error = None;
+                    if intent == BlockingIntent::Block {
+                        self.active_backend = Some(backend);
+                    }
+                    return Ok(());
+                }
+                Err(error) => errors.push(format!("{}: {error}", backend.id())),
+            }
+        }
+        let message = format!(
+            "all configured blocking backends failed for {} ({})",
+            blocking_intent_id(intent),
+            errors.join(" | ")
+        );
+        self.last_backend = None;
+        self.last_fallback_used = false;
+        self.last_error = Some(message.clone());
+        Err(io::Error::new(io::ErrorKind::PermissionDenied, message))
+    }
+
+    fn apply_with_backend(
+        &mut self,
+        intent: BlockingIntent,
+        backend: BlockingBackendKind,
+    ) -> io::Result<()> {
+        match backend {
+            BlockingBackendKind::Hosts => match intent {
+                BlockingIntent::Block => self.apply_hosts_block(),
+                BlockingIntent::Unblock => self.remove_hosts_block(),
+            },
+            BlockingBackendKind::Command => self.apply_command_backend(intent),
+        }
+    }
+
+    fn preview_with_backend(
+        &self,
+        intent: BlockingIntent,
+        backend: BlockingBackendKind,
+    ) -> io::Result<BlockingPreview> {
+        match backend {
+            BlockingBackendKind::Hosts => {
+                let original = fs::read_to_string(HOSTS_FILE)?;
+                Ok(self.preview_from_hosts_content(HOSTS_FILE, &original, intent))
+            }
+            BlockingBackendKind::Command => self.preview_from_command(intent),
+        }
+    }
+
+    fn backend_order_for_intent(&self, intent: BlockingIntent) -> Vec<BlockingBackendKind> {
+        if intent == BlockingIntent::Block {
+            return self.backend_policy.backend_order();
+        }
+
+        let mut order = Vec::new();
+        if let Some(active_backend) = self.active_backend {
+            order.push(active_backend);
+        }
+        for backend in self.backend_policy.backend_order() {
+            if !order.contains(&backend) {
+                order.push(backend);
+            }
+        }
+        order
+    }
+
+    fn apply_command_backend(&self, intent: BlockingIntent) -> io::Result<()> {
+        let template = match intent {
+            BlockingIntent::Block => self.command_backend.block_command.as_str(),
+            BlockingIntent::Unblock => self.command_backend.unblock_command.as_str(),
+        };
+        let template = template.trim();
+        if template.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "command backend `{}` command is not configured",
+                    blocking_intent_id(intent)
+                ),
+            ));
+        }
+        let rendered = render_command_template(template, &self.sites);
+        run_shell_command(&rendered)
+    }
+
+    fn preview_from_command(&self, intent: BlockingIntent) -> io::Result<BlockingPreview> {
+        let template = match intent {
+            BlockingIntent::Block => self.command_backend.block_command.as_str(),
+            BlockingIntent::Unblock => self.command_backend.unblock_command.as_str(),
+        }
+        .trim()
+        .to_string();
+        if template.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "command backend `{}` command is not configured",
+                    blocking_intent_id(intent)
+                ),
+            ));
+        }
+
+        let rendered = render_command_template(&template, &self.sites);
+        let action = match intent {
+            BlockingIntent::Block => {
+                if self.sites.is_empty() {
+                    BlockingPreviewAction::NoChange
+                } else {
+                    BlockingPreviewAction::Block
+                }
+            }
+            BlockingIntent::Unblock => BlockingPreviewAction::Unblock,
+        };
+        let effective_blocked_sites = if action == BlockingPreviewAction::Block {
+            self.sites.clone()
+        } else {
+            Vec::new()
+        };
+
+        Ok(BlockingPreview {
+            backend: BlockingBackendKind::Command,
+            backend_target: rendered.clone(),
+            attempted_backends: vec![BlockingBackendKind::Command],
+            fallback_used: false,
+            hosts_file_path: rendered,
+            action,
+            effective_blocked_sites,
+            would_change: action != BlockingPreviewAction::NoChange,
+            current_section: None,
+            next_section: None,
+        })
     }
 
     fn apply_hosts_block(&self) -> io::Result<()> {
@@ -410,7 +704,7 @@ impl SiteBlocker {
         result
     }
 
-    fn preview_from_content(
+    fn preview_from_hosts_content(
         &self,
         hosts_file_path: &str,
         original: &str,
@@ -441,6 +735,10 @@ impl SiteBlocker {
         };
 
         BlockingPreview {
+            backend: BlockingBackendKind::Hosts,
+            backend_target: hosts_file_path.to_string(),
+            attempted_backends: vec![BlockingBackendKind::Hosts],
+            fallback_used: false,
             hosts_file_path: hosts_file_path.to_string(),
             action,
             effective_blocked_sites,
@@ -522,6 +820,50 @@ impl Default for SiteBlocker {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn blocking_intent_id(intent: BlockingIntent) -> &'static str {
+    match intent {
+        BlockingIntent::Block => "block",
+        BlockingIntent::Unblock => "unblock",
+    }
+}
+
+fn render_command_template(template: &str, sites: &[String]) -> String {
+    let sites_csv = sites.join(",");
+    let sites_lines = sites.join("\n");
+    template
+        .replace("{sites_csv}", &sites_csv)
+        .replace("{sites_lines}", &sites_lines)
+        .replace("{site_count}", &sites.len().to_string())
+}
+
+fn run_shell_command(command: &str) -> io::Result<()> {
+    let status = shell_command(command).status()?;
+    if status.success() {
+        return Ok(());
+    }
+    Err(io::Error::other(format!(
+        "command exited with status {}",
+        status
+            .code()
+            .map(|code| code.to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    )))
+}
+
+#[cfg(target_os = "windows")]
+fn shell_command(command: &str) -> Command {
+    let mut cmd = Command::new("cmd");
+    cmd.args(["/C", command]);
+    cmd
+}
+
+#[cfg(not(target_os = "windows"))]
+fn shell_command(command: &str) -> Command {
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", command]);
+    cmd
 }
 
 fn line_ending_for(content: &str) -> &'static str {
@@ -902,7 +1244,7 @@ mod tests {
         blocker.add_site("example.com".to_string());
         let original = "127.0.0.1 localhost\n";
 
-        let preview = blocker.preview_from_content("hosts", original, BlockingIntent::Block);
+        let preview = blocker.preview_from_hosts_content("hosts", original, BlockingIntent::Block);
 
         assert_eq!(preview.action, BlockingPreviewAction::Block);
         assert!(preview.would_change);
@@ -923,7 +1265,8 @@ mod tests {
         let blocker = SiteBlocker::new();
         let original = "127.0.0.1 localhost\n# focustime-block-start\n127.0.0.1 example.com\n# focustime-block-end\n";
 
-        let preview = blocker.preview_from_content("hosts", original, BlockingIntent::Unblock);
+        let preview =
+            blocker.preview_from_hosts_content("hosts", original, BlockingIntent::Unblock);
 
         assert_eq!(preview.action, BlockingPreviewAction::Unblock);
         assert!(preview.would_change);
@@ -950,7 +1293,8 @@ mod tests {
             "# focustime-block-end\n",
         );
 
-        let preview = blocker.preview_from_content("hosts", original, BlockingIntent::Unblock);
+        let preview =
+            blocker.preview_from_hosts_content("hosts", original, BlockingIntent::Unblock);
         let section = preview
             .current_section
             .as_deref()
@@ -967,7 +1311,7 @@ mod tests {
         blocker.add_site("example.com".to_string());
         let original = blocker.build_blocked_hosts_content("127.0.0.1 localhost\n");
 
-        let preview = blocker.preview_from_content("hosts", &original, BlockingIntent::Block);
+        let preview = blocker.preview_from_hosts_content("hosts", &original, BlockingIntent::Block);
 
         assert_eq!(preview.action, BlockingPreviewAction::NoChange);
         assert!(!preview.would_change);
