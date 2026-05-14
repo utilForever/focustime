@@ -3,15 +3,14 @@ use std::collections::HashSet;
 use crate::cli::{
     BackupOutput, BlockingPreviewAction, BlockingPreviewCommandOutput,
     BlocklistProfileCommandOutput, BlocklistProfileConfig, BreakGlassCommandOutput,
-    DiagnosticsCommandOutput, ExportOutput, FeatureFlagsOutput, FocusScoreOutput,
-    GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, MigrationCommandOutput,
-    MigrationStepStatus, ProfileOutput, RecurringScheduleConfig, RestoreOutput,
-    ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput, Serialize,
-    SessionMetadataCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
-    SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
-    StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput, StrictCommandOutput,
-    TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, TimerStateOutput, Write,
-    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
+    DiagnosticsCommandOutput, ExportOutput, FocusScoreOutput, GoalCarryCommandOutput,
+    GoalCommandOutput, GoalOutput, MigrationCommandOutput, MigrationStepStatus, ProfileOutput,
+    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput,
+    ScheduleInspectionOutput, Serialize, SessionMetadataCommandOutput, SetupCheck, SetupCheckLevel,
+    SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
+    SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput,
+    StatusOutput, StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
+    TimerStateOutput, Write, format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -517,11 +516,6 @@ pub(super) fn print_migration_output(payload: &MigrationCommandOutput) {
         "Canonical stats: {}",
         payload.canonical_stats_path.display()
     );
-    if let Some(legacy_stats_path) = payload.legacy_stats_path.as_deref() {
-        println!("Legacy stats: {}", legacy_stats_path.display());
-    } else {
-        println!("Legacy stats: n/a");
-    }
     println!("Steps:");
     for step in &payload.steps {
         println!(
@@ -541,8 +535,6 @@ pub(super) fn print_migration_output(payload: &MigrationCommandOutput) {
 
 fn migration_step_status_id(status: MigrationStepStatus) -> &'static str {
     match status {
-        MigrationStepStatus::Planned => "planned",
-        MigrationStepStatus::Applied => "applied",
         MigrationStepStatus::Skipped => "skipped",
     }
 }
@@ -666,10 +658,6 @@ pub(super) fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutpu
     print_diagnostics_check("Blocking permissions", &payload.blocking_permissions);
     print_diagnostics_check("Hosts write capability", &payload.hosts_write_capability);
     print_diagnostics_check("WakaTime config", &payload.wakatime_config);
-    println!(
-        "Feature flags: metadata-fallback={}",
-        bool_label(payload.feature_flags.metadata_task_label_fallback),
-    );
     if payload.deprecation_warnings.is_empty() {
         println!("Deprecation warnings: none");
     } else {
@@ -692,9 +680,6 @@ pub(super) fn build_diagnostics_command_output(
         blocking_permissions: setup_check_output(&diagnostics.blocking_permissions),
         hosts_write_capability: setup_check_output(&diagnostics.hosts_write_capability),
         wakatime_config: setup_check_output(&diagnostics.wakatime_config),
-        feature_flags: FeatureFlagsOutput {
-            metadata_task_label_fallback: diagnostics.feature_flags.metadata_task_label_fallback,
-        },
         deprecation_warnings: diagnostics.deprecation_warnings.clone(),
     }
 }
@@ -751,10 +736,6 @@ fn setup_check_level_id(level: SetupCheckLevel) -> &'static str {
         SetupCheckLevel::Ok => "ok",
         SetupCheckLevel::Warning => "warning",
     }
-}
-
-fn bool_label(enabled: bool) -> &'static str {
-    if enabled { "on" } else { "off" }
 }
 
 pub(super) fn print_json<T: Serialize>(payload: &T) -> Result<(), String> {

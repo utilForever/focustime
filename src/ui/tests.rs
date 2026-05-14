@@ -439,7 +439,7 @@ fn setup_diagnostics_view_renders_deprecation_warnings() {
     app.mode = AppMode::SetupDiagnostics;
     app.setup_diagnostics.deprecation_warnings = vec![
         "Deprecated top-level timer fields are in use.".to_string(),
-        "Deprecated legacy stats path detected.".to_string(),
+        "Deprecated top-level automation fields are in use.".to_string(),
     ];
 
     terminal

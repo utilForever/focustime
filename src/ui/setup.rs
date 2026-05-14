@@ -27,7 +27,6 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             Constraint::Length(2),                                      // blocking permissions
             Constraint::Length(2),                                      // hosts write capability
             Constraint::Length(2),                                      // wakatime config status
-            Constraint::Length(3),                                      // feature flags
             Constraint::Length(DEPRECATION_WARNING_PANEL_LINES as u16), // deprecation warnings
             Constraint::Length(1),                                      // preview summary
             Constraint::Min(0),                                         // preview section
@@ -63,21 +62,6 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         "WakaTime config status",
         &app.setup_diagnostics.wakatime_config,
     );
-    let feature_flags_lines = vec![Line::from(format!(
-        "Feature flags: metadata-fallback={}",
-        bool_label(
-            app.setup_diagnostics
-                .feature_flags
-                .metadata_task_label_fallback
-        ),
-    ))];
-    frame.render_widget(
-        Paragraph::new(feature_flags_lines)
-            .style(Style::default().fg(app_color(app, Color::DarkGray)))
-            .wrap(Wrap { trim: true }),
-        inner[5],
-    );
-
     let deprecation_lines = if app.setup_diagnostics.deprecation_warnings.is_empty() {
         vec![Line::from("Deprecation warnings: none")]
     } else {
@@ -103,7 +87,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         Paragraph::new(deprecation_lines)
             .style(Style::default().fg(app_color(app, Color::Yellow)))
             .wrap(Wrap { trim: true }),
-        inner[6],
+        inner[5],
     );
 
     let (preview_summary, preview_style) = if let Some(error) = app.blocking_preview.error.as_ref()
@@ -135,7 +119,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
         Paragraph::new(preview_summary)
             .alignment(Alignment::Left)
             .style(preview_style),
-        inner[7],
+        inner[6],
     );
 
     let preview_section_text = if app.blocking_preview.error.is_some() {
@@ -154,13 +138,13 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             )
             .style(Style::default().fg(app_color(app, Color::Gray)))
             .wrap(Wrap { trim: false }),
-        inner[8],
+        inner[7],
     );
 
     render_hint_lines(
         frame,
         app,
-        inner[9],
+        inner[8],
         vec![
             Line::from(format!(
                 "Diagnostics: {} Refresh checks + preview",
@@ -183,10 +167,6 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             }),
         ],
     );
-}
-
-fn bool_label(enabled: bool) -> &'static str {
-    if enabled { "on" } else { "off" }
 }
 
 pub(super) fn render_setup_check(
