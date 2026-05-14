@@ -222,7 +222,7 @@ deprecation warnings when legacy compatibility fields/paths are detected.
 | Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`                          | `[custom_profile]`                                                                                            | v0.12.0 (planned)      |
 | Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`                                  | `[profile_automation.<profile>.notifications]`, `[profile_automation.<profile>.auto_start]`, and per-profile `strict_mode` / `recurring_schedule` | v0.12.0 (planned)      |
 | Top-level `blocked_sites` (without canonical profiles)                                                         | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                      | v0.12.0 (planned)      |
-| Legacy config-dir `stats.toml` path                                                                          | Canonical state/data `stats.toml` path and `focustime --migrate`                                             | v0.12.0 (planned)      |
+| Legacy config-dir `stats.toml` path                                                                          | Canonical state/data `stats.toml` path and `focustime --migrate`                                             | Removed (canonical-only now) |
 
 Milestone policy:
 
