@@ -1,5 +1,4 @@
 use crate::cli::*;
-use crate::config::FeatureFlagsConfig;
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -643,11 +642,10 @@ fn parse_diagnostics_supports_json_mode() {
 }
 
 #[test]
-fn diagnostics_output_includes_effective_feature_flags() {
+fn diagnostics_output_includes_deprecation_warnings_field() {
     let app = App::default();
     let payload = build_diagnostics_command_output(&app.setup_diagnostics);
 
-    assert!(payload.feature_flags.metadata_task_label_fallback);
     assert!(payload.deprecation_warnings.is_empty());
 }
 
@@ -656,7 +654,7 @@ fn diagnostics_output_includes_deprecation_warnings() {
     let mut app = App::default();
     app.setup_diagnostics.deprecation_warnings = vec![
         "Deprecated top-level timer fields are in use.".to_string(),
-        "Deprecated legacy stats path detected.".to_string(),
+        "Deprecated top-level automation fields are in use.".to_string(),
     ];
 
     let payload = build_diagnostics_command_output(&app.setup_diagnostics);
@@ -665,7 +663,7 @@ fn diagnostics_output_includes_deprecation_warnings() {
         payload.deprecation_warnings,
         vec![
             "Deprecated top-level timer fields are in use.".to_string(),
-            "Deprecated legacy stats path detected.".to_string()
+            "Deprecated top-level automation fields are in use.".to_string()
         ]
     );
 }
@@ -1950,17 +1948,12 @@ fn build_status_output_includes_unconfigured_selected_task_goal() {
 }
 
 #[test]
-fn build_status_output_disables_task_label_metadata_mirror_when_flag_disabled() {
+fn build_status_output_does_not_mirror_task_label_metadata() {
     let mut stats = FocusStats::default();
     let changed =
         stats.update_task_planner_state(vec!["Docs".to_string()], Some("Docs".to_string()));
     assert!(changed);
-    let config = AppConfig {
-        feature_flags: FeatureFlagsConfig {
-            metadata_task_label_fallback: false,
-        },
-        ..AppConfig::default()
-    };
+    let config = AppConfig::default();
 
     let output = build_status_output(&config, &stats);
 

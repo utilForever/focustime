@@ -877,7 +877,7 @@ fn persisted_stats_round_trip_preserves_task_label_states() {
 }
 
 #[test]
-fn legacy_focus_sessions_default_metadata_from_task_label() {
+fn legacy_focus_sessions_keep_empty_metadata() {
     let legacy_toml = r#"
             [[focus_sessions]]
             date = "2026-04-09"
@@ -885,29 +885,6 @@ fn legacy_focus_sessions_default_metadata_from_task_label() {
             focused_seconds = 1500
         "#;
     let restored = FocusStats::try_from_toml(legacy_toml).unwrap();
-
-    let export = restored.export_data();
-    assert_eq!(export.sessions.len(), 1);
-    assert_eq!(export.sessions[0].task_label, "Project A");
-    assert_eq!(export.sessions[0].focus_intention, "Project A");
-    assert_eq!(export.sessions[0].task_note, "Project A");
-}
-
-#[test]
-fn legacy_focus_sessions_keep_empty_metadata_when_fallback_is_disabled() {
-    let legacy_toml = r#"
-            [[focus_sessions]]
-            date = "2026-04-09"
-            task_label = "Project A"
-            focused_seconds = 1500
-        "#;
-    let restored = FocusStats::try_from_toml_with_options(
-        legacy_toml,
-        StatsLoadOptions {
-            metadata_task_label_fallback: false,
-        },
-    )
-    .unwrap();
 
     let export = restored.export_data();
     assert_eq!(export.sessions.len(), 1);

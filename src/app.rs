@@ -129,9 +129,9 @@ const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 35;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
+const UNLINKED_BREAK_TEMPLATE_NAME: &str = "Custom";
 #[cfg(not(test))]
 const STATS_FILE_NAME: &str = "stats.toml";
-const UNLINKED_BREAK_TEMPLATE_NAME: &str = "Custom";
 pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
 const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const SCHEDULE_DAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -434,16 +434,11 @@ pub struct SetupDiagnostics {
     pub blocking_permissions: SetupCheck,
     pub hosts_write_capability: SetupCheck,
     pub wakatime_config: SetupCheck,
-    pub feature_flags: FeatureFlagsConfig,
     pub deprecation_warnings: Vec<String>,
 }
 
 impl SetupDiagnostics {
-    fn collect(
-        blocker: &SiteBlocker,
-        feature_flags: FeatureFlagsConfig,
-        deprecation_warnings: Vec<String>,
-    ) -> Self {
+    fn collect(blocker: &SiteBlocker, deprecation_warnings: Vec<String>) -> Self {
         let hosts_diagnostics = blocker.hosts_file_diagnostics();
         let blocking_permissions = blocking_permissions_check(&hosts_diagnostics);
         let hosts_write_capability = hosts_write_capability_check(&hosts_diagnostics);
@@ -463,7 +458,6 @@ impl SetupDiagnostics {
             blocking_permissions,
             hosts_write_capability,
             wakatime_config,
-            feature_flags,
             deprecation_warnings,
         }
     }
@@ -649,10 +643,8 @@ impl App {
         );
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (mut stats, stats_error) =
-            match FocusStats::load_with_options(crate::stats::StatsLoadOptions {
-                metadata_task_label_fallback: feature_flags.metadata_task_label_fallback,
-            }) {
-                Ok(stats) => (stats, None),
+            match FocusStats::load_with_options(crate::stats::StatsLoadOptions::default()) {
+                Ok(stats) => (stats, legacy_stats_path_migration_warning()),
                 Err(e) => (FocusStats::default(), Some(e)),
             };
         let retained = stats.apply_retention_policy(stats_retention, Local::now().date_naive());
@@ -668,7 +660,7 @@ impl App {
         );
         let blocker = SiteBlocker::new();
         let setup_diagnostics =
-            SetupDiagnostics::collect(&blocker, feature_flags, setup_deprecation_warnings.clone());
+            SetupDiagnostics::collect(&blocker, setup_deprecation_warnings.clone());
         let mut app = Self {
             timer,
             should_quit: false,
@@ -1580,50 +1572,42 @@ fn permission_remediation_guidance() -> &'static str {
 
 pub(super) fn setup_deprecation_warnings(config_deprecation_warnings: &[String]) -> Vec<String> {
     let mut warnings = config_deprecation_warnings.to_vec();
-    if let Some(stats_warning) = legacy_stats_path_deprecation_warning() {
+    if let Some(stats_warning) = legacy_stats_path_migration_warning() {
         warnings.push(stats_warning);
     }
     warnings
 }
 
-pub(super) fn format_legacy_stats_path_deprecation_warning(
+pub(super) fn format_legacy_stats_path_migration_warning(
     canonical_path: &std::path::Path,
     legacy_path: &std::path::Path,
-    canonical_exists: bool,
 ) -> String {
-    let mut warning = format!(
-        "Deprecated legacy stats path detected at `{}`.",
-        legacy_path.display()
-    );
-    if !canonical_exists {
-        warning.push_str(" Canonical stats are missing and this path must be migrated.");
-    }
-    warning.push_str(&format!(
-        " Move stats to `{}` and run `focustime --migrate`.",
+    format!(
+        "Legacy stats path `{}` is still in use while canonical stats `{}` are missing. Run `focustime --migrate` to migrate existing history.",
+        legacy_path.display(),
         canonical_path.display()
-    ));
-    warning
+    )
 }
 
 #[cfg(not(test))]
-fn legacy_stats_path_deprecation_warning() -> Option<String> {
+fn legacy_stats_path_migration_warning() -> Option<String> {
     let canonical_path = crate::config::stats_data_path(STATS_FILE_NAME)?;
+    if canonical_path.exists() {
+        return None;
+    }
     let legacy_path =
         crate::config::app_data_path(STATS_FILE_NAME).filter(|path| path != &canonical_path)?;
     if !legacy_path.exists() {
         return None;
     }
-
-    let canonical_exists = canonical_path.exists();
-    Some(format_legacy_stats_path_deprecation_warning(
+    Some(format_legacy_stats_path_migration_warning(
         &canonical_path,
         &legacy_path,
-        canonical_exists,
     ))
 }
 
 #[cfg(test)]
-fn legacy_stats_path_deprecation_warning() -> Option<String> {
+fn legacy_stats_path_migration_warning() -> Option<String> {
     None
 }
 

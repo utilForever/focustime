@@ -136,24 +136,16 @@ impl App {
 
     pub fn focus_intention_for_cli(&self) -> Option<String> {
         if self.focus_session_active_for_current_state() {
-            return self
-                .active_focus_intention
-                .clone()
-                .or_else(|| self.active_focus_task_label.clone())
-                .or_else(|| self.selected_task_label.clone());
+            return self.active_focus_intention.clone();
         }
-        self.cli_metadata_fallback_value()
+        None
     }
 
     pub fn task_note_for_cli(&self) -> Option<String> {
         if self.focus_session_active_for_current_state() {
-            return self
-                .active_focus_task_note
-                .clone()
-                .or_else(|| self.active_focus_task_label.clone())
-                .or_else(|| self.selected_task_label.clone());
+            return self.active_focus_task_note.clone();
         }
-        self.cli_metadata_fallback_value()
+        None
     }
 
     pub fn set_focus_intention_for_cli(&mut self, value: &str) -> Result<(), String> {
@@ -179,14 +171,6 @@ impl App {
             self.timer.remaining_secs,
             self.timer.pomodoros_completed,
         )
-    }
-
-    fn cli_metadata_fallback_value(&self) -> Option<String> {
-        if self.feature_flags.metadata_task_label_fallback {
-            self.selected_task_label.clone()
-        } else {
-            None
-        }
     }
 
     fn ensure_focus_active_for_cli_metadata_update(&self, command: &str) -> Result<(), String> {

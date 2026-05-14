@@ -38,18 +38,8 @@ const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
 const EXPORT_SCHEMA_VERSION: u32 = 5;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StatsLoadOptions {
-    pub metadata_task_label_fallback: bool,
-}
-
-impl Default for StatsLoadOptions {
-    fn default() -> Self {
-        Self {
-            metadata_task_label_fallback: true,
-        }
-    }
-}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StatsLoadOptions {}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StatsSaveOptions {}

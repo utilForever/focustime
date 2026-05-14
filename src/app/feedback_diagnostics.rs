@@ -107,8 +107,7 @@ impl App {
     pub(super) fn refresh_setup_diagnostics(&mut self) {
         let deprecation_warnings =
             crate::app::setup_deprecation_warnings(&self.config_deprecation_warnings);
-        self.setup_diagnostics =
-            SetupDiagnostics::collect(&self.blocker, self.feature_flags, deprecation_warnings);
+        self.setup_diagnostics = SetupDiagnostics::collect(&self.blocker, deprecation_warnings);
         self.refresh_blocking_preview();
     }
 

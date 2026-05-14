@@ -248,9 +248,7 @@ fn round_trip_full_config() {
             queue_capacity: 512,
             queue_retry_delay_secs: 30,
         },
-        feature_flags: FeatureFlagsConfig {
-            metadata_task_label_fallback: true,
-        },
+        feature_flags: FeatureFlagsConfig::default(),
         shortcuts: ShortcutConfig {
             timer_toggle_pause: "space".to_string(),
             timer_stop_reset: "x".to_string(),

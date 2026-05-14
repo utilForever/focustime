@@ -165,7 +165,7 @@ Options:
   --watch         Stream periodic status updates (status command only; default 1s)
   --backup        Back up config.toml and stats.toml to current directory or DIR
   --restore       Restore config.toml and stats.toml from current directory or DIR
-  --migrate       Run compatibility migration for canonical stats/config persistence
+  --migrate       Report canonical persistence migration status
   --dry-run       Preview migration steps without mutating files (migration only)
   --export        Export stats to current directory or DIR
   --json          Emit machine-readable JSON output
@@ -613,8 +613,6 @@ struct RestoreOutput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum MigrationStepStatus {
-    Planned,
-    Applied,
     Skipped,
 }
 
@@ -632,7 +630,6 @@ struct MigrationCommandOutput {
     changed: bool,
     config_path: PathBuf,
     canonical_stats_path: PathBuf,
-    legacy_stats_path: Option<PathBuf>,
     steps: Vec<MigrationStepOutput>,
     warnings: Vec<String>,
 }
@@ -746,18 +743,12 @@ struct SetupCheckOutput {
     message: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-struct FeatureFlagsOutput {
-    metadata_task_label_fallback: bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct DiagnosticsCommandOutput {
     hosts_file_path: String,
     blocking_permissions: SetupCheckOutput,
     hosts_write_capability: SetupCheckOutput,
     wakatime_config: SetupCheckOutput,
-    feature_flags: FeatureFlagsOutput,
     deprecation_warnings: Vec<String>,
 }
 

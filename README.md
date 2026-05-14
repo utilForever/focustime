@@ -196,7 +196,7 @@ cargo run -- --backup=./reports --json
 cargo run -- --restore
 cargo run -- --restore=./reports --json
 
-# Run stats-path compatibility migration (legacy -> canonical) with optional dry-run preview
+# Run canonical persistence migration diagnostics (optional dry-run preview)
 cargo run -- --migrate
 cargo run -- --migrate --dry-run --json
 
@@ -209,20 +209,19 @@ Backup/restore behavior:
 
 - `--backup` creates the target directory if needed, then copies `config.toml` and `stats.toml` into it.
 - `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
-- `--migrate` applies compatibility migration updates for canonical stats persistence and disables migration-window feature flags after success.
-- `--migrate --dry-run` reports planned migration steps without mutating any files.
+- `--migrate` reports canonical persistence migration status; runtime persistence is canonical-path only.
+- `--migrate --dry-run` reports the same migration status in dry-run mode (no file changes).
 
 ### Legacy compatibility deprecation milestones
 
-`focustime --diagnostics` and the TUI Setup Diagnostics screen now report targeted
-deprecation warnings when legacy compatibility fields/paths are detected.
+`focustime --diagnostics` and the TUI Setup Diagnostics screen report targeted
+deprecation warnings when legacy compatibility fields are detected.
 
 | Legacy field/path                                                                                               | Canonical replacement                                                                                         | Removal milestone      |
 | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`                          | `[custom_profile]`                                                                                            | v0.12.0 (planned)      |
 | Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`                                  | `[profile_automation.<profile>.notifications]`, `[profile_automation.<profile>.auto_start]`, and per-profile `strict_mode` / `recurring_schedule` | v0.12.0 (planned)      |
 | Top-level `blocked_sites` (without canonical profiles)                                                         | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                      | v0.12.0 (planned)      |
-| Legacy config-dir `stats.toml` path                                                                          | Canonical state/data `stats.toml` path and `focustime --migrate`                                             | Removed (canonical-only now) |
 
 Milestone policy:
 
@@ -398,10 +397,6 @@ selected_blocklist_profile = "Work"
 # Legacy compatibility mirror for the selected profile's automation strict mode.
 strict_mode = false
 break_glass_duration_secs = 300
-
-[feature_flags]
-# Backfill legacy metadata from task_label when missing.
-metadata_task_label_fallback = true
 
 [shortcuts]
 timer_toggle_pause = "space"
@@ -667,7 +662,7 @@ Override events are recorded for audit visibility in the History view and includ
 
 - completed pomodoros for the current app session
 - focused minutes for the current app session
-- daily aggregates persisted in `stats.toml` (canonical data/state directory with optional legacy config-dir mirror during migration)
+- daily aggregates persisted in `stats.toml` in the canonical data/state directory
 - weekly totals derived from daily aggregates in the History view
 - weekly consistency score (`active_days / 7`, rounded to `%`) derived from daily activity
 - weekly focus score KPI (50/50 blend of consistency and weekly goal completion; `n/a` when weekly goal is off)
