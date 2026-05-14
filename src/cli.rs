@@ -47,20 +47,19 @@ use output::{
     flush_stdout, print_backup_output, print_blocking_preview_command_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
     print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
-    print_goal_command_output, print_json, print_json_compact, print_migration_output,
-    print_profile_output, print_restore_output, print_schedule_command_output,
-    print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
-    print_timer_state_output,
+    print_goal_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
+    print_session_metadata_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
-    finalize_cli_action, invalid_usage, parse_dry_run_option, parse_global_tokens,
-    parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_primary_command,
-    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
-    parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
-    parse_watch_interval_secs, parse_weekly_goal_value, require_nonempty_key_value,
+    finalize_cli_action, invalid_usage, parse_global_tokens, parse_goal_carry_value,
+    parse_goal_value, parse_monthly_goal_value, parse_primary_command, parse_profile_id,
+    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
+    parse_theme_preset, parse_watch_interval_option, parse_watch_interval_secs,
+    parse_weekly_goal_value, require_nonempty_key_value,
 };
 use status::{
     available_break_template_views, available_theme_preset_views, build_status_output,
@@ -120,7 +119,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --status [--watch[=SECONDS]] [--json]
   focustime --backup[=DIR] [--json]
   focustime --restore[=DIR] [--json]
-  focustime --migrate [--dry-run] [--json]
   focustime --export[=DIR] [--json]
 
 Options:
@@ -165,8 +163,6 @@ Options:
   --watch         Stream periodic status updates (status command only; default 1s)
   --backup        Back up config.toml and stats.toml to current directory or DIR
   --restore       Restore config.toml and stats.toml from current directory or DIR
-  --migrate       Report canonical persistence migration status
-  --dry-run       Preview migration steps without mutating files (migration only)
   --export        Export stats to current directory or DIR
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
@@ -281,9 +277,6 @@ pub enum CommandKind {
     Restore {
         dir: Option<PathBuf>,
     },
-    Migrate {
-        dry_run: bool,
-    },
     Export {
         dir: Option<PathBuf>,
     },
@@ -342,7 +335,6 @@ enum PrimaryCommand {
     Status,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
-    Migrate,
     Export(Option<PathBuf>),
     BlocklistProfile(Option<String>),
     BlocklistProfileCreate(String),
@@ -394,8 +386,6 @@ enum ParsedToken {
     BlockingPreview,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
-    Migrate,
-    DryRun,
     Export(Option<PathBuf>),
     BlocklistProfile(Option<String>),
     BlocklistProfileCreate(String),
@@ -608,30 +598,6 @@ struct RestoreOutput {
     restore_dir: PathBuf,
     config_restored_path: PathBuf,
     stats_restored_path: PathBuf,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum MigrationStepStatus {
-    Skipped,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct MigrationStepOutput {
-    operation: &'static str,
-    status: MigrationStepStatus,
-    detail: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct MigrationCommandOutput {
-    action: &'static str,
-    dry_run: bool,
-    changed: bool,
-    config_path: PathBuf,
-    canonical_stats_path: PathBuf,
-    steps: Vec<MigrationStepOutput>,
-    warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -862,8 +828,7 @@ where
     let primary = parse_primary_command(&tokens).map_err(|message| usage_error(output, message))?;
     let watch_interval_secs =
         parse_watch_interval_option(&tokens).map_err(|message| usage_error(output, message))?;
-    let dry_run = parse_dry_run_option(&tokens).map_err(|message| usage_error(output, message))?;
-    finalize_cli_action(show_help, output, primary, watch_interval_secs, dry_run)
+    finalize_cli_action(show_help, output, primary, watch_interval_secs)
         .map_err(|message| usage_error(output, message))
 }
 
