@@ -130,6 +130,8 @@ const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
 const UNLINKED_BREAK_TEMPLATE_NAME: &str = "Custom";
+#[cfg(not(test))]
+const STATS_FILE_NAME: &str = "stats.toml";
 pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
 const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const SCHEDULE_DAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -642,7 +644,7 @@ impl App {
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (mut stats, stats_error) =
             match FocusStats::load_with_options(crate::stats::StatsLoadOptions::default()) {
-                Ok(stats) => (stats, None),
+                Ok(stats) => (stats, legacy_stats_path_migration_warning()),
                 Err(e) => (FocusStats::default(), Some(e)),
             };
         let retained = stats.apply_retention_policy(stats_retention, Local::now().date_naive());
@@ -1569,7 +1571,44 @@ fn permission_remediation_guidance() -> &'static str {
 }
 
 pub(super) fn setup_deprecation_warnings(config_deprecation_warnings: &[String]) -> Vec<String> {
-    config_deprecation_warnings.to_vec()
+    let mut warnings = config_deprecation_warnings.to_vec();
+    if let Some(stats_warning) = legacy_stats_path_migration_warning() {
+        warnings.push(stats_warning);
+    }
+    warnings
+}
+
+pub(super) fn format_legacy_stats_path_migration_warning(
+    canonical_path: &std::path::Path,
+    legacy_path: &std::path::Path,
+) -> String {
+    format!(
+        "Legacy stats path `{}` is still in use while canonical stats `{}` are missing. Run `focustime --migrate` to migrate existing history.",
+        legacy_path.display(),
+        canonical_path.display()
+    )
+}
+
+#[cfg(not(test))]
+fn legacy_stats_path_migration_warning() -> Option<String> {
+    let canonical_path = crate::config::stats_data_path(STATS_FILE_NAME)?;
+    if canonical_path.exists() {
+        return None;
+    }
+    let legacy_path =
+        crate::config::app_data_path(STATS_FILE_NAME).filter(|path| path != &canonical_path)?;
+    if !legacy_path.exists() {
+        return None;
+    }
+    Some(format_legacy_stats_path_migration_warning(
+        &canonical_path,
+        &legacy_path,
+    ))
+}
+
+#[cfg(test)]
+fn legacy_stats_path_migration_warning() -> Option<String> {
+    None
 }
 
 impl Drop for App {

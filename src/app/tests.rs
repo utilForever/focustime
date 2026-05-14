@@ -7,6 +7,7 @@ use crate::session_recovery::{
 use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, TimeZone, Weekday};
 use std::{
     fs,
+    path::Path,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -78,6 +79,18 @@ fn app_default_uses_canonical_config_in_tests() {
     assert_eq!(app.daily_goal, DailyGoalConfig::default());
     assert_eq!(app.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(app.monthly_goal, MonthlyGoalConfig::default());
+}
+
+#[test]
+fn legacy_stats_path_migration_warning_includes_actionable_guidance() {
+    let warning = format_legacy_stats_path_migration_warning(
+        Path::new("state/stats.toml"),
+        Path::new("config/stats.toml"),
+    );
+
+    assert!(warning.contains("Legacy stats path"));
+    assert!(warning.contains("canonical stats"));
+    assert!(warning.contains("Run `focustime --migrate`"));
 }
 
 #[test]
