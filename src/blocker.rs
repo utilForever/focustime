@@ -507,20 +507,32 @@ impl SiteBlocker {
     fn apply_with_fallback(&mut self, intent: BlockingIntent) -> io::Result<()> {
         let order = self.backend_order_for_intent(intent);
         let mut errors = Vec::new();
+        let mut first_success: Option<(usize, BlockingBackendKind)> = None;
+        let attempt_all_backends = intent == BlockingIntent::Unblock;
         for (index, backend) in order.iter().copied().enumerate() {
             match self.apply_with_backend(intent, backend) {
                 Ok(()) => {
-                    self.last_backend = Some(backend);
-                    self.last_fallback_used = index > 0;
-                    self.last_error = None;
-                    if intent == BlockingIntent::Block {
-                        self.active_backend = Some(backend);
+                    if first_success.is_none() {
+                        first_success = Some((index, backend));
                     }
-                    return Ok(());
+                    if !attempt_all_backends {
+                        break;
+                    }
                 }
                 Err(error) => errors.push(format!("{}: {error}", backend.id())),
             }
         }
+
+        if let Some((index, backend)) = first_success {
+            self.last_backend = Some(backend);
+            self.last_fallback_used = index > 0;
+            self.last_error = None;
+            if intent == BlockingIntent::Block {
+                self.active_backend = Some(backend);
+            }
+            return Ok(());
+        }
+
         let message = format!(
             "all configured blocking backends failed for {} ({})",
             blocking_intent_id(intent),
