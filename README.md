@@ -212,16 +212,16 @@ Backup/restore behavior:
 `focustime --diagnostics` and the TUI Setup Diagnostics screen report targeted
 deprecation warnings when legacy compatibility fields are detected.
 
-| Legacy field/path                                                                                               | Canonical replacement                                                                                         | Removal milestone      |
-| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`                          | `[custom_profile]`                                                                                            | v0.12.0 (planned)      |
-| Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`                                  | `[profile_automation.<profile>.notifications]`, `[profile_automation.<profile>.auto_start]`, and per-profile `strict_mode` / `recurring_schedule` | v0.12.0 (planned)      |
-| Top-level `blocked_sites` (without canonical profiles)                                                         | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                      | v0.12.0 (planned)      |
+| Legacy field/path                                                                    | Canonical replacement                                                                                                                             | Removal milestone |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval` | `[custom_profile]`                                                                                                                                | v0.12.0 (planned) |
+| Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`         | `[profile_automation.<profile>.notifications]`, `[profile_automation.<profile>.auto_start]`, and per-profile `strict_mode` / `recurring_schedule` | v0.12.0 (planned) |
+| Top-level `blocked_sites` (without canonical profiles)                               | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                                                           | v0.12.0 (planned) |
 
 Milestone policy:
 
-- **v0.11.x:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
-- **Post-migration cleanup:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
+- **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
+- **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
 - **v0.12.0 (planned):** remove legacy field/path compatibility after the warning window
 
 ### CLI JSON/error contract
@@ -390,7 +390,7 @@ selected_profile = "custom"
 selected_break_template = "Classic"
 selected_theme_preset = "classic"
 selected_blocklist_profile = "Work"
- 
+
 [blocking_backend]
 # hosts_only | hosts_then_command | command_then_hosts | command_only
 policy = "hosts_then_command"
@@ -400,7 +400,7 @@ block_command = ""
 unblock_command = ""
 diagnostics_command = ""
 
-# Legacy compatibility mirror for the selected profile's automation strict mode.
+# Strict mode for the selected profile's automation settings.
 strict_mode = false
 break_glass_duration_secs = 300
 
@@ -785,12 +785,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.10.1`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.11.0`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.10.1](https://github.com/utilForever/focustime/releases/tag/v0.10.1).
+The latest stable release is [v0.11.0](https://github.com/utilForever/focustime/releases/tag/v0.11.0).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 

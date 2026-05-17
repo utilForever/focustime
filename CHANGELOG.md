@@ -7,19 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-16
+
+### Added
+
+- **Blocking backend strategy and diagnostics surfaces (#300):** added configurable blocking backend policy (`hosts_only`, `hosts_then_command`, `command_then_hosts`, `command_only`) and exposed backend diagnostics/reporting paths in CLI and TUI setup workflows.
+
 ### Changed
 
-- **Removed legacy config mirror writes and compatibility-sync paths (#265):** canonical config/profile/blocklist and canonical stats persistence are now the only runtime/write paths, while legacy top-level config fields remain load-time compatibility input for migrated user configs.
-- **Retired migration-window CLI compatibility flags (#267):** removed deprecated `--migrate`/`--dry-run` command paths and transitional migration output shims; `--backup`/`--restore` remain supported and docs/guidance now reflect canonical-path-only persistence.
+- **Removed legacy config mirror writes and compatibility-sync paths (#297):** canonical config/profile/blocklist and canonical stats persistence are now the only runtime/write paths, while legacy top-level config fields remain load-time compatibility input for migrated user configs.
+- **Finalized canonical persistence paths and retired deprecated schema handling (#298):** removed remaining migration-window persistence branches and aligned runtime/docs with canonical config and stats path behavior.
+- **Retired migration-window CLI compatibility flags (#299):** removed deprecated `--migrate`/`--dry-run` command paths and transitional migration output shims; `--backup`/`--restore` remain supported and docs/guidance now reflect canonical-path-only persistence.
 
 ## [0.10.1] - 2026-05-13
 
 ### Added
 
-- **Expanded runtime recovery scope and startup reconciliation notices (#272):** recovery now includes schedule arming continuity and strict-reset pending confirmation alongside existing timer/schedule-delay/break-glass artifacts, with deterministic partial-recovery startup notices when saved runtime fragments are dropped.
-- **Dual-read/dual-write stats persistence compatibility path (#262):** added canonical data/state stats persistence with legacy-path read fallback and dual-write mirroring controls, including CLI backup/restore and diagnostics visibility updates for migration windows.
-- **Migration tooling with dry-run and rollback safety (#263):** added `--migrate` with explicit `--dry-run` preview mode, structured migration step reporting, and rollback-aware migration execution/diagnostics for stats-path compatibility finalization.
-- **Deprecation warnings and migration docs for legacy fields/paths (#264):** added targeted setup/CLI diagnostics warnings for detected legacy config and stats-path compatibility usage, plus README mapping and planned removal milestones.
+- **Expanded runtime recovery scope and startup reconciliation notices (#294):** recovery now includes schedule arming continuity and strict-reset pending confirmation alongside existing timer/schedule-delay/break-glass artifacts, with deterministic partial-recovery startup notices when saved runtime fragments are dropped.
+- **Dual-read/dual-write stats persistence compatibility path (#291):** added canonical data/state stats persistence with legacy-path read fallback and dual-write mirroring controls, including CLI backup/restore and diagnostics visibility updates for migration windows.
+- **Migration tooling with dry-run and rollback safety (#292):** added `--migrate` with explicit `--dry-run` preview mode, structured migration step reporting, and rollback-aware migration execution/diagnostics for stats-path compatibility finalization.
+- **Deprecation warnings and migration docs for legacy fields/paths (#293):** added targeted setup/CLI diagnostics warnings for detected legacy config and stats-path compatibility usage, plus README mapping and planned removal milestones.
 
 ## [0.10.0] - 2026-05-11
 
@@ -265,7 +272,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/utilForever/focustime/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/utilForever/focustime/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/utilForever/focustime/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/utilForever/focustime/compare/v0.9.0...v0.9.1
