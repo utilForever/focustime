@@ -1,7 +1,8 @@
 use crate::app::{
     App, AppConfig, BlocklistProfileConfig, DEFAULT_BLOCKLIST_PROFILE_NAME, Local,
-    PendingTimerAction, TimerPhase, TimerState, blocking_backend_config_for_persistence,
-    format_duration_label, occurrence_key, profile_index, profile_spec_for, task_label_index,
+    PendingTimerAction, TimerPhase, TimerState, TimerStatus,
+    blocking_backend_config_for_persistence, format_duration_label, occurrence_key, profile_index,
+    profile_spec_for, task_label_index,
 };
 use crate::session_recovery::{self, InProgressSessionSnapshot, WorkflowStateSnapshot};
 use chrono::{LocalResult, TimeZone};
@@ -27,21 +28,33 @@ impl App {
             return;
         };
 
-        if let Err(reason) = self.try_apply_recovery_snapshot(snapshot.clone()) {
-            self.phase_notification = Some(format!("Ignored saved in-progress session: {reason}."));
-            if let Err(clear_error) = session_recovery::clear() {
-                self.config_error = Some(format!(
-                    "session recovery cleanup failed after invalid state: {clear_error}"
-                ));
+        let recovered_snapshot = match self.try_apply_recovery_snapshot(snapshot) {
+            Ok(snapshot) => snapshot,
+            Err(reason) => {
+                self.phase_notification =
+                    Some(format!("Ignored saved in-progress session: {reason}."));
+                if let Err(clear_error) = session_recovery::clear() {
+                    self.config_error = Some(format!(
+                        "session recovery cleanup failed after invalid state: {clear_error}"
+                    ));
+                }
+                return;
             }
-            return;
-        }
+        };
 
-        self.phase_notification = Some(format!(
-            "Recovered in-progress {} session ({} remaining).",
-            snapshot.phase().label(),
-            format_duration_label(snapshot.remaining_secs)
-        ));
+        if recovered_snapshot.status() == TimerStatus::Idle {
+            self.phase_notification = Some(format!(
+                "Recovered elapsed timer state into {} phase ({} remaining).",
+                recovered_snapshot.phase().label(),
+                format_duration_label(recovered_snapshot.remaining_secs)
+            ));
+        } else {
+            self.phase_notification = Some(format!(
+                "Recovered in-progress {} session ({} remaining).",
+                recovered_snapshot.phase().label(),
+                format_duration_label(recovered_snapshot.remaining_secs)
+            ));
+        }
     }
 
     pub(super) fn restore_cli_workflow_state(&mut self) {
@@ -237,7 +250,7 @@ impl App {
     fn try_apply_recovery_snapshot(
         &mut self,
         snapshot: InProgressSessionSnapshot,
-    ) -> Result<(), String> {
+    ) -> Result<InProgressSessionSnapshot, String> {
         let profile_spec = profile_spec_for(snapshot.selected_profile, &self.custom_profile);
         let mut recovered_timer = TimerState::with_profile(
             profile_spec.focus_secs,
@@ -250,8 +263,13 @@ impl App {
         recovered_timer.remaining_secs = snapshot.remaining_secs;
         recovered_timer.pomodoros_completed = snapshot.pomodoros_completed;
         snapshot.validate_for_timer(&recovered_timer)?;
+        let reconciled_snapshot = snapshot.reconcile_elapsed_for_timer(&recovered_timer);
+        recovered_timer.phase = reconciled_snapshot.phase();
+        recovered_timer.status = reconciled_snapshot.status();
+        recovered_timer.remaining_secs = reconciled_snapshot.remaining_secs;
+        recovered_timer.pomodoros_completed = reconciled_snapshot.pomodoros_completed;
 
-        let task_label = snapshot
+        let task_label = reconciled_snapshot
             .normalized_task_label()
             .ok_or_else(|| "saved task label is missing or invalid".to_string())?;
         let selected_task_label =
@@ -262,36 +280,38 @@ impl App {
                 task_label
             };
 
-        self.selected_profile = snapshot.selected_profile;
-        self.profile_selection_index = profile_index(snapshot.selected_profile);
-        self.load_automation_runtime_for_profile(snapshot.selected_profile);
+        self.selected_profile = reconciled_snapshot.selected_profile;
+        self.profile_selection_index = profile_index(reconciled_snapshot.selected_profile);
+        self.load_automation_runtime_for_profile(reconciled_snapshot.selected_profile);
         self.current_frame_now = Local::now();
         self.timer = recovered_timer;
         self.selected_task_label = Some(selected_task_label);
         self.pending_timer_action = None;
         self.break_glass_expires_at = None;
-        self.active_focus_task_label = if self.timer.phase == TimerPhase::Focus {
+        let focus_active =
+            self.timer.phase == TimerPhase::Focus && self.timer.status != TimerStatus::Idle;
+        self.active_focus_task_label = if focus_active {
             self.selected_task_label.clone()
         } else {
             None
         };
-        self.active_focus_intention = if self.timer.phase == TimerPhase::Focus {
-            snapshot.normalized_focus_intention()
+        self.active_focus_intention = if focus_active {
+            reconciled_snapshot.normalized_focus_intention()
         } else {
             None
         };
-        self.active_focus_task_note = if self.timer.phase == TimerPhase::Focus {
-            snapshot.normalized_task_note()
+        self.active_focus_task_note = if focus_active {
+            reconciled_snapshot.normalized_task_note()
         } else {
             None
         };
-        self.active_focus_profile = if self.timer.phase == TimerPhase::Focus {
+        self.active_focus_profile = if focus_active {
             Some(self.selected_profile)
         } else {
             None
         };
         self.sync_task_planner_state();
-        Ok(())
+        Ok(reconciled_snapshot)
     }
 
     pub(super) fn sync_recovery_snapshot(&mut self) {

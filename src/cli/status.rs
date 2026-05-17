@@ -7,6 +7,7 @@ use crate::cli::{
     TodayOutput, carry_over_goal_target, current_day_key, effective_blocked_sites_for_profile,
     session_recovery,
 };
+use crate::timer::TimerState;
 
 pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
     let day = current_day_key();
@@ -298,17 +299,26 @@ fn build_live_status_output(
         mirror_metadata_from_task_label(fallback_task_label);
     match session_recovery::load() {
         Ok(Some(snapshot)) => {
+            let selected_profile = profile_view(snapshot.selected_profile, &custom);
+            let timer_for_reconciliation = TimerState::with_profile(
+                selected_profile.focus_secs,
+                selected_profile.short_break_secs,
+                selected_profile.long_break_secs,
+                selected_profile.long_break_interval,
+            );
+            let snapshot = snapshot.reconcile_elapsed_for_timer(&timer_for_reconciliation);
             let phase = snapshot.phase();
             let status = snapshot.status();
+            let in_progress = status != TimerStatus::Idle;
             LiveStatusOutput {
                 state_source: "recovery",
                 recovery_error: None,
-                in_progress: true,
+                in_progress,
                 phase: timer_phase_id(phase),
                 status: timer_status_id(status),
                 remaining_secs: snapshot.remaining_secs,
                 pomodoros_completed: snapshot.pomodoros_completed,
-                selected_profile: profile_view(snapshot.selected_profile, &custom),
+                selected_profile,
                 selected_task_label: snapshot.normalized_task_label(),
                 focus_intention: snapshot.normalized_focus_intention(),
                 task_note: snapshot.normalized_task_note(),

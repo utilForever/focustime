@@ -1,4 +1,7 @@
-use std::io;
+use std::{
+    io,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[cfg(not(test))]
 use std::{fs, path::Path};
@@ -11,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::ProfileId,
     task_labels::normalize_task_label,
-    timer::{TimerPhase, TimerState, TimerStatus},
+    timer::{DEFAULT_LONG_BREAK_INTERVAL, TimerPhase, TimerState, TimerStatus},
 };
 
 #[cfg(not(test))]
@@ -87,6 +90,8 @@ pub struct InProgressSessionSnapshot {
     #[serde(default)]
     pub task_note: Option<String>,
     pub selected_profile: ProfileId,
+    #[serde(default)]
+    pub captured_at_epoch_secs: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -135,6 +140,7 @@ impl InProgressSessionSnapshot {
             focus_intention,
             task_note,
             selected_profile,
+            captured_at_epoch_secs: current_epoch_secs(),
         })
     }
 
@@ -187,6 +193,59 @@ impl InProgressSessionSnapshot {
         }
 
         Ok(())
+    }
+
+    pub fn reconcile_elapsed_for_timer(&self, timer: &TimerState) -> Self {
+        let Some(now_epoch_secs) = current_epoch_secs() else {
+            return self.clone();
+        };
+        self.reconcile_elapsed_for_timer_at_epoch_secs(timer, now_epoch_secs)
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn reconcile_elapsed_for_timer_at_epoch_secs(
+        &self,
+        timer: &TimerState,
+        now_epoch_secs: i64,
+    ) -> Self {
+        if self.status != RecoveryTimerStatus::Running {
+            return self.clone();
+        }
+        let Some(captured_at_epoch_secs) = self.captured_at_epoch_secs else {
+            return self.clone();
+        };
+        if now_epoch_secs <= captured_at_epoch_secs {
+            return self.clone();
+        }
+
+        let elapsed_secs = (now_epoch_secs - captured_at_epoch_secs) as u64;
+        if elapsed_secs == 0 {
+            return self.clone();
+        }
+
+        let mut reconciled = self.clone();
+        if elapsed_secs < reconciled.remaining_secs {
+            reconciled.remaining_secs -= elapsed_secs;
+            return reconciled;
+        }
+
+        match reconciled.phase() {
+            TimerPhase::Focus => {
+                reconciled.pomodoros_completed = reconciled.pomodoros_completed.saturating_add(1);
+                let next_phase = next_phase_after_focus(timer, reconciled.pomodoros_completed);
+                reconciled.phase = RecoveryTimerPhase::from_timer_phase(next_phase);
+                reconciled.remaining_secs = phase_duration_secs(timer, next_phase);
+            }
+            TimerPhase::ShortBreak | TimerPhase::LongBreak => {
+                reconciled.phase = RecoveryTimerPhase::from_timer_phase(TimerPhase::Focus);
+                reconciled.remaining_secs = phase_duration_secs(timer, TimerPhase::Focus);
+            }
+        }
+
+        reconciled.status = RecoveryTimerStatus::Idle;
+        reconciled.focus_intention = None;
+        reconciled.task_note = None;
+        reconciled
     }
 }
 
@@ -314,6 +373,19 @@ fn phase_duration_secs(timer: &TimerState, phase: TimerPhase) -> u64 {
     }
 }
 
+fn next_phase_after_focus(timer: &TimerState, completed_focus_count: u32) -> TimerPhase {
+    let long_break_interval = if timer.long_break_interval == 0 {
+        DEFAULT_LONG_BREAK_INTERVAL
+    } else {
+        timer.long_break_interval
+    };
+    if completed_focus_count % long_break_interval == 0 {
+        TimerPhase::LongBreak
+    } else {
+        TimerPhase::ShortBreak
+    }
+}
+
 fn normalize_metadata_text(value: &str) -> Option<String> {
     let normalized = value.trim();
     if normalized.is_empty() {
@@ -321,6 +393,13 @@ fn normalize_metadata_text(value: &str) -> Option<String> {
     } else {
         Some(normalized.to_string())
     }
+}
+
+fn current_epoch_secs() -> Option<i64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs().min(i64::MAX as u64) as i64)
 }
 
 #[cfg(test)]
@@ -428,6 +507,7 @@ mod tests {
             focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: None,
         };
 
         assert!(snapshot.validate_for_timer(&timer).is_err());
@@ -445,6 +525,7 @@ mod tests {
             focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: None,
         };
 
         assert!(snapshot.validate_for_timer(&timer).is_err());
@@ -462,6 +543,7 @@ mod tests {
             focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: None,
         };
 
         assert!(snapshot.validate_for_timer(&timer).is_err());
@@ -479,6 +561,7 @@ mod tests {
             focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: None,
         };
 
         assert!(snapshot.validate_for_timer(&timer).is_err());
@@ -496,6 +579,7 @@ mod tests {
             focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::DeepWork,
+            captured_at_epoch_secs: None,
         };
 
         assert!(snapshot.validate_for_timer(&timer).is_ok());
@@ -513,11 +597,102 @@ mod tests {
             focus_intention: None,
             task_note: None,
             selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: None,
         };
 
         assert_eq!(snapshot.normalized_focus_intention(), None);
         assert_eq!(snapshot.normalized_task_note(), None);
         assert!(snapshot.validate_for_timer(&timer).is_ok());
+    }
+
+    #[test]
+    fn running_snapshot_reconciliation_subtracts_elapsed_time() {
+        let timer = TimerState::with_profile(60, 30, 90, 4);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 50,
+            pomodoros_completed: 1,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Write docs".to_string()),
+            task_note: Some("Section 1".to_string()),
+            selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: Some(100),
+        };
+
+        let reconciled = snapshot.reconcile_elapsed_for_timer_at_epoch_secs(&timer, 120);
+
+        assert_eq!(reconciled.phase, RecoveryTimerPhase::Focus);
+        assert_eq!(reconciled.status, RecoveryTimerStatus::Running);
+        assert_eq!(reconciled.remaining_secs, 30);
+        assert_eq!(reconciled.pomodoros_completed, 1);
+        assert_eq!(reconciled.focus_intention.as_deref(), Some("Write docs"));
+        assert_eq!(reconciled.task_note.as_deref(), Some("Section 1"));
+    }
+
+    #[test]
+    fn running_focus_snapshot_reconciliation_advances_phase_when_elapsed_exceeds_remaining() {
+        let timer = TimerState::with_profile(60, 30, 90, 2);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 10,
+            pomodoros_completed: 1,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Write docs".to_string()),
+            task_note: Some("Section 1".to_string()),
+            selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: Some(100),
+        };
+
+        let reconciled = snapshot.reconcile_elapsed_for_timer_at_epoch_secs(&timer, 115);
+
+        assert_eq!(reconciled.phase, RecoveryTimerPhase::LongBreak);
+        assert_eq!(reconciled.status, RecoveryTimerStatus::Idle);
+        assert_eq!(reconciled.remaining_secs, 90);
+        assert_eq!(reconciled.pomodoros_completed, 2);
+        assert!(reconciled.focus_intention.is_none());
+        assert!(reconciled.task_note.is_none());
+        assert_eq!(reconciled.selected_task_label.as_deref(), Some("Docs"));
+    }
+
+    #[test]
+    fn paused_snapshot_reconciliation_does_not_change_state() {
+        let timer = TimerState::with_profile(60, 30, 90, 4);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Paused,
+            remaining_secs: 50,
+            pomodoros_completed: 1,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Write docs".to_string()),
+            task_note: Some("Section 1".to_string()),
+            selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: Some(100),
+        };
+
+        let reconciled = snapshot.reconcile_elapsed_for_timer_at_epoch_secs(&timer, 1_000);
+
+        assert_eq!(reconciled, snapshot);
+    }
+
+    #[test]
+    fn in_progress_snapshot_deserializes_legacy_payload_without_capture_timestamp() {
+        let snapshot: InProgressSessionSnapshot = toml::from_str(
+            r#"
+phase = "focus"
+status = "running"
+remaining_secs = 1200
+pomodoros_completed = 2
+selected_task_label = "Docs"
+focus_intention = "Write docs"
+task_note = "API section"
+selected_profile = "classic"
+"#,
+        )
+        .expect("legacy payload should deserialize");
+
+        assert!(snapshot.captured_at_epoch_secs.is_none());
     }
 
     #[test]
