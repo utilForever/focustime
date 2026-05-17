@@ -2226,6 +2226,7 @@ fn build_status_output_uses_recovery_snapshot_for_live_state() {
         focus_intention: Some("Write docs".to_string()),
         task_note: Some("API section".to_string()),
         selected_profile: ProfileId::DeepWork,
+        captured_at_epoch_secs: None,
     }));
     let config = AppConfig::default();
     let stats = FocusStats::default();
@@ -2245,6 +2246,36 @@ fn build_status_output_uses_recovery_snapshot_for_live_state() {
     assert!(output.live.recovery_error.is_none());
     assert_eq!(output.session.pomodoros_completed, 3);
     assert_eq!(output.session.focused_minutes, 199);
+}
+
+#[test]
+fn build_status_output_reconciles_elapsed_running_recovery_snapshot() {
+    session_recovery::set_test_load_snapshot(Some(InProgressSessionSnapshot {
+        phase: RecoveryTimerPhase::Focus,
+        status: RecoveryTimerStatus::Running,
+        remaining_secs: 1,
+        pomodoros_completed: 0,
+        selected_task_label: Some("Docs".to_string()),
+        focus_intention: Some("Write docs".to_string()),
+        task_note: Some("API section".to_string()),
+        selected_profile: ProfileId::Classic,
+        captured_at_epoch_secs: Some(0),
+    }));
+    let config = AppConfig::default();
+    let stats = FocusStats::default();
+
+    let output = build_status_output(&config, &stats);
+
+    assert!(!output.live.in_progress);
+    assert_eq!(output.live.state_source, "recovery");
+    assert_eq!(output.live.phase, "short-break");
+    assert_eq!(output.live.status, "idle");
+    assert_eq!(output.live.pomodoros_completed, 1);
+    assert_eq!(output.live.remaining_secs, DEFAULT_SHORT_BREAK_SECS);
+    assert_eq!(output.live.selected_task_label.as_deref(), Some("Docs"));
+    assert!(output.live.focus_intention.is_none());
+    assert!(output.live.task_note.is_none());
+    assert!(!output.live.strict_mode_enforced);
 }
 
 #[test]
