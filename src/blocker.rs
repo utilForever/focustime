@@ -1170,7 +1170,16 @@ fn flush_dns_cache() {
 #[cfg(test)]
 mod tests {
     use crate::blocker::*;
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_hosts_path(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("focustime-hosts-rollback-{label}-{unique}.tmp"))
+    }
 
     #[test]
     fn strip_unterminated_start_marker_leaves_content_unchanged() {
@@ -1495,5 +1504,102 @@ mod tests {
         assert!(!preview.would_change);
         assert!(preview.next_section.is_some());
         assert!(preview.current_section.is_some());
+    }
+
+    #[test]
+    fn block_rolls_back_to_original_after_post_replace_failure() {
+        let path = temp_hosts_path("block-post-replace");
+        let original = "127.0.0.1 localhost\n::1 localhost\n";
+        fs::write(&path, original).expect("temp hosts file should be writable");
+
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("example.com".to_string());
+        set_test_hosts_write_fail_steps(&[HostsWriteFailStep::AfterReplace]);
+
+        let result = blocker.apply_hosts_block_to_path(&path);
+        set_test_hosts_write_fail_steps(&[]);
+
+        assert!(result.is_err());
+        let restored = fs::read_to_string(&path).expect("hosts file should remain readable");
+        assert_eq!(restored, original);
+        assert!(!restored.contains(BLOCK_MARKER_START));
+        assert!(!restored.contains(BLOCK_MARKER_END));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn block_failure_before_replace_keeps_original_content() {
+        let path = temp_hosts_path("block-stage-write");
+        let original = "127.0.0.1 localhost\n::1 localhost\n";
+        fs::write(&path, original).expect("temp hosts file should be writable");
+
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("example.com".to_string());
+        set_test_hosts_write_fail_steps(&[HostsWriteFailStep::StageWrite]);
+
+        let result = blocker.apply_hosts_block_to_path(&path);
+        set_test_hosts_write_fail_steps(&[]);
+
+        assert!(result.is_err());
+        let content = fs::read_to_string(&path).expect("hosts file should remain readable");
+        assert_eq!(content, original);
+        assert!(!content.contains(BLOCK_MARKER_START));
+        assert!(!content.contains(BLOCK_MARKER_END));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn unblock_rolls_back_to_complete_section_after_post_replace_failure() {
+        let path = temp_hosts_path("unblock-post-replace");
+        let original = concat!(
+            "127.0.0.1 localhost\n",
+            "# focustime-block-start\n",
+            "127.0.0.1 example.com\n",
+            "::1 example.com\n",
+            "# focustime-block-end\n",
+            "::1 localhost\n",
+        );
+        fs::write(&path, original).expect("temp hosts file should be writable");
+
+        let blocker = SiteBlocker::new();
+        set_test_hosts_write_fail_steps(&[HostsWriteFailStep::AfterReplace]);
+
+        let result = blocker.remove_hosts_block_from_path(&path);
+        set_test_hosts_write_fail_steps(&[]);
+
+        assert!(result.is_err());
+        let restored = fs::read_to_string(&path).expect("hosts file should remain readable");
+        assert_eq!(restored, original);
+        assert_eq!(restored.matches(BLOCK_MARKER_START).count(), 1);
+        assert_eq!(restored.matches(BLOCK_MARKER_END).count(), 1);
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rollback_failure_is_reported_when_restore_step_fails() {
+        let path = temp_hosts_path("rollback-restore-error");
+        let original = "127.0.0.1 localhost\n::1 localhost\n";
+        fs::write(&path, original).expect("temp hosts file should be writable");
+
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("example.com".to_string());
+        set_test_hosts_write_fail_steps(&[
+            HostsWriteFailStep::AfterReplace,
+            HostsWriteFailStep::RollbackRestore,
+        ]);
+
+        let result = blocker.apply_hosts_block_to_path(&path);
+        set_test_hosts_write_fail_steps(&[]);
+
+        let error = result.expect_err("rollback should fail when restore step is injected to fail");
+        assert!(error.to_string().contains("rollback failed"));
+        let content = fs::read_to_string(&path).expect("hosts file should remain readable");
+        assert!(content.contains(BLOCK_MARKER_START));
+        assert!(content.contains(BLOCK_MARKER_END));
+
+        let _ = fs::remove_file(path);
     }
 }
