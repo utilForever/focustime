@@ -1037,8 +1037,8 @@ where
             .map(|()| true);
     }
 
-    remove_file_if_exists(&staged_path)?;
-    remove_file_if_exists(&snapshot_path)?;
+    cleanup_temp_file_best_effort(&staged_path);
+    cleanup_temp_file_best_effort(&snapshot_path);
     Ok(true)
 }
 
@@ -1139,6 +1139,15 @@ fn remove_file_if_exists(path: &Path) -> io::Result<()> {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error),
+    }
+}
+
+fn cleanup_temp_file_best_effort(path: &Path) {
+    if let Err(error) = remove_file_if_exists(path) {
+        eprintln!(
+            "Warning: failed to remove hosts temp file `{}`: {error}",
+            path.display()
+        );
     }
 }
 
