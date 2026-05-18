@@ -57,6 +57,7 @@ fn snapshot_for_tests(
         focus_intention: metadata_value.clone(),
         task_note: metadata_value,
         selected_profile,
+        captured_at_epoch_secs: None,
     }
 }
 
@@ -5207,6 +5208,61 @@ fn startup_restores_valid_in_progress_snapshot() {
 }
 
 #[test]
+fn startup_reconciles_elapsed_recovery_time_while_session_is_running() {
+    let now_epoch_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("current time should be after unix epoch")
+        .as_secs() as i64;
+    session_recovery::set_test_load_snapshot(Some(InProgressSessionSnapshot {
+        phase: RecoveryTimerPhase::Focus,
+        status: RecoveryTimerStatus::Running,
+        remaining_secs: 120,
+        pomodoros_completed: 0,
+        selected_task_label: Some("Docs".to_string()),
+        focus_intention: Some("Docs".to_string()),
+        task_note: Some("Docs".to_string()),
+        selected_profile: ProfileId::Classic,
+        captured_at_epoch_secs: Some(now_epoch_secs - 10),
+    }));
+
+    let app = App::from_config(AppConfig::default());
+
+    assert_eq!(app.timer.phase, TimerPhase::Focus);
+    assert_eq!(app.timer.status, TimerStatus::Running);
+    assert!((109..=111).contains(&app.timer.remaining_secs));
+    assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
+}
+
+#[test]
+fn startup_reconciles_elapsed_recovery_time_when_phase_completed_offline() {
+    session_recovery::set_test_load_snapshot(Some(InProgressSessionSnapshot {
+        phase: RecoveryTimerPhase::Focus,
+        status: RecoveryTimerStatus::Running,
+        remaining_secs: 1,
+        pomodoros_completed: 0,
+        selected_task_label: Some("Docs".to_string()),
+        focus_intention: Some("Write docs".to_string()),
+        task_note: Some("Section 1".to_string()),
+        selected_profile: ProfileId::Classic,
+        captured_at_epoch_secs: Some(0),
+    }));
+
+    let app = App::from_config(AppConfig::default());
+
+    assert_eq!(app.timer.phase, TimerPhase::ShortBreak);
+    assert_eq!(app.timer.status, TimerStatus::Idle);
+    assert_eq!(app.timer.remaining_secs, app.timer.short_break_secs);
+    assert_eq!(app.timer.pomodoros_completed, 1);
+    assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
+    assert!(app.active_focus_intention.is_none());
+    assert!(app.active_focus_task_note.is_none());
+    assert!(app.phase_notification.as_deref().is_some_and(|message| {
+        message.contains("Recovered elapsed timer state into Short Break phase")
+    }));
+    assert!(session_recovery::test_saved_snapshot().is_none());
+}
+
+#[test]
 fn startup_recovery_rehydrates_profile_automation_runtime_for_snapshot_profile() {
     let deep_work_schedule = RecurringScheduleConfig {
         windows: vec![RecurringFocusWindowConfig {
@@ -5270,6 +5326,7 @@ fn startup_restores_pomodoro_count_for_phase_cadence() {
         focus_intention: Some("Docs".to_string()),
         task_note: Some("Docs".to_string()),
         selected_profile: ProfileId::Classic,
+        captured_at_epoch_secs: None,
     }));
 
     let mut app = App::from_config(AppConfig::default());

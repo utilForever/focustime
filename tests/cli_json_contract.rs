@@ -538,6 +538,44 @@ fn start_then_status_json_reports_running_recovery_state_across_processes() {
 }
 
 #[test]
+fn status_json_reconciles_elapsed_recovery_snapshot_from_disk() {
+    let env = TestEnv::new("status-json-reconcile-elapsed");
+    write_recovery_snapshot(
+        &env,
+        r#"phase = "focus"
+status = "running"
+remaining_secs = 1
+pomodoros_completed = 0
+selected_task_label = "Docs"
+focus_intention = "Write docs"
+task_note = "API section"
+selected_profile = "classic"
+captured_at_epoch_secs = 0
+"#,
+    );
+
+    let status_output = env.run(&["--status", "--json"]);
+    assert_eq!(status_output.status.code(), Some(0));
+    assert!(stderr_text(&status_output).trim().is_empty());
+
+    let payload: Value = serde_json::from_slice(&status_output.stdout).expect("stdout JSON");
+    assert_eq!(payload["live"]["state_source"], "recovery");
+    assert_eq!(payload["live"]["in_progress"], true);
+    assert_eq!(payload["live"]["phase"], "short-break");
+    assert_eq!(payload["live"]["status"], "idle");
+    assert_eq!(payload["live"]["pomodoros_completed"], 1);
+    assert_eq!(payload["live"]["selected_task_label"], "Docs");
+    assert!(payload["live"]["focus_intention"].is_null());
+    assert!(payload["live"]["task_note"].is_null());
+    assert!(
+        payload["live"]["remaining_secs"]
+            .as_u64()
+            .expect("remaining secs should be u64")
+            > 0
+    );
+}
+
+#[test]
 fn start_json_requires_selected_task_label() {
     let env = TestEnv::new("start-json-requires-task");
     let output = env.run(&["--start", "--json"]);
