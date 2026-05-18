@@ -677,10 +677,12 @@ impl SiteBlocker {
     }
 
     fn apply_hosts_block_to_path(&self, hosts_path: &Path) -> io::Result<()> {
-        let original = fs::read_to_string(hosts_path)?;
-        let content = self.build_blocked_hosts_content(&original);
-        atomic_write_hosts_to_path(hosts_path, &content)?;
-        flush_dns_cache();
+        let changed = atomic_write_hosts_to_path(hosts_path, |snapshot_content| {
+            Some(self.build_blocked_hosts_content(snapshot_content))
+        })?;
+        if changed {
+            flush_dns_cache();
+        }
         Ok(())
     }
 
@@ -689,11 +691,16 @@ impl SiteBlocker {
     }
 
     fn remove_hosts_block_from_path(&self, hosts_path: &Path) -> io::Result<()> {
-        let content = fs::read_to_string(hosts_path)?;
-        let cleaned = Self::strip_block_section(&content);
-        // Only write back if something was actually removed.
-        if cleaned != content {
-            atomic_write_hosts_to_path(hosts_path, &cleaned)?;
+        let changed = atomic_write_hosts_to_path(hosts_path, |snapshot_content| {
+            let cleaned = Self::strip_block_section(snapshot_content);
+            if cleaned == snapshot_content {
+                None
+            } else {
+                Some(cleaned)
+            }
+        })?;
+        // Only flush DNS when we actually changed the hosts file.
+        if changed {
             flush_dns_cache();
         }
         Ok(())
@@ -981,15 +988,31 @@ enum HostsReplaceError {
     NeedsRollback(io::Error),
 }
 
-/// Write `content` to the hosts file with staged replacement and rollback.
-/// If an update fails after replacing the destination, the previous state is
-/// restored from a snapshot to avoid leaving partial focustime sections behind.
-fn atomic_write_hosts_to_path(hosts_path: &Path, content: &str) -> io::Result<()> {
+/// Update the hosts file via staged replacement and rollback, deriving next
+/// content from the snapshotted source to avoid TOCTOU races.
+fn atomic_write_hosts_to_path<F>(hosts_path: &Path, build_content: F) -> io::Result<bool>
+where
+    F: FnOnce(&str) -> Option<String>,
+{
     let staged_path = hosts_transaction_temp_path(hosts_path, "staged");
     let snapshot_path = hosts_transaction_temp_path(hosts_path, "snapshot");
 
     create_hosts_snapshot(hosts_path, &snapshot_path)?;
-    if let Err(error) = write_staged_hosts_file(hosts_path, &staged_path, content) {
+    let snapshot_content = match fs::read_to_string(&snapshot_path) {
+        Ok(content) => content,
+        Err(error) => {
+            let _ = remove_file_if_exists(&staged_path);
+            let _ = remove_file_if_exists(&snapshot_path);
+            return Err(error);
+        }
+    };
+    let Some(content) = build_content(&snapshot_content) else {
+        let _ = remove_file_if_exists(&staged_path);
+        let _ = remove_file_if_exists(&snapshot_path);
+        return Ok(false);
+    };
+
+    if let Err(error) = write_staged_hosts_file(hosts_path, &staged_path, &content) {
         let _ = remove_file_if_exists(&staged_path);
         let _ = remove_file_if_exists(&snapshot_path);
         return Err(error);
@@ -1004,17 +1027,19 @@ fn atomic_write_hosts_to_path(hosts_path: &Path, content: &str) -> io::Result<()
         }
         #[cfg(target_os = "windows")]
         Err(HostsReplaceError::NeedsRollback(error)) => {
-            return rollback_hosts_write(hosts_path, &snapshot_path, &staged_path, error);
+            return rollback_hosts_write(hosts_path, &snapshot_path, &staged_path, error)
+                .map(|()| true);
         }
     }
 
     if let Err(error) = maybe_fail_hosts_write_step(HostsWriteFailStep::AfterReplace) {
-        return rollback_hosts_write(hosts_path, &snapshot_path, &staged_path, error);
+        return rollback_hosts_write(hosts_path, &snapshot_path, &staged_path, error)
+            .map(|()| true);
     }
 
     remove_file_if_exists(&staged_path)?;
     remove_file_if_exists(&snapshot_path)?;
-    Ok(())
+    Ok(true)
 }
 
 fn rollback_hosts_write(
