@@ -10,9 +10,9 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::{Deserialize, Serialize};
 
 const HEARTBEAT_INTERVAL_SECS: u64 = 120;
-const DEFAULT_HEARTBEAT_RETRY_BACKOFF_SECS: [u64; 2] = [1, 2];
-const DEFAULT_HEARTBEAT_QUEUE_CAPACITY: usize = 256;
-const DEFAULT_HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 10;
+const DEFAULT_HEARTBEAT_RETRY_BACKOFF_SECS: [u64; 3] = [2, 5, 10];
+const DEFAULT_HEARTBEAT_QUEUE_CAPACITY: usize = 512;
+const DEFAULT_HEARTBEAT_QUEUE_RETRY_DELAY_SECS: u64 = 30;
 const MAX_HEARTBEAT_RETRY_BACKOFF_ENTRIES: usize = 8;
 const MAX_HEARTBEAT_RETRY_BACKOFF_SECS: u64 = 300;
 const MAX_HEARTBEAT_QUEUE_CAPACITY: usize = 4096;
@@ -305,6 +305,8 @@ pub struct WakatimeTracker {
     in_flight_from_queue: bool,
     /// Earliest time at which queued heartbeats should be replayed again.
     queue_retry_not_before_epoch_secs: Option<u64>,
+    /// Consecutive retryable replay failures used to scale queue replay delay.
+    queue_retry_failure_streak: u32,
     /// Durable snapshot path for queued heartbeats and replay state.
     queue_snapshot_path: Option<PathBuf>,
     /// Latches an immediate heartbeat request while another worker is in flight.
@@ -348,6 +350,7 @@ impl WakatimeTracker {
             in_flight_heartbeat: None,
             in_flight_from_queue: false,
             queue_retry_not_before_epoch_secs: None,
+            queue_retry_failure_streak: 0,
             queue_snapshot_path: heartbeat_queue_snapshot_path(),
             pending_immediate_heartbeat: false,
             heartbeat_metadata: metadata.normalized(),
@@ -461,6 +464,7 @@ impl WakatimeTracker {
                 } else {
                     snapshot.queue_retry_not_before_epoch_secs
                 };
+                self.queue_retry_failure_streak = 0;
                 self.retry_state = None;
             }
             Ok(None) => {}
@@ -520,6 +524,7 @@ impl WakatimeTracker {
                     self.in_flight_from_queue = false;
                     self.in_flight_heartbeat = None;
                     self.queue_retry_not_before_epoch_secs = None;
+                    self.queue_retry_failure_streak = 0;
                     self.retry_state = None;
                     self.last_error = None;
                     self.last_successful_heartbeat_epoch_secs = Some(current_unix_epoch_secs());
@@ -546,12 +551,16 @@ impl WakatimeTracker {
                     self.last_error = Some(error);
                     if retryable {
                         self.requeue_in_flight_heartbeat();
-                        self.queue_retry_not_before_epoch_secs = Some(
-                            current_unix_epoch_secs()
-                                .saturating_add(self.runtime.queue_retry_delay_secs),
-                        );
+                        self.queue_retry_failure_streak =
+                            self.queue_retry_failure_streak.saturating_add(1);
+                        let retry_delay_secs =
+                            self.scaled_queue_retry_delay_secs(self.queue_retry_failure_streak);
+                        self.queue_retry_not_before_epoch_secs =
+                            Some(current_unix_epoch_secs().saturating_add(retry_delay_secs));
                     } else {
                         self.in_flight_heartbeat = None;
+                        self.queue_retry_not_before_epoch_secs = None;
+                        self.queue_retry_failure_streak = 0;
                     }
                     queue_state_changed = true;
                 }
@@ -667,6 +676,15 @@ impl WakatimeTracker {
             .is_none_or(|not_before| current_unix_epoch_secs() >= not_before)
     }
 
+    fn scaled_queue_retry_delay_secs(&self, failure_streak: u32) -> u64 {
+        let exponent = failure_streak.saturating_sub(1);
+        let multiplier = 2u64.checked_pow(exponent).unwrap_or(u64::MAX);
+        self.runtime
+            .queue_retry_delay_secs
+            .saturating_mul(multiplier)
+            .min(MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS)
+    }
+
     fn dispatch_pending_work(&mut self) {
         if self.api_key.is_none() || self.heartbeat_in_flight {
             return;
@@ -755,6 +773,7 @@ impl WakatimeTracker {
             in_flight_heartbeat: None,
             in_flight_from_queue: false,
             queue_retry_not_before_epoch_secs: None,
+            queue_retry_failure_streak: 0,
             queue_snapshot_path: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
@@ -786,6 +805,7 @@ impl WakatimeTracker {
             in_flight_heartbeat: None,
             in_flight_from_queue: false,
             queue_retry_not_before_epoch_secs: None,
+            queue_retry_failure_streak: 0,
             queue_snapshot_path: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
@@ -813,6 +833,22 @@ impl WakatimeTracker {
     }
 
     #[cfg(test)]
+    pub(crate) fn push_retrying_event_for_tests(
+        &self,
+        attempt: u8,
+        max_attempts: u8,
+        next_backoff_secs: u64,
+        error: impl Into<String>,
+    ) {
+        let _ = self.result_tx.send(HeartbeatEvent::Retrying {
+            attempt,
+            max_attempts,
+            next_backoff_secs,
+            error: error.into(),
+        });
+    }
+
+    #[cfg(test)]
     pub(crate) fn heartbeat_metadata_for_tests(&self) -> WakatimeHeartbeatMetadata {
         self.heartbeat_metadata.clone()
     }
@@ -835,6 +871,7 @@ impl WakatimeTracker {
         self.in_flight_heartbeat = None;
         self.in_flight_from_queue = false;
         self.queue_retry_not_before_epoch_secs = None;
+        self.queue_retry_failure_streak = 0;
         self.pending_immediate_heartbeat = false;
         self.retry_state = None;
         self.last_error = None;
@@ -1180,6 +1217,7 @@ mod tests {
             in_flight_heartbeat: None,
             in_flight_from_queue: false,
             queue_retry_not_before_epoch_secs: None,
+            queue_retry_failure_streak: 0,
             queue_snapshot_path: None,
             pending_immediate_heartbeat: false,
             heartbeat_metadata: WakatimeHeartbeatMetadata::default(),
@@ -1361,6 +1399,69 @@ mod tests {
         }
         .normalized();
         assert_eq!(normalized.retry_backoff_secs, vec![5]);
+    }
+
+    #[test]
+    fn scaled_queue_retry_delay_grows_exponentially_and_is_capped() {
+        let mut tracker = tracker_with(Some("test-key"), true, 0);
+        tracker.runtime.queue_retry_delay_secs = 30;
+
+        assert_eq!(tracker.scaled_queue_retry_delay_secs(1), 30);
+        assert_eq!(tracker.scaled_queue_retry_delay_secs(2), 60);
+        assert_eq!(tracker.scaled_queue_retry_delay_secs(3), 120);
+        assert_eq!(
+            tracker.scaled_queue_retry_delay_secs(8),
+            MAX_HEARTBEAT_QUEUE_RETRY_DELAY_SECS
+        );
+    }
+
+    #[test]
+    fn retryable_queue_failures_increase_replay_delay_until_success() {
+        let mut tracker = tracker_with(Some("test-key"), true, 0);
+        tracker.runtime.queue_retry_delay_secs = 2;
+        tracker.request_heartbeat(true);
+
+        tracker
+            .result_tx
+            .send(HeartbeatEvent::Failed {
+                error: "network unavailable".to_string(),
+                retryable: true,
+            })
+            .expect("test event send must succeed");
+        tracker.poll_events();
+
+        let first_not_before = tracker
+            .queue_retry_not_before_epoch_secs
+            .expect("first retryable failure should set queue replay delay");
+        assert_eq!(tracker.queue_retry_failure_streak, 1);
+
+        tracker.queue_retry_not_before_epoch_secs =
+            Some(current_unix_epoch_secs().saturating_sub(1));
+        tracker.poll_events();
+        assert!(tracker.heartbeat_in_flight);
+
+        tracker
+            .result_tx
+            .send(HeartbeatEvent::Failed {
+                error: "still offline".to_string(),
+                retryable: true,
+            })
+            .expect("test event send must succeed");
+        tracker.poll_events();
+
+        let second_not_before = tracker
+            .queue_retry_not_before_epoch_secs
+            .expect("second retryable failure should set queue replay delay");
+        assert_eq!(tracker.queue_retry_failure_streak, 2);
+        assert!(second_not_before > first_not_before);
+
+        tracker
+            .result_tx
+            .send(HeartbeatEvent::Sent)
+            .expect("test event send must succeed");
+        tracker.poll_events();
+        assert_eq!(tracker.queue_retry_failure_streak, 0);
+        assert!(tracker.queue_retry_not_before_epoch_secs.is_none());
     }
 
     #[test]

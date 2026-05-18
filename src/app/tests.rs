@@ -4115,6 +4115,24 @@ fn poll_wakatime_status_applies_async_failure_event() {
 }
 
 #[test]
+fn poll_wakatime_status_transitions_queued_backlog_to_replaying() {
+    let mut app = App::default();
+    app.wakatime = WakatimeTracker::new_configured_for_tests();
+    app.wakatime.set_pending_heartbeats_for_tests(2);
+    assert!(matches!(
+        app.wakatime.runtime_state(),
+        crate::wakatime::WakatimeRuntimeState::Queued { pending: 2 }
+    ));
+
+    app.poll_wakatime_status();
+
+    assert!(matches!(
+        app.wakatime.runtime_state(),
+        crate::wakatime::WakatimeRuntimeState::Replaying { pending: 2 }
+    ));
+}
+
+#[test]
 fn focus_does_not_start_without_selected_task_label() {
     let mut app = App::default();
 

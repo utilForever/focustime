@@ -735,7 +735,7 @@ fn normalize_clamps_wakatime_runtime_knobs_and_falls_back_for_invalid_backoff() 
         ..AppConfig::default()
     }
     .normalize();
-    assert_eq!(cfg.wakatime_runtime.retry_backoff_secs, vec![1, 2]);
+    assert_eq!(cfg.wakatime_runtime.retry_backoff_secs, vec![2, 5, 10]);
     assert_eq!(cfg.wakatime_runtime.queue_retry_delay_secs, 1);
 
     let cfg = AppConfig {

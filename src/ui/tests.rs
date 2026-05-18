@@ -916,6 +916,39 @@ fn wakatime_status_line_shows_replaying_queue_backlog() {
 }
 
 #[test]
+fn wakatime_status_line_shows_retrying_state() {
+    let mut app = App::default();
+    app.wakatime = WakatimeTracker::new_configured_for_tests();
+    app.wakatime
+        .push_retrying_event_for_tests(2, 4, 5, "HTTP 503");
+    app.wakatime.poll_events();
+
+    let (text, color) = wakatime_status_line(&app);
+
+    assert_eq!(
+        text,
+        "⏱  WakaTime: retrying (2/4) in 5s (HTTP 503) · last success not yet sent"
+    );
+    assert_eq!(color, Color::Yellow);
+}
+
+#[test]
+fn wakatime_status_line_shows_error_state() {
+    let mut app = App::default();
+    app.wakatime = WakatimeTracker::new_configured_for_tests();
+    app.wakatime.push_failed_event_for_tests("HTTP 500");
+    app.wakatime.poll_events();
+
+    let (text, color) = wakatime_status_line(&app);
+
+    assert_eq!(
+        text,
+        "⏱  WakaTime: error (HTTP 500) · last success not yet sent"
+    );
+    assert_eq!(color, Color::Red);
+}
+
+#[test]
 fn wakatime_status_line_for_not_configured_omits_last_success_suffix() {
     let mut app = App::default();
     app.wakatime = WakatimeTracker::new_unconfigured_for_tests();

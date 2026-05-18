@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **WakaTime queue replay/backoff tuning (#311):** retuned default retry/runtime queue knobs to reduce aggressive retry loops, added exponential replay cooldown for consecutive retryable queue failures, and expanded queued/replaying/retrying/error status transition coverage in runtime/UI tests.
+
 ## [0.11.0] - 2026-05-16
 
 ### Added
