@@ -691,6 +691,14 @@ impl SiteBlocker {
     }
 
     fn remove_hosts_block_from_path(&self, hosts_path: &Path) -> io::Result<()> {
+        // Fast path: when there is no managed section to remove, avoid creating
+        // rollback artifacts in the hosts directory (which may require write
+        // permission even for a no-op unblock).
+        let current = fs::read_to_string(hosts_path)?;
+        if Self::strip_block_section(&current) == current {
+            return Ok(());
+        }
+
         let changed = atomic_write_hosts_to_path(hosts_path, |snapshot_content| {
             let cleaned = Self::strip_block_section(snapshot_content);
             if cleaned == snapshot_content {
