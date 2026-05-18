@@ -560,7 +560,7 @@ captured_at_epoch_secs = 0
 
     let payload: Value = serde_json::from_slice(&status_output.stdout).expect("stdout JSON");
     assert_eq!(payload["live"]["state_source"], "recovery");
-    assert_eq!(payload["live"]["in_progress"], false);
+    assert_eq!(payload["live"]["in_progress"], true);
     assert_eq!(payload["live"]["phase"], "short-break");
     assert_eq!(payload["live"]["status"], "idle");
     assert_eq!(payload["live"]["pomodoros_completed"], 1);

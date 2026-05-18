@@ -2266,12 +2266,14 @@ fn build_status_output_reconciles_elapsed_running_recovery_snapshot() {
 
     let output = build_status_output(&config, &stats);
 
-    assert!(!output.live.in_progress);
+    assert!(output.live.in_progress);
     assert_eq!(output.live.state_source, "recovery");
     assert_eq!(output.live.phase, "short-break");
     assert_eq!(output.live.status, "idle");
     assert_eq!(output.live.pomodoros_completed, 1);
     assert_eq!(output.live.remaining_secs, DEFAULT_SHORT_BREAK_SECS);
+    assert_eq!(output.session.pomodoros_completed, 1);
+    assert_eq!(output.session.focused_minutes, DEFAULT_FOCUS_SECS / 60);
     assert_eq!(output.live.selected_task_label.as_deref(), Some("Docs"));
     assert!(output.live.focus_intention.is_none());
     assert!(output.live.task_note.is_none());

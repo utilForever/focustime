@@ -299,6 +299,7 @@ fn build_live_status_output(
         mirror_metadata_from_task_label(fallback_task_label);
     match session_recovery::load() {
         Ok(Some(snapshot)) => {
+            let pre_reconcile_in_progress = snapshot.status() != TimerStatus::Idle;
             let selected_profile = profile_view(snapshot.selected_profile, &custom);
             let timer_for_reconciliation = TimerState::with_profile(
                 selected_profile.focus_secs,
@@ -309,7 +310,7 @@ fn build_live_status_output(
             let snapshot = snapshot.reconcile_elapsed_for_timer(&timer_for_reconciliation);
             let phase = snapshot.phase();
             let status = snapshot.status();
-            let in_progress = status != TimerStatus::Idle;
+            let in_progress = pre_reconcile_in_progress || status != TimerStatus::Idle;
             LiveStatusOutput {
                 state_source: "recovery",
                 recovery_error: None,
