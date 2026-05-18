@@ -1393,6 +1393,28 @@ fn parse_with_contract_detects_json_on_early_parse_failures() {
     );
 }
 
+#[test]
+fn parse_with_contract_marks_json_usage_errors_from_key_value_parsing() {
+    let error = parse_with_contract(&["--goal=abc", "--json"]).unwrap_err();
+    assert_eq!(error.kind, CliErrorKind::Usage);
+    assert_eq!(error.output, OutputMode::Json);
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert!(error.message.contains("Invalid goal"));
+}
+
+#[test]
+fn parse_with_contract_marks_json_usage_errors_from_finalize_step() {
+    let error = parse_with_contract(&["--watch", "--json"]).unwrap_err();
+    assert_eq!(error.kind, CliErrorKind::Usage);
+    assert_eq!(error.output, OutputMode::Json);
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert!(
+        error
+            .message
+            .contains("`--watch` is only valid with `--status`.")
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn parse_rejects_non_utf8_arguments() {
