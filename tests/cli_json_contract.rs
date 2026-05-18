@@ -112,6 +112,27 @@ fn stderr_text(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).to_string()
 }
 
+fn assert_json_error_contract(
+    output: &Output,
+    expected_exit_code: i32,
+    expected_kind: &str,
+) -> Value {
+    assert_eq!(output.status.code(), Some(expected_exit_code));
+    assert!(stderr_text(output).trim().is_empty());
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(payload["ok"], false);
+    assert_eq!(payload["error"]["kind"], expected_kind);
+    assert_eq!(payload["error"]["exit_code"], expected_exit_code);
+    assert!(
+        payload["error"]["message"]
+            .as_str()
+            .is_some_and(|message| !message.trim().is_empty()),
+        "error message should be a non-empty string"
+    );
+    payload
+}
+
 fn write_recovery_snapshot(env: &TestEnv, content: &str) {
     let app_data_dir = env.app_data_dir();
     fs::create_dir_all(&app_data_dir).expect("failed to create app data directory");
@@ -600,13 +621,7 @@ fn parse_errors_in_json_mode_emit_usage_envelope() {
     let env = TestEnv::new("json-parse-error");
     let output = env.run(&["--status", "--unknown", "--json"]);
 
-    assert_eq!(output.status.code(), Some(2));
-    assert!(stderr_text(&output).trim().is_empty());
-
-    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(payload["ok"], false);
-    assert_eq!(payload["error"]["kind"], "usage");
-    assert_eq!(payload["error"]["exit_code"], 2);
+    let payload = assert_json_error_contract(&output, 2, "usage");
     assert!(
         payload["error"]["message"]
             .as_str()
@@ -620,19 +635,76 @@ fn runtime_errors_in_json_mode_emit_runtime_envelope() {
     let env = TestEnv::new("json-runtime-error");
     let output = env.run(&["--resume", "--json"]);
 
-    assert_eq!(output.status.code(), Some(1));
-    assert!(stderr_text(&output).trim().is_empty());
-
-    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(payload["ok"], false);
-    assert_eq!(payload["error"]["kind"], "runtime");
-    assert_eq!(payload["error"]["exit_code"], 1);
+    let payload = assert_json_error_contract(&output, 1, "runtime");
     assert!(
         payload["error"]["message"]
             .as_str()
             .expect("error message should be a string")
             .contains("Cannot resume")
     );
+}
+
+#[test]
+fn parse_errors_in_json_mode_preserve_contract_across_parser_stages() {
+    let env = TestEnv::new("json-parse-contract-matrix");
+    let cases: [(&[&str], &str); 5] = [
+        (&["--status", "--unknown", "--json"], "Unknown option"),
+        (
+            &["--schedule-set", "--json"],
+            "`--schedule-set` requires a JSON payload",
+        ),
+        (
+            &["--status", "--watch=0", "--json"],
+            "positive whole number of seconds",
+        ),
+        (&["--task=", "--json"], "`--task=` requires a task label"),
+        (
+            &["--status", "--watch", "--watch=2", "--json"],
+            "can only be specified once",
+        ),
+    ];
+
+    for (args, message_fragment) in cases {
+        let output = env.run(args);
+        let payload = assert_json_error_contract(&output, 2, "usage");
+        assert!(
+            payload["error"]["message"]
+                .as_str()
+                .expect("error message should be a string")
+                .contains(message_fragment),
+            "expected message fragment `{message_fragment}` for args {:?}, got {}",
+            args,
+            payload["error"]["message"]
+        );
+    }
+}
+
+#[test]
+fn runtime_errors_in_json_mode_preserve_contract_across_command_families() {
+    let env = TestEnv::new("json-runtime-contract-matrix");
+    let cases: [(&[&str], &str); 4] = [
+        (&["--start", "--json"], "select a task label first"),
+        (&["--pause", "--json"], "Cannot pause"),
+        (&["--resume", "--json"], "Cannot resume"),
+        (
+            &["--focus-intention", "Write docs", "--json"],
+            "focus session is not active or paused",
+        ),
+    ];
+
+    for (args, message_fragment) in cases {
+        let output = env.run(args);
+        let payload = assert_json_error_contract(&output, 1, "runtime");
+        assert!(
+            payload["error"]["message"]
+                .as_str()
+                .expect("error message should be a string")
+                .contains(message_fragment),
+            "expected message fragment `{message_fragment}` for args {:?}, got {}",
+            args,
+            payload["error"]["message"]
+        );
+    }
 }
 
 #[test]
@@ -643,6 +715,16 @@ fn text_parse_errors_still_use_stderr() {
     assert_eq!(output.status.code(), Some(2));
     assert!(stdout_text(&output).trim().is_empty());
     assert!(stderr_text(&output).contains("Unknown option"));
+}
+
+#[test]
+fn text_runtime_errors_still_use_stderr() {
+    let env = TestEnv::new("text-runtime-error");
+    let output = env.run(&["--resume"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stdout_text(&output).trim().is_empty());
+    assert!(stderr_text(&output).contains("Cannot resume"));
 }
 
 #[test]
