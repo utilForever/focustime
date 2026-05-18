@@ -482,9 +482,9 @@ project = "focustime"
 language = "Pomodoro"
 
 [wakatime_runtime]
-retry_backoff_secs = [1, 2]
-queue_capacity = 256
-queue_retry_delay_secs = 10
+retry_backoff_secs = [2, 5, 10]
+queue_capacity = 512
+queue_retry_delay_secs = 30
 
 [[wakatime.task_mappings]]
 task_label = "Docs"
@@ -520,8 +520,8 @@ schedule runtime defaults (`time_step_minutes = 15`, `delay_secs = 600`).
 `60..43200`.
 
 `[wakatime_runtime]` is optional. When omitted, focustime keeps existing
-WakaTime runtime defaults (`retry_backoff_secs = [1, 2]`,
-`queue_capacity = 256`, `queue_retry_delay_secs = 10`). Backoff entries are
+WakaTime runtime defaults (`retry_backoff_secs = [2, 5, 10]`,
+`queue_capacity = 512`, `queue_retry_delay_secs = 30`). Backoff entries are
 bounded to `1..300` seconds (up to 8 entries, empty/invalid falls back to
 defaults), queue capacity is clamped to `1..4096`, and queue replay delay is
 clamped to `1..3600`.
@@ -757,13 +757,14 @@ When WakaTime is configured, heartbeats are still best-effort and non-blocking.
 The timer never waits on network calls.
 
 - transient heartbeat failures (`429`, `5xx`, and connectivity/timeout errors)
-  retry with bounded backoff (default `1s`, then `2s`, configurable via
+  retry with bounded backoff (default `2s`, then `5s`, then `10s`, configurable via
   `[wakatime_runtime].retry_backoff_secs`)
 - retryable failures that still cannot be delivered are queued in a durable local
-  backlog (bounded, drop-oldest at capacity; default `256`, configurable via
+  backlog (bounded, drop-oldest at capacity; default `512`, configurable via
   `[wakatime_runtime].queue_capacity`) and replayed oldest-first after restart
   and when connectivity recovers
-- queued heartbeat replay delay after retryable failure defaults to `10s` and is
+- queued heartbeat replay delay after retryable failure starts at `30s`, doubles
+  after each consecutive retryable replay failure (up to `3600s`), and is
   configurable via `[wakatime_runtime].queue_retry_delay_secs`
 - invalid/corrupt persisted queue snapshots are dropped on startup and surfaced
   as a runtime warning in WakaTime status
