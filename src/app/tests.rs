@@ -5229,7 +5229,7 @@ fn startup_reconciles_elapsed_recovery_time_while_session_is_running() {
 
     assert_eq!(app.timer.phase, TimerPhase::Focus);
     assert_eq!(app.timer.status, TimerStatus::Running);
-    assert!(app.timer.remaining_secs <= 110);
+    assert!((109..=111).contains(&app.timer.remaining_secs));
     assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
 }
 
