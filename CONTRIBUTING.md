@@ -85,7 +85,7 @@ The project uses Conventional Commit-style release commits:
 
 Before preparing a release commit, make sure all CI jobs pass for the release changes.
 
-To publish a release artifact set, create and push a `v*` tag (for example, `v0.11.0`).
+To publish a release artifact set, create and push a `v*` tag (for example, `v0.11.1`).
 The release workflow will:
 
 - run `cargo check --all --locked`, `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and `cargo test --all --locked`
