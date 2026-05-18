@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[cfg(target_os = "windows")]
@@ -13,9 +13,18 @@ const HOSTS_FILE: &str = "/etc/hosts";
 const BLOCK_MARKER_START: &str = "# focustime-block-start";
 const BLOCK_MARKER_END: &str = "# focustime-block-end";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HostsWriteFailStep {
+    Snapshot,
+    StageWrite,
+    AfterReplace,
+    RollbackRestore,
+}
+
 #[cfg(test)]
 thread_local! {
     static TEST_LAST_BLOCKING_ACTION: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+    static TEST_HOSTS_WRITE_FAIL_STEPS: RefCell<Vec<HostsWriteFailStep>> = const { RefCell::new(Vec::new()) };
 }
 
 #[cfg(test)]
@@ -28,6 +37,13 @@ fn record_test_blocking_action(action: &'static str) {
 #[cfg(test)]
 pub(crate) fn take_test_blocking_action() -> Option<&'static str> {
     TEST_LAST_BLOCKING_ACTION.with(|slot| slot.borrow_mut().take())
+}
+
+#[cfg(test)]
+fn set_test_hosts_write_fail_steps(steps: &[HostsWriteFailStep]) {
+    TEST_HOSTS_WRITE_FAIL_STEPS.with(|slot| {
+        *slot.borrow_mut() = steps.to_vec();
+    });
 }
 
 pub struct SiteBlocker {
@@ -657,19 +673,42 @@ impl SiteBlocker {
     }
 
     fn apply_hosts_block(&self) -> io::Result<()> {
-        let original = fs::read_to_string(HOSTS_FILE)?;
-        let content = self.build_blocked_hosts_content(&original);
-        atomic_write_hosts(&content)?;
-        flush_dns_cache();
+        self.apply_hosts_block_to_path(Path::new(HOSTS_FILE))
+    }
+
+    fn apply_hosts_block_to_path(&self, hosts_path: &Path) -> io::Result<()> {
+        let changed = atomic_write_hosts_to_path(hosts_path, |snapshot_content| {
+            Some(self.build_blocked_hosts_content(snapshot_content))
+        })?;
+        if changed {
+            flush_dns_cache();
+        }
         Ok(())
     }
 
     fn remove_hosts_block(&self) -> io::Result<()> {
-        let content = fs::read_to_string(HOSTS_FILE)?;
-        let cleaned = Self::strip_block_section(&content);
-        // Only write back if something was actually removed.
-        if cleaned != content {
-            atomic_write_hosts(&cleaned)?;
+        self.remove_hosts_block_from_path(Path::new(HOSTS_FILE))
+    }
+
+    fn remove_hosts_block_from_path(&self, hosts_path: &Path) -> io::Result<()> {
+        // Fast path: when there is no managed section to remove, avoid creating
+        // rollback artifacts in the hosts directory (which may require write
+        // permission even for a no-op unblock).
+        let current = fs::read_to_string(hosts_path)?;
+        if Self::strip_block_section(&current) == current {
+            return Ok(());
+        }
+
+        let changed = atomic_write_hosts_to_path(hosts_path, |snapshot_content| {
+            let cleaned = Self::strip_block_section(snapshot_content);
+            if cleaned == snapshot_content {
+                None
+            } else {
+                Some(cleaned)
+            }
+        })?;
+        // Only flush DNS when we actually changed the hosts file.
+        if changed {
             flush_dns_cache();
         }
         Ok(())
@@ -951,31 +990,199 @@ fn probe_hosts_write_path(path: &Path) -> io::Result<()> {
     fs::remove_file(&probe)
 }
 
-/// Write `content` to the hosts file atomically via a temp file + rename so
-/// an interrupted write cannot corrupt the file or leave it truncated.
-/// On non-Windows the original file's permissions are copied to the replacement.
-/// On Windows we fall back to a direct write because atomic rename over an
-/// existing file requires Win32 APIs not exposed by std::fs::rename.
-fn atomic_write_hosts(content: &str) -> io::Result<()> {
-    let hosts_path = Path::new(HOSTS_FILE);
-
+enum HostsReplaceError {
+    NoMutation(io::Error),
     #[cfg(target_os = "windows")]
-    {
-        fs::write(hosts_path, content)
+    NeedsRollback(io::Error),
+}
+
+/// Update the hosts file via staged replacement and rollback, deriving next
+/// content from the snapshotted source to avoid TOCTOU races.
+fn atomic_write_hosts_to_path<F>(hosts_path: &Path, build_content: F) -> io::Result<bool>
+where
+    F: FnOnce(&str) -> Option<String>,
+{
+    let staged_path = hosts_transaction_temp_path(hosts_path, "staged");
+    let snapshot_path = hosts_transaction_temp_path(hosts_path, "snapshot");
+
+    create_hosts_snapshot(hosts_path, &snapshot_path)?;
+    let snapshot_content = match fs::read_to_string(&snapshot_path) {
+        Ok(content) => content,
+        Err(error) => {
+            let _ = remove_file_if_exists(&staged_path);
+            let _ = remove_file_if_exists(&snapshot_path);
+            return Err(error);
+        }
+    };
+    let Some(content) = build_content(&snapshot_content) else {
+        let _ = remove_file_if_exists(&staged_path);
+        let _ = remove_file_if_exists(&snapshot_path);
+        return Ok(false);
+    };
+
+    if let Err(error) = write_staged_hosts_file(hosts_path, &staged_path, &content) {
+        let _ = remove_file_if_exists(&staged_path);
+        let _ = remove_file_if_exists(&snapshot_path);
+        return Err(error);
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let dir = hosts_path.parent().unwrap_or(Path::new("."));
-        let tmp_path = dir.join(".focustime_hosts.tmp");
-        fs::write(&tmp_path, content)?;
-        // Copy the original file's permissions onto the temp file so the rename
-        // does not silently change the access mode of /etc/hosts.
-        if let Ok(meta) = fs::metadata(hosts_path) {
-            let _ = fs::set_permissions(&tmp_path, meta.permissions());
+    match replace_hosts_file(&staged_path, hosts_path) {
+        Ok(()) => {}
+        Err(HostsReplaceError::NoMutation(error)) => {
+            let _ = remove_file_if_exists(&staged_path);
+            let _ = remove_file_if_exists(&snapshot_path);
+            return Err(error);
         }
-        fs::rename(&tmp_path, hosts_path)
+        #[cfg(target_os = "windows")]
+        Err(HostsReplaceError::NeedsRollback(error)) => {
+            return rollback_hosts_write(hosts_path, &snapshot_path, &staged_path, error)
+                .map(|()| true);
+        }
     }
+
+    if let Err(error) = maybe_fail_hosts_write_step(HostsWriteFailStep::AfterReplace) {
+        return rollback_hosts_write(hosts_path, &snapshot_path, &staged_path, error)
+            .map(|()| true);
+    }
+
+    cleanup_temp_file_best_effort(&staged_path);
+    cleanup_temp_file_best_effort(&snapshot_path);
+    Ok(true)
+}
+
+fn rollback_hosts_write(
+    hosts_path: &Path,
+    snapshot_path: &Path,
+    staged_path: &Path,
+    update_error: io::Error,
+) -> io::Result<()> {
+    let rollback_result = restore_hosts_snapshot(hosts_path, snapshot_path);
+    let _ = remove_file_if_exists(staged_path);
+    let _ = remove_file_if_exists(snapshot_path);
+
+    match rollback_result {
+        Ok(()) => Err(io::Error::new(
+            update_error.kind(),
+            format!("failed to update hosts file: {update_error}; previous state restored"),
+        )),
+        Err(rollback_error) => Err(io::Error::other(format!(
+            "failed to update hosts file: {update_error}; rollback failed: {rollback_error}"
+        ))),
+    }
+}
+
+fn create_hosts_snapshot(hosts_path: &Path, snapshot_path: &Path) -> io::Result<()> {
+    maybe_fail_hosts_write_step(HostsWriteFailStep::Snapshot)?;
+    fs::copy(hosts_path, snapshot_path).map(|_| ())
+}
+
+fn write_staged_hosts_file(hosts_path: &Path, staged_path: &Path, content: &str) -> io::Result<()> {
+    maybe_fail_hosts_write_step(HostsWriteFailStep::StageWrite)?;
+    fs::write(staged_path, content)?;
+    // Copy the original file's permissions onto the staged file so replacement
+    // does not silently change the hosts file mode bits.
+    if let Ok(meta) = fs::metadata(hosts_path) {
+        let _ = fs::set_permissions(staged_path, meta.permissions());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn replace_hosts_file(staged_path: &Path, hosts_path: &Path) -> Result<(), HostsReplaceError> {
+    match fs::rename(staged_path, hosts_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            fs::remove_file(hosts_path).map_err(HostsReplaceError::NoMutation)?;
+            fs::rename(staged_path, hosts_path).map_err(HostsReplaceError::NeedsRollback)
+        }
+        Err(error) => Err(HostsReplaceError::NoMutation(error)),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn replace_hosts_file(staged_path: &Path, hosts_path: &Path) -> Result<(), HostsReplaceError> {
+    fs::rename(staged_path, hosts_path).map_err(HostsReplaceError::NoMutation)
+}
+
+fn restore_hosts_snapshot(hosts_path: &Path, snapshot_path: &Path) -> io::Result<()> {
+    maybe_fail_hosts_write_step(HostsWriteFailStep::RollbackRestore)?;
+    restore_snapshot_file(snapshot_path, hosts_path)
+}
+
+#[cfg(target_os = "windows")]
+fn restore_snapshot_file(snapshot_path: &Path, hosts_path: &Path) -> io::Result<()> {
+    match fs::rename(snapshot_path, hosts_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            fs::remove_file(hosts_path)?;
+            fs::rename(snapshot_path, hosts_path)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn restore_snapshot_file(snapshot_path: &Path, hosts_path: &Path) -> io::Result<()> {
+    fs::rename(snapshot_path, hosts_path)
+}
+
+fn hosts_transaction_temp_path(hosts_path: &Path, marker: &str) -> PathBuf {
+    let dir = hosts_path.parent().unwrap_or(Path::new("."));
+    let target_name = hosts_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("hosts");
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    dir.join(format!(
+        ".{target_name}.focustime.{pid}.{nanos}.{marker}.tmp"
+    ))
+}
+
+fn remove_file_if_exists(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+fn cleanup_temp_file_best_effort(path: &Path) {
+    if let Err(error) = remove_file_if_exists(path) {
+        eprintln!(
+            "Warning: failed to remove hosts temp file `{}`: {error}",
+            path.display()
+        );
+    }
+}
+
+fn maybe_fail_hosts_write_step(step: HostsWriteFailStep) -> io::Result<()> {
+    #[cfg(test)]
+    {
+        let should_fail = TEST_HOSTS_WRITE_FAIL_STEPS.with(|slot| {
+            let mut configured = slot.borrow_mut();
+            if configured.first().copied() == Some(step) {
+                configured.remove(0);
+                true
+            } else {
+                false
+            }
+        });
+        if should_fail {
+            return Err(io::Error::other(format!(
+                "simulated hosts write failure at {step:?}"
+            )));
+        }
+    }
+    #[cfg(not(test))]
+    {
+        let _ = step;
+    }
+
+    Ok(())
 }
 
 /// Flush the OS DNS cache so /etc/hosts changes take effect immediately.
@@ -1007,7 +1214,16 @@ fn flush_dns_cache() {
 #[cfg(test)]
 mod tests {
     use crate::blocker::*;
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_hosts_path(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("focustime-hosts-rollback-{label}-{unique}.tmp"))
+    }
 
     #[test]
     fn strip_unterminated_start_marker_leaves_content_unchanged() {
@@ -1332,5 +1548,102 @@ mod tests {
         assert!(!preview.would_change);
         assert!(preview.next_section.is_some());
         assert!(preview.current_section.is_some());
+    }
+
+    #[test]
+    fn block_rolls_back_to_original_after_post_replace_failure() {
+        let path = temp_hosts_path("block-post-replace");
+        let original = "127.0.0.1 localhost\n::1 localhost\n";
+        fs::write(&path, original).expect("temp hosts file should be writable");
+
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("example.com".to_string());
+        set_test_hosts_write_fail_steps(&[HostsWriteFailStep::AfterReplace]);
+
+        let result = blocker.apply_hosts_block_to_path(&path);
+        set_test_hosts_write_fail_steps(&[]);
+
+        assert!(result.is_err());
+        let restored = fs::read_to_string(&path).expect("hosts file should remain readable");
+        assert_eq!(restored, original);
+        assert!(!restored.contains(BLOCK_MARKER_START));
+        assert!(!restored.contains(BLOCK_MARKER_END));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn block_failure_before_replace_keeps_original_content() {
+        let path = temp_hosts_path("block-stage-write");
+        let original = "127.0.0.1 localhost\n::1 localhost\n";
+        fs::write(&path, original).expect("temp hosts file should be writable");
+
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("example.com".to_string());
+        set_test_hosts_write_fail_steps(&[HostsWriteFailStep::StageWrite]);
+
+        let result = blocker.apply_hosts_block_to_path(&path);
+        set_test_hosts_write_fail_steps(&[]);
+
+        assert!(result.is_err());
+        let content = fs::read_to_string(&path).expect("hosts file should remain readable");
+        assert_eq!(content, original);
+        assert!(!content.contains(BLOCK_MARKER_START));
+        assert!(!content.contains(BLOCK_MARKER_END));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn unblock_rolls_back_to_complete_section_after_post_replace_failure() {
+        let path = temp_hosts_path("unblock-post-replace");
+        let original = concat!(
+            "127.0.0.1 localhost\n",
+            "# focustime-block-start\n",
+            "127.0.0.1 example.com\n",
+            "::1 example.com\n",
+            "# focustime-block-end\n",
+            "::1 localhost\n",
+        );
+        fs::write(&path, original).expect("temp hosts file should be writable");
+
+        let blocker = SiteBlocker::new();
+        set_test_hosts_write_fail_steps(&[HostsWriteFailStep::AfterReplace]);
+
+        let result = blocker.remove_hosts_block_from_path(&path);
+        set_test_hosts_write_fail_steps(&[]);
+
+        assert!(result.is_err());
+        let restored = fs::read_to_string(&path).expect("hosts file should remain readable");
+        assert_eq!(restored, original);
+        assert_eq!(restored.matches(BLOCK_MARKER_START).count(), 1);
+        assert_eq!(restored.matches(BLOCK_MARKER_END).count(), 1);
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rollback_failure_is_reported_when_restore_step_fails() {
+        let path = temp_hosts_path("rollback-restore-error");
+        let original = "127.0.0.1 localhost\n::1 localhost\n";
+        fs::write(&path, original).expect("temp hosts file should be writable");
+
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("example.com".to_string());
+        set_test_hosts_write_fail_steps(&[
+            HostsWriteFailStep::AfterReplace,
+            HostsWriteFailStep::RollbackRestore,
+        ]);
+
+        let result = blocker.apply_hosts_block_to_path(&path);
+        set_test_hosts_write_fail_steps(&[]);
+
+        let error = result.expect_err("rollback should fail when restore step is injected to fail");
+        assert!(error.to_string().contains("rollback failed"));
+        let content = fs::read_to_string(&path).expect("hosts file should remain readable");
+        assert!(content.contains(BLOCK_MARKER_START));
+        assert!(content.contains(BLOCK_MARKER_END));
+
+        let _ = fs::remove_file(path);
     }
 }
