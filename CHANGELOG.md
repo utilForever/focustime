@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-05-18
+
 ### Changed
 
+- **Restart/recovery elapsed reconciliation and status hydration (#309):** recovery snapshot hydration now reconciles elapsed wall time so restored phase/remaining/session totals stay accurate across relaunch gaps in both startup restoration and CLI status output paths.
+- **Hosts-file rollback hardening on partial failures (#310):** hosts backend block/unblock updates now use explicit rollback behavior to restore the prior hosts state when write/replace operations fail mid-update.
 - **WakaTime queue replay/backoff tuning (#311):** retuned default retry/runtime queue knobs to reduce aggressive retry loops, added exponential replay cooldown for consecutive retryable queue failures, and expanded queued/replaying/retrying/error status transition coverage in runtime/UI tests.
+- **CLI `--json` error contract consistency sweep (#312):** expanded parser/runtime error-contract coverage to enforce stable JSON error envelope shape, exit-code mapping, and stream behavior across command families.
+- **`--status --watch` cadence and interrupt polish (#313):** switched watch scheduling to monotonic deadlines for steadier cadence and improved interrupt handling so watch mode exits cleanly without partial output.
 
 ## [0.11.0] - 2026-05-16
 
@@ -276,7 +282,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/utilForever/focustime/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/utilForever/focustime/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/utilForever/focustime/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/utilForever/focustime/compare/v0.9.1...v0.10.0
