@@ -1071,21 +1071,13 @@ unsafe fn install_platform_watch_interrupt_handler() -> Result<(), String> {
     }
 
     unsafe extern "C" {
-        fn signal(signum: i32, handler: usize) -> usize;
+        fn signal(signum: i32, handler: unsafe extern "C" fn(i32)) -> unsafe extern "C" fn(i32);
     }
 
     const SIGINT: i32 = 2;
-    const SIG_ERR: usize = usize::MAX;
 
-    let previous = unsafe { signal(SIGINT, handle_sigint as usize) };
-    if previous == SIG_ERR {
-        Err(
-            "Failed to install watch interrupt handler: signal(SIGINT) returned SIG_ERR."
-                .to_string(),
-        )
-    } else {
-        Ok(())
-    }
+    let _previous = unsafe { signal(SIGINT, handle_sigint) };
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]

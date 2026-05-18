@@ -97,7 +97,7 @@ impl TestEnv {
 
     #[cfg(unix)]
     fn run_watch_with_sigint(&self, args: &[&str], runtime: Duration) -> Output {
-        let mut child = self.spawn_watch(args);
+        let child = self.spawn_watch(args);
         thread::sleep(runtime);
         let interrupt_status = Command::new("kill")
             .arg("-INT")
@@ -390,7 +390,8 @@ fn status_watch_json_sigint_exits_cleanly_without_partial_snapshot() {
     assert_eq!(output.status.code(), Some(0));
     assert!(stderr_text(&output).trim().is_empty());
 
-    let lines: Vec<&str> = stdout_text(&output)
+    let stdout = stdout_text(&output);
+    let lines: Vec<&str> = stdout
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
