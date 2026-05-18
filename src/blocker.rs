@@ -977,6 +977,7 @@ fn probe_hosts_write_path(path: &Path) -> io::Result<()> {
 
 enum HostsReplaceError {
     NoMutation(io::Error),
+    #[cfg(target_os = "windows")]
     NeedsRollback(io::Error),
 }
 
@@ -1001,6 +1002,7 @@ fn atomic_write_hosts_to_path(hosts_path: &Path, content: &str) -> io::Result<()
             let _ = remove_file_if_exists(&snapshot_path);
             return Err(error);
         }
+        #[cfg(target_os = "windows")]
         Err(HostsReplaceError::NeedsRollback(error)) => {
             return rollback_hosts_write(hosts_path, &snapshot_path, &staged_path, error);
         }
