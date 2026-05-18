@@ -1,4 +1,13 @@
-use std::{env, fs, path::Path, thread, time::Duration};
+use std::{
+    env, fs,
+    path::Path,
+    sync::{
+        OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::{Duration, Instant},
+};
 
 use crate::app::App;
 
@@ -31,6 +40,10 @@ use crate::cli::{
 
 const CONFIG_FILE_NAME: &str = "config.toml";
 const STATS_FILE_NAME: &str = "stats.toml";
+const WATCH_INTERRUPT_POLL_INTERVAL: Duration = Duration::from_millis(200);
+
+static WATCH_INTERRUPTED: AtomicBool = AtomicBool::new(false);
+static WATCH_INTERRUPT_HANDLER: OnceLock<Result<(), String>> = OnceLock::new();
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
     match cli_command.kind {
@@ -996,12 +1009,118 @@ fn execute_status_watch_command(output: OutputMode, interval_secs: u64) -> Resul
         return Err("`--watch` interval must be greater than 0 seconds.".to_string());
     }
 
+    install_watch_interrupt_handler()?;
+    WATCH_INTERRUPTED.store(false, Ordering::SeqCst);
+    let interval = Duration::from_secs(interval_secs);
+    let mut next_deadline = Instant::now();
+
     loop {
+        if WATCH_INTERRUPTED.load(Ordering::SeqCst) {
+            break;
+        }
+
         let payload = load_status_output()?;
         emit_status_output(&payload, output, true)?;
         flush_stdout()?;
-        thread::sleep(Duration::from_secs(interval_secs));
+
+        next_deadline = next_watch_deadline(next_deadline, interval, Instant::now());
+        if wait_for_next_watch_tick(next_deadline) {
+            break;
+        }
     }
+
+    Ok(())
+}
+
+fn install_watch_interrupt_handler() -> Result<(), String> {
+    WATCH_INTERRUPT_HANDLER
+        .get_or_init(|| unsafe { install_platform_watch_interrupt_handler() })
+        .clone()
+}
+
+fn next_watch_deadline(previous_deadline: Instant, interval: Duration, now: Instant) -> Instant {
+    let mut deadline = previous_deadline + interval;
+    while deadline <= now {
+        deadline += interval;
+    }
+    deadline
+}
+
+fn wait_for_next_watch_tick(deadline: Instant) -> bool {
+    loop {
+        if WATCH_INTERRUPTED.load(Ordering::SeqCst) {
+            return true;
+        }
+
+        let now = Instant::now();
+        if now >= deadline {
+            return false;
+        }
+
+        let sleep_for = deadline
+            .saturating_duration_since(now)
+            .min(WATCH_INTERRUPT_POLL_INTERVAL);
+        thread::sleep(sleep_for);
+    }
+}
+
+#[cfg(unix)]
+unsafe fn install_platform_watch_interrupt_handler() -> Result<(), String> {
+    unsafe extern "C" fn handle_sigint(_signal: i32) {
+        WATCH_INTERRUPTED.store(true, Ordering::SeqCst);
+    }
+
+    unsafe extern "C" {
+        fn signal(signum: i32, handler: usize) -> usize;
+    }
+
+    const SIGINT: i32 = 2;
+    const SIG_ERR: usize = usize::MAX;
+
+    let previous = unsafe { signal(SIGINT, handle_sigint as usize) };
+    if previous == SIG_ERR {
+        Err(
+            "Failed to install watch interrupt handler: signal(SIGINT) returned SIG_ERR."
+                .to_string(),
+        )
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn install_platform_watch_interrupt_handler() -> Result<(), String> {
+    unsafe extern "system" fn handle_console_ctrl(ctrl_type: u32) -> i32 {
+        const CTRL_C_EVENT: u32 = 0;
+        const CTRL_BREAK_EVENT: u32 = 1;
+        if ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_BREAK_EVENT {
+            WATCH_INTERRUPTED.store(true, Ordering::SeqCst);
+            return 1;
+        }
+        0
+    }
+
+    unsafe extern "system" {
+        fn SetConsoleCtrlHandler(
+            handler_routine: Option<unsafe extern "system" fn(u32) -> i32>,
+            add: i32,
+        ) -> i32;
+    }
+
+    let installed = unsafe { SetConsoleCtrlHandler(Some(handle_console_ctrl), 1) };
+    if installed == 0 {
+        Err(
+            "Failed to install watch interrupt handler: SetConsoleCtrlHandler returned 0."
+                .to_string(),
+        )
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(any(unix, target_os = "windows")))]
+unsafe fn install_platform_watch_interrupt_handler() -> Result<(), String> {
+    Ok(())
 }
 
 fn load_status_output() -> Result<StatusOutput, String> {
@@ -1446,5 +1565,81 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
         selected_task_label,
         focus_intention,
         task_note,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    static WATCH_TEST_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn guard_watch_state() -> std::sync::MutexGuard<'static, ()> {
+        WATCH_TEST_GUARD
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("watch test guard should lock")
+    }
+
+    #[test]
+    fn next_watch_deadline_advances_when_on_schedule() {
+        let _guard = guard_watch_state();
+        let base = Instant::now();
+        let interval = Duration::from_secs(2);
+        let now = base + Duration::from_millis(500);
+
+        let deadline = next_watch_deadline(base, interval, now);
+
+        assert_eq!(deadline, base + interval);
+    }
+
+    #[test]
+    fn next_watch_deadline_skips_missed_intervals() {
+        let _guard = guard_watch_state();
+        let base = Instant::now();
+        let interval = Duration::from_secs(1);
+        let now = base + Duration::from_millis(3300);
+
+        let deadline = next_watch_deadline(base, interval, now);
+
+        assert_eq!(deadline, base + Duration::from_secs(4));
+    }
+
+    #[test]
+    fn wait_for_next_watch_tick_returns_interrupt_state_immediately() {
+        let _guard = guard_watch_state();
+        WATCH_INTERRUPTED.store(true, Ordering::SeqCst);
+
+        let interrupted = wait_for_next_watch_tick(Instant::now() + Duration::from_secs(1));
+
+        WATCH_INTERRUPTED.store(false, Ordering::SeqCst);
+        assert!(interrupted);
+    }
+
+    #[test]
+    fn wait_for_next_watch_tick_returns_false_after_deadline() {
+        let _guard = guard_watch_state();
+        WATCH_INTERRUPTED.store(false, Ordering::SeqCst);
+
+        let interrupted = wait_for_next_watch_tick(Instant::now());
+
+        WATCH_INTERRUPTED.store(false, Ordering::SeqCst);
+        assert!(!interrupted);
+    }
+
+    #[test]
+    fn wait_for_next_watch_tick_observes_interrupt_request() {
+        let _guard = guard_watch_state();
+        WATCH_INTERRUPTED.store(false, Ordering::SeqCst);
+        let deadline = Instant::now() + Duration::from_secs(2);
+
+        let wait_thread = std::thread::spawn(move || wait_for_next_watch_tick(deadline));
+        std::thread::sleep(Duration::from_millis(30));
+        WATCH_INTERRUPTED.store(true, Ordering::SeqCst);
+
+        let interrupted = wait_thread.join().expect("watch wait thread should join");
+        WATCH_INTERRUPTED.store(false, Ordering::SeqCst);
+        assert!(interrupted);
     }
 }

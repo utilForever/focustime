@@ -1,7 +1,7 @@
 use std::{
     fs,
     path::PathBuf,
-    process::{Command, Output, Stdio},
+    process::{Child, Command, Output, Stdio},
     sync::atomic::{AtomicU64, Ordering},
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -68,7 +68,7 @@ impl TestEnv {
             .expect("failed to run focustime integration command")
     }
 
-    fn run_watch(&self, args: &[&str], runtime: Duration) -> Output {
+    fn spawn_watch(&self, args: &[&str]) -> Child {
         let mut command = Command::new(focustime_bin_path());
         command.args(args);
         command.current_dir(&self.root);
@@ -81,14 +81,36 @@ impl TestEnv {
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
 
-        let mut child = command
+        command
             .spawn()
-            .expect("failed to spawn focustime integration command");
+            .expect("failed to spawn focustime integration command")
+    }
+
+    fn run_watch(&self, args: &[&str], runtime: Duration) -> Output {
+        let mut child = self.spawn_watch(args);
         thread::sleep(runtime);
         let _ = child.kill();
         child
             .wait_with_output()
             .expect("failed to collect watch command output")
+    }
+
+    #[cfg(unix)]
+    fn run_watch_with_sigint(&self, args: &[&str], runtime: Duration) -> Output {
+        let mut child = self.spawn_watch(args);
+        thread::sleep(runtime);
+        let interrupt_status = Command::new("kill")
+            .arg("-INT")
+            .arg(child.id().to_string())
+            .status()
+            .expect("failed to send SIGINT to watch command");
+        assert!(
+            interrupt_status.success(),
+            "kill -INT should succeed, got status: {interrupt_status}"
+        );
+        child
+            .wait_with_output()
+            .expect("failed to collect watch command output after SIGINT")
     }
 }
 
@@ -351,6 +373,36 @@ fn status_watch_json_streams_multiple_snapshots() {
     for line in lines {
         let payload: Value =
             serde_json::from_str(line).expect("snapshot line should be valid JSON");
+        assert!(payload.get("day").is_some());
+        assert!(payload.get("live").is_some());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn status_watch_json_sigint_exits_cleanly_without_partial_snapshot() {
+    let env = TestEnv::new("status-watch-json-sigint");
+    let output = env.run_watch_with_sigint(
+        &["--status", "--watch=1", "--json"],
+        Duration::from_millis(1400),
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(stderr_text(&output).trim().is_empty());
+
+    let lines: Vec<&str> = stdout_text(&output)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert!(
+        !lines.is_empty(),
+        "expected at least one snapshot before SIGINT, got none"
+    );
+
+    for line in lines {
+        let payload: Value =
+            serde_json::from_str(line).expect("SIGINT watch output should stay valid NDJSON");
         assert!(payload.get("day").is_some());
         assert!(payload.get("live").is_some());
     }
