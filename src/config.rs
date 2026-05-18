@@ -1046,15 +1046,15 @@ fn default_wakatime_language() -> String {
 }
 
 fn default_wakatime_retry_backoff_secs() -> Vec<u64> {
-    vec![1, 2]
+    vec![2, 5, 10]
 }
 
 fn default_wakatime_queue_capacity() -> usize {
-    256
+    512
 }
 
 fn default_wakatime_queue_retry_delay_secs() -> u64 {
-    10
+    30
 }
 
 fn default_schedule_time_step_minutes() -> u16 {
