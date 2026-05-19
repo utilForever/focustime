@@ -472,6 +472,7 @@ impl App {
             weekday_profile_rules: self.weekday_profile_rules.clone(),
             session_templates: self.session_templates.clone(),
             selected_session_template: self.selected_session_template_for_persistence(),
+            automation_triggers: self.automation_triggers.clone(),
             selected_theme_preset: self.selected_theme_preset,
             notifications: self.notification_settings,
             auto_start: self.auto_start,

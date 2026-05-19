@@ -30,6 +30,7 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.selected_break_template, "Classic");
     assert!(cfg.session_templates.is_empty());
     assert!(cfg.selected_session_template.is_empty());
+    assert!(cfg.automation_triggers.is_empty());
     assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
     assert_eq!(cfg.break_templates.len(), 2);
     assert!(cfg.blocked_sites.is_empty());
@@ -159,6 +160,23 @@ fn round_trip_full_config() {
             },
         }],
         selected_session_template: "Morning deep work".to_string(),
+        automation_triggers: vec![
+            AutomationTriggerRuleConfig {
+                trigger: AutomationTriggerConditionConfig::Time {
+                    days: vec!["mon".to_string(), "wed".to_string()],
+                    at: "08:55".to_string(),
+                },
+                action: AutomationTriggerActionConfig::ApplyDefaults {
+                    profile: ProfileId::DeepWork,
+                    blocklist_profile: "Work".to_string(),
+                    session_template: Some("Morning deep work".to_string()),
+                },
+            },
+            AutomationTriggerRuleConfig {
+                trigger: AutomationTriggerConditionConfig::FocusCompleted,
+                action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 5 * 60 },
+            },
+        ],
         weekday_profile_rules: Vec::new(),
         selected_theme_preset: ThemePreset::HighContrast,
         notifications: NotificationConfig {
@@ -320,6 +338,7 @@ fn round_trip_full_config() {
         parsed.selected_session_template,
         original.selected_session_template
     );
+    assert_eq!(parsed.automation_triggers, original.automation_triggers);
     assert_eq!(parsed.selected_theme_preset, original.selected_theme_preset);
     assert_eq!(parsed.notifications, NotificationConfig::default());
     assert_eq!(parsed.auto_start, AutoStartConfig::default());
@@ -812,6 +831,173 @@ fn normalize_clamps_schedule_runtime_knobs_to_safe_bounds() {
 }
 
 #[test]
+fn normalize_filters_invalid_time_triggers_and_clamps_delay_action() {
+    let cfg = AppConfig {
+        automation_triggers: vec![
+            AutomationTriggerRuleConfig {
+                trigger: AutomationTriggerConditionConfig::Time {
+                    days: vec!["MONDAY".to_string(), "fri".to_string(), "mon".to_string()],
+                    at: "08:05".to_string(),
+                },
+                action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 0 },
+            },
+            AutomationTriggerRuleConfig {
+                trigger: AutomationTriggerConditionConfig::Time {
+                    days: vec!["nonday".to_string()],
+                    at: "09:00".to_string(),
+                },
+                action: AutomationTriggerActionConfig::StartFocus,
+            },
+        ],
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(cfg.automation_triggers.len(), 1);
+    assert_eq!(
+        cfg.automation_triggers[0],
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time {
+                days: vec!["mon".to_string(), "fri".to_string()],
+                at: "08:05".to_string(),
+            },
+            action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 60 },
+        }
+    );
+}
+
+#[test]
+fn normalize_automation_trigger_apply_defaults_resolves_references() {
+    let cfg = AppConfig {
+        blocklist_profiles: vec![
+            BlocklistProfileConfig {
+                name: "Default".to_string(),
+                sites: Vec::new(),
+                allowlist_sites: Vec::new(),
+            },
+            BlocklistProfileConfig {
+                name: "Work".to_string(),
+                sites: Vec::new(),
+                allowlist_sites: Vec::new(),
+            },
+        ],
+        session_templates: vec![SessionTemplateConfig {
+            name: "Deep Flow".to_string(),
+            task_label: "Docs".to_string(),
+            profile: ProfileId::DeepWork,
+            blocklist_profile: "Work".to_string(),
+            schedule: RecurringScheduleConfig::default(),
+        }],
+        automation_triggers: vec![AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::FocusStarted,
+            action: AutomationTriggerActionConfig::ApplyDefaults {
+                profile: ProfileId::DeepWork,
+                blocklist_profile: "work".to_string(),
+                session_template: Some("deep flow".to_string()),
+            },
+        }],
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(cfg.automation_triggers.len(), 1);
+    assert_eq!(
+        cfg.automation_triggers[0],
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::FocusStarted,
+            action: AutomationTriggerActionConfig::ApplyDefaults {
+                profile: ProfileId::DeepWork,
+                blocklist_profile: "Work".to_string(),
+                session_template: Some("Deep Flow".to_string()),
+            },
+        }
+    );
+}
+
+#[test]
+fn validate_automation_trigger_rules_rejects_conflicting_rules() {
+    let rules = vec![
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time {
+                days: vec!["mon".to_string()],
+                at: "09:00".to_string(),
+            },
+            action: AutomationTriggerActionConfig::StartFocus,
+        },
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time {
+                days: vec!["monday".to_string()],
+                at: "09:00".to_string(),
+            },
+            action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 5 * 60 },
+        },
+    ];
+
+    let error =
+        validate_automation_trigger_rules(&rules, &[BlocklistProfileConfig::default()], &[])
+            .unwrap_err();
+
+    assert!(error.contains("Conflicting automation trigger rules"));
+    assert!(error.contains("time trigger"));
+}
+
+#[test]
+fn validate_automation_trigger_rules_rejects_missing_references() {
+    let rules = vec![AutomationTriggerRuleConfig {
+        trigger: AutomationTriggerConditionConfig::FocusStarted,
+        action: AutomationTriggerActionConfig::ApplyDefaults {
+            profile: ProfileId::DeepWork,
+            blocklist_profile: "Work".to_string(),
+            session_template: Some("Deep Flow".to_string()),
+        },
+    }];
+
+    let error =
+        validate_automation_trigger_rules(&rules, &[BlocklistProfileConfig::default()], &[])
+            .unwrap_err();
+
+    assert!(error.contains("blocklist profile `Work` does not exist"));
+}
+
+#[test]
+fn validate_automation_trigger_rules_accepts_distinct_valid_rules() {
+    let blocklists = vec![
+        BlocklistProfileConfig::default(),
+        BlocklistProfileConfig {
+            name: "Work".to_string(),
+            sites: Vec::new(),
+            allowlist_sites: Vec::new(),
+        },
+    ];
+    let templates = vec![SessionTemplateConfig {
+        name: "Deep Flow".to_string(),
+        task_label: "Docs".to_string(),
+        profile: ProfileId::DeepWork,
+        blocklist_profile: "Work".to_string(),
+        schedule: RecurringScheduleConfig::default(),
+    }];
+    let rules = vec![
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time {
+                days: vec!["mon".to_string()],
+                at: "09:00".to_string(),
+            },
+            action: AutomationTriggerActionConfig::ApplyDefaults {
+                profile: ProfileId::DeepWork,
+                blocklist_profile: "Work".to_string(),
+                session_template: Some("Deep Flow".to_string()),
+            },
+        },
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::ScheduleWindowStart,
+            action: AutomationTriggerActionConfig::StartFocus,
+        },
+    ];
+
+    validate_automation_trigger_rules(&rules, &blocklists, &templates).unwrap();
+}
+
+#[test]
 fn normalize_clamps_wakatime_runtime_knobs_and_falls_back_for_invalid_backoff() {
     let cfg = AppConfig {
         wakatime_runtime: WakatimeRuntimeConfig {
@@ -917,6 +1103,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         selected_break_template: default_break_template_name(),
         session_templates: Vec::new(),
         selected_session_template: String::new(),
+        automation_triggers: Vec::new(),
         weekday_profile_rules: Vec::new(),
         selected_theme_preset: ThemePreset::Classic,
         notifications: NotificationConfig::default(),

@@ -1,3 +1,4 @@
+use crate::app::automation_triggers::AutomationTriggerEvent;
 use crate::app::{
     App, DateTime, Local, ScheduleDisplayState, ShortcutAction, TimerPhase, TimerState,
     TimerStatus, WindowOccurrence, active_occurrence, active_one_time_occurrence,
@@ -77,26 +78,39 @@ impl App {
     }
 
     pub(super) fn sync_recurring_schedule(&mut self, now: DateTime<Local>) {
+        let active_window = self.active_schedule_occurrence_at(now);
+        let active_occurrence_key = active_window.as_ref().map(occurrence_key);
+        if self.last_active_schedule_occurrence_key.as_deref() != active_occurrence_key.as_deref()
+            && self.last_active_schedule_occurrence_key.is_some()
+        {
+            self.fire_automation_trigger_event(AutomationTriggerEvent::ScheduleWindowEnd, now);
+        }
+        self.last_active_schedule_occurrence_key = active_occurrence_key.clone();
+
         if self.recurring_windows.is_empty() && self.one_time_windows.is_empty() {
             self.schedule_armed_occurrence_key = None;
             self.clear_schedule_delay_state();
             return;
         }
 
-        let Some(active_window) = self.active_schedule_occurrence_at(now) else {
+        let Some(_active_window) = active_window else {
             self.schedule_armed_occurrence_key = None;
             self.clear_schedule_delay_state();
             return;
         };
 
-        let active_occurrence_key = occurrence_key(&active_window);
+        let Some(active_occurrence_key) = active_occurrence_key else {
+            self.schedule_armed_occurrence_key = None;
+            self.clear_schedule_delay_state();
+            return;
+        };
         if self.sync_schedule_delay_state_for_occurrence(&active_occurrence_key, now) {
             self.schedule_armed_occurrence_key = None;
             return;
         }
         if self.last_schedule_occurrence_key.as_deref() != Some(active_occurrence_key.as_str()) {
             self.last_schedule_occurrence_key = Some(active_occurrence_key.clone());
-            self.handle_schedule_window_start(&active_occurrence_key);
+            self.handle_schedule_window_start(&active_occurrence_key, now);
         } else if self.focus_session_active_for_current_state() {
             self.schedule_armed_occurrence_key = None;
         }
@@ -105,6 +119,17 @@ impl App {
     pub(super) fn delay_active_schedule_start_for_workflow(
         &mut self,
         now: DateTime<Local>,
+    ) -> Result<DateTime<Local>, String> {
+        self.delay_active_schedule_start_for_workflow_with_secs(
+            now,
+            self.schedule_runtime.delay_secs,
+        )
+    }
+
+    pub(super) fn delay_active_schedule_start_for_workflow_with_secs(
+        &mut self,
+        now: DateTime<Local>,
+        delay_secs: u64,
     ) -> Result<DateTime<Local>, String> {
         if self.focus_session_active_for_current_state() {
             return Err(
@@ -128,8 +153,7 @@ impl App {
             }
             _ => now,
         };
-        let requested_until =
-            delayed_from + chrono::Duration::seconds(self.schedule_runtime.delay_secs as i64);
+        let requested_until = delayed_from + chrono::Duration::seconds(delay_secs as i64);
         let delayed_until = requested_until.min(active_window.end);
 
         self.schedule_armed_occurrence_key = None;
@@ -180,7 +204,8 @@ impl App {
         false
     }
 
-    fn handle_schedule_window_start(&mut self, active_occurrence_key: &str) {
+    fn handle_schedule_window_start(&mut self, active_occurrence_key: &str, now: DateTime<Local>) {
+        self.fire_automation_trigger_event(AutomationTriggerEvent::ScheduleWindowStart, now);
         if self.focus_session_active_for_current_state() {
             self.schedule_armed_occurrence_key = None;
             return;

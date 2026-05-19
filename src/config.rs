@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fs;
 use std::io;
@@ -86,6 +86,9 @@ pub struct AppConfig {
     /// Name of the active session template (empty = none selected).
     #[serde(default)]
     pub selected_session_template: String,
+    /// Rule-based automation triggers for time/schedule/runtime events.
+    #[serde(default)]
+    pub automation_triggers: Vec<AutomationTriggerRuleConfig>,
     /// Selected UI theme preset.
     #[serde(default)]
     pub selected_theme_preset: ThemePreset,
@@ -793,6 +796,113 @@ impl Default for WeekdayProfileRuleConfig {
             profile: ProfileId::default(),
             blocklist_profile: default_blocklist_profile_name(),
             session_template: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct AutomationTriggerRuleConfig {
+    #[serde(default)]
+    pub trigger: AutomationTriggerConditionConfig,
+    #[serde(default)]
+    pub action: AutomationTriggerActionConfig,
+}
+
+impl AutomationTriggerRuleConfig {
+    fn normalized_with_context(
+        &self,
+        blocklist_profiles: &[BlocklistProfileConfig],
+        session_templates: &[SessionTemplateConfig],
+    ) -> Option<Self> {
+        let trigger = self.trigger.normalized()?;
+        let action = self
+            .action
+            .normalized_with_context(blocklist_profiles, session_templates)?;
+        Some(Self { trigger, action })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AutomationTriggerConditionConfig {
+    #[default]
+    ScheduleWindowStart,
+    ScheduleWindowEnd,
+    FocusStarted,
+    FocusCompleted,
+    BreakStarted,
+    BreakCompleted,
+    Time {
+        #[serde(default = "default_schedule_window_days")]
+        days: Vec<String>,
+        #[serde(default = "default_schedule_window_start")]
+        at: String,
+    },
+}
+
+impl AutomationTriggerConditionConfig {
+    fn normalized(&self) -> Option<Self> {
+        match self {
+            Self::ScheduleWindowStart => Some(Self::ScheduleWindowStart),
+            Self::ScheduleWindowEnd => Some(Self::ScheduleWindowEnd),
+            Self::FocusStarted => Some(Self::FocusStarted),
+            Self::FocusCompleted => Some(Self::FocusCompleted),
+            Self::BreakStarted => Some(Self::BreakStarted),
+            Self::BreakCompleted => Some(Self::BreakCompleted),
+            Self::Time { days, at } => {
+                let days = normalize_trigger_days(days)?;
+                let at = normalize_schedule_time_or_default(at, default_schedule_window_start);
+                Some(Self::Time { days, at })
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AutomationTriggerActionConfig {
+    #[default]
+    StartFocus,
+    DelayScheduleStart {
+        #[serde(default = "default_schedule_delay_secs")]
+        delay_secs: u64,
+    },
+    ApplyDefaults {
+        #[serde(default)]
+        profile: ProfileId,
+        #[serde(default = "default_blocklist_profile_name")]
+        blocklist_profile: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_template: Option<String>,
+    },
+}
+
+impl AutomationTriggerActionConfig {
+    fn normalized_with_context(
+        &self,
+        blocklist_profiles: &[BlocklistProfileConfig],
+        session_templates: &[SessionTemplateConfig],
+    ) -> Option<Self> {
+        match self {
+            Self::StartFocus => Some(Self::StartFocus),
+            Self::DelayScheduleStart { delay_secs } => Some(Self::DelayScheduleStart {
+                delay_secs: (*delay_secs).clamp(SCHEDULE_DELAY_MIN_SECS, SCHEDULE_DELAY_MAX_SECS),
+            }),
+            Self::ApplyDefaults {
+                profile,
+                blocklist_profile,
+                session_template,
+            } => Some(Self::ApplyDefaults {
+                profile: *profile,
+                blocklist_profile: normalize_selected_blocklist_profile(
+                    blocklist_profile,
+                    blocklist_profiles,
+                ),
+                session_template: normalize_optional_selected_session_template(
+                    session_template.as_deref(),
+                    session_templates,
+                ),
+            }),
         }
     }
 }
@@ -1617,6 +1727,7 @@ impl Default for AppConfig {
             weekday_profile_rules: Vec::new(),
             session_templates: Vec::new(),
             selected_session_template: String::new(),
+            automation_triggers: Vec::new(),
             selected_theme_preset: ThemePreset::default(),
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
@@ -1820,6 +1931,11 @@ impl AppConfig {
             normalize_session_templates(&self.session_templates, &self.blocklist_profiles);
         self.selected_session_template = normalize_selected_session_template(
             &self.selected_session_template,
+            &self.session_templates,
+        );
+        self.automation_triggers = normalize_automation_triggers(
+            &self.automation_triggers,
+            &self.blocklist_profiles,
             &self.session_templates,
         );
         self.weekday_profile_rules = normalize_weekday_profile_rules(
@@ -2253,6 +2369,166 @@ fn normalize_optional_selected_session_template(
         .map(|template| template.name.clone())
 }
 
+fn normalize_automation_triggers(
+    rules: &[AutomationTriggerRuleConfig],
+    blocklist_profiles: &[BlocklistProfileConfig],
+    session_templates: &[SessionTemplateConfig],
+) -> Vec<AutomationTriggerRuleConfig> {
+    rules
+        .iter()
+        .filter_map(|rule| rule.normalized_with_context(blocklist_profiles, session_templates))
+        .collect()
+}
+
+pub fn validate_automation_trigger_rules(
+    rules: &[AutomationTriggerRuleConfig],
+    blocklist_profiles: &[BlocklistProfileConfig],
+    session_templates: &[SessionTemplateConfig],
+) -> Result<(), String> {
+    let mut seen_trigger_keys: HashMap<String, usize> = HashMap::new();
+    for (index, rule) in rules.iter().enumerate() {
+        validate_automation_trigger_rule(
+            rule,
+            index,
+            blocklist_profiles,
+            session_templates,
+            &mut seen_trigger_keys,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_automation_trigger_rule(
+    rule: &AutomationTriggerRuleConfig,
+    index: usize,
+    blocklist_profiles: &[BlocklistProfileConfig],
+    session_templates: &[SessionTemplateConfig],
+    seen_trigger_keys: &mut HashMap<String, usize>,
+) -> Result<(), String> {
+    match &rule.trigger {
+        AutomationTriggerConditionConfig::ScheduleWindowStart
+        | AutomationTriggerConditionConfig::ScheduleWindowEnd
+        | AutomationTriggerConditionConfig::FocusStarted
+        | AutomationTriggerConditionConfig::FocusCompleted
+        | AutomationTriggerConditionConfig::BreakStarted
+        | AutomationTriggerConditionConfig::BreakCompleted => {}
+        AutomationTriggerConditionConfig::Time { days, at } => {
+            if days.is_empty() {
+                return Err(format!(
+                    "Invalid automation trigger rule at index {index}: time trigger `days` cannot be empty."
+                ));
+            }
+            for day in days {
+                if weekday_token_to_index(day).is_none() {
+                    return Err(format!(
+                        "Invalid automation trigger rule at index {index}: unknown weekday `{day}` in time trigger."
+                    ));
+                }
+            }
+            if parse_schedule_time_minutes(at).is_none() {
+                return Err(format!(
+                    "Invalid automation trigger rule at index {index}: time trigger `at` must be HH:MM in 24-hour format."
+                ));
+            }
+        }
+    }
+
+    match &rule.action {
+        AutomationTriggerActionConfig::StartFocus => {}
+        AutomationTriggerActionConfig::DelayScheduleStart { delay_secs } => {
+            if *delay_secs < SCHEDULE_DELAY_MIN_SECS || *delay_secs > SCHEDULE_DELAY_MAX_SECS {
+                return Err(format!(
+                    "Invalid automation trigger rule at index {index}: `delay_secs` must be between {SCHEDULE_DELAY_MIN_SECS} and {SCHEDULE_DELAY_MAX_SECS}."
+                ));
+            }
+        }
+        AutomationTriggerActionConfig::ApplyDefaults {
+            blocklist_profile,
+            session_template,
+            ..
+        } => {
+            if blocklist_profile.trim().is_empty() {
+                return Err(format!(
+                    "Invalid automation trigger rule at index {index}: `blocklist_profile` cannot be empty."
+                ));
+            }
+            if !blocklist_profiles
+                .iter()
+                .any(|profile| profile.name.eq_ignore_ascii_case(blocklist_profile.trim()))
+            {
+                return Err(format!(
+                    "Invalid automation trigger rule at index {index}: blocklist profile `{}` does not exist.",
+                    blocklist_profile
+                ));
+            }
+            if let Some(template) = session_template.as_deref() {
+                if template.trim().is_empty() {
+                    return Err(format!(
+                        "Invalid automation trigger rule at index {index}: `session_template` cannot be empty when provided."
+                    ));
+                }
+                if !session_templates
+                    .iter()
+                    .any(|candidate| candidate.name.eq_ignore_ascii_case(template.trim()))
+                {
+                    return Err(format!(
+                        "Invalid automation trigger rule at index {index}: session template `{template}` does not exist."
+                    ));
+                }
+            }
+        }
+    }
+
+    let conflict_keys = automation_trigger_conflict_keys(&rule.trigger);
+    for trigger_key in conflict_keys {
+        if let Some(previous_index) = seen_trigger_keys.insert(trigger_key.clone(), index) {
+            return Err(format!(
+                "Conflicting automation trigger rules at indexes {previous_index} and {index}: both target `{}`. Keep one rule per trigger condition.",
+                format_automation_trigger_conflict_key(&trigger_key)
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn automation_trigger_conflict_keys(trigger: &AutomationTriggerConditionConfig) -> Vec<String> {
+    match trigger {
+        AutomationTriggerConditionConfig::ScheduleWindowStart => {
+            vec!["schedule_window_start".to_string()]
+        }
+        AutomationTriggerConditionConfig::ScheduleWindowEnd => {
+            vec!["schedule_window_end".to_string()]
+        }
+        AutomationTriggerConditionConfig::FocusStarted => vec!["focus_started".to_string()],
+        AutomationTriggerConditionConfig::FocusCompleted => vec!["focus_completed".to_string()],
+        AutomationTriggerConditionConfig::BreakStarted => vec!["break_started".to_string()],
+        AutomationTriggerConditionConfig::BreakCompleted => vec!["break_completed".to_string()],
+        AutomationTriggerConditionConfig::Time { days, at } => {
+            let mut keys = Vec::new();
+            for day in days {
+                if let Some(day_index) = weekday_token_to_index(day) {
+                    keys.push(format!(
+                        "time:{}@{}",
+                        weekday_token_from_index(day_index),
+                        at
+                    ));
+                }
+            }
+            keys.sort();
+            keys.dedup();
+            keys
+        }
+    }
+}
+
+fn format_automation_trigger_conflict_key(key: &str) -> String {
+    if let Some(rest) = key.strip_prefix("time:") {
+        return format!("time trigger `{rest}`");
+    }
+    format!("event trigger `{key}`")
+}
+
 fn normalize_weekday_profile_rules(
     rules: &[WeekdayProfileRuleConfig],
     blocklist_profiles: &[BlocklistProfileConfig],
@@ -2275,6 +2551,25 @@ fn normalize_weekday_profile_rules(
 
 fn normalize_weekday_token(value: &str) -> Option<String> {
     weekday_token_to_index(value).map(|index| weekday_token_from_index(index).to_string())
+}
+
+fn normalize_trigger_days(days: &[String]) -> Option<Vec<String>> {
+    let mut normalized = Vec::new();
+    let mut seen = HashSet::new();
+    for day in days {
+        let Some(index) = weekday_token_to_index(day) else {
+            continue;
+        };
+        let token = weekday_token_from_index(index).to_string();
+        if seen.insert(token.clone()) {
+            normalized.push(token);
+        }
+    }
+    if normalized.is_empty() {
+        return None;
+    }
+    normalized.sort_by_key(|day| weekday_token_to_index(day).unwrap_or(usize::MAX));
+    Some(normalized)
 }
 
 fn weekday_token_to_index(value: &str) -> Option<usize> {
