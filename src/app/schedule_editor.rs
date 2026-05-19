@@ -410,8 +410,7 @@ impl App {
 
     fn selected_automation_trigger_mut(&mut self) -> Option<&mut AutomationTriggerRuleConfig> {
         let index = self.profile_edit_automation_trigger;
-        self.automation_trigger_rules_for_edit_mut()
-            .get_mut(index)
+        self.automation_trigger_rules_for_edit_mut().get_mut(index)
     }
 
     fn selected_schedule_day_token(&self) -> &'static str {
@@ -477,9 +476,11 @@ impl App {
         if self.automation_trigger_rules_for_edit().is_empty() {
             self.profile_edit_automation_trigger = 0;
         } else {
-            self.profile_edit_automation_trigger = self
-                .profile_edit_automation_trigger
-                .min(self.automation_trigger_rules_for_edit().len().saturating_sub(1));
+            self.profile_edit_automation_trigger = self.profile_edit_automation_trigger.min(
+                self.automation_trigger_rules_for_edit()
+                    .len()
+                    .saturating_sub(1),
+            );
         }
     }
 
