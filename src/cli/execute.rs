@@ -18,7 +18,8 @@ use crate::cli::{
     EditSiteResult, ExportOutput, FocusStats, GoalCarryCommandOutput, GoalCommandOutput,
     InvalidSiteEntryOutput, InvalidSiteInput, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId,
     ProfileOutput, ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
-    ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SiteAddCommandOutput, SiteBlocker,
+    ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SessionTemplateCommandKind,
+    SessionTemplateCommandOutput, SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker,
     SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
     SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
     TaskGoalOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput,
@@ -31,11 +32,12 @@ use crate::cli::{
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
     print_profile_output, print_restore_output, print_schedule_command_output,
     print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
-    print_timer_state_output, profile_id, profile_view, selected_break_template_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    print_session_template_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
+    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
+    timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -94,6 +96,9 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         }
         CommandKind::BlocklistSites { target, command } => {
             execute_blocklist_sites_command(target, command, cli_command.output)
+        }
+        CommandKind::SessionTemplate { command } => {
+            execute_session_template_command(command, cli_command.output)
         }
     }
 }
@@ -305,6 +310,41 @@ fn execute_blocklist_sites_command(
                 OutputMode::Json => print_json(&payload)?,
             }
         }
+    }
+    Ok(())
+}
+
+fn execute_session_template_command(
+    command: SessionTemplateCommandKind,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut app = App::new();
+    let (action, updated) = match command {
+        SessionTemplateCommandKind::Select { name } => (
+            "session-template",
+            app.select_session_template_for_cli(name.as_deref())?,
+        ),
+        SessionTemplateCommandKind::Apply { name } => (
+            "session-template-apply",
+            app.apply_session_template_for_cli(name.as_deref())?,
+        ),
+        SessionTemplateCommandKind::Create { name } => (
+            "session-template-create",
+            app.create_session_template_for_cli(&name)?,
+        ),
+        SessionTemplateCommandKind::Rename { name } => (
+            "session-template-rename",
+            app.rename_active_session_template_for_cli(&name)?,
+        ),
+        SessionTemplateCommandKind::Delete => (
+            "session-template-delete",
+            app.delete_active_session_template_for_cli()?,
+        ),
+    };
+    let payload = build_session_template_command_output(&app, action, updated);
+    match output {
+        OutputMode::Text => print_session_template_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
 }
@@ -636,6 +676,34 @@ fn build_blocklist_profile_command_output(
         updated,
         selected_blocklist_profile: selected_name,
         profiles,
+    }
+}
+
+fn build_session_template_command_output(
+    app: &App,
+    action: &'static str,
+    updated: bool,
+) -> SessionTemplateCommandOutput {
+    let selected_session_template = app.active_session_template_name().map(str::to_string);
+    let mut templates = Vec::with_capacity(app.session_template_count());
+    templates.extend(app.session_templates.iter().map(|template| {
+        SessionTemplateSummaryOutput {
+            name: template.name.clone(),
+            active: selected_session_template
+                .as_deref()
+                .is_some_and(|selected| selected.eq_ignore_ascii_case(&template.name)),
+            task_label: template.task_label.clone(),
+            profile: profile_id(template.profile),
+            blocklist_profile: template.blocklist_profile.clone(),
+            schedule_windows_count: template.schedule.windows.len()
+                + template.schedule.one_time_windows.len(),
+        }
+    }));
+    SessionTemplateCommandOutput {
+        action,
+        updated,
+        selected_session_template,
+        templates,
     }
 }
 

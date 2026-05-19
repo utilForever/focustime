@@ -151,6 +151,15 @@ cargo run -- --blocklist-profile-create Study
 cargo run -- --blocklist-profile-rename "Deep Work"
 cargo run -- --blocklist-profile-delete --json
 
+# Manage session templates (task/profile/blocklist/schedule bundles)
+cargo run -- --session-template
+cargo run -- --session-template "Deep Flow"
+cargo run -- --session-template-create "Deep Flow"
+cargo run -- --session-template-rename "Sprint Focus"
+cargo run -- --session-template-apply
+cargo run -- --session-template-apply "Deep Flow"
+cargo run -- --session-template-delete --json
+
 # Manage blocklist/allowlist sites for the active blocklist profile
 cargo run -- --blocklist-sites
 cargo run -- --allowlist-sites --json
@@ -352,16 +361,15 @@ and profile-scoped automation settings are persisted in `config.toml`.
 
 Open the session planner from timer view with **`t`**.
 
-- `a`: add a new task label
-- `e`: rename highlighted task label
-- `f`: toggle favorite for highlighted task label (favorites are listed first)
-- `x`: toggle archive state for highlighted task label
-- `d` or `Delete`: delete highlighted task label
-- `r` or `1-5`: quick-pick recent task labels
-- `↑/↓` (default `navigate_up`/`navigate_down`): move selection
-- `Enter` (default `confirm`): select highlighted task label (archived labels are visible but cannot be selected)
+- `←/→` (default `navigate_left`/`navigate_right`): switch between **Task Labels** and **Session Templates** panes
+- `a`: in task pane, add a new task label; in template pane, capture a new template from current task/profile/blocklist/schedule
+- `e`: in task pane, rename highlighted task label; in template pane, rename highlighted session template
+- `d` or `Delete`: delete highlighted task label/template in the active pane
+- `Enter` (default `confirm`): in task pane, select highlighted task label (archived labels are visible but cannot be selected); in template pane, apply highlighted template
+- Task pane only: `f` toggle favorite (favorites are listed first), `x` toggle archive, `r` or `1-5` quick-pick recent labels
+- `↑/↓` (default `navigate_up`/`navigate_down`): move selection in the active pane
 - `t` or `Esc` (default `cancel`): return to timer view
-- while adding/renaming a label, `Enter` (default `confirm`) saves and `Esc` (default `cancel`) cancels
+- while adding/renaming a label or template, `Enter` (default `confirm`) saves and `Esc` (default `cancel`) cancels
 
 Starting a focus session from idle now requires a selected task label. The timer
 view always shows the current task label (or a reminder to select one).
@@ -379,8 +387,8 @@ Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
 CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`,
-`--break-glass-trigger`, and `--break-glass-cancel` for non-interactive inspection and
-in-session workflow control.
+`--session-template*`, `--break-glass-trigger`, and `--break-glass-cancel` for
+non-interactive inspection and in-session workflow control.
 
 ### Example config
 
@@ -388,6 +396,7 @@ in-session workflow control.
 schema_version = 1
 selected_profile = "custom"
 selected_break_template = "Classic"
+selected_session_template = "Deep Flow"
 selected_theme_preset = "classic"
 selected_blocklist_profile = "Work"
 
@@ -432,6 +441,17 @@ allowlist_sites = ["reddit.com"]
 name = "Study"
 sites = ["x.com", "news.ycombinator.com"]
 allowlist_sites = []
+
+[[session_templates]]
+name = "Deep Flow"
+task_label = "Docs"
+profile = "deep-work"
+blocklist_profile = "Work"
+
+[[session_templates.schedule.windows]]
+days = ["mon", "tue", "wed", "thu", "fri"]
+start = "09:00"
+end = "11:00"
 
 [custom_profile]
 focus_secs = 1800

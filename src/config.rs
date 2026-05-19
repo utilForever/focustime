@@ -77,6 +77,12 @@ pub struct AppConfig {
     /// Name of the active break template.
     #[serde(default)]
     pub selected_break_template: String,
+    /// Reusable session templates bundling task/profile/blocklist/schedule settings.
+    #[serde(default)]
+    pub session_templates: Vec<SessionTemplateConfig>,
+    /// Name of the active session template (empty = none selected).
+    #[serde(default)]
+    pub selected_session_template: String,
     /// Selected UI theme preset.
     #[serde(default)]
     pub selected_theme_preset: ThemePreset,
@@ -1099,6 +1105,10 @@ fn default_break_template_name() -> String {
     "Classic".to_string()
 }
 
+fn default_session_template_name() -> String {
+    "Template".to_string()
+}
+
 fn default_shortcut_quit() -> String {
     "q".to_string()
 }
@@ -1476,6 +1486,40 @@ impl BreakTemplateConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionTemplateConfig {
+    #[serde(default = "default_session_template_name")]
+    pub name: String,
+    #[serde(default)]
+    pub task_label: String,
+    #[serde(default)]
+    pub profile: ProfileId,
+    #[serde(default = "default_blocklist_profile_name")]
+    pub blocklist_profile: String,
+    #[serde(default)]
+    pub schedule: RecurringScheduleConfig,
+}
+
+impl SessionTemplateConfig {
+    pub fn normalized_with_blocklists(
+        &self,
+        blocklist_profiles: &[BlocklistProfileConfig],
+    ) -> Option<Self> {
+        let name =
+            normalize_nonempty_or_default_string(&self.name, &default_session_template_name());
+        let task_label = normalize_optional_nonempty_string(Some(&self.task_label))?;
+        let blocklist_profile =
+            normalize_selected_blocklist_profile(&self.blocklist_profile, blocklist_profiles);
+        Some(Self {
+            name,
+            task_label,
+            profile: self.profile,
+            blocklist_profile,
+            schedule: self.schedule.normalized(),
+        })
+    }
+}
+
 impl Default for BreakTemplateConfig {
     fn default() -> Self {
         Self {
@@ -1518,6 +1562,8 @@ impl Default for AppConfig {
             custom_profile: None,
             break_templates: default_break_templates(),
             selected_break_template: default_break_template_name(),
+            session_templates: Vec::new(),
+            selected_session_template: String::new(),
             selected_theme_preset: ThemePreset::default(),
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
@@ -1716,6 +1762,12 @@ impl AppConfig {
         self.selected_blocklist_profile = normalize_selected_blocklist_profile(
             &self.selected_blocklist_profile,
             &self.blocklist_profiles,
+        );
+        self.session_templates =
+            normalize_session_templates(&self.session_templates, &self.blocklist_profiles);
+        self.selected_session_template = normalize_selected_session_template(
+            &self.selected_session_template,
+            &self.session_templates,
         );
         self.blocking_backend = self.blocking_backend.normalized();
         self.schedule_runtime = self.schedule_runtime.normalized();
@@ -2096,6 +2148,40 @@ fn normalize_selected_break_template(
             .map(|template| template.name.clone())
             .unwrap_or_default()
     }
+}
+
+fn normalize_session_templates(
+    templates: &[SessionTemplateConfig],
+    blocklist_profiles: &[BlocklistProfileConfig],
+) -> Vec<SessionTemplateConfig> {
+    let mut normalized = Vec::new();
+    let mut seen_names = HashSet::new();
+
+    for template in templates {
+        let Some(template) = template.normalized_with_blocklists(blocklist_profiles) else {
+            continue;
+        };
+        let name = make_unique_profile_name(&template.name, &mut seen_names);
+        normalized.push(SessionTemplateConfig { name, ..template });
+    }
+
+    normalized
+}
+
+fn normalize_selected_session_template(
+    selected_name: &str,
+    templates: &[SessionTemplateConfig],
+) -> String {
+    let selected_name = selected_name.trim();
+    if selected_name.is_empty() {
+        return String::new();
+    }
+
+    templates
+        .iter()
+        .find(|template| template.name.eq_ignore_ascii_case(selected_name))
+        .map(|template| template.name.clone())
+        .unwrap_or_default()
 }
 
 fn break_template_matches_custom_profile(

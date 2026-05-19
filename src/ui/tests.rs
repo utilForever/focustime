@@ -1,4 +1,7 @@
-use crate::config::{AppConfig, ShortcutConfig, ThemePreset};
+use crate::config::{
+    AppConfig, ProfileId, RecurringScheduleConfig, SessionTemplateConfig, ShortcutConfig,
+    ThemePreset,
+};
 use crate::ui::*;
 use chrono::{Datelike, Duration, NaiveDate};
 use ratatui::style::Color;
@@ -817,6 +820,53 @@ fn session_planner_view_renders_rename_input_title() {
 
     let text = terminal_text(&terminal, width, height);
     assert!(text.contains("Rename task label"));
+}
+
+#[test]
+fn session_planner_view_renders_template_panel() {
+    let width = 120;
+    let height = 28;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+    let mut app = App::default();
+    app.mode = AppMode::SessionPlanner;
+    app.task_labels = vec!["Docs".to_string()];
+    app.selected_task_label = Some("Docs".to_string());
+    app.session_templates = vec![SessionTemplateConfig {
+        name: "Deep Flow".to_string(),
+        task_label: "Docs".to_string(),
+        profile: ProfileId::Classic,
+        blocklist_profile: "Default".to_string(),
+        schedule: RecurringScheduleConfig::default(),
+    }];
+
+    terminal
+        .draw(|frame| render(frame, &app))
+        .expect("render should succeed");
+
+    let text = terminal_text(&terminal, width, height);
+    assert!(text.contains("Session Templates"));
+    assert!(text.contains("Deep Flow"));
+}
+
+#[test]
+fn session_planner_view_renders_template_rename_input_title() {
+    let width = 120;
+    let height = 28;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+    let mut app = App::default();
+    app.mode = AppMode::SessionPlanner;
+    app.planner_input_active = true;
+    app.planner_input_mode = Some(PlannerInputMode::RenameTemplate);
+    app.planner_input = "Deep Flow".to_string();
+
+    terminal
+        .draw(|frame| render(frame, &app))
+        .expect("render should succeed");
+
+    let text = terminal_text(&terminal, width, height);
+    assert!(text.contains("Rename session template"));
 }
 
 #[test]

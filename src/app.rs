@@ -17,8 +17,8 @@ use crate::config::{
     DailyGoalConfig, FeatureFlagsConfig, GoalCarryOverConfig, MonthlyGoalConfig,
     NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
     ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, ScheduleRuntimeConfig, StatsRetentionConfig, ThemePreset,
-    WakatimeMetadataConfig, WakatimeRuntimeConfig, WeeklyGoalConfig,
+    RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
+    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -55,6 +55,7 @@ mod profile_management;
 mod schedule_editor;
 mod schedule_runtime;
 mod session_planner;
+mod session_templates;
 mod shortcuts;
 mod site_manager;
 mod timer_flow;
@@ -212,6 +213,15 @@ fn blocklist_profile_index(profiles: &[BlocklistProfileConfig], selected_name: &
 }
 
 fn break_template_index(templates: &[BreakTemplateConfig], selected_name: &str) -> Option<usize> {
+    templates
+        .iter()
+        .position(|template| template.name.eq_ignore_ascii_case(selected_name))
+}
+
+fn session_template_index(
+    templates: &[SessionTemplateConfig],
+    selected_name: &str,
+) -> Option<usize> {
     templates
         .iter()
         .position(|template| template.name.eq_ignore_ascii_case(selected_name))
@@ -387,6 +397,14 @@ pub enum BlocklistProfileInputMode {
 pub enum PlannerInputMode {
     Add,
     Rename,
+    CreateTemplate,
+    RenameTemplate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlannerPane {
+    Tasks,
+    Templates,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -578,6 +596,8 @@ pub struct App {
     active_blocklist_profile: usize,
     pub break_templates: Vec<BreakTemplateConfig>,
     active_break_template: Option<usize>,
+    pub session_templates: Vec<SessionTemplateConfig>,
+    active_session_template: Option<usize>,
     pub blocklist_profile_input: String,
     pub blocklist_profile_input_active: bool,
     blocklist_profile_input_mode: Option<BlocklistProfileInputMode>,
@@ -587,6 +607,8 @@ pub struct App {
     task_label_favorites: BTreeSet<String>,
     task_label_archived: BTreeSet<String>,
     pub planner_selection_index: usize,
+    pub planner_template_selection_index: usize,
+    pub planner_pane: PlannerPane,
     pub planner_input: String,
     pub planner_input_active: bool,
     pub planner_input_mode: Option<PlannerInputMode>,
@@ -721,6 +743,9 @@ impl App {
             &config.selected_break_template,
             &custom_profile,
         );
+        let session_templates = config.session_templates.clone();
+        let active_session_template =
+            session_template_index(&session_templates, &config.selected_session_template);
         let profile_spec = profile_spec_for(selected_profile, &custom_profile);
         let (mut stats, stats_error) =
             match FocusStats::load_with_options(crate::stats::StatsLoadOptions::default()) {
@@ -732,6 +757,7 @@ impl App {
         let task_label_favorites = task_label_state_keys(stats.task_label_favorites());
         let task_label_archived = task_label_state_keys(stats.task_label_archived());
         let planner_selection_index = 0;
+        let planner_template_selection_index = active_session_template.unwrap_or(0);
         let timer = TimerState::with_profile(
             profile_spec.focus_secs,
             profile_spec.short_break_secs,
@@ -756,6 +782,8 @@ impl App {
             active_blocklist_profile,
             break_templates,
             active_break_template,
+            session_templates,
+            active_session_template,
             blocklist_profile_input: String::new(),
             blocklist_profile_input_active: false,
             blocklist_profile_input_mode: None,
@@ -765,6 +793,8 @@ impl App {
             task_label_favorites,
             task_label_archived,
             planner_selection_index,
+            planner_template_selection_index,
+            planner_pane: PlannerPane::Tasks,
             planner_input: String::new(),
             planner_input_active: false,
             planner_input_mode: None,
@@ -1246,6 +1276,16 @@ impl App {
             .unwrap_or(UNLINKED_BREAK_TEMPLATE_NAME)
     }
 
+    pub fn active_session_template_name(&self) -> Option<&str> {
+        self.active_session_template
+            .and_then(|index| self.session_templates.get(index))
+            .map(|template| template.name.as_str())
+    }
+
+    pub fn session_template_count(&self) -> usize {
+        self.session_templates.len()
+    }
+
     pub fn active_break_template_summary(&self) -> String {
         if let Some(template) = self
             .active_break_template
@@ -1271,6 +1311,13 @@ impl App {
     fn selected_break_template_for_persistence(&self) -> String {
         self.active_break_template
             .and_then(|index| self.break_templates.get(index))
+            .map(|template| template.name.clone())
+            .unwrap_or_default()
+    }
+
+    fn selected_session_template_for_persistence(&self) -> String {
+        self.active_session_template
+            .and_then(|index| self.session_templates.get(index))
             .map(|template| template.name.clone())
             .unwrap_or_default()
     }

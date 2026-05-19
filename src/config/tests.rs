@@ -28,6 +28,8 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.selected_profile, ProfileId::Custom);
     assert!(cfg.custom_profile.is_none());
     assert_eq!(cfg.selected_break_template, "Classic");
+    assert!(cfg.session_templates.is_empty());
+    assert!(cfg.selected_session_template.is_empty());
     assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
     assert_eq!(cfg.break_templates.len(), 2);
     assert!(cfg.blocked_sites.is_empty());
@@ -137,6 +139,26 @@ fn round_trip_full_config() {
             },
         ],
         selected_break_template: "Recovery".to_string(),
+        session_templates: vec![SessionTemplateConfig {
+            name: "Morning deep work".to_string(),
+            task_label: "Docs".to_string(),
+            profile: ProfileId::DeepWork,
+            blocklist_profile: "Work".to_string(),
+            schedule: RecurringScheduleConfig {
+                windows: vec![RecurringFocusWindowConfig {
+                    days: vec!["mon".to_string(), "wed".to_string()],
+                    start: "09:15".to_string(),
+                    end: "11:00".to_string(),
+                }],
+                exception_dates: vec!["2026-04-27".to_string()],
+                one_time_windows: vec![OneTimeFocusWindowConfig {
+                    date: "2026-05-10".to_string(),
+                    start: "14:00".to_string(),
+                    end: "15:00".to_string(),
+                }],
+            },
+        }],
+        selected_session_template: "Morning deep work".to_string(),
         selected_theme_preset: ThemePreset::HighContrast,
         notifications: NotificationConfig {
             enabled: true,
@@ -292,6 +314,11 @@ fn round_trip_full_config() {
         parsed.selected_break_template,
         original.selected_break_template
     );
+    assert_eq!(parsed.session_templates, original.session_templates);
+    assert_eq!(
+        parsed.selected_session_template,
+        original.selected_session_template
+    );
     assert_eq!(parsed.selected_theme_preset, original.selected_theme_preset);
     assert_eq!(parsed.notifications, NotificationConfig::default());
     assert_eq!(parsed.auto_start, AutoStartConfig::default());
@@ -328,6 +355,8 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.selected_profile, ProfileId::Custom);
     assert!(cfg.custom_profile.is_none());
     assert_eq!(cfg.selected_break_template, "");
+    assert!(cfg.session_templates.is_empty());
+    assert_eq!(cfg.selected_session_template, "");
     assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
     assert_eq!(cfg.break_templates.len(), 2);
     assert!(cfg.blocked_sites.is_empty());
@@ -414,6 +443,77 @@ fn normalize_break_templates_deduplicates_names_and_clamps_values() {
     );
     assert_eq!(cfg.break_templates[1].name, "recovery (2)");
     assert_eq!(cfg.selected_break_template, "Recovery");
+}
+
+#[test]
+fn normalize_session_templates_deduplicates_and_filters_invalid_entries() {
+    let cfg = AppConfig {
+        blocklist_profiles: vec![
+            BlocklistProfileConfig {
+                name: "Work".to_string(),
+                sites: vec!["youtube.com".to_string()],
+                allowlist_sites: Vec::new(),
+            },
+            BlocklistProfileConfig {
+                name: "Study".to_string(),
+                sites: vec!["reddit.com".to_string()],
+                allowlist_sites: Vec::new(),
+            },
+        ],
+        session_templates: vec![
+            SessionTemplateConfig {
+                name: "Morning".to_string(),
+                task_label: "  Docs  ".to_string(),
+                profile: ProfileId::DeepWork,
+                blocklist_profile: "work".to_string(),
+                schedule: RecurringScheduleConfig::default(),
+            },
+            SessionTemplateConfig {
+                name: "morning".to_string(),
+                task_label: "Code".to_string(),
+                profile: ProfileId::Classic,
+                blocklist_profile: "missing".to_string(),
+                schedule: RecurringScheduleConfig::default(),
+            },
+            SessionTemplateConfig {
+                name: "No Task".to_string(),
+                task_label: "   ".to_string(),
+                profile: ProfileId::Custom,
+                blocklist_profile: "Study".to_string(),
+                schedule: RecurringScheduleConfig::default(),
+            },
+        ],
+        selected_session_template: "MORNING".to_string(),
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(cfg.session_templates.len(), 2);
+    assert_eq!(cfg.session_templates[0].name, "Morning");
+    assert_eq!(cfg.session_templates[0].task_label, "Docs");
+    assert_eq!(cfg.session_templates[0].blocklist_profile, "Work");
+    assert_eq!(cfg.session_templates[1].name, "morning (2)");
+    assert_eq!(cfg.session_templates[1].task_label, "Code");
+    assert_eq!(cfg.session_templates[1].blocklist_profile, "Work");
+    assert_eq!(cfg.selected_session_template, "Morning");
+}
+
+#[test]
+fn normalize_selected_session_template_clears_unknown_value() {
+    let cfg = AppConfig {
+        session_templates: vec![SessionTemplateConfig {
+            name: "Morning".to_string(),
+            task_label: "Docs".to_string(),
+            profile: ProfileId::DeepWork,
+            blocklist_profile: "Default".to_string(),
+            schedule: RecurringScheduleConfig::default(),
+        }],
+        selected_session_template: "Missing".to_string(),
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(cfg.selected_session_template, "");
 }
 
 #[test]
@@ -814,6 +914,8 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         }),
         break_templates: default_break_templates(),
         selected_break_template: default_break_template_name(),
+        session_templates: Vec::new(),
+        selected_session_template: String::new(),
         selected_theme_preset: ThemePreset::Classic,
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
