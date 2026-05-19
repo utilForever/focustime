@@ -130,6 +130,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         selected_break_template: "Classic".to_string(),
         session_templates: Vec::new(),
         selected_session_template: String::new(),
+        weekday_profile_rules: Vec::new(),
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
@@ -3595,6 +3596,7 @@ fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
         weekly_goal: app.weekly_goal,
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
+        weekday_profile_rules: app.weekday_profile_rules.clone(),
         selected_theme_preset: app.selected_theme_preset,
         wakatime_metadata: app.wakatime_metadata.clone(),
     });
@@ -3649,6 +3651,7 @@ fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_res
         weekly_goal: app.weekly_goal,
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
+        weekday_profile_rules: app.weekday_profile_rules.clone(),
         selected_theme_preset: app.selected_theme_preset,
         wakatime_metadata: app.wakatime_metadata.clone(),
     });
