@@ -129,38 +129,98 @@ impl App {
     }
 
     fn handle_session_planner_shortcuts(&mut self, key: &KeyEvent) {
-        if self.shortcut_matches(ShortcutAction::BackSessionPlanner, key) {
-            self.mode = AppMode::Timer;
-        } else if self.shortcut_matches(ShortcutAction::PlannerAdd, key) {
-            match self.planner_pane {
-                PlannerPane::Tasks => self.start_planner_input(),
-                PlannerPane::Templates => self.start_planner_template_create_input(),
-            }
-        } else if self.shortcut_matches(ShortcutAction::PlannerRename, key) {
-            match self.planner_pane {
-                PlannerPane::Tasks => self.start_planner_rename_input(),
-                PlannerPane::Templates => self.start_planner_template_rename_input(),
-            }
-        } else if self.shortcut_matches(ShortcutAction::PlannerFavorite, key) {
-            if self.planner_pane == PlannerPane::Tasks {
-                self.toggle_planner_favorite();
-            }
-        } else if self.shortcut_matches(ShortcutAction::PlannerArchive, key) {
-            if self.planner_pane == PlannerPane::Tasks {
-                self.toggle_planner_archive();
-            }
-        } else if self.navigation_matches(NavigationAction::Delete, key)
-            || self.shortcut_matches(ShortcutAction::PlannerDelete, key)
-        {
-            match self.planner_pane {
-                PlannerPane::Tasks => self.remove_planner_label(),
-                PlannerPane::Templates => self.remove_planner_template(),
-            }
-        } else if self.shortcut_matches(ShortcutAction::PlannerSelectRecent, key)
-            && self.planner_pane == PlannerPane::Tasks
-        {
-            self.select_recent_planner_label(0);
+        if self.handle_session_planner_back_shortcut(key) {
+            return;
         }
+        if self.handle_session_planner_add_shortcut(key) {
+            return;
+        }
+        if self.handle_session_planner_rename_shortcut(key) {
+            return;
+        }
+        if self.handle_session_planner_favorite_shortcut(key) {
+            return;
+        }
+        if self.handle_session_planner_archive_shortcut(key) {
+            return;
+        }
+        if self.handle_session_planner_delete_shortcut(key) {
+            return;
+        }
+        let _ = self.handle_session_planner_select_recent_shortcut(key);
+    }
+
+    fn handle_session_planner_back_shortcut(&mut self, key: &KeyEvent) -> bool {
+        if !self.shortcut_matches(ShortcutAction::BackSessionPlanner, key) {
+            return false;
+        }
+        self.mode = AppMode::Timer;
+        true
+    }
+
+    fn handle_session_planner_add_shortcut(&mut self, key: &KeyEvent) -> bool {
+        if !self.shortcut_matches(ShortcutAction::PlannerAdd, key) {
+            return false;
+        }
+        match self.planner_pane {
+            PlannerPane::Tasks => self.start_planner_input(),
+            PlannerPane::Templates => self.start_planner_template_create_input(),
+        }
+        true
+    }
+
+    fn handle_session_planner_rename_shortcut(&mut self, key: &KeyEvent) -> bool {
+        if !self.shortcut_matches(ShortcutAction::PlannerRename, key) {
+            return false;
+        }
+        match self.planner_pane {
+            PlannerPane::Tasks => self.start_planner_rename_input(),
+            PlannerPane::Templates => self.start_planner_template_rename_input(),
+        }
+        true
+    }
+
+    fn handle_session_planner_favorite_shortcut(&mut self, key: &KeyEvent) -> bool {
+        if !self.shortcut_matches(ShortcutAction::PlannerFavorite, key) {
+            return false;
+        }
+        if self.planner_pane == PlannerPane::Tasks {
+            self.toggle_planner_favorite();
+        }
+        true
+    }
+
+    fn handle_session_planner_archive_shortcut(&mut self, key: &KeyEvent) -> bool {
+        if !self.shortcut_matches(ShortcutAction::PlannerArchive, key) {
+            return false;
+        }
+        if self.planner_pane == PlannerPane::Tasks {
+            self.toggle_planner_archive();
+        }
+        true
+    }
+
+    fn handle_session_planner_delete_shortcut(&mut self, key: &KeyEvent) -> bool {
+        if !(self.navigation_matches(NavigationAction::Delete, key)
+            || self.shortcut_matches(ShortcutAction::PlannerDelete, key))
+        {
+            return false;
+        }
+        match self.planner_pane {
+            PlannerPane::Tasks => self.remove_planner_label(),
+            PlannerPane::Templates => self.remove_planner_template(),
+        }
+        true
+    }
+
+    fn handle_session_planner_select_recent_shortcut(&mut self, key: &KeyEvent) -> bool {
+        if !(self.shortcut_matches(ShortcutAction::PlannerSelectRecent, key)
+            && self.planner_pane == PlannerPane::Tasks)
+        {
+            return false;
+        }
+        self.select_recent_planner_label(0);
+        true
     }
 
     fn start_planner_input(&mut self) {
