@@ -915,6 +915,28 @@ fn normalize_automation_trigger_apply_defaults_resolves_references() {
 }
 
 #[test]
+fn automation_trigger_rules_require_trigger_and_action_fields() {
+    let missing_action = r#"
+[[automation_triggers]]
+trigger = { type = "focus_started" }
+"#;
+    let missing_trigger = r#"
+[[automation_triggers]]
+action = { type = "start_focus" }
+"#;
+
+    let missing_action_error = toml::from_str::<AppConfig>(missing_action)
+        .expect_err("rule missing action should fail deserialization")
+        .to_string();
+    let missing_trigger_error = toml::from_str::<AppConfig>(missing_trigger)
+        .expect_err("rule missing trigger should fail deserialization")
+        .to_string();
+
+    assert!(missing_action_error.contains("missing field `action`"));
+    assert!(missing_trigger_error.contains("missing field `trigger`"));
+}
+
+#[test]
 fn validate_automation_trigger_rules_rejects_conflicting_rules() {
     let rules = vec![
         AutomationTriggerRuleConfig {

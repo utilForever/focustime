@@ -802,9 +802,7 @@ impl Default for WeekdayProfileRuleConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AutomationTriggerRuleConfig {
-    #[serde(default)]
     pub trigger: AutomationTriggerConditionConfig,
-    #[serde(default)]
     pub action: AutomationTriggerActionConfig,
 }
 
