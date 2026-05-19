@@ -6,22 +6,7 @@ use crate::app::{
 
 impl App {
     pub(super) fn handle_key_session_planner(&mut self, key: KeyEvent) {
-        if self.planner_input_active {
-            match key.code {
-                _ if self.navigation_matches(NavigationAction::Confirm, &key) => {
-                    self.commit_planner_input()
-                }
-                _ if self.navigation_matches(NavigationAction::Cancel, &key) => {
-                    self.cancel_planner_input()
-                }
-                _ if self.navigation_matches(NavigationAction::Backspace, &key) => {
-                    self.planner_input.pop();
-                }
-                KeyCode::Char(c) => {
-                    self.planner_input.push(c);
-                }
-                _ => {}
-            }
+        if self.handle_session_planner_input_key(&key) {
             return;
         }
 
@@ -29,92 +14,134 @@ impl App {
             return;
         }
 
+        if self.handle_session_planner_navigation_key(&key) {
+            return;
+        }
+        if self.handle_session_planner_recent_digit_key(&key) {
+            return;
+        }
+        self.handle_session_planner_shortcuts(&key);
+    }
+
+    fn handle_session_planner_input_key(&mut self, key: &KeyEvent) -> bool {
+        if !self.planner_input_active {
+            return false;
+        }
         match key.code {
-            _ if self.navigation_matches(NavigationAction::Cancel, &key) => {
-                self.mode = AppMode::Timer;
+            _ if self.navigation_matches(NavigationAction::Confirm, key) => {
+                self.commit_planner_input()
             }
-            _ if self.navigation_matches(NavigationAction::MoveUp, &key) => {
-                match self.planner_pane {
-                    PlannerPane::Tasks => {
+            _ if self.navigation_matches(NavigationAction::Cancel, key) => {
+                self.cancel_planner_input()
+            }
+            _ if self.navigation_matches(NavigationAction::Backspace, key) => {
+                self.planner_input.pop();
+            }
+            KeyCode::Char(c) => {
+                self.planner_input.push(c);
+            }
+            _ => {}
+        }
+        true
+    }
+
+    fn handle_session_planner_navigation_key(&mut self, key: &KeyEvent) -> bool {
+        if self.navigation_matches(NavigationAction::Cancel, key) {
+            self.mode = AppMode::Timer;
+            return true;
+        }
+        if self.navigation_matches(NavigationAction::MoveUp, key) {
+            match self.planner_pane {
+                PlannerPane::Tasks => {
+                    self.planner_selection_index = self.planner_selection_index.saturating_sub(1);
+                }
+                PlannerPane::Templates => {
+                    self.planner_template_selection_index =
+                        self.planner_template_selection_index.saturating_sub(1);
+                }
+            }
+            return true;
+        }
+        if self.navigation_matches(NavigationAction::MoveDown, key) {
+            match self.planner_pane {
+                PlannerPane::Tasks => {
+                    let labels = self.planner_labels_for_display();
+                    if !labels.is_empty() {
                         self.planner_selection_index =
-                            self.planner_selection_index.saturating_sub(1);
+                            (self.planner_selection_index + 1).min(labels.len().saturating_sub(1));
                     }
-                    PlannerPane::Templates => {
+                }
+                PlannerPane::Templates => {
+                    if !self.session_templates.is_empty() {
                         self.planner_template_selection_index =
-                            self.planner_template_selection_index.saturating_sub(1);
+                            (self.planner_template_selection_index + 1)
+                                .min(self.session_templates.len().saturating_sub(1));
                     }
                 }
             }
-            _ if self.navigation_matches(NavigationAction::MoveDown, &key) => {
-                match self.planner_pane {
-                    PlannerPane::Tasks => {
-                        let labels = self.planner_labels_for_display();
-                        if !labels.is_empty() {
-                            self.planner_selection_index = (self.planner_selection_index + 1)
-                                .min(labels.len().saturating_sub(1));
-                        }
-                    }
-                    PlannerPane::Templates => {
-                        if !self.session_templates.is_empty() {
-                            self.planner_template_selection_index =
-                                (self.planner_template_selection_index + 1)
-                                    .min(self.session_templates.len().saturating_sub(1));
-                        }
-                    }
-                }
+            return true;
+        }
+        if self.navigation_matches(NavigationAction::MoveLeft, key) {
+            self.planner_pane = PlannerPane::Tasks;
+            return true;
+        }
+        if self.navigation_matches(NavigationAction::MoveRight, key) {
+            self.planner_pane = PlannerPane::Templates;
+            return true;
+        }
+        if self.navigation_matches(NavigationAction::Confirm, key) {
+            match self.planner_pane {
+                PlannerPane::Tasks => self.select_planner_label(),
+                PlannerPane::Templates => self.apply_planner_template(),
             }
-            _ if self.navigation_matches(NavigationAction::MoveLeft, &key) => {
-                self.planner_pane = PlannerPane::Tasks;
+            return true;
+        }
+        false
+    }
+
+    fn handle_session_planner_recent_digit_key(&mut self, key: &KeyEvent) -> bool {
+        if let KeyCode::Char(c @ '1'..='9') = key.code {
+            let index = (c as usize).saturating_sub('1' as usize);
+            if self.planner_pane == PlannerPane::Tasks {
+                self.select_recent_planner_label(index);
             }
-            _ if self.navigation_matches(NavigationAction::MoveRight, &key) => {
-                self.planner_pane = PlannerPane::Templates;
+            return true;
+        }
+        false
+    }
+
+    fn handle_session_planner_shortcuts(&mut self, key: &KeyEvent) {
+        if self.shortcut_matches(ShortcutAction::BackSessionPlanner, key) {
+            self.mode = AppMode::Timer;
+        } else if self.shortcut_matches(ShortcutAction::PlannerAdd, key) {
+            match self.planner_pane {
+                PlannerPane::Tasks => self.start_planner_input(),
+                PlannerPane::Templates => self.start_planner_template_create_input(),
             }
-            KeyCode::Char(c @ '1'..='9') => {
-                let index = (c as usize).saturating_sub('1' as usize);
-                if self.planner_pane == PlannerPane::Tasks {
-                    self.select_recent_planner_label(index);
-                }
+        } else if self.shortcut_matches(ShortcutAction::PlannerRename, key) {
+            match self.planner_pane {
+                PlannerPane::Tasks => self.start_planner_rename_input(),
+                PlannerPane::Templates => self.start_planner_template_rename_input(),
             }
-            _ if self.navigation_matches(NavigationAction::Confirm, &key) => {
-                match self.planner_pane {
-                    PlannerPane::Tasks => self.select_planner_label(),
-                    PlannerPane::Templates => self.apply_planner_template(),
-                }
+        } else if self.shortcut_matches(ShortcutAction::PlannerFavorite, key) {
+            if self.planner_pane == PlannerPane::Tasks {
+                self.toggle_planner_favorite();
             }
-            _ => {
-                if self.shortcut_matches(ShortcutAction::BackSessionPlanner, &key) {
-                    self.mode = AppMode::Timer;
-                } else if self.shortcut_matches(ShortcutAction::PlannerAdd, &key) {
-                    match self.planner_pane {
-                        PlannerPane::Tasks => self.start_planner_input(),
-                        PlannerPane::Templates => self.start_planner_template_create_input(),
-                    }
-                } else if self.shortcut_matches(ShortcutAction::PlannerRename, &key) {
-                    match self.planner_pane {
-                        PlannerPane::Tasks => self.start_planner_rename_input(),
-                        PlannerPane::Templates => self.start_planner_template_rename_input(),
-                    }
-                } else if self.shortcut_matches(ShortcutAction::PlannerFavorite, &key) {
-                    if self.planner_pane == PlannerPane::Tasks {
-                        self.toggle_planner_favorite();
-                    }
-                } else if self.shortcut_matches(ShortcutAction::PlannerArchive, &key) {
-                    if self.planner_pane == PlannerPane::Tasks {
-                        self.toggle_planner_archive();
-                    }
-                } else if self.navigation_matches(NavigationAction::Delete, &key)
-                    || self.shortcut_matches(ShortcutAction::PlannerDelete, &key)
-                {
-                    match self.planner_pane {
-                        PlannerPane::Tasks => self.remove_planner_label(),
-                        PlannerPane::Templates => self.remove_planner_template(),
-                    }
-                } else if self.shortcut_matches(ShortcutAction::PlannerSelectRecent, &key)
-                    && self.planner_pane == PlannerPane::Tasks
-                {
-                    self.select_recent_planner_label(0);
-                }
+        } else if self.shortcut_matches(ShortcutAction::PlannerArchive, key) {
+            if self.planner_pane == PlannerPane::Tasks {
+                self.toggle_planner_archive();
             }
+        } else if self.navigation_matches(NavigationAction::Delete, key)
+            || self.shortcut_matches(ShortcutAction::PlannerDelete, key)
+        {
+            match self.planner_pane {
+                PlannerPane::Tasks => self.remove_planner_label(),
+                PlannerPane::Templates => self.remove_planner_template(),
+            }
+        } else if self.shortcut_matches(ShortcutAction::PlannerSelectRecent, key)
+            && self.planner_pane == PlannerPane::Tasks
+        {
+            self.select_recent_planner_label(0);
         }
     }
 
