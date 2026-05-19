@@ -506,6 +506,18 @@ fn parse_schedule_reads_current_schedule() {
 }
 
 #[test]
+fn parse_weekday_rules_reads_current_rules() {
+    let parsed = parse(&["--weekday-rules"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::WeekdayRules { rules: None },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
 fn parse_schedule_delay_supports_json_mode() {
     let parsed = parse(&["--schedule-delay", "--json"]).unwrap();
     assert_eq!(
@@ -581,6 +593,30 @@ fn parse_schedule_set_accepts_one_time_windows_payload() {
                         end: "15:30".to_string(),
                     }],
                 }),
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_weekday_rules_set_accepts_json_payload() {
+    let payload = r#"[{"day":"monday","profile":"deep-work","blocklist_profile":"Work","session_template":"Deep Flow"}]"#;
+    let parsed = parse_args([
+        OsString::from("--weekday-rules-set"),
+        OsString::from(payload),
+    ])
+    .unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::WeekdayRules {
+                rules: Some(vec![WeekdayProfileRuleConfig {
+                    day: "monday".to_string(),
+                    profile: ProfileId::DeepWork,
+                    blocklist_profile: "Work".to_string(),
+                    session_template: Some("Deep Flow".to_string()),
+                }]),
             },
             output: OutputMode::Text
         })
@@ -1167,6 +1203,23 @@ fn classify_key_value_arg_accepts_schedule_set_equals_value() {
 }
 
 #[test]
+fn classify_key_value_arg_accepts_weekday_rules_set_equals_value() {
+    let payload = "--weekday-rules-set=[{\"day\":\"fri\",\"profile\":\"classic\",\"blocklist_profile\":\"Default\"}]";
+    let parsed = classify_key_value_arg(payload).unwrap();
+    assert_eq!(
+        parsed,
+        Some(ParsedToken::WeekdayRulesSet(vec![
+            WeekdayProfileRuleConfig {
+                day: "fri".to_string(),
+                profile: ProfileId::Classic,
+                blocklist_profile: "Default".to_string(),
+                session_template: None,
+            }
+        ]))
+    );
+}
+
+#[test]
 fn classify_key_value_arg_accepts_session_template_equals_value() {
     let parsed = classify_key_value_arg("--session-template=Deep Flow").unwrap();
     assert_eq!(
@@ -1268,6 +1321,12 @@ fn classify_key_value_arg_rejects_empty_goal_carry_monthly_equals_value() {
 fn classify_key_value_arg_rejects_empty_schedule_set_equals_value() {
     let error = classify_key_value_arg("--schedule-set=").unwrap_err();
     assert!(error.contains("`--schedule-set=` requires a JSON payload."));
+}
+
+#[test]
+fn classify_key_value_arg_rejects_empty_weekday_rules_set_equals_value() {
+    let error = classify_key_value_arg("--weekday-rules-set=").unwrap_err();
+    assert!(error.contains("`--weekday-rules-set=` requires a JSON payload."));
 }
 
 #[test]
@@ -1391,6 +1450,12 @@ fn parse_rejects_schedule_set_without_payload() {
 }
 
 #[test]
+fn parse_rejects_weekday_rules_set_without_payload() {
+    let error = parse(&["--weekday-rules-set"]).unwrap_err();
+    assert!(error.contains("`--weekday-rules-set` requires a JSON payload"));
+}
+
+#[test]
 fn parse_rejects_blocklist_profile_create_without_value() {
     let error = parse(&["--blocklist-profile-create"]).unwrap_err();
     assert!(error.contains("`--blocklist-profile-create` requires a profile name"));
@@ -1421,6 +1486,17 @@ fn parse_rejects_schedule_set_with_invalid_weekday() {
     let error =
         parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
     assert!(error.contains("unknown weekday"));
+}
+
+#[test]
+fn parse_rejects_weekday_rules_set_with_invalid_weekday() {
+    let payload = r#"[{"day":"funday","profile":"classic","blocklist_profile":"Default"}]"#;
+    let error = parse_args([
+        OsString::from("--weekday-rules-set"),
+        OsString::from(payload),
+    ])
+    .unwrap_err();
+    assert!(error.contains("unknown day"));
 }
 
 #[test]

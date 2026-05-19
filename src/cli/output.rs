@@ -10,7 +10,8 @@ use crate::cli::{
     SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
     SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput,
     StatusOutput, StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
-    TimerStateOutput, Write, format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
+    TimerStateOutput, WeekdayRulesCommandOutput, Write, format_schedule_conflict,
+    inspect_schedule_conflicts_from_config, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -630,6 +631,27 @@ pub(super) fn print_schedule_command_output(payload: &ScheduleCommandOutput) {
         for conflict in &payload.inspection.conflicts {
             println!("  - {conflict}");
         }
+    }
+}
+
+pub(super) fn print_weekday_rules_command_output(payload: &WeekdayRulesCommandOutput) {
+    if payload.updated {
+        println!("Weekday rules updated.");
+    }
+    if payload.rules.is_empty() {
+        println!("Weekday rules: none");
+        return;
+    }
+    println!("Weekday rules:");
+    for rule in &payload.rules {
+        let template = rule.session_template.as_deref().unwrap_or("none");
+        println!(
+            "  - {} -> profile {}, blocklist {}, template {}",
+            rule.day,
+            rule.profile.label(),
+            rule.blocklist_profile,
+            template
+        );
     }
 }
 

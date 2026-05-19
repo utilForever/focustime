@@ -3,7 +3,7 @@ use crate::cli::{
     DEFAULT_WATCH_INTERVAL_SECS, DailyGoalConfig, MonthlyGoalConfig, NaiveDate,
     OneTimeFocusWindowConfig, OutputMode, ParsedToken, PrimaryCommand, ProfileId,
     RecurringFocusWindowConfig, RecurringScheduleConfig, SessionTemplateCommandKind, SiteEditValue,
-    SiteListTarget, ThemePreset, USAGE_TEXT, WeeklyGoalConfig,
+    SiteListTarget, ThemePreset, USAGE_TEXT, WeekdayProfileRuleConfig, WeeklyGoalConfig,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -49,6 +49,8 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Strict(_)
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
+            | ParsedToken::WeekdayRules
+            | ParsedToken::WeekdayRulesSet(_)
             | ParsedToken::ScheduleDelay
             | ParsedToken::BreakGlassTrigger
             | ParsedToken::BreakGlassCancel
@@ -138,6 +140,12 @@ pub(super) fn parse_primary_command(
             ParsedToken::Schedule => set_primary_command(&mut primary, PrimaryCommand::Schedule)?,
             ParsedToken::ScheduleSet(schedule) => {
                 set_primary_command(&mut primary, PrimaryCommand::ScheduleSet(schedule.clone()))?
+            }
+            ParsedToken::WeekdayRules => {
+                set_primary_command(&mut primary, PrimaryCommand::WeekdayRules)?
+            }
+            ParsedToken::WeekdayRulesSet(rules) => {
+                set_primary_command(&mut primary, PrimaryCommand::WeekdayRulesSet(rules.clone()))?
             }
             ParsedToken::ScheduleDelay => {
                 set_primary_command(&mut primary, PrimaryCommand::ScheduleDelay)?
@@ -306,6 +314,14 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Schedule {
                 schedule: Some(schedule),
             },
+            output,
+        })),
+        Some(PrimaryCommand::WeekdayRules) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::WeekdayRules { rules: None },
+            output,
+        })),
+        Some(PrimaryCommand::WeekdayRulesSet(rules)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::WeekdayRules { rules: Some(rules) },
             output,
         })),
         Some(PrimaryCommand::ScheduleDelay) => Ok(CliAction::RunCommand(CliCommand {
@@ -633,6 +649,18 @@ pub(super) fn parse_schedule_value(value: &str) -> Result<RecurringScheduleConfi
     Ok(schedule)
 }
 
+pub(super) fn parse_weekday_rules_value(
+    value: &str,
+) -> Result<Vec<WeekdayProfileRuleConfig>, String> {
+    let rules = serde_json::from_str::<Vec<WeekdayProfileRuleConfig>>(value).map_err(|error| {
+        invalid_usage(&format!(
+            "Invalid weekday-rules JSON payload: {error}. Use `--weekday-rules-set='[{{\"day\":\"mon\",\"profile\":\"deep-work\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}}]'`."
+        ))
+    })?;
+    validate_weekday_rules_value(&rules)?;
+    Ok(rules)
+}
+
 fn validate_schedule_value(schedule: &RecurringScheduleConfig) -> Result<(), String> {
     for (index, window) in schedule.windows.iter().enumerate() {
         validate_schedule_window(window, index)?;
@@ -726,6 +754,30 @@ fn validate_one_time_schedule_window(
     Ok(())
 }
 
+fn validate_weekday_rules_value(rules: &[WeekdayProfileRuleConfig]) -> Result<(), String> {
+    for (index, rule) in rules.iter().enumerate() {
+        if !is_valid_schedule_weekday(&rule.day) {
+            return Err(invalid_usage(&format!(
+                "Invalid weekday rule at index {index}: unknown day `{}`.",
+                rule.day
+            )));
+        }
+        if rule.blocklist_profile.trim().is_empty() {
+            return Err(invalid_usage(&format!(
+                "Invalid weekday rule at index {index}: `blocklist_profile` cannot be empty."
+            )));
+        }
+        if let Some(template) = rule.session_template.as_deref()
+            && template.trim().is_empty()
+        {
+            return Err(invalid_usage(&format!(
+                "Invalid weekday rule at index {index}: `session_template` cannot be empty when provided."
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn is_valid_schedule_weekday(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
@@ -799,6 +851,8 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Strict(_) => "--strict",
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
+        PrimaryCommand::WeekdayRules => "--weekday-rules",
+        PrimaryCommand::WeekdayRulesSet(_) => "--weekday-rules-set",
         PrimaryCommand::ScheduleDelay => "--schedule-delay",
         PrimaryCommand::BreakGlassTrigger => "--break-glass-trigger",
         PrimaryCommand::BreakGlassCancel => "--break-glass-cancel",
