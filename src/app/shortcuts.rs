@@ -137,9 +137,11 @@ const SITE_INPUT_NAV_ACTIONS: [NavigationAction; 3] = [
     NavigationAction::Backspace,
 ];
 
-const SESSION_PLANNER_NAV_ACTIONS: [NavigationAction; 5] = [
+const SESSION_PLANNER_NAV_ACTIONS: [NavigationAction; 7] = [
     NavigationAction::MoveDown,
     NavigationAction::MoveUp,
+    NavigationAction::MoveLeft,
+    NavigationAction::MoveRight,
     NavigationAction::Confirm,
     NavigationAction::Cancel,
     NavigationAction::Delete,
