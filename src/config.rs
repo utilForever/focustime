@@ -2403,13 +2403,23 @@ fn validate_automation_trigger_rule(
     session_templates: &[SessionTemplateConfig],
     seen_trigger_keys: &mut HashMap<String, usize>,
 ) -> Result<(), String> {
-    match &rule.trigger {
+    validate_automation_trigger_condition(&rule.trigger, index)?;
+    validate_automation_trigger_action(&rule.action, index, blocklist_profiles, session_templates)?;
+    validate_automation_trigger_conflicts(&rule.trigger, index, seen_trigger_keys)?;
+    Ok(())
+}
+
+fn validate_automation_trigger_condition(
+    trigger: &AutomationTriggerConditionConfig,
+    index: usize,
+) -> Result<(), String> {
+    match trigger {
         AutomationTriggerConditionConfig::ScheduleWindowStart
         | AutomationTriggerConditionConfig::ScheduleWindowEnd
         | AutomationTriggerConditionConfig::FocusStarted
         | AutomationTriggerConditionConfig::FocusCompleted
         | AutomationTriggerConditionConfig::BreakStarted
-        | AutomationTriggerConditionConfig::BreakCompleted => {}
+        | AutomationTriggerConditionConfig::BreakCompleted => Ok(()),
         AutomationTriggerConditionConfig::Time { days, at } => {
             if days.is_empty() {
                 return Err(format!(
@@ -2428,17 +2438,26 @@ fn validate_automation_trigger_rule(
                     "Invalid automation trigger rule at index {index}: time trigger `at` must be HH:MM in 24-hour format."
                 ));
             }
+            Ok(())
         }
     }
+}
 
-    match &rule.action {
-        AutomationTriggerActionConfig::StartFocus => {}
+fn validate_automation_trigger_action(
+    action: &AutomationTriggerActionConfig,
+    index: usize,
+    blocklist_profiles: &[BlocklistProfileConfig],
+    session_templates: &[SessionTemplateConfig],
+) -> Result<(), String> {
+    match action {
+        AutomationTriggerActionConfig::StartFocus => Ok(()),
         AutomationTriggerActionConfig::DelayScheduleStart { delay_secs } => {
             if *delay_secs < SCHEDULE_DELAY_MIN_SECS || *delay_secs > SCHEDULE_DELAY_MAX_SECS {
                 return Err(format!(
                     "Invalid automation trigger rule at index {index}: `delay_secs` must be between {SCHEDULE_DELAY_MIN_SECS} and {SCHEDULE_DELAY_MAX_SECS}."
                 ));
             }
+            Ok(())
         }
         AutomationTriggerActionConfig::ApplyDefaults {
             blocklist_profile,
@@ -2474,10 +2493,17 @@ fn validate_automation_trigger_rule(
                     ));
                 }
             }
+            Ok(())
         }
     }
+}
 
-    let conflict_keys = automation_trigger_conflict_keys(&rule.trigger);
+fn validate_automation_trigger_conflicts(
+    trigger: &AutomationTriggerConditionConfig,
+    index: usize,
+    seen_trigger_keys: &mut HashMap<String, usize>,
+) -> Result<(), String> {
+    let conflict_keys = automation_trigger_conflict_keys(trigger);
     for trigger_key in conflict_keys {
         if let Some(previous_index) = seen_trigger_keys.insert(trigger_key.clone(), index) {
             return Err(format!(
@@ -2486,7 +2512,6 @@ fn validate_automation_trigger_rule(
             ));
         }
     }
-
     Ok(())
 }
 
