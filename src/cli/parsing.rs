@@ -2,8 +2,8 @@ use crate::cli::{
     BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind,
     DEFAULT_WATCH_INTERVAL_SECS, DailyGoalConfig, MonthlyGoalConfig, NaiveDate,
     OneTimeFocusWindowConfig, OutputMode, ParsedToken, PrimaryCommand, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, SiteEditValue, SiteListTarget,
-    ThemePreset, USAGE_TEXT, WeeklyGoalConfig,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, SessionTemplateCommandKind, SiteEditValue,
+    SiteListTarget, ThemePreset, USAGE_TEXT, WeeklyGoalConfig,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -61,6 +61,11 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::BlocklistProfileCreate(_)
             | ParsedToken::BlocklistProfileRename(_)
             | ParsedToken::BlocklistProfileDelete
+            | ParsedToken::SessionTemplate(_)
+            | ParsedToken::SessionTemplateApply(_)
+            | ParsedToken::SessionTemplateCreate(_)
+            | ParsedToken::SessionTemplateRename(_)
+            | ParsedToken::SessionTemplateDelete
             | ParsedToken::BlocklistSites
             | ParsedToken::AllowlistSites
             | ParsedToken::BlocklistSiteAdd(_)
@@ -172,6 +177,24 @@ pub(super) fn parse_primary_command(
             )?,
             ParsedToken::BlocklistProfileDelete => {
                 set_primary_command(&mut primary, PrimaryCommand::BlocklistProfileDelete)?
+            }
+            ParsedToken::SessionTemplate(name) => {
+                set_primary_command(&mut primary, PrimaryCommand::SessionTemplate(name.clone()))?
+            }
+            ParsedToken::SessionTemplateApply(name) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::SessionTemplateApply(name.clone()),
+            )?,
+            ParsedToken::SessionTemplateCreate(name) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::SessionTemplateCreate(name.clone()),
+            )?,
+            ParsedToken::SessionTemplateRename(name) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::SessionTemplateRename(name.clone()),
+            )?,
+            ParsedToken::SessionTemplateDelete => {
+                set_primary_command(&mut primary, PrimaryCommand::SessionTemplateDelete)?
             }
             ParsedToken::BlocklistSites => {
                 set_primary_command(&mut primary, PrimaryCommand::BlocklistSites)?
@@ -380,6 +403,40 @@ pub(super) fn finalize_cli_action(
         Some(PrimaryCommand::BlocklistProfileDelete) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::BlocklistProfile {
                 command: BlocklistProfileCommandKind::Delete,
+            },
+            output,
+        })),
+        Some(PrimaryCommand::SessionTemplate(name)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::SessionTemplate {
+                command: SessionTemplateCommandKind::Select { name },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::SessionTemplateApply(name)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::SessionTemplate {
+                command: SessionTemplateCommandKind::Apply { name },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::SessionTemplateCreate(name)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::SessionTemplate {
+                    command: SessionTemplateCommandKind::Create { name },
+                },
+                output,
+            }))
+        }
+        Some(PrimaryCommand::SessionTemplateRename(name)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::SessionTemplate {
+                    command: SessionTemplateCommandKind::Rename { name },
+                },
+                output,
+            }))
+        }
+        Some(PrimaryCommand::SessionTemplateDelete) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::SessionTemplate {
+                command: SessionTemplateCommandKind::Delete,
             },
             output,
         })),
@@ -755,6 +812,11 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
         PrimaryCommand::BlocklistProfileRename(_) => "--blocklist-profile-rename",
         PrimaryCommand::BlocklistProfileDelete => "--blocklist-profile-delete",
+        PrimaryCommand::SessionTemplate(_) => "--session-template",
+        PrimaryCommand::SessionTemplateApply(_) => "--session-template-apply",
+        PrimaryCommand::SessionTemplateCreate(_) => "--session-template-create",
+        PrimaryCommand::SessionTemplateRename(_) => "--session-template-rename",
+        PrimaryCommand::SessionTemplateDelete => "--session-template-delete",
         PrimaryCommand::BlocklistSites => "--blocklist-sites",
         PrimaryCommand::AllowlistSites => "--allowlist-sites",
         PrimaryCommand::BlocklistSiteAdd(_) => "--blocklist-site-add",

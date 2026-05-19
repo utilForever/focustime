@@ -6,11 +6,11 @@ use crate::cli::{
     DiagnosticsCommandOutput, ExportOutput, FocusScoreOutput, GoalCarryCommandOutput,
     GoalCommandOutput, GoalOutput, ProfileOutput, RecurringScheduleConfig, RestoreOutput,
     ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput, Serialize,
-    SessionMetadataCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
-    SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
-    StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput, StrictCommandOutput,
-    TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput, TimerStateOutput, Write,
-    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
+    SessionMetadataCommandOutput, SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel,
+    SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
+    SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput,
+    StatusOutput, StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
+    TimerStateOutput, Write, format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -102,6 +102,35 @@ pub(super) fn print_blocklist_profile_command_output(payload: &BlocklistProfileC
             profile.blocklist_sites_count,
             profile.allowlist_sites_count,
             profile.effective_blocked_sites_count
+        );
+    }
+}
+
+pub(super) fn print_session_template_command_output(payload: &SessionTemplateCommandOutput) {
+    if payload.updated {
+        println!("Session template updated.");
+    }
+    println!(
+        "Selected session template: {}",
+        payload
+            .selected_session_template
+            .as_deref()
+            .unwrap_or("none")
+    );
+    if payload.templates.is_empty() {
+        println!("Templates: none");
+        return;
+    }
+    println!("Templates:");
+    for template in &payload.templates {
+        let marker = if template.active { "*" } else { " " };
+        println!(
+            "  {marker} {} (task `{}`, profile {}, blocklist `{}`, windows {})",
+            template.name,
+            template.task_label,
+            template.profile,
+            template.blocklist_profile,
+            template.schedule_windows_count
         );
     }
 }
