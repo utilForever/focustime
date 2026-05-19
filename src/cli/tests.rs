@@ -1,4 +1,5 @@
 use crate::cli::*;
+use crate::config::{AutomationTriggerActionConfig, AutomationTriggerConditionConfig};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -518,6 +519,18 @@ fn parse_weekday_rules_reads_current_rules() {
 }
 
 #[test]
+fn parse_automation_triggers_reads_current_rules() {
+    let parsed = parse(&["--automation-triggers"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::AutomationTriggers { rules: None },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
 fn parse_schedule_delay_supports_json_mode() {
     let parsed = parse(&["--schedule-delay", "--json"]).unwrap();
     assert_eq!(
@@ -616,6 +629,32 @@ fn parse_weekday_rules_set_accepts_json_payload() {
                     profile: ProfileId::DeepWork,
                     blocklist_profile: "Work".to_string(),
                     session_template: Some("Deep Flow".to_string()),
+                }]),
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_automation_triggers_set_accepts_json_payload() {
+    let payload = r#"[{"trigger":{"type":"focus_completed"},"action":{"type":"apply_defaults","profile":"deep-work","blocklist_profile":"Default"}}]"#;
+    let parsed = parse_args([
+        OsString::from("--automation-triggers-set"),
+        OsString::from(payload),
+    ])
+    .unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::AutomationTriggers {
+                rules: Some(vec![AutomationTriggerRuleConfig {
+                    trigger: AutomationTriggerConditionConfig::FocusCompleted,
+                    action: AutomationTriggerActionConfig::ApplyDefaults {
+                        profile: ProfileId::DeepWork,
+                        blocklist_profile: "Default".to_string(),
+                        session_template: None,
+                    },
                 }]),
             },
             output: OutputMode::Text
@@ -1220,6 +1259,21 @@ fn classify_key_value_arg_accepts_weekday_rules_set_equals_value() {
 }
 
 #[test]
+fn classify_key_value_arg_accepts_automation_triggers_set_equals_value() {
+    let payload = "--automation-triggers-set=[{\"trigger\":{\"type\":\"schedule_window_start\"},\"action\":{\"type\":\"start_focus\"}}]";
+    let parsed = classify_key_value_arg(payload).unwrap();
+    assert_eq!(
+        parsed,
+        Some(ParsedToken::AutomationTriggersSet(vec![
+            AutomationTriggerRuleConfig {
+                trigger: AutomationTriggerConditionConfig::ScheduleWindowStart,
+                action: AutomationTriggerActionConfig::StartFocus,
+            }
+        ]))
+    );
+}
+
+#[test]
 fn classify_key_value_arg_accepts_session_template_equals_value() {
     let parsed = classify_key_value_arg("--session-template=Deep Flow").unwrap();
     assert_eq!(
@@ -1327,6 +1381,12 @@ fn classify_key_value_arg_rejects_empty_schedule_set_equals_value() {
 fn classify_key_value_arg_rejects_empty_weekday_rules_set_equals_value() {
     let error = classify_key_value_arg("--weekday-rules-set=").unwrap_err();
     assert!(error.contains("`--weekday-rules-set=` requires a JSON payload."));
+}
+
+#[test]
+fn classify_key_value_arg_rejects_empty_automation_triggers_set_equals_value() {
+    let error = classify_key_value_arg("--automation-triggers-set=").unwrap_err();
+    assert!(error.contains("`--automation-triggers-set=` requires a JSON payload."));
 }
 
 #[test]
@@ -1456,6 +1516,12 @@ fn parse_rejects_weekday_rules_set_without_payload() {
 }
 
 #[test]
+fn parse_rejects_automation_triggers_set_without_payload() {
+    let error = parse(&["--automation-triggers-set"]).unwrap_err();
+    assert!(error.contains("`--automation-triggers-set` requires a JSON payload"));
+}
+
+#[test]
 fn parse_rejects_blocklist_profile_create_without_value() {
     let error = parse(&["--blocklist-profile-create"]).unwrap_err();
     assert!(error.contains("`--blocklist-profile-create` requires a profile name"));
@@ -1497,6 +1563,17 @@ fn parse_rejects_weekday_rules_set_with_invalid_weekday() {
     ])
     .unwrap_err();
     assert!(error.contains("unknown day"));
+}
+
+#[test]
+fn parse_rejects_automation_triggers_set_with_invalid_json() {
+    let payload = r#"[{"trigger":{"type":"unknown"}}]"#;
+    let error = parse_args([
+        OsString::from("--automation-triggers-set"),
+        OsString::from(payload),
+    ])
+    .unwrap_err();
+    assert!(error.contains("Invalid automation-triggers JSON payload"));
 }
 
 #[test]

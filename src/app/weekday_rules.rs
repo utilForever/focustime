@@ -1,5 +1,5 @@
 use crate::app::{App, Local, TimerStatus};
-use crate::config::WeekdayProfileRuleConfig;
+use crate::config::{ProfileId, WeekdayProfileRuleConfig};
 use chrono::{DateTime, Datelike};
 
 impl App {
@@ -35,24 +35,39 @@ impl App {
         &mut self,
         rule: &WeekdayProfileRuleConfig,
     ) -> Result<(), String> {
+        let context = format!("weekday rule for `{}`", rule.day);
+        self.apply_profile_defaults_for_automation(
+            rule.profile,
+            &rule.blocklist_profile,
+            rule.session_template.as_deref(),
+            &context,
+        )
+    }
+
+    pub(super) fn apply_profile_defaults_for_automation(
+        &mut self,
+        profile: ProfileId,
+        blocklist_profile: &str,
+        session_template: Option<&str>,
+        context: &str,
+    ) -> Result<(), String> {
         let mut changed_after_profile_apply = false;
-        let profile_changed = self.selected_profile != rule.profile;
-        if profile_changed && !self.apply_profile(rule.profile) {
+        let profile_changed = self.selected_profile != profile;
+        if profile_changed && !self.apply_profile(profile) {
             return Err(self
                 .config_error
                 .clone()
                 .or_else(|| self.phase_notification.clone())
-                .unwrap_or_else(|| "failed to apply profile from weekday rule".to_string()));
+                .unwrap_or_else(|| format!("failed to apply profile from {context}")));
         }
 
-        let Some(blocklist_index) = self.blocklist_profiles.iter().position(|profile| {
-            profile
-                .name
-                .eq_ignore_ascii_case(rule.blocklist_profile.as_str())
-        }) else {
+        let Some(blocklist_index) = self
+            .blocklist_profiles
+            .iter()
+            .position(|profile| profile.name.eq_ignore_ascii_case(blocklist_profile))
+        else {
             return Err(format!(
-                "weekday rule for `{}` references missing blocklist profile `{}`",
-                rule.day, rule.blocklist_profile
+                "{context} references missing blocklist profile `{blocklist_profile}`"
             ));
         };
         if self.active_blocklist_profile != blocklist_index {
@@ -62,12 +77,9 @@ impl App {
             changed_after_profile_apply = true;
         }
 
-        let target_template = match rule.session_template.as_deref() {
+        let target_template = match session_template {
             Some(name) => Some(self.session_template_index_by_name(name).ok_or_else(|| {
-                format!(
-                    "weekday rule for `{}` references missing session template `{}`",
-                    rule.day, name
-                )
+                format!("{context} references missing session template `{name}`")
             })?),
             None => None,
         };

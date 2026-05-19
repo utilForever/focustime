@@ -12,9 +12,10 @@ use crate::app::App;
 use crate::app::{SetupCheck, SetupCheckLevel, SetupDiagnostics};
 use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
-    AppConfig, BlocklistProfileConfig, BreakTemplateConfig, CustomProfileConfig, DailyGoalConfig,
-    MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, ThemePreset, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    AppConfig, AutomationTriggerRuleConfig, BlocklistProfileConfig, BreakTemplateConfig,
+    CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, ThemePreset, WeekdayProfileRuleConfig,
+    WeeklyGoalConfig,
 };
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
@@ -44,23 +45,25 @@ use execute::{
 use output::{
     build_blocking_preview_command_output, build_diagnostics_command_output,
     build_schedule_inspection_output, display_input_value, effective_blocked_sites_for_profile,
-    flush_stdout, print_backup_output, print_blocking_preview_command_output,
-    print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
-    print_goal_command_output, print_json, print_json_compact, print_profile_output,
-    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
-    print_session_metadata_command_output, print_session_template_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output, print_theme_command_output,
-    print_timer_state_output, print_weekday_rules_command_output,
+    flush_stdout, print_automation_triggers_command_output, print_backup_output,
+    print_blocking_preview_command_output, print_blocklist_profile_command_output,
+    print_break_glass_command_output, print_diagnostics_command_output, print_export_output,
+    print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
+    print_profile_output, print_restore_output, print_schedule_command_output,
+    print_schedule_delay_command_output, print_session_metadata_command_output,
+    print_session_template_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
+    print_weekday_rules_command_output,
 };
 use parsing::{
-    finalize_cli_action, invalid_usage, parse_global_tokens, parse_goal_carry_value,
-    parse_goal_value, parse_monthly_goal_value, parse_primary_command, parse_profile_id,
-    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
-    parse_theme_preset, parse_watch_interval_option, parse_watch_interval_secs,
-    parse_weekday_rules_value, parse_weekly_goal_value, require_nonempty_key_value,
+    finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_global_tokens,
+    parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_primary_command,
+    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
+    parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
+    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 use status::{
     available_break_template_views, available_theme_preset_views, build_status_output,
@@ -102,6 +105,8 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --schedule-set=JSON_PAYLOAD [--json]
   focustime --weekday-rules [--json]
   focustime --weekday-rules-set=JSON_PAYLOAD [--json]
+  focustime --automation-triggers [--json]
+  focustime --automation-triggers-set=JSON_PAYLOAD [--json]
   focustime --schedule-delay [--json]
   focustime --break-glass-trigger [--json]
   focustime --break-glass-cancel [--json]
@@ -152,6 +157,8 @@ Options:
   --schedule-set  Replace selected profile schedule (recurring + one-time) from JSON payload
   --weekday-rules      Show weekday smart-switch rules
   --weekday-rules-set  Replace weekday smart-switch rules from JSON payload
+  --automation-triggers      Show automation trigger rules
+  --automation-triggers-set  Replace automation trigger rules from JSON payload
   --schedule-delay  Delay the current active schedule window start by 10 minutes
   --break-glass-trigger  Trigger break-glass workflow (first call arms, second confirms)
   --break-glass-cancel   Cancel a pending break-glass confirmation
@@ -281,6 +288,9 @@ pub enum CommandKind {
     WeekdayRules {
         rules: Option<Vec<WeekdayProfileRuleConfig>>,
     },
+    AutomationTriggers {
+        rules: Option<Vec<AutomationTriggerRuleConfig>>,
+    },
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
@@ -350,6 +360,8 @@ enum PrimaryCommand {
     ScheduleSet(RecurringScheduleConfig),
     WeekdayRules,
     WeekdayRulesSet(Vec<WeekdayProfileRuleConfig>),
+    AutomationTriggers,
+    AutomationTriggersSet(Vec<AutomationTriggerRuleConfig>),
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
@@ -409,6 +421,8 @@ enum ParsedToken {
     ScheduleSet(RecurringScheduleConfig),
     WeekdayRules,
     WeekdayRulesSet(Vec<WeekdayProfileRuleConfig>),
+    AutomationTriggers,
+    AutomationTriggersSet(Vec<AutomationTriggerRuleConfig>),
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
@@ -751,6 +765,12 @@ struct ScheduleInspectionOutput {
 struct WeekdayRulesCommandOutput {
     updated: bool,
     rules: Vec<WeekdayProfileRuleConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct AutomationTriggersCommandOutput {
+    updated: bool,
+    rules: Vec<AutomationTriggerRuleConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

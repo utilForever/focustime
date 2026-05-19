@@ -10,24 +10,27 @@ use std::{
 };
 
 use crate::app::App;
+use crate::config::validate_automation_trigger_rules;
 
 use crate::cli::{
-    AppConfig, BackupOutput, BlocklistProfileCommandKind, BlocklistProfileCommandOutput,
-    BlocklistProfileConfig, BlocklistProfileSummaryOutput, BlocklistSiteCommandKind,
-    BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig, DailyGoalSnapshot,
-    EditSiteResult, ExportOutput, FocusStats, GoalCarryCommandOutput, GoalCommandOutput,
-    InvalidSiteEntryOutput, InvalidSiteInput, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId,
-    ProfileOutput, ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
-    ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SessionTemplateCommandKind,
-    SessionTemplateCommandOutput, SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker,
-    SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
-    SiteListTarget, StatusOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
-    TaskGoalOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput,
+    AppConfig, AutomationTriggerRuleConfig, AutomationTriggersCommandOutput, BackupOutput,
+    BlocklistProfileCommandKind, BlocklistProfileCommandOutput, BlocklistProfileConfig,
+    BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, BreakGlassCommandOutput, CliCommand,
+    CommandKind, DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats,
+    GoalCarryCommandOutput, GoalCommandOutput, InvalidSiteEntryOutput, InvalidSiteInput,
+    MonthlyGoalConfig, OutputMode, PathBuf, ProfileId, ProfileOutput, ProfileView,
+    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput,
+    SessionMetadataCommandOutput, SessionTemplateCommandKind, SessionTemplateCommandOutput,
+    SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker, SiteDeleteCommandOutput,
+    SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput, SiteListTarget, StatusOutput,
+    StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
+    ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput,
     WeekdayProfileRuleConfig, WeekdayRulesCommandOutput, WeeklyGoalConfig,
     available_break_template_views, available_theme_preset_views,
     build_blocking_preview_command_output, build_diagnostics_command_output,
     build_schedule_inspection_output, build_status_output, build_task_goal_output,
-    display_input_value, effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
+    display_input_value, effective_blocked_sites_for_profile, flush_stdout,
+    print_automation_triggers_command_output, print_backup_output,
     print_blocking_preview_command_output, print_blocklist_profile_command_output,
     print_break_glass_command_output, print_diagnostics_command_output, print_export_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
@@ -83,6 +86,9 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         }
         CommandKind::WeekdayRules { rules } => {
             execute_weekday_rules_command(rules, cli_command.output)
+        }
+        CommandKind::AutomationTriggers { rules } => {
+            execute_automation_triggers_command(rules, cli_command.output)
         }
         CommandKind::ScheduleDelay => execute_schedule_delay_command(cli_command.output),
         CommandKind::BreakGlassTrigger => execute_break_glass_trigger_command(cli_command.output),
@@ -1045,6 +1051,39 @@ fn execute_weekday_rules_command(
 
     match output {
         OutputMode::Text => print_weekday_rules_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_automation_triggers_command(
+    rules: Option<Vec<AutomationTriggerRuleConfig>>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let mut updated = false;
+    if let Some(rules) = rules {
+        config.automation_triggers = rules;
+        config = config.normalized();
+        validate_automation_trigger_rules(
+            &config.automation_triggers,
+            &config.blocklist_profiles,
+            &config.session_templates,
+        )
+        .map_err(|error| format!("Invalid automation trigger rules: {error}"))?;
+        config
+            .save()
+            .map_err(|error| format!("Failed to save automation trigger rules: {error}"))?;
+        updated = true;
+    }
+
+    let payload = AutomationTriggersCommandOutput {
+        updated,
+        rules: config.automation_triggers.clone(),
+    };
+
+    match output {
+        OutputMode::Text => print_automation_triggers_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     time::{Duration, Instant},
 };
 
@@ -12,14 +12,15 @@ use crate::blocker::{
     HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
 };
 use crate::config::{
-    AppConfig, AutoStartConfig, BlockingBackendConfig, BlockingBackendPolicyConfig,
-    BlocklistProfileConfig, BreakTemplateConfig, CommandBlockingBackendConfig, CustomProfileConfig,
-    DailyGoalConfig, FeatureFlagsConfig, GoalCarryOverConfig, MonthlyGoalConfig,
-    NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
-    ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
-    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeekdayProfileRuleConfig,
-    WeeklyGoalConfig,
+    AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
+    BlockingBackendPolicyConfig, BlocklistProfileConfig, BreakTemplateConfig,
+    CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig, FeatureFlagsConfig,
+    GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig,
+    ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
+    SessionTemplateConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
+    WakatimeRuntimeConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    validate_automation_trigger_rules,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -45,6 +46,7 @@ use crate::wakatime::{
     WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, WakatimeTracker,
 };
 
+mod automation_triggers;
 mod break_glass;
 mod cli_api;
 mod feedback_diagnostics;
@@ -66,7 +68,7 @@ pub use shortcuts::{NavigationAction, ShortcutAction};
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 42] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 52] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -109,6 +111,16 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 42] = [
     "Weekday rule template",
     "Weekday rule add/remove",
     "Theme preset",
+    "Automation trigger",
+    "Trigger condition",
+    "Trigger time day",
+    "Trigger time at",
+    "Trigger action",
+    "Action profile",
+    "Action blocklist",
+    "Action template",
+    "Action delay",
+    "Trigger add/remove",
 ];
 const PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX: usize = 9;
 const PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX: usize = 10;
@@ -143,6 +155,16 @@ const PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX: usize = 38;
 const PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX: usize = 39;
 const PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX: usize = 40;
 const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 41;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX: usize = 42;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX: usize = 43;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX: usize = 44;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_AT_INDEX: usize = 45;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX: usize = 46;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_PROFILE_INDEX: usize = 47;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_BLOCKLIST_INDEX: usize = 48;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_TEMPLATE_INDEX: usize = 49;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX: usize = 50;
+const PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX: usize = 51;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
@@ -333,6 +355,7 @@ struct ProfileEditSnapshot {
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
     recurring_schedule: RecurringScheduleConfig,
+    automation_triggers: Vec<AutomationTriggerRuleConfig>,
     weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     strict_mode: bool,
     daily_goal: DailyGoalConfig,
@@ -653,6 +676,8 @@ pub struct App {
     feature_flags: FeatureFlagsConfig,
     config_deprecation_warnings: Vec<String>,
     profile_automation: ProfileAutomationSettingsConfig,
+    automation_triggers: Vec<AutomationTriggerRuleConfig>,
+    automation_trigger_last_fired_minute: HashMap<usize, i64>,
     weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     pub custom_profile: CustomProfileConfig,
     pub profile_selection_index: usize,
@@ -663,6 +688,8 @@ pub struct App {
     profile_edit_schedule_exception: usize,
     profile_edit_one_time_window: usize,
     profile_edit_weekday_rule: usize,
+    profile_edit_automation_trigger: usize,
+    profile_edit_automation_triggers: Vec<AutomationTriggerRuleConfig>,
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
@@ -675,6 +702,7 @@ pub struct App {
     schedule_delayed_occurrence_key: Option<String>,
     schedule_delay_until: Option<DateTime<Local>>,
     last_schedule_occurrence_key: Option<String>,
+    last_active_schedule_occurrence_key: Option<String>,
     last_weekday_profile_sync_day: Option<NaiveDate>,
     current_frame_now: DateTime<Local>,
     pub strict_mode: bool,
@@ -724,6 +752,7 @@ impl App {
         let setup_deprecation_warnings = setup_deprecation_warnings(&config_deprecation_warnings);
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
+        let mut automation_triggers = config.automation_triggers.clone();
         let weekday_profile_rules = config.weekday_profile_rules.clone();
         let selected_automation = config.profile_automation_for(selected_profile);
         let notification_settings = selected_automation.notifications;
@@ -749,13 +778,27 @@ impl App {
         let break_templates = config.break_templates.clone();
         let (shortcuts, shortcut_diagnostics) =
             ShortcutBindings::from_config_with_diagnostics(&config.shortcuts);
-        let shortcut_config_error = if shortcut_diagnostics.is_empty() {
-            None
-        } else {
-            Some(format!(
+        let shortcut_config_error = (!shortcut_diagnostics.is_empty()).then(|| {
+            format!(
                 "shortcut config adjusted: {}",
                 shortcut_diagnostics.join(" ")
-            ))
+            )
+        });
+        let automation_trigger_config_error = validate_automation_trigger_rules(
+            &automation_triggers,
+            &blocklist_profiles,
+            &config.session_templates,
+        )
+        .err()
+        .map(|error| format!("automation trigger config ignored: {error}"));
+        if automation_trigger_config_error.is_some() {
+            automation_triggers.clear();
+        }
+        let initial_config_error = match (shortcut_config_error, automation_trigger_config_error) {
+            (Some(shortcut), Some(trigger)) => Some(format!("{shortcut} {trigger}")),
+            (Some(shortcut), None) => Some(shortcut),
+            (None, Some(trigger)) => Some(trigger),
+            (None, None) => None,
         };
         let active_break_template = resolve_active_break_template(
             &break_templates,
@@ -829,7 +872,7 @@ impl App {
             block_error: None,
             setup_diagnostics,
             blocking_preview: BlockingPreviewSnapshot::default(),
-            config_error: shortcut_config_error,
+            config_error: initial_config_error,
             stats_error,
             history_feedback: None,
             phase_notification: None,
@@ -849,6 +892,8 @@ impl App {
             feature_flags,
             config_deprecation_warnings,
             profile_automation,
+            automation_triggers,
+            automation_trigger_last_fired_minute: HashMap::new(),
             weekday_profile_rules,
             custom_profile,
             profile_selection_index: profile_index(selected_profile),
@@ -859,6 +904,8 @@ impl App {
             profile_edit_schedule_exception: 0,
             profile_edit_one_time_window: 0,
             profile_edit_weekday_rule: 0,
+            profile_edit_automation_trigger: 0,
+            profile_edit_automation_triggers: Vec::new(),
             profile_edit_snapshot: None,
             notification_settings,
             auto_start,
@@ -871,6 +918,7 @@ impl App {
             schedule_delayed_occurrence_key: None,
             schedule_delay_until: None,
             last_schedule_occurrence_key: None,
+            last_active_schedule_occurrence_key: None,
             last_weekday_profile_sync_day: None,
             current_frame_now: Local::now(),
             strict_mode,
@@ -929,6 +977,7 @@ impl App {
         self.sync_break_glass_override();
         self.sync_weekday_profile_rules(now);
         self.sync_recurring_schedule(now);
+        self.sync_time_based_automation_triggers(now);
     }
 
     pub fn selected_profile_name(&self) -> &'static str {
@@ -1157,6 +1206,9 @@ impl App {
     pub fn profile_edit_field_value(&self, field_index: usize) -> String {
         if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX)
             .contains(&field_index)
+            || (PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX
+                ..=PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX)
+                .contains(&field_index)
         {
             return self.profile_edit_schedule_field_value(field_index);
         }

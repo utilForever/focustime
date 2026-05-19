@@ -1,5 +1,6 @@
+use crate::app::automation_triggers::AutomationTriggerEvent;
 use crate::app::{
-    App, SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
+    App, Local, SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
     current_day_key,
 };
 
@@ -62,6 +63,9 @@ impl App {
             is_catchup,
             blocked_focus_autostart,
         );
+        if !is_catchup {
+            self.fire_timer_lifecycle_automation_events(completed_phase, TimerStatus::Running);
+        }
 
         if self.timer.phase != TimerPhase::Focus {
             self.active_focus_task_label = None;
@@ -129,6 +133,8 @@ impl App {
         let interruption_context = interruption_reason
             .filter(|_| was_focus_active)
             .map(|reason| self.build_focus_interruption_context(reason));
+        let previous_phase = self.timer.phase;
+        let previous_status = self.timer.status;
         self.pending_timer_action = None;
         action(&mut self.timer);
         let is_focus_active = self.focus_session_active_for_current_state();
@@ -153,10 +159,49 @@ impl App {
             self.active_focus_profile = None;
             self.break_glass_expires_at = None;
         }
+        self.fire_timer_lifecycle_automation_events(previous_phase, previous_status);
         self.apply_blocking_for_phase();
         self.sync_recovery_snapshot();
         if let Err(error) = self.sync_cli_workflow_state() {
             self.config_error = Some(error);
+        }
+    }
+
+    fn fire_timer_lifecycle_automation_events(
+        &mut self,
+        previous_phase: TimerPhase,
+        previous_status: TimerStatus,
+    ) {
+        let now = Local::now();
+        if previous_phase != self.timer.phase {
+            match previous_phase {
+                TimerPhase::Focus => {
+                    self.fire_automation_trigger_event(AutomationTriggerEvent::FocusCompleted, now)
+                }
+                TimerPhase::ShortBreak | TimerPhase::LongBreak => {
+                    self.fire_automation_trigger_event(AutomationTriggerEvent::BreakCompleted, now)
+                }
+            }
+            match self.timer.phase {
+                TimerPhase::Focus => {
+                    self.fire_automation_trigger_event(AutomationTriggerEvent::FocusStarted, now)
+                }
+                TimerPhase::ShortBreak | TimerPhase::LongBreak => {
+                    self.fire_automation_trigger_event(AutomationTriggerEvent::BreakStarted, now)
+                }
+            }
+            return;
+        }
+
+        if previous_status != TimerStatus::Running && self.timer.status == TimerStatus::Running {
+            match self.timer.phase {
+                TimerPhase::Focus => {
+                    self.fire_automation_trigger_event(AutomationTriggerEvent::FocusStarted, now)
+                }
+                TimerPhase::ShortBreak | TimerPhase::LongBreak => {
+                    self.fire_automation_trigger_event(AutomationTriggerEvent::BreakStarted, now)
+                }
+            }
         }
     }
 

@@ -295,6 +295,16 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         39 => "Rule template",
         40 => "Rule add/remove",
         41 => "Theme preset",
+        42 => "Trigger selector",
+        43 => "Trigger condition",
+        44 => "Time day",
+        45 => "Time at",
+        46 => "Action",
+        47 => "Action profile",
+        48 => "Action blocklist",
+        49 => "Action template",
+        50 => "Action delay",
+        51 => "Trigger add/remove",
         _ => "",
     }
 }
