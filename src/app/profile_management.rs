@@ -130,6 +130,7 @@ impl App {
         self.profile_edit_one_time_window = 0;
         self.profile_edit_weekday_rule = 0;
         self.profile_edit_automation_trigger = 0;
+        self.profile_edit_automation_triggers.clear();
         self.profile_edit_snapshot = None;
         self.profile_selection_index = profile_index(self.selected_profile);
         self.clamp_profile_selection();
@@ -139,6 +140,7 @@ impl App {
 
     pub(super) fn exit_profile_manager(&mut self) {
         self.mode = AppMode::Timer;
+        self.profile_edit_automation_triggers.clear();
         self.profile_edit_snapshot = None;
     }
 
@@ -254,6 +256,7 @@ impl App {
         self.profile_edit_one_time_window = 0;
         self.profile_edit_weekday_rule = 0;
         self.profile_edit_automation_trigger = 0;
+        self.profile_edit_automation_triggers = self.automation_triggers.clone();
         self.clamp_profile_edit_schedule_selection();
     }
 
@@ -284,10 +287,12 @@ impl App {
         self.profile_edit_one_time_window = 0;
         self.profile_edit_weekday_rule = 0;
         self.profile_edit_automation_trigger = 0;
+        self.profile_edit_automation_triggers.clear();
         self.clamp_profile_edit_schedule_selection();
     }
 
     pub(super) fn commit_profile_edit(&mut self) {
+        let edited_automation_triggers = self.profile_edit_automation_triggers.clone();
         let custom_profile_changed = self.profile_edit_snapshot.as_ref().is_some_and(|snapshot| {
             snapshot.custom_profile.normalized() != self.custom_profile.normalized()
         });
@@ -302,7 +307,7 @@ impl App {
         let automation_triggers_changed = self
             .profile_edit_snapshot
             .as_ref()
-            .is_some_and(|snapshot| snapshot.automation_triggers != self.automation_triggers);
+            .is_some_and(|snapshot| snapshot.automation_triggers != edited_automation_triggers);
         let daily_goal_changed = self
             .profile_edit_snapshot
             .as_ref()
@@ -325,13 +330,16 @@ impl App {
         self.wakatime_metadata = self.wakatime_metadata.normalized();
         if automation_triggers_changed
             && let Err(error) = validate_automation_trigger_rules(
-                &self.automation_triggers,
+                &edited_automation_triggers,
                 &self.blocklist_profiles,
                 &self.session_templates,
             )
         {
             self.config_error = Some(error);
             return;
+        }
+        if automation_triggers_changed {
+            self.automation_triggers = edited_automation_triggers;
         }
         if self.selected_profile == ProfileId::Custom {
             if custom_profile_changed {
@@ -383,6 +391,8 @@ impl App {
         self.profile_edit_schedule_exception = 0;
         self.profile_edit_one_time_window = 0;
         self.profile_edit_weekday_rule = 0;
+        self.profile_edit_automation_trigger = 0;
+        self.profile_edit_automation_triggers.clear();
         self.clamp_profile_edit_schedule_selection();
         self.profile_edit_snapshot = None;
     }

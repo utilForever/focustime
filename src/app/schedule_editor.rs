@@ -240,13 +240,13 @@ impl App {
     }
 
     fn automation_trigger_selector_value(&self) -> String {
-        if self.automation_triggers.is_empty() {
+        if self.automation_trigger_rules_for_edit().is_empty() {
             "none".to_string()
         } else {
             format!(
                 "{}/{}",
                 self.profile_edit_automation_trigger.saturating_add(1),
-                self.automation_triggers.len()
+                self.automation_trigger_rules_for_edit().len()
             )
         }
     }
@@ -344,7 +344,7 @@ impl App {
     }
 
     fn automation_trigger_collection_value(&self) -> String {
-        if self.automation_triggers.is_empty() {
+        if self.automation_trigger_rules_for_edit().is_empty() {
             "→ Add rule".to_string()
         } else {
             "← Remove · → Add".to_string()
@@ -387,14 +387,31 @@ impl App {
             .get_mut(self.profile_edit_weekday_rule)
     }
 
+    fn automation_trigger_rules_for_edit(&self) -> &[AutomationTriggerRuleConfig] {
+        if self.profile_edit_active {
+            &self.profile_edit_automation_triggers
+        } else {
+            &self.automation_triggers
+        }
+    }
+
+    fn automation_trigger_rules_for_edit_mut(&mut self) -> &mut Vec<AutomationTriggerRuleConfig> {
+        if self.profile_edit_active {
+            &mut self.profile_edit_automation_triggers
+        } else {
+            &mut self.automation_triggers
+        }
+    }
+
     fn selected_automation_trigger(&self) -> Option<&AutomationTriggerRuleConfig> {
-        self.automation_triggers
+        self.automation_trigger_rules_for_edit()
             .get(self.profile_edit_automation_trigger)
     }
 
     fn selected_automation_trigger_mut(&mut self) -> Option<&mut AutomationTriggerRuleConfig> {
-        self.automation_triggers
-            .get_mut(self.profile_edit_automation_trigger)
+        let index = self.profile_edit_automation_trigger;
+        self.automation_trigger_rules_for_edit_mut()
+            .get_mut(index)
     }
 
     fn selected_schedule_day_token(&self) -> &'static str {
@@ -457,12 +474,12 @@ impl App {
                 .profile_edit_weekday_rule
                 .min(self.weekday_profile_rules.len().saturating_sub(1));
         }
-        if self.automation_triggers.is_empty() {
+        if self.automation_trigger_rules_for_edit().is_empty() {
             self.profile_edit_automation_trigger = 0;
         } else {
             self.profile_edit_automation_trigger = self
                 .profile_edit_automation_trigger
-                .min(self.automation_triggers.len().saturating_sub(1));
+                .min(self.automation_trigger_rules_for_edit().len().saturating_sub(1));
         }
     }
 
@@ -936,10 +953,10 @@ impl App {
     }
 
     pub(super) fn cycle_automation_trigger_rule(&mut self, increase: bool) {
-        if self.automation_triggers.is_empty() {
+        if self.automation_trigger_rules_for_edit().is_empty() {
             return;
         }
-        let total = self.automation_triggers.len();
+        let total = self.automation_trigger_rules_for_edit().len();
         if increase {
             self.profile_edit_automation_trigger =
                 (self.profile_edit_automation_trigger + 1) % total;
@@ -1242,16 +1259,19 @@ impl App {
 
     pub(super) fn adjust_automation_triggers_collection(&mut self, increase: bool) {
         if increase {
-            self.automation_triggers
+            self.automation_trigger_rules_for_edit_mut()
                 .push(AutomationTriggerRuleConfig::default());
-            self.profile_edit_automation_trigger = self.automation_triggers.len().saturating_sub(1);
+            self.profile_edit_automation_trigger = self
+                .automation_trigger_rules_for_edit()
+                .len()
+                .saturating_sub(1);
             return;
         }
-        if self.automation_triggers.is_empty() {
+        if self.automation_trigger_rules_for_edit().is_empty() {
             return;
         }
-        self.automation_triggers
-            .remove(self.profile_edit_automation_trigger);
+        let index = self.profile_edit_automation_trigger;
+        self.automation_trigger_rules_for_edit_mut().remove(index);
         self.clamp_profile_edit_schedule_selection();
     }
 

@@ -3597,7 +3597,7 @@ fn profile_editor_preserves_multi_day_automation_trigger_days() {
 fn commit_profile_edit_rejects_invalid_automation_trigger_rules() {
     let mut app = App::default();
     app.begin_profile_edit();
-    app.automation_triggers = vec![AutomationTriggerRuleConfig {
+    app.profile_edit_automation_triggers = vec![AutomationTriggerRuleConfig {
         trigger: AutomationTriggerConditionConfig::FocusStarted,
         action: AutomationTriggerActionConfig::ApplyDefaults {
             profile: ProfileId::Classic,
@@ -3610,11 +3610,33 @@ fn commit_profile_edit_rejects_invalid_automation_trigger_rules() {
 
     assert!(app.profile_edit_active);
     assert!(app.profile_edit_snapshot.is_some());
+    assert!(app.automation_triggers.is_empty());
     assert!(
         app.config_error
             .as_deref()
             .is_some_and(|error| error.contains("blocklist profile"))
     );
+}
+
+#[test]
+fn profile_edit_stages_automation_trigger_changes_until_commit() {
+    let mut app = App::default();
+    let initial_rule = AutomationTriggerRuleConfig {
+        trigger: AutomationTriggerConditionConfig::FocusStarted,
+        action: AutomationTriggerActionConfig::StartFocus,
+    };
+    app.automation_triggers = vec![initial_rule];
+
+    app.begin_profile_edit();
+    app.adjust_automation_triggers_collection(true);
+    assert_eq!(app.automation_triggers.len(), 1);
+    assert_eq!(app.profile_edit_automation_triggers.len(), 2);
+
+    app.commit_profile_edit();
+
+    assert!(!app.profile_edit_active);
+    assert_eq!(app.automation_triggers.len(), 2);
+    assert!(app.profile_edit_automation_triggers.is_empty());
 }
 
 #[test]
