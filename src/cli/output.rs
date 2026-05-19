@@ -1,17 +1,17 @@
 use std::collections::HashSet;
 
 use crate::cli::{
-    BackupOutput, BlockingPreviewAction, BlockingPreviewCommandOutput,
-    BlocklistProfileCommandOutput, BlocklistProfileConfig, BreakGlassCommandOutput,
-    DiagnosticsCommandOutput, ExportOutput, FocusScoreOutput, GoalCarryCommandOutput,
-    GoalCommandOutput, GoalOutput, ProfileOutput, RecurringScheduleConfig, RestoreOutput,
-    ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput, Serialize,
-    SessionMetadataCommandOutput, SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel,
-    SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
-    SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput,
-    StatusOutput, StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, ThemeCommandOutput,
-    TimerStateOutput, WeekdayRulesCommandOutput, Write, format_schedule_conflict,
-    inspect_schedule_conflicts_from_config, io,
+    AutomationTriggersCommandOutput, BackupOutput, BlockingPreviewAction,
+    BlockingPreviewCommandOutput, BlocklistProfileCommandOutput, BlocklistProfileConfig,
+    BreakGlassCommandOutput, DiagnosticsCommandOutput, ExportOutput, FocusScoreOutput,
+    GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, ProfileOutput, RecurringScheduleConfig,
+    RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput,
+    Serialize, SessionMetadataCommandOutput, SessionTemplateCommandOutput, SetupCheck,
+    SetupCheckLevel, SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput,
+    SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary,
+    StatsRetentionStatusOutput, StatusOutput, StrictCommandOutput, TaskGoalCommandOutput,
+    TaskGoalOutput, ThemeCommandOutput, TimerStateOutput, WeekdayRulesCommandOutput, Write,
+    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -652,6 +652,22 @@ pub(super) fn print_weekday_rules_command_output(payload: &WeekdayRulesCommandOu
             rule.blocklist_profile,
             template
         );
+    }
+}
+
+pub(super) fn print_automation_triggers_command_output(payload: &AutomationTriggersCommandOutput) {
+    if payload.updated {
+        println!("Automation triggers updated.");
+    }
+    if payload.rules.is_empty() {
+        println!("Automation triggers: none");
+        return;
+    }
+    println!("Automation triggers:");
+    for rule in &payload.rules {
+        let formatted = serde_json::to_string(rule)
+            .unwrap_or_else(|_| "<failed to serialize automation trigger>".to_string());
+        println!("  - {formatted}");
     }
 }
 

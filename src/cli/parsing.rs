@@ -1,7 +1,7 @@
 use crate::cli::{
-    BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind,
-    DEFAULT_WATCH_INTERVAL_SECS, DailyGoalConfig, MonthlyGoalConfig, NaiveDate,
-    OneTimeFocusWindowConfig, OutputMode, ParsedToken, PrimaryCommand, ProfileId,
+    AutomationTriggerRuleConfig, BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction,
+    CliCommand, CommandKind, DEFAULT_WATCH_INTERVAL_SECS, DailyGoalConfig, MonthlyGoalConfig,
+    NaiveDate, OneTimeFocusWindowConfig, OutputMode, ParsedToken, PrimaryCommand, ProfileId,
     RecurringFocusWindowConfig, RecurringScheduleConfig, SessionTemplateCommandKind, SiteEditValue,
     SiteListTarget, ThemePreset, USAGE_TEXT, WeekdayProfileRuleConfig, WeeklyGoalConfig,
 };
@@ -51,6 +51,8 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::ScheduleSet(_)
             | ParsedToken::WeekdayRules
             | ParsedToken::WeekdayRulesSet(_)
+            | ParsedToken::AutomationTriggers
+            | ParsedToken::AutomationTriggersSet(_)
             | ParsedToken::ScheduleDelay
             | ParsedToken::BreakGlassTrigger
             | ParsedToken::BreakGlassCancel
@@ -147,6 +149,13 @@ pub(super) fn parse_primary_command(
             ParsedToken::WeekdayRulesSet(rules) => {
                 set_primary_command(&mut primary, PrimaryCommand::WeekdayRulesSet(rules.clone()))?
             }
+            ParsedToken::AutomationTriggers => {
+                set_primary_command(&mut primary, PrimaryCommand::AutomationTriggers)?
+            }
+            ParsedToken::AutomationTriggersSet(rules) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::AutomationTriggersSet(rules.clone()),
+            )?,
             ParsedToken::ScheduleDelay => {
                 set_primary_command(&mut primary, PrimaryCommand::ScheduleDelay)?
             }
@@ -324,6 +333,16 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::WeekdayRules { rules: Some(rules) },
             output,
         })),
+        Some(PrimaryCommand::AutomationTriggers) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::AutomationTriggers { rules: None },
+            output,
+        })),
+        Some(PrimaryCommand::AutomationTriggersSet(rules)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::AutomationTriggers { rules: Some(rules) },
+                output,
+            }))
+        }
         Some(PrimaryCommand::ScheduleDelay) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::ScheduleDelay,
             output,
@@ -661,6 +680,16 @@ pub(super) fn parse_weekday_rules_value(
     Ok(rules)
 }
 
+pub(super) fn parse_automation_triggers_value(
+    value: &str,
+) -> Result<Vec<AutomationTriggerRuleConfig>, String> {
+    serde_json::from_str::<Vec<AutomationTriggerRuleConfig>>(value).map_err(|error| {
+        invalid_usage(&format!(
+            "Invalid automation-triggers JSON payload: {error}. Use `--automation-triggers-set='[{{\"trigger\":{{\"type\":\"time\",\"days\":[\"mon\"],\"at\":\"09:00\"}},\"action\":{{\"type\":\"start_focus\"}}}}]'`."
+        ))
+    })
+}
+
 fn validate_schedule_value(schedule: &RecurringScheduleConfig) -> Result<(), String> {
     for (index, window) in schedule.windows.iter().enumerate() {
         validate_schedule_window(window, index)?;
@@ -853,6 +882,8 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
         PrimaryCommand::WeekdayRules => "--weekday-rules",
         PrimaryCommand::WeekdayRulesSet(_) => "--weekday-rules-set",
+        PrimaryCommand::AutomationTriggers => "--automation-triggers",
+        PrimaryCommand::AutomationTriggersSet(_) => "--automation-triggers-set",
         PrimaryCommand::ScheduleDelay => "--schedule-delay",
         PrimaryCommand::BreakGlassTrigger => "--break-glass-trigger",
         PrimaryCommand::BreakGlassCancel => "--break-glass-cancel",
