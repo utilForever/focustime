@@ -1,5 +1,11 @@
 use crate::app::{
-    App, OneTimeFocusWindowConfig, PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX,
+    App, OneTimeFocusWindowConfig, PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_BLOCKLIST_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_PROFILE_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_TEMPLATE_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_AT_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX, PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX,
     PROFILE_EDIT_ONE_TIME_DATE_INDEX, PROFILE_EDIT_ONE_TIME_END_INDEX,
     PROFILE_EDIT_ONE_TIME_START_INDEX, PROFILE_EDIT_ONE_TIME_WINDOW_INDEX,
     PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX,
@@ -15,6 +21,9 @@ use crate::app::{
     inspect_schedule_conflicts_from_config, parse_hhmm_minutes, parse_schedule_exception_date,
     profile_for_index, profile_index, sort_one_time_windows, sort_schedule_days,
     sort_schedule_exception_dates,
+};
+use crate::config::{
+    AutomationTriggerActionConfig, AutomationTriggerConditionConfig, AutomationTriggerRuleConfig,
 };
 
 impl App {
@@ -64,6 +73,30 @@ impl App {
             PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX => self.weekday_rule_blocklist_value(),
             PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX => self.weekday_rule_template_value(),
             PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX => self.weekday_rule_collection_value(),
+            PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX => self.automation_trigger_selector_value(),
+            PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX => {
+                self.automation_trigger_condition_value()
+            }
+            PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX => {
+                self.automation_trigger_time_day_value()
+            }
+            PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_AT_INDEX => {
+                self.automation_trigger_time_at_value()
+            }
+            PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX => self.automation_trigger_action_value(),
+            PROFILE_EDIT_AUTOMATION_TRIGGER_PROFILE_INDEX => {
+                self.automation_trigger_profile_value()
+            }
+            PROFILE_EDIT_AUTOMATION_TRIGGER_BLOCKLIST_INDEX => {
+                self.automation_trigger_blocklist_value()
+            }
+            PROFILE_EDIT_AUTOMATION_TRIGGER_TEMPLATE_INDEX => {
+                self.automation_trigger_template_value()
+            }
+            PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX => self.automation_trigger_delay_value(),
+            PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX => {
+                self.automation_trigger_collection_value()
+            }
             _ => String::new(),
         }
     }
@@ -206,6 +239,114 @@ impl App {
         }
     }
 
+    fn automation_trigger_selector_value(&self) -> String {
+        if self.automation_triggers.is_empty() {
+            "none".to_string()
+        } else {
+            format!(
+                "{}/{}",
+                self.profile_edit_automation_trigger.saturating_add(1),
+                self.automation_triggers.len()
+            )
+        }
+    }
+
+    fn automation_trigger_condition_value(&self) -> String {
+        match self.selected_automation_trigger().map(|rule| &rule.trigger) {
+            Some(AutomationTriggerConditionConfig::ScheduleWindowStart) => {
+                "schedule_window_start".to_string()
+            }
+            Some(AutomationTriggerConditionConfig::ScheduleWindowEnd) => {
+                "schedule_window_end".to_string()
+            }
+            Some(AutomationTriggerConditionConfig::FocusStarted) => "focus_started".to_string(),
+            Some(AutomationTriggerConditionConfig::FocusCompleted) => "focus_completed".to_string(),
+            Some(AutomationTriggerConditionConfig::BreakStarted) => "break_started".to_string(),
+            Some(AutomationTriggerConditionConfig::BreakCompleted) => "break_completed".to_string(),
+            Some(AutomationTriggerConditionConfig::Time { .. }) => "time".to_string(),
+            None => "n/a".to_string(),
+        }
+    }
+
+    fn automation_trigger_time_day_value(&self) -> String {
+        let Some(AutomationTriggerConditionConfig::Time { days, .. }) =
+            self.selected_automation_trigger().map(|rule| &rule.trigger)
+        else {
+            return "n/a".to_string();
+        };
+        days.first().cloned().unwrap_or_else(|| "n/a".to_string())
+    }
+
+    fn automation_trigger_time_at_value(&self) -> String {
+        let Some(AutomationTriggerConditionConfig::Time { at, .. }) =
+            self.selected_automation_trigger().map(|rule| &rule.trigger)
+        else {
+            return "n/a".to_string();
+        };
+        at.clone()
+    }
+
+    fn automation_trigger_action_value(&self) -> String {
+        match self.selected_automation_trigger().map(|rule| &rule.action) {
+            Some(AutomationTriggerActionConfig::StartFocus) => "start_focus".to_string(),
+            Some(AutomationTriggerActionConfig::DelayScheduleStart { .. }) => {
+                "delay_schedule_start".to_string()
+            }
+            Some(AutomationTriggerActionConfig::ApplyDefaults { .. }) => {
+                "apply_defaults".to_string()
+            }
+            None => "n/a".to_string(),
+        }
+    }
+
+    fn automation_trigger_profile_value(&self) -> String {
+        let Some(AutomationTriggerActionConfig::ApplyDefaults { profile, .. }) =
+            self.selected_automation_trigger().map(|rule| &rule.action)
+        else {
+            return "n/a".to_string();
+        };
+        profile.label().to_string()
+    }
+
+    fn automation_trigger_blocklist_value(&self) -> String {
+        let Some(AutomationTriggerActionConfig::ApplyDefaults {
+            blocklist_profile, ..
+        }) = self.selected_automation_trigger().map(|rule| &rule.action)
+        else {
+            return "n/a".to_string();
+        };
+        blocklist_profile.clone()
+    }
+
+    fn automation_trigger_template_value(&self) -> String {
+        let Some(AutomationTriggerActionConfig::ApplyDefaults {
+            session_template, ..
+        }) = self.selected_automation_trigger().map(|rule| &rule.action)
+        else {
+            return "n/a".to_string();
+        };
+        session_template
+            .clone()
+            .unwrap_or_else(|| "none".to_string())
+    }
+
+    fn automation_trigger_delay_value(&self) -> String {
+        let Some(AutomationTriggerActionConfig::DelayScheduleStart { delay_secs }) =
+            self.selected_automation_trigger().map(|rule| &rule.action)
+        else {
+            return "n/a".to_string();
+        };
+        format!("{delay_secs}s")
+    }
+
+    fn automation_trigger_collection_value(&self) -> String {
+        if self.automation_triggers.is_empty() {
+            "→ Add rule".to_string()
+        } else {
+            "← Remove · → Add".to_string()
+        }
+    }
+
     fn selected_schedule_window(&self) -> Option<&RecurringFocusWindowConfig> {
         self.recurring_schedule
             .windows
@@ -240,6 +381,16 @@ impl App {
     ) -> Option<&mut crate::config::WeekdayProfileRuleConfig> {
         self.weekday_profile_rules
             .get_mut(self.profile_edit_weekday_rule)
+    }
+
+    fn selected_automation_trigger(&self) -> Option<&AutomationTriggerRuleConfig> {
+        self.automation_triggers
+            .get(self.profile_edit_automation_trigger)
+    }
+
+    fn selected_automation_trigger_mut(&mut self) -> Option<&mut AutomationTriggerRuleConfig> {
+        self.automation_triggers
+            .get_mut(self.profile_edit_automation_trigger)
     }
 
     fn selected_schedule_day_token(&self) -> &'static str {
@@ -301,6 +452,13 @@ impl App {
             self.profile_edit_weekday_rule = self
                 .profile_edit_weekday_rule
                 .min(self.weekday_profile_rules.len().saturating_sub(1));
+        }
+        if self.automation_triggers.is_empty() {
+            self.profile_edit_automation_trigger = 0;
+        } else {
+            self.profile_edit_automation_trigger = self
+                .profile_edit_automation_trigger
+                .min(self.automation_triggers.len().saturating_sub(1));
         }
     }
 
@@ -770,6 +928,326 @@ impl App {
         }
         self.weekday_profile_rules
             .remove(self.profile_edit_weekday_rule);
+        self.clamp_profile_edit_schedule_selection();
+    }
+
+    pub(super) fn cycle_automation_trigger_rule(&mut self, increase: bool) {
+        if self.automation_triggers.is_empty() {
+            return;
+        }
+        let total = self.automation_triggers.len();
+        if increase {
+            self.profile_edit_automation_trigger =
+                (self.profile_edit_automation_trigger + 1) % total;
+        } else if self.profile_edit_automation_trigger == 0 {
+            self.profile_edit_automation_trigger = total - 1;
+        } else {
+            self.profile_edit_automation_trigger =
+                self.profile_edit_automation_trigger.saturating_sub(1);
+        }
+    }
+
+    pub(super) fn cycle_automation_trigger_condition(&mut self, increase: bool) {
+        let Some(current) = self
+            .selected_automation_trigger()
+            .map(|rule| rule.trigger.clone())
+        else {
+            return;
+        };
+        let conditions = [
+            AutomationTriggerConditionConfig::ScheduleWindowStart,
+            AutomationTriggerConditionConfig::ScheduleWindowEnd,
+            AutomationTriggerConditionConfig::FocusStarted,
+            AutomationTriggerConditionConfig::FocusCompleted,
+            AutomationTriggerConditionConfig::BreakStarted,
+            AutomationTriggerConditionConfig::BreakCompleted,
+            AutomationTriggerConditionConfig::Time {
+                days: vec![SCHEDULE_DAY_TOKENS[0].to_string()],
+                at: "09:00".to_string(),
+            },
+        ];
+        let current_index = conditions
+            .iter()
+            .position(|candidate| {
+                std::mem::discriminant(candidate) == std::mem::discriminant(&current)
+            })
+            .unwrap_or(0);
+        let next_index = if increase {
+            (current_index + 1) % conditions.len()
+        } else if current_index == 0 {
+            conditions.len() - 1
+        } else {
+            current_index - 1
+        };
+        let next = match &conditions[next_index] {
+            AutomationTriggerConditionConfig::Time { .. } => {
+                if let AutomationTriggerConditionConfig::Time { days, at } = current {
+                    AutomationTriggerConditionConfig::Time { days, at }
+                } else {
+                    AutomationTriggerConditionConfig::Time {
+                        days: vec![SCHEDULE_DAY_TOKENS[0].to_string()],
+                        at: "09:00".to_string(),
+                    }
+                }
+            }
+            value => value.clone(),
+        };
+        if let Some(rule) = self.selected_automation_trigger_mut() {
+            rule.trigger = next;
+        }
+    }
+
+    pub(super) fn cycle_automation_trigger_time_day(&mut self, increase: bool) {
+        let Some(AutomationTriggerConditionConfig::Time { days, .. }) = self
+            .selected_automation_trigger()
+            .map(|rule| rule.trigger.clone())
+        else {
+            return;
+        };
+        let current_day = days
+            .first()
+            .cloned()
+            .unwrap_or_else(|| SCHEDULE_DAY_TOKENS[0].to_string());
+        let current_index = SCHEDULE_DAY_TOKENS
+            .iter()
+            .position(|token| token.eq_ignore_ascii_case(current_day.as_str()))
+            .unwrap_or(0);
+        let total = SCHEDULE_DAY_TOKENS.len();
+        let next_index = if increase {
+            (current_index + 1) % total
+        } else if current_index == 0 {
+            total - 1
+        } else {
+            current_index - 1
+        };
+        if let Some(rule) = self.selected_automation_trigger_mut()
+            && let AutomationTriggerConditionConfig::Time { days, .. } = &mut rule.trigger
+        {
+            days.clear();
+            days.push(SCHEDULE_DAY_TOKENS[next_index].to_string());
+        }
+    }
+
+    pub(super) fn adjust_automation_trigger_time_at(&mut self, increase: bool) {
+        let step_minutes = self.schedule_runtime.time_step_minutes;
+        if let Some(rule) = self.selected_automation_trigger_mut()
+            && let AutomationTriggerConditionConfig::Time { at, .. } = &mut rule.trigger
+        {
+            let current = parse_hhmm_minutes(at).unwrap_or(9 * 60);
+            let next = if increase {
+                current.saturating_add(step_minutes).min(23 * 60 + 59)
+            } else {
+                current.saturating_sub(step_minutes)
+            };
+            *at = format_hhmm(next);
+        }
+    }
+
+    pub(super) fn cycle_automation_trigger_action(&mut self, increase: bool) {
+        let Some(current) = self
+            .selected_automation_trigger()
+            .map(|rule| rule.action.clone())
+        else {
+            return;
+        };
+        let actions = [
+            AutomationTriggerActionConfig::StartFocus,
+            AutomationTriggerActionConfig::DelayScheduleStart {
+                delay_secs: self.schedule_runtime.delay_secs,
+            },
+            AutomationTriggerActionConfig::ApplyDefaults {
+                profile: self.selected_profile,
+                blocklist_profile: self.active_blocklist_profile_name().to_string(),
+                session_template: self.active_session_template_name().map(ToString::to_string),
+            },
+        ];
+        let current_index = actions
+            .iter()
+            .position(|candidate| {
+                std::mem::discriminant(candidate) == std::mem::discriminant(&current)
+            })
+            .unwrap_or(0);
+        let next_index = if increase {
+            (current_index + 1) % actions.len()
+        } else if current_index == 0 {
+            actions.len() - 1
+        } else {
+            current_index - 1
+        };
+        let next = match &actions[next_index] {
+            AutomationTriggerActionConfig::DelayScheduleStart { .. } => {
+                if let AutomationTriggerActionConfig::DelayScheduleStart { delay_secs } = current {
+                    AutomationTriggerActionConfig::DelayScheduleStart { delay_secs }
+                } else {
+                    AutomationTriggerActionConfig::DelayScheduleStart {
+                        delay_secs: self.schedule_runtime.delay_secs,
+                    }
+                }
+            }
+            AutomationTriggerActionConfig::ApplyDefaults { .. } => {
+                if let AutomationTriggerActionConfig::ApplyDefaults {
+                    profile,
+                    blocklist_profile,
+                    session_template,
+                } = current
+                {
+                    AutomationTriggerActionConfig::ApplyDefaults {
+                        profile,
+                        blocklist_profile,
+                        session_template,
+                    }
+                } else {
+                    AutomationTriggerActionConfig::ApplyDefaults {
+                        profile: self.selected_profile,
+                        blocklist_profile: self.active_blocklist_profile_name().to_string(),
+                        session_template: self
+                            .active_session_template_name()
+                            .map(ToString::to_string),
+                    }
+                }
+            }
+            value => value.clone(),
+        };
+        if let Some(rule) = self.selected_automation_trigger_mut() {
+            rule.action = next;
+        }
+    }
+
+    pub(super) fn cycle_automation_trigger_profile(&mut self, increase: bool) {
+        let Some(AutomationTriggerActionConfig::ApplyDefaults { profile, .. }) = self
+            .selected_automation_trigger()
+            .map(|rule| rule.action.clone())
+        else {
+            return;
+        };
+        let current_index = profile_index(profile);
+        let total = PROFILE_IDS.len();
+        let next_index = if increase {
+            (current_index + 1) % total
+        } else if current_index == 0 {
+            total - 1
+        } else {
+            current_index - 1
+        };
+        if let Some(rule) = self.selected_automation_trigger_mut()
+            && let AutomationTriggerActionConfig::ApplyDefaults { profile, .. } = &mut rule.action
+        {
+            *profile = profile_for_index(next_index);
+        }
+    }
+
+    pub(super) fn cycle_automation_trigger_blocklist(&mut self, increase: bool) {
+        if self.blocklist_profiles.is_empty() {
+            return;
+        }
+        let Some(AutomationTriggerActionConfig::ApplyDefaults {
+            blocklist_profile, ..
+        }) = self
+            .selected_automation_trigger()
+            .map(|rule| rule.action.clone())
+        else {
+            return;
+        };
+        let current_index = self
+            .blocklist_profiles
+            .iter()
+            .position(|profile| {
+                profile
+                    .name
+                    .eq_ignore_ascii_case(blocklist_profile.as_str())
+            })
+            .unwrap_or(0);
+        let total = self.blocklist_profiles.len();
+        let next_index = if increase {
+            (current_index + 1) % total
+        } else if current_index == 0 {
+            total - 1
+        } else {
+            current_index - 1
+        };
+        let next_name = self.blocklist_profiles[next_index].name.clone();
+        if let Some(rule) = self.selected_automation_trigger_mut()
+            && let AutomationTriggerActionConfig::ApplyDefaults {
+                blocklist_profile, ..
+            } = &mut rule.action
+        {
+            *blocklist_profile = next_name;
+        }
+    }
+
+    pub(super) fn cycle_automation_trigger_template(&mut self, increase: bool) {
+        let Some(AutomationTriggerActionConfig::ApplyDefaults {
+            session_template, ..
+        }) = self
+            .selected_automation_trigger()
+            .map(|rule| rule.action.clone())
+        else {
+            return;
+        };
+        if self.session_templates.is_empty() {
+            if let Some(rule) = self.selected_automation_trigger_mut()
+                && let AutomationTriggerActionConfig::ApplyDefaults {
+                    session_template, ..
+                } = &mut rule.action
+            {
+                *session_template = None;
+            }
+            return;
+        }
+        let none_index = self.session_templates.len();
+        let current_index = session_template
+            .as_deref()
+            .and_then(|name| self.session_template_index_by_name(name))
+            .unwrap_or(none_index);
+        let total = none_index + 1;
+        let next_index = if increase {
+            (current_index + 1) % total
+        } else if current_index == 0 {
+            total - 1
+        } else {
+            current_index - 1
+        };
+        let next_template = if next_index == none_index {
+            None
+        } else {
+            self.session_templates
+                .get(next_index)
+                .map(|template| template.name.clone())
+        };
+        if let Some(rule) = self.selected_automation_trigger_mut()
+            && let AutomationTriggerActionConfig::ApplyDefaults {
+                session_template, ..
+            } = &mut rule.action
+        {
+            *session_template = next_template;
+        }
+    }
+
+    pub(super) fn adjust_automation_trigger_delay(&mut self, increase: bool) {
+        if let Some(rule) = self.selected_automation_trigger_mut()
+            && let AutomationTriggerActionConfig::DelayScheduleStart { delay_secs } =
+                &mut rule.action
+        {
+            if increase {
+                *delay_secs = delay_secs.saturating_add(30);
+            } else {
+                *delay_secs = delay_secs.saturating_sub(30).max(1);
+            }
+        }
+    }
+
+    pub(super) fn adjust_automation_triggers_collection(&mut self, increase: bool) {
+        if increase {
+            self.automation_triggers
+                .push(AutomationTriggerRuleConfig::default());
+            self.profile_edit_automation_trigger = self.automation_triggers.len().saturating_sub(1);
+            return;
+        }
+        if self.automation_triggers.is_empty() {
+            return;
+        }
+        self.automation_triggers
+            .remove(self.profile_edit_automation_trigger);
         self.clamp_profile_edit_schedule_selection();
     }
 

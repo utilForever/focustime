@@ -47,8 +47,9 @@ const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
 const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
 const PROFILE_EDIT_GROUP_GOALS: [usize; 9] = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [18, 19];
-const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 21] = [
-    20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 31] = [
+    20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 42, 43, 44,
+    45, 46, 47, 48, 49, 50, 51,
 ];
 const PROFILE_EDIT_GROUP_APPEARANCE: [usize; 1] = [41];
 const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 6] = [
