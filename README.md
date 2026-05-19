@@ -171,8 +171,11 @@ cargo run -- --allowlist-site-delete reddit.com
 # Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"16:00"}]}'
+cargo run -- --weekday-rules
+cargo run -- --weekday-rules-set='[{"day":"mon","profile":"deep-work","blocklist_profile":"Work","session_template":"Deep Flow"}]'
 cargo run -- --schedule-delay
 cargo run -- --schedule --json
+cargo run -- --weekday-rules --json
 
 # Break-glass workflow controls from CLI (first call arms, second confirms)
 cargo run -- --break-glass-trigger
@@ -387,7 +390,7 @@ Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
 CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`,
-`--session-template*`, `--break-glass-trigger`, and `--break-glass-cancel` for
+`--weekday-rules*`, `--session-template*`, `--break-glass-trigger`, and `--break-glass-cancel` for
 non-interactive inspection and in-session workflow control.
 
 ### Example config
@@ -632,6 +635,8 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
+- `weekday_profile_rules[]` can bind weekday (`day`) to a profile (`profile`), blocklist profile (`blocklist_profile`), and optional session template (`session_template`)
+- weekday profile rules apply at startup and day boundaries; they do not continuously re-assert during the same day
 - the timer session overview shows the current/next scheduled window
 
 You can configure notification and auto-start settings directly from the TUI:
@@ -654,6 +659,9 @@ You can configure notification and auto-start settings directly from the TUI:
   - **One-time date**: `←/→` moves selected one-time window date backward/forward by 1 day
   - **One-time start/end**: adjust one-time window times in `[schedule_runtime].time_step_minutes` steps (default `15`, clamped `1..60`)
   - **One-time add/remove**: `→` adds a one-time window (starting from today), `←` removes selected window
+  - **Weekday rule**: `←/→` changes which weekday rule entry is selected
+  - **Weekday day/profile/blocklist/template**: tune target weekday and linked profile/blocklist/session-template values
+  - **Weekday add/remove**: `→` adds a rule for an unused day, `←` removes selected rule
   - **Conflict inspector**: read-only summary of detected schedule overlaps/conflicts
 
 ## Session recovery
