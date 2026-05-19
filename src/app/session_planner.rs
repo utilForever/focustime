@@ -118,11 +118,12 @@ impl App {
     }
 
     fn handle_session_planner_recent_digit_key(&mut self, key: &KeyEvent) -> bool {
+        if self.planner_pane != PlannerPane::Tasks {
+            return false;
+        }
         if let KeyCode::Char(c @ '1'..='9') = key.code {
             let index = (c as usize).saturating_sub('1' as usize);
-            if self.planner_pane == PlannerPane::Tasks {
-                self.select_recent_planner_label(index);
-            }
+            self.select_recent_planner_label(index);
             return true;
         }
         false
