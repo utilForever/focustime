@@ -50,35 +50,10 @@ impl App {
             self.mode = AppMode::Timer;
             return true;
         }
-        if self.navigation_matches(NavigationAction::MoveUp, key) {
-            match self.planner_pane {
-                PlannerPane::Tasks => {
-                    self.planner_selection_index = self.planner_selection_index.saturating_sub(1);
-                }
-                PlannerPane::Templates => {
-                    self.planner_template_selection_index =
-                        self.planner_template_selection_index.saturating_sub(1);
-                }
-            }
+        if self.handle_session_planner_move_up(key) {
             return true;
         }
-        if self.navigation_matches(NavigationAction::MoveDown, key) {
-            match self.planner_pane {
-                PlannerPane::Tasks => {
-                    let labels = self.planner_labels_for_display();
-                    if !labels.is_empty() {
-                        self.planner_selection_index =
-                            (self.planner_selection_index + 1).min(labels.len().saturating_sub(1));
-                    }
-                }
-                PlannerPane::Templates => {
-                    if !self.session_templates.is_empty() {
-                        self.planner_template_selection_index =
-                            (self.planner_template_selection_index + 1)
-                                .min(self.session_templates.len().saturating_sub(1));
-                    }
-                }
-            }
+        if self.handle_session_planner_move_down(key) {
             return true;
         }
         if self.navigation_matches(NavigationAction::MoveLeft, key) {
@@ -89,14 +64,57 @@ impl App {
             self.planner_pane = PlannerPane::Templates;
             return true;
         }
-        if self.navigation_matches(NavigationAction::Confirm, key) {
-            match self.planner_pane {
-                PlannerPane::Tasks => self.select_planner_label(),
-                PlannerPane::Templates => self.apply_planner_template(),
-            }
-            return true;
+        self.handle_session_planner_confirm_key(key)
+    }
+
+    fn handle_session_planner_move_up(&mut self, key: &KeyEvent) -> bool {
+        if !self.navigation_matches(NavigationAction::MoveUp, key) {
+            return false;
         }
-        false
+        match self.planner_pane {
+            PlannerPane::Tasks => {
+                self.planner_selection_index = self.planner_selection_index.saturating_sub(1);
+            }
+            PlannerPane::Templates => {
+                self.planner_template_selection_index =
+                    self.planner_template_selection_index.saturating_sub(1);
+            }
+        }
+        true
+    }
+
+    fn handle_session_planner_move_down(&mut self, key: &KeyEvent) -> bool {
+        if !self.navigation_matches(NavigationAction::MoveDown, key) {
+            return false;
+        }
+        match self.planner_pane {
+            PlannerPane::Tasks => {
+                let labels = self.planner_labels_for_display();
+                if !labels.is_empty() {
+                    self.planner_selection_index =
+                        (self.planner_selection_index + 1).min(labels.len().saturating_sub(1));
+                }
+            }
+            PlannerPane::Templates => {
+                if !self.session_templates.is_empty() {
+                    self.planner_template_selection_index = (self.planner_template_selection_index
+                        + 1)
+                    .min(self.session_templates.len().saturating_sub(1));
+                }
+            }
+        }
+        true
+    }
+
+    fn handle_session_planner_confirm_key(&mut self, key: &KeyEvent) -> bool {
+        if !self.navigation_matches(NavigationAction::Confirm, key) {
+            return false;
+        }
+        match self.planner_pane {
+            PlannerPane::Tasks => self.select_planner_label(),
+            PlannerPane::Templates => self.apply_planner_template(),
+        }
+        true
     }
 
     fn handle_session_planner_recent_digit_key(&mut self, key: &KeyEvent) -> bool {
