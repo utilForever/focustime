@@ -274,7 +274,11 @@ impl App {
         else {
             return "n/a".to_string();
         };
-        days.first().cloned().unwrap_or_else(|| "n/a".to_string())
+        match days.len() {
+            0 => "n/a".to_string(),
+            1 => days[0].clone(),
+            _ => days.join(","),
+        }
     }
 
     fn automation_trigger_time_at_value(&self) -> String {
@@ -1004,10 +1008,10 @@ impl App {
         else {
             return;
         };
-        let current_day = days
-            .first()
-            .cloned()
-            .unwrap_or_else(|| SCHEDULE_DAY_TOKENS[0].to_string());
+        if days.len() != 1 {
+            return;
+        }
+        let current_day = days[0].clone();
         let current_index = SCHEDULE_DAY_TOKENS
             .iter()
             .position(|token| token.eq_ignore_ascii_case(current_day.as_str()))
@@ -1022,9 +1026,9 @@ impl App {
         };
         if let Some(rule) = self.selected_automation_trigger_mut()
             && let AutomationTriggerConditionConfig::Time { days, .. } = &mut rule.trigger
+            && days.len() == 1
         {
-            days.clear();
-            days.push(SCHEDULE_DAY_TOKENS[next_index].to_string());
+            days[0] = SCHEDULE_DAY_TOKENS[next_index].to_string();
         }
     }
 

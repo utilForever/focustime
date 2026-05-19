@@ -3574,6 +3574,26 @@ fn profile_editor_adjusts_automation_trigger_fields() {
 }
 
 #[test]
+fn profile_editor_preserves_multi_day_automation_trigger_days() {
+    let mut app = App::default();
+    app.automation_triggers = vec![AutomationTriggerRuleConfig {
+        trigger: AutomationTriggerConditionConfig::Time {
+            days: vec!["mon".to_string(), "wed".to_string()],
+            at: "09:00".to_string(),
+        },
+        action: AutomationTriggerActionConfig::StartFocus,
+    }];
+    let original = app.automation_triggers.clone();
+
+    assert_eq!(
+        app.profile_edit_field_value(PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX),
+        "mon,wed"
+    );
+    app.cycle_automation_trigger_time_day(true);
+    assert_eq!(app.automation_triggers, original);
+}
+
+#[test]
 fn commit_profile_edit_rejects_invalid_automation_trigger_rules() {
     let mut app = App::default();
     app.begin_profile_edit();
