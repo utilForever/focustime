@@ -57,16 +57,27 @@ impl App {
         let Some(active_index) = self.active_session_template else {
             return Err("No active session template selected.".to_string());
         };
+        self.rename_session_template_at(active_index, name)
+    }
+
+    pub(super) fn rename_session_template_at(
+        &mut self,
+        template_index: usize,
+        name: &str,
+    ) -> Result<bool, String> {
+        if template_index >= self.session_templates.len() {
+            return Err("Session template selection is invalid.".to_string());
+        }
         let name = name.trim();
         if name.is_empty() {
             return Err("Template name cannot be empty.".to_string());
         }
         let Some(current_name) = self
             .session_templates
-            .get(active_index)
+            .get(template_index)
             .map(|template| template.name.clone())
         else {
-            return Err("No active session template selected.".to_string());
+            return Err("Session template selection is invalid.".to_string());
         };
         if current_name == name {
             return Ok(false);
@@ -76,12 +87,12 @@ impl App {
             .iter()
             .enumerate()
             .any(|(index, template)| {
-                index != active_index && template.name.eq_ignore_ascii_case(name)
+                index != template_index && template.name.eq_ignore_ascii_case(name)
             });
         if duplicate {
             return Err(format!("Template `{name}` already exists."));
         }
-        if let Some(template) = self.session_templates.get_mut(active_index) {
+        if let Some(template) = self.session_templates.get_mut(template_index) {
             template.name = name.to_string();
         }
         self.save_config();
@@ -92,15 +103,26 @@ impl App {
         let Some(active_index) = self.active_session_template else {
             return Err("No active session template selected.".to_string());
         };
-        if active_index >= self.session_templates.len() {
-            return Err("No active session template selected.".to_string());
+        self.delete_session_template_at(active_index)
+    }
+
+    pub(super) fn delete_session_template_at(&mut self, index: usize) -> Result<bool, String> {
+        if index >= self.session_templates.len() {
+            return Err("Session template selection is invalid.".to_string());
         }
-        self.session_templates.remove(active_index);
+        self.session_templates.remove(index);
         if self.session_templates.is_empty() {
             self.active_session_template = None;
         } else {
-            self.active_session_template =
-                Some(active_index.min(self.session_templates.len().saturating_sub(1)));
+            self.active_session_template = self.active_session_template.map(|active_index| {
+                if active_index == index {
+                    index.min(self.session_templates.len().saturating_sub(1))
+                } else if active_index > index {
+                    active_index.saturating_sub(1)
+                } else {
+                    active_index.min(self.session_templates.len().saturating_sub(1))
+                }
+            });
         }
         self.save_config();
         Ok(true)

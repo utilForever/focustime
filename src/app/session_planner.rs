@@ -505,11 +505,15 @@ impl App {
             .get(index)
             .map(|template| template.name.clone())
             .unwrap_or_default();
-        self.active_session_template = Some(index);
-        match self.rename_active_session_template(name) {
+        match self.rename_session_template_at(index, name) {
             Ok(updated) => {
                 self.cancel_planner_input();
-                self.planner_template_selection_index = self.active_session_template.unwrap_or(0);
+                if self.session_templates.is_empty() {
+                    self.planner_template_selection_index = 0;
+                } else {
+                    self.planner_template_selection_index =
+                        index.min(self.session_templates.len().saturating_sub(1));
+                }
                 if updated {
                     self.set_planner_feedback(
                         PlannerFeedbackLevel::Success,
@@ -626,10 +630,14 @@ impl App {
             .get(index)
             .map(|template| template.name.clone())
             .unwrap_or_default();
-        self.active_session_template = Some(index);
-        match self.delete_active_session_template() {
+        match self.delete_session_template_at(index) {
             Ok(_) => {
-                self.planner_template_selection_index = self.active_session_template.unwrap_or(0);
+                if self.session_templates.is_empty() {
+                    self.planner_template_selection_index = 0;
+                } else {
+                    self.planner_template_selection_index =
+                        index.min(self.session_templates.len().saturating_sub(1));
+                }
                 self.set_planner_feedback(
                     PlannerFeedbackLevel::Success,
                     format!("Deleted session template `{removed}`"),

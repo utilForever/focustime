@@ -4944,6 +4944,75 @@ fn session_planner_template_rename_and_delete_manage_templates() {
 }
 
 #[test]
+fn session_planner_template_rename_non_active_keeps_active_template() {
+    let mut app = App::default();
+    app.task_labels = vec!["Docs".to_string(), "Review".to_string(), "Plan".to_string()];
+
+    app.selected_task_label = Some("Docs".to_string());
+    app.capture_session_template("Template A")
+        .expect("template A should be created");
+    app.selected_task_label = Some("Review".to_string());
+    app.capture_session_template("Template B")
+        .expect("template B should be created");
+    app.selected_task_label = Some("Plan".to_string());
+    app.capture_session_template("Template C")
+        .expect("template C should be created");
+    app.select_session_template(Some("Template A"))
+        .expect("template A should be selected");
+
+    app.handle_key(key(KeyCode::Char('t')));
+    app.handle_key(key(KeyCode::Right));
+    app.planner_template_selection_index = 2;
+    app.handle_key(key(KeyCode::Char('e')));
+    assert_eq!(
+        app.planner_input_mode,
+        Some(PlannerInputMode::RenameTemplate)
+    );
+
+    app.planner_input = "Template C2".to_string();
+    app.handle_key(key(KeyCode::Enter));
+
+    assert_eq!(app.active_session_template_name(), Some("Template A"));
+    let names = app
+        .session_templates
+        .iter()
+        .map(|template| template.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(names, vec!["Template A", "Template B", "Template C2"]);
+}
+
+#[test]
+fn session_planner_template_delete_non_active_keeps_active_template() {
+    let mut app = App::default();
+    app.task_labels = vec!["Docs".to_string(), "Review".to_string(), "Plan".to_string()];
+
+    app.selected_task_label = Some("Docs".to_string());
+    app.capture_session_template("Template A")
+        .expect("template A should be created");
+    app.selected_task_label = Some("Review".to_string());
+    app.capture_session_template("Template B")
+        .expect("template B should be created");
+    app.selected_task_label = Some("Plan".to_string());
+    app.capture_session_template("Template C")
+        .expect("template C should be created");
+    app.select_session_template(Some("Template A"))
+        .expect("template A should be selected");
+
+    app.handle_key(key(KeyCode::Char('t')));
+    app.handle_key(key(KeyCode::Right));
+    app.planner_template_selection_index = 2;
+    app.handle_key(key(KeyCode::Char('d')));
+
+    assert_eq!(app.active_session_template_name(), Some("Template A"));
+    let names = app
+        .session_templates
+        .iter()
+        .map(|template| template.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(names, vec!["Template A", "Template B"]);
+}
+
+#[test]
 fn session_planner_rename_moves_task_goal_target() {
     let mut app = App::default();
     app.task_labels = vec!["Docs".to_string()];
