@@ -635,26 +635,28 @@ impl App {
             return;
         };
         let total = SCHEDULE_DAY_TOKENS.len();
-        let next_index = if increase {
-            (current_index + 1) % total
-        } else if current_index == 0 {
-            total - 1
-        } else {
-            current_index - 1
-        };
-        let next_day = SCHEDULE_DAY_TOKENS[next_index];
-        if self
-            .weekday_profile_rules
-            .iter()
-            .enumerate()
-            .any(|(index, rule)| {
-                index != self.profile_edit_weekday_rule && rule.day.eq_ignore_ascii_case(next_day)
-            })
-        {
+        for step in 1..=total {
+            let candidate_index = if increase {
+                (current_index + step) % total
+            } else {
+                (current_index + total - (step % total)) % total
+            };
+            let candidate_day = SCHEDULE_DAY_TOKENS[candidate_index];
+            let occupied = self
+                .weekday_profile_rules
+                .iter()
+                .enumerate()
+                .any(|(index, rule)| {
+                    index != self.profile_edit_weekday_rule
+                        && rule.day.eq_ignore_ascii_case(candidate_day)
+                });
+            if occupied {
+                continue;
+            }
+            if let Some(rule) = self.selected_weekday_profile_rule_mut() {
+                rule.day = candidate_day.to_string();
+            }
             return;
-        }
-        if let Some(rule) = self.selected_weekday_profile_rule_mut() {
-            rule.day = next_day.to_string();
         }
     }
 

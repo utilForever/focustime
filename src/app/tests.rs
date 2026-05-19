@@ -1,6 +1,8 @@
 use crate::app::*;
 use crate::blocker;
-use crate::config::{FeatureFlagsConfig, ShortcutConfig, StatsRetentionConfig};
+use crate::config::{
+    FeatureFlagsConfig, ShortcutConfig, StatsRetentionConfig, WeekdayProfileRuleConfig,
+};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -850,6 +852,38 @@ fn editing_one_time_schedule_fields_updates_and_persists_settings() {
         persisted.recurring_schedule.one_time_windows,
         app.recurring_schedule.one_time_windows
     );
+}
+
+#[test]
+fn weekday_rule_day_cycle_skips_occupied_days() {
+    let mut app = App::default();
+    app.weekday_profile_rules = vec![
+        WeekdayProfileRuleConfig {
+            day: "mon".to_string(),
+            profile: ProfileId::Classic,
+            blocklist_profile: "Default".to_string(),
+            session_template: None,
+        },
+        WeekdayProfileRuleConfig {
+            day: "tue".to_string(),
+            profile: ProfileId::Classic,
+            blocklist_profile: "Default".to_string(),
+            session_template: None,
+        },
+        WeekdayProfileRuleConfig {
+            day: "wed".to_string(),
+            profile: ProfileId::Classic,
+            blocklist_profile: "Default".to_string(),
+            session_template: None,
+        },
+    ];
+    app.profile_edit_weekday_rule = 0;
+
+    app.cycle_weekday_profile_rule_day(true);
+    assert_eq!(app.weekday_profile_rules[0].day, "thu");
+
+    app.cycle_weekday_profile_rule_day(false);
+    assert_eq!(app.weekday_profile_rules[0].day, "mon");
 }
 
 #[test]
