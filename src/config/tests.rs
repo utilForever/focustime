@@ -159,6 +159,7 @@ fn round_trip_full_config() {
             },
         }],
         selected_session_template: "Morning deep work".to_string(),
+        weekday_profile_rules: Vec::new(),
         selected_theme_preset: ThemePreset::HighContrast,
         notifications: NotificationConfig {
             enabled: true,
@@ -916,6 +917,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         selected_break_template: default_break_template_name(),
         session_templates: Vec::new(),
         selected_session_template: String::new(),
+        weekday_profile_rules: Vec::new(),
         selected_theme_preset: ThemePreset::Classic,
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),

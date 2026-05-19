@@ -469,6 +469,7 @@ impl App {
             custom_profile: Some(custom_profile),
             break_templates: self.break_templates.clone(),
             selected_break_template: self.selected_break_template_for_persistence(),
+            weekday_profile_rules: self.weekday_profile_rules.clone(),
             session_templates: self.session_templates.clone(),
             selected_session_template: self.selected_session_template_for_persistence(),
             selected_theme_preset: self.selected_theme_preset,

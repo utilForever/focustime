@@ -288,7 +288,13 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         32 => "One-time end",
         33 => "One-time add/remove",
         34 => "Conflict inspector",
-        35 => "Theme preset",
+        35 => "Rule selector",
+        36 => "Rule day",
+        37 => "Rule profile",
+        38 => "Rule blocklist",
+        39 => "Rule template",
+        40 => "Rule add/remove",
+        41 => "Theme preset",
         _ => "",
     }
 }

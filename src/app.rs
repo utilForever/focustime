@@ -18,7 +18,8 @@ use crate::config::{
     NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
     ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
     RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
-    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeeklyGoalConfig,
+    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeekdayProfileRuleConfig,
+    WeeklyGoalConfig,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -59,12 +60,13 @@ mod session_templates;
 mod shortcuts;
 mod site_manager;
 mod timer_flow;
+mod weekday_rules;
 use shortcuts::ShortcutBindings;
 pub use shortcuts::{NavigationAction, ShortcutAction};
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 36] = [
+pub const PROFILE_EDIT_FIELD_LABELS: [&str; 42] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -100,6 +102,12 @@ pub const PROFILE_EDIT_FIELD_LABELS: [&str; 36] = [
     "One-time end",
     "One-time add/remove",
     "Schedule conflicts",
+    "Weekday rule",
+    "Weekday rule day",
+    "Weekday rule profile",
+    "Weekday rule blocklist",
+    "Weekday rule template",
+    "Weekday rule add/remove",
     "Theme preset",
 ];
 const PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX: usize = 9;
@@ -128,7 +136,13 @@ const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 31;
 const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 32;
 const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 33;
 const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 34;
-const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 35;
+const PROFILE_EDIT_WEEKDAY_RULE_INDEX: usize = 35;
+const PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX: usize = 36;
+const PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX: usize = 37;
+const PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX: usize = 38;
+const PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX: usize = 39;
+const PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX: usize = 40;
+const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 41;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
@@ -319,6 +333,7 @@ struct ProfileEditSnapshot {
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
     recurring_schedule: RecurringScheduleConfig,
+    weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     strict_mode: bool,
     daily_goal: DailyGoalConfig,
     weekly_goal: WeeklyGoalConfig,
@@ -638,6 +653,7 @@ pub struct App {
     feature_flags: FeatureFlagsConfig,
     config_deprecation_warnings: Vec<String>,
     profile_automation: ProfileAutomationSettingsConfig,
+    weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     pub custom_profile: CustomProfileConfig,
     pub profile_selection_index: usize,
     pub profile_edit_active: bool,
@@ -646,6 +662,7 @@ pub struct App {
     profile_edit_schedule_day: usize,
     profile_edit_schedule_exception: usize,
     profile_edit_one_time_window: usize,
+    profile_edit_weekday_rule: usize,
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
@@ -658,6 +675,7 @@ pub struct App {
     schedule_delayed_occurrence_key: Option<String>,
     schedule_delay_until: Option<DateTime<Local>>,
     last_schedule_occurrence_key: Option<String>,
+    last_weekday_profile_sync_day: Option<NaiveDate>,
     current_frame_now: DateTime<Local>,
     pub strict_mode: bool,
     break_glass_duration_secs: u64,
@@ -706,6 +724,7 @@ impl App {
         let setup_deprecation_warnings = setup_deprecation_warnings(&config_deprecation_warnings);
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
+        let weekday_profile_rules = config.weekday_profile_rules.clone();
         let selected_automation = config.profile_automation_for(selected_profile);
         let notification_settings = selected_automation.notifications;
         let auto_start = selected_automation.auto_start;
@@ -830,6 +849,7 @@ impl App {
             feature_flags,
             config_deprecation_warnings,
             profile_automation,
+            weekday_profile_rules,
             custom_profile,
             profile_selection_index: profile_index(selected_profile),
             profile_edit_active: false,
@@ -838,6 +858,7 @@ impl App {
             profile_edit_schedule_day: 0,
             profile_edit_schedule_exception: 0,
             profile_edit_one_time_window: 0,
+            profile_edit_weekday_rule: 0,
             profile_edit_snapshot: None,
             notification_settings,
             auto_start,
@@ -850,6 +871,7 @@ impl App {
             schedule_delayed_occurrence_key: None,
             schedule_delay_until: None,
             last_schedule_occurrence_key: None,
+            last_weekday_profile_sync_day: None,
             current_frame_now: Local::now(),
             strict_mode,
             break_glass_duration_secs,
@@ -872,6 +894,7 @@ impl App {
         app.recompute_blocker_sites_from_active_profile();
         app.restore_in_progress_session();
         app.restore_cli_workflow_state();
+        app.sync_weekday_profile_rules(Local::now());
         app.sync_planner_selection_to_selected_label();
         app.sync_recovery_snapshot();
         app.apply_blocking_for_phase();
@@ -904,6 +927,7 @@ impl App {
         self.sync_today_goal_snapshot();
         self.wakatime.poll_events();
         self.sync_break_glass_override();
+        self.sync_weekday_profile_rules(now);
         self.sync_recurring_schedule(now);
     }
 
@@ -1131,7 +1155,7 @@ impl App {
     }
 
     pub fn profile_edit_field_value(&self, field_index: usize) -> String {
-        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX)
+        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX)
             .contains(&field_index)
         {
             return self.profile_edit_schedule_field_value(field_index);

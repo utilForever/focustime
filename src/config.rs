@@ -77,6 +77,9 @@ pub struct AppConfig {
     /// Name of the active break template.
     #[serde(default)]
     pub selected_break_template: String,
+    /// Weekday smart-switch rules for profile and planning defaults.
+    #[serde(default)]
+    pub weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     /// Reusable session templates bundling task/profile/blocklist/schedule settings.
     #[serde(default)]
     pub session_templates: Vec<SessionTemplateConfig>,
@@ -750,6 +753,51 @@ impl ProfileAutomationSettingsConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WeekdayProfileRuleConfig {
+    #[serde(default = "default_weekday_profile_rule_day")]
+    pub day: String,
+    #[serde(default)]
+    pub profile: ProfileId,
+    #[serde(default = "default_blocklist_profile_name")]
+    pub blocklist_profile: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_template: Option<String>,
+}
+
+impl WeekdayProfileRuleConfig {
+    fn normalized_with_context(
+        &self,
+        blocklist_profiles: &[BlocklistProfileConfig],
+        session_templates: &[SessionTemplateConfig],
+    ) -> Option<Self> {
+        let day = normalize_weekday_token(&self.day)?;
+        let blocklist_profile =
+            normalize_selected_blocklist_profile(&self.blocklist_profile, blocklist_profiles);
+        let session_template = normalize_optional_selected_session_template(
+            self.session_template.as_deref(),
+            session_templates,
+        );
+        Some(Self {
+            day,
+            profile: self.profile,
+            blocklist_profile,
+            session_template,
+        })
+    }
+}
+
+impl Default for WeekdayProfileRuleConfig {
+    fn default() -> Self {
+        Self {
+            day: default_weekday_profile_rule_day(),
+            profile: ProfileId::default(),
+            blocklist_profile: default_blocklist_profile_name(),
+            session_template: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RecurringFocusWindowConfig {
     #[serde(default = "default_schedule_window_days")]
     pub days: Vec<String>,
@@ -1079,6 +1127,10 @@ fn default_schedule_window_days() -> Vec<String> {
         "thu".to_string(),
         "fri".to_string(),
     ]
+}
+
+fn default_weekday_profile_rule_day() -> String {
+    "mon".to_string()
 }
 
 fn default_schedule_window_start() -> String {
@@ -1562,6 +1614,7 @@ impl Default for AppConfig {
             custom_profile: None,
             break_templates: default_break_templates(),
             selected_break_template: default_break_template_name(),
+            weekday_profile_rules: Vec::new(),
             session_templates: Vec::new(),
             selected_session_template: String::new(),
             selected_theme_preset: ThemePreset::default(),
@@ -1767,6 +1820,11 @@ impl AppConfig {
             normalize_session_templates(&self.session_templates, &self.blocklist_profiles);
         self.selected_session_template = normalize_selected_session_template(
             &self.selected_session_template,
+            &self.session_templates,
+        );
+        self.weekday_profile_rules = normalize_weekday_profile_rules(
+            &self.weekday_profile_rules,
+            &self.blocklist_profiles,
             &self.session_templates,
         );
         self.blocking_backend = self.blocking_backend.normalized();
@@ -2182,6 +2240,67 @@ fn normalize_selected_session_template(
         .find(|template| template.name.eq_ignore_ascii_case(selected_name))
         .map(|template| template.name.clone())
         .unwrap_or_default()
+}
+
+fn normalize_optional_selected_session_template(
+    value: Option<&str>,
+    session_templates: &[SessionTemplateConfig],
+) -> Option<String> {
+    let normalized = normalize_optional_nonempty_string(value)?;
+    session_templates
+        .iter()
+        .find(|template| template.name.eq_ignore_ascii_case(&normalized))
+        .map(|template| template.name.clone())
+}
+
+fn normalize_weekday_profile_rules(
+    rules: &[WeekdayProfileRuleConfig],
+    blocklist_profiles: &[BlocklistProfileConfig],
+    session_templates: &[SessionTemplateConfig],
+) -> Vec<WeekdayProfileRuleConfig> {
+    let mut normalized_by_day: [Option<WeekdayProfileRuleConfig>; 7] =
+        std::array::from_fn(|_| None);
+    for rule in rules {
+        let Some(normalized) = rule.normalized_with_context(blocklist_profiles, session_templates)
+        else {
+            continue;
+        };
+        let Some(day_index) = weekday_token_to_index(&normalized.day) else {
+            continue;
+        };
+        normalized_by_day[day_index] = Some(normalized);
+    }
+    normalized_by_day.into_iter().flatten().collect()
+}
+
+fn normalize_weekday_token(value: &str) -> Option<String> {
+    weekday_token_to_index(value).map(|index| weekday_token_from_index(index).to_string())
+}
+
+fn weekday_token_to_index(value: &str) -> Option<usize> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "mon" | "monday" => Some(0),
+        "tue" | "tues" | "tuesday" => Some(1),
+        "wed" | "wednesday" => Some(2),
+        "thu" | "thurs" | "thursday" => Some(3),
+        "fri" | "friday" => Some(4),
+        "sat" | "saturday" => Some(5),
+        "sun" | "sunday" => Some(6),
+        _ => None,
+    }
+}
+
+fn weekday_token_from_index(index: usize) -> &'static str {
+    match index {
+        0 => "mon",
+        1 => "tue",
+        2 => "wed",
+        3 => "thu",
+        4 => "fri",
+        5 => "sat",
+        6 => "sun",
+        _ => "mon",
+    }
 }
 
 fn break_template_matches_custom_profile(

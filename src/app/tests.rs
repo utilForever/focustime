@@ -1,6 +1,8 @@
 use crate::app::*;
 use crate::blocker;
-use crate::config::{FeatureFlagsConfig, ShortcutConfig, StatsRetentionConfig};
+use crate::config::{
+    FeatureFlagsConfig, ShortcutConfig, StatsRetentionConfig, WeekdayProfileRuleConfig,
+};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -130,6 +132,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         selected_break_template: "Classic".to_string(),
         session_templates: Vec::new(),
         selected_session_template: String::new(),
+        weekday_profile_rules: Vec::new(),
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
@@ -849,6 +852,38 @@ fn editing_one_time_schedule_fields_updates_and_persists_settings() {
         persisted.recurring_schedule.one_time_windows,
         app.recurring_schedule.one_time_windows
     );
+}
+
+#[test]
+fn weekday_rule_day_cycle_skips_occupied_days() {
+    let mut app = App::default();
+    app.weekday_profile_rules = vec![
+        WeekdayProfileRuleConfig {
+            day: "mon".to_string(),
+            profile: ProfileId::Classic,
+            blocklist_profile: "Default".to_string(),
+            session_template: None,
+        },
+        WeekdayProfileRuleConfig {
+            day: "tue".to_string(),
+            profile: ProfileId::Classic,
+            blocklist_profile: "Default".to_string(),
+            session_template: None,
+        },
+        WeekdayProfileRuleConfig {
+            day: "wed".to_string(),
+            profile: ProfileId::Classic,
+            blocklist_profile: "Default".to_string(),
+            session_template: None,
+        },
+    ];
+    app.profile_edit_weekday_rule = 0;
+
+    app.cycle_weekday_profile_rule_day(true);
+    assert_eq!(app.weekday_profile_rules[0].day, "thu");
+
+    app.cycle_weekday_profile_rule_day(false);
+    assert_eq!(app.weekday_profile_rules[0].day, "mon");
 }
 
 #[test]
@@ -3595,6 +3630,7 @@ fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
         weekly_goal: app.weekly_goal,
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
+        weekday_profile_rules: app.weekday_profile_rules.clone(),
         selected_theme_preset: app.selected_theme_preset,
         wakatime_metadata: app.wakatime_metadata.clone(),
     });
@@ -3649,6 +3685,7 @@ fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_res
         weekly_goal: app.weekly_goal,
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
+        weekday_profile_rules: app.weekday_profile_rules.clone(),
         selected_theme_preset: app.selected_theme_preset,
         wakatime_metadata: app.wakatime_metadata.clone(),
     });
