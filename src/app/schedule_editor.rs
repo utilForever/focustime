@@ -7,10 +7,14 @@ use crate::app::{
     PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX,
     PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX,
     PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
+    PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX, PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX,
+    PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX, PROFILE_EDIT_WEEKDAY_RULE_INDEX,
+    PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX, PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX, PROFILE_IDS,
     RecurringFocusWindowConfig, SCHEDULE_DAY_LABELS, SCHEDULE_DAY_TOKENS, bool_label, format_hhmm,
     format_schedule_conflict, format_schedule_days_for_display,
     inspect_schedule_conflicts_from_config, parse_hhmm_minutes, parse_schedule_exception_date,
-    sort_one_time_windows, sort_schedule_days, sort_schedule_exception_dates,
+    profile_for_index, profile_index, sort_one_time_windows, sort_schedule_days,
+    sort_schedule_exception_dates,
 };
 
 impl App {
@@ -54,6 +58,12 @@ impl App {
                 .unwrap_or_else(|| "n/a".to_string()),
             PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX => self.one_time_window_collection_value(),
             PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX => self.schedule_conflict_summary_value(),
+            PROFILE_EDIT_WEEKDAY_RULE_INDEX => self.weekday_rule_selector_value(),
+            PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX => self.weekday_rule_day_value(),
+            PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX => self.weekday_rule_profile_value(),
+            PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX => self.weekday_rule_blocklist_value(),
+            PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX => self.weekday_rule_template_value(),
+            PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX => self.weekday_rule_collection_value(),
             _ => String::new(),
         }
     }
@@ -144,6 +154,58 @@ impl App {
         }
     }
 
+    fn weekday_rule_selector_value(&self) -> String {
+        if self.weekday_profile_rules.is_empty() {
+            "none".to_string()
+        } else {
+            format!(
+                "{}/{}",
+                self.profile_edit_weekday_rule.saturating_add(1),
+                self.weekday_profile_rules.len()
+            )
+        }
+    }
+
+    fn weekday_rule_day_value(&self) -> String {
+        self.selected_weekday_profile_rule()
+            .map(|rule| {
+                let day_index = SCHEDULE_DAY_TOKENS
+                    .iter()
+                    .position(|token| token.eq_ignore_ascii_case(rule.day.as_str()))
+                    .unwrap_or(0);
+                SCHEDULE_DAY_LABELS[day_index].to_string()
+            })
+            .unwrap_or_else(|| "n/a".to_string())
+    }
+
+    fn weekday_rule_profile_value(&self) -> String {
+        self.selected_weekday_profile_rule()
+            .map(|rule| rule.profile.label().to_string())
+            .unwrap_or_else(|| "n/a".to_string())
+    }
+
+    fn weekday_rule_blocklist_value(&self) -> String {
+        self.selected_weekday_profile_rule()
+            .map(|rule| rule.blocklist_profile.clone())
+            .unwrap_or_else(|| "n/a".to_string())
+    }
+
+    fn weekday_rule_template_value(&self) -> String {
+        self.selected_weekday_profile_rule()
+            .and_then(|rule| rule.session_template.clone())
+            .unwrap_or_else(|| "none".to_string())
+    }
+
+    fn weekday_rule_collection_value(&self) -> String {
+        if self.weekday_profile_rules.is_empty() {
+            "→ Add rule".to_string()
+        } else if self.weekday_profile_rules.len() >= SCHEDULE_DAY_TOKENS.len() {
+            "← Remove".to_string()
+        } else {
+            "← Remove · → Add".to_string()
+        }
+    }
+
     fn selected_schedule_window(&self) -> Option<&RecurringFocusWindowConfig> {
         self.recurring_schedule
             .windows
@@ -166,6 +228,18 @@ impl App {
         self.recurring_schedule
             .one_time_windows
             .get(self.profile_edit_one_time_window)
+    }
+
+    fn selected_weekday_profile_rule(&self) -> Option<&crate::config::WeekdayProfileRuleConfig> {
+        self.weekday_profile_rules
+            .get(self.profile_edit_weekday_rule)
+    }
+
+    fn selected_weekday_profile_rule_mut(
+        &mut self,
+    ) -> Option<&mut crate::config::WeekdayProfileRuleConfig> {
+        self.weekday_profile_rules
+            .get_mut(self.profile_edit_weekday_rule)
     }
 
     fn selected_schedule_day_token(&self) -> &'static str {
@@ -220,6 +294,13 @@ impl App {
                     .len()
                     .saturating_sub(1),
             );
+        }
+        if self.weekday_profile_rules.is_empty() {
+            self.profile_edit_weekday_rule = 0;
+        } else {
+            self.profile_edit_weekday_rule = self
+                .profile_edit_weekday_rule
+                .min(self.weekday_profile_rules.len().saturating_sub(1));
         }
     }
 
@@ -524,6 +605,170 @@ impl App {
         {
             self.profile_edit_one_time_window = position;
         }
+    }
+
+    pub(super) fn cycle_weekday_profile_rule(&mut self, increase: bool) {
+        if self.weekday_profile_rules.is_empty() {
+            return;
+        }
+        let total = self.weekday_profile_rules.len();
+        if increase {
+            self.profile_edit_weekday_rule = (self.profile_edit_weekday_rule + 1) % total;
+        } else if self.profile_edit_weekday_rule == 0 {
+            self.profile_edit_weekday_rule = total - 1;
+        } else {
+            self.profile_edit_weekday_rule = self.profile_edit_weekday_rule.saturating_sub(1);
+        }
+    }
+
+    pub(super) fn cycle_weekday_profile_rule_day(&mut self, increase: bool) {
+        let Some(current_day) = self
+            .selected_weekday_profile_rule()
+            .map(|rule| rule.day.clone())
+        else {
+            return;
+        };
+        let Some(current_index) = SCHEDULE_DAY_TOKENS
+            .iter()
+            .position(|token| token.eq_ignore_ascii_case(&current_day))
+        else {
+            return;
+        };
+        let total = SCHEDULE_DAY_TOKENS.len();
+        let next_index = if increase {
+            (current_index + 1) % total
+        } else if current_index == 0 {
+            total - 1
+        } else {
+            current_index - 1
+        };
+        let next_day = SCHEDULE_DAY_TOKENS[next_index];
+        if self
+            .weekday_profile_rules
+            .iter()
+            .enumerate()
+            .any(|(index, rule)| {
+                index != self.profile_edit_weekday_rule && rule.day.eq_ignore_ascii_case(next_day)
+            })
+        {
+            return;
+        }
+        if let Some(rule) = self.selected_weekday_profile_rule_mut() {
+            rule.day = next_day.to_string();
+        }
+    }
+
+    pub(super) fn cycle_weekday_profile_rule_profile(&mut self, increase: bool) {
+        let Some(rule) = self.selected_weekday_profile_rule_mut() else {
+            return;
+        };
+        let current_index = profile_index(rule.profile);
+        let total = PROFILE_IDS.len();
+        let next_index = if increase {
+            (current_index + 1) % total
+        } else if current_index == 0 {
+            total - 1
+        } else {
+            current_index - 1
+        };
+        rule.profile = profile_for_index(next_index);
+    }
+
+    pub(super) fn cycle_weekday_profile_rule_blocklist(&mut self, increase: bool) {
+        if self.blocklist_profiles.is_empty() {
+            return;
+        }
+        let Some(current_name) = self
+            .selected_weekday_profile_rule()
+            .map(|rule| rule.blocklist_profile.clone())
+        else {
+            return;
+        };
+        let current_index = self
+            .blocklist_profiles
+            .iter()
+            .position(|profile| profile.name.eq_ignore_ascii_case(current_name.as_str()))
+            .unwrap_or(0);
+        let total = self.blocklist_profiles.len();
+        let next_index = if increase {
+            (current_index + 1) % total
+        } else if current_index == 0 {
+            total - 1
+        } else {
+            current_index - 1
+        };
+        let next_name = self.blocklist_profiles[next_index].name.clone();
+        if let Some(rule) = self.selected_weekday_profile_rule_mut() {
+            rule.blocklist_profile = next_name;
+        }
+    }
+
+    pub(super) fn cycle_weekday_profile_rule_template(&mut self, increase: bool) {
+        if self.session_templates.is_empty() {
+            if let Some(rule) = self.selected_weekday_profile_rule_mut() {
+                rule.session_template = None;
+            }
+            return;
+        }
+
+        let current_name = self
+            .selected_weekday_profile_rule()
+            .and_then(|rule| rule.session_template.clone());
+        let none_index = self.session_templates.len();
+        let current_index = current_name
+            .as_deref()
+            .and_then(|name| self.session_template_index_by_name(name))
+            .unwrap_or(none_index);
+        let total = none_index + 1;
+        let next_index = if increase {
+            (current_index + 1) % total
+        } else if current_index == 0 {
+            total - 1
+        } else {
+            current_index - 1
+        };
+        let next_template = if next_index == none_index {
+            None
+        } else {
+            self.session_templates
+                .get(next_index)
+                .map(|template| template.name.clone())
+        };
+        if let Some(rule) = self.selected_weekday_profile_rule_mut() {
+            rule.session_template = next_template;
+        }
+    }
+
+    pub(super) fn adjust_weekday_profile_rules_collection(&mut self, increase: bool) {
+        if increase {
+            if self.weekday_profile_rules.len() >= SCHEDULE_DAY_TOKENS.len() {
+                return;
+            }
+            let Some(next_day) = SCHEDULE_DAY_TOKENS.iter().find(|token| {
+                !self
+                    .weekday_profile_rules
+                    .iter()
+                    .any(|rule| rule.day.eq_ignore_ascii_case(token))
+            }) else {
+                return;
+            };
+            self.weekday_profile_rules
+                .push(crate::config::WeekdayProfileRuleConfig {
+                    day: (*next_day).to_string(),
+                    profile: self.selected_profile,
+                    blocklist_profile: self.active_blocklist_profile_name().to_string(),
+                    session_template: self.active_session_template_name().map(ToString::to_string),
+                });
+            self.profile_edit_weekday_rule = self.weekday_profile_rules.len().saturating_sub(1);
+            return;
+        }
+
+        if self.weekday_profile_rules.is_empty() {
+            return;
+        }
+        self.weekday_profile_rules
+            .remove(self.profile_edit_weekday_rule);
+        self.clamp_profile_edit_schedule_selection();
     }
 
     pub(super) fn adjust_schedule_windows_collection(&mut self, increase: bool) {

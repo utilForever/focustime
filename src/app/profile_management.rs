@@ -12,6 +12,9 @@ use crate::app::{
     PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
     PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX,
     PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX, PROFILE_EDIT_WAKATIME_PROJECT_INDEX,
+    PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX, PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX,
+    PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX, PROFILE_EDIT_WEEKDAY_RULE_INDEX,
+    PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX, PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, PROFILE_IDS, ProfileAutomationConfig,
     ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState, WakatimeHeartbeatMetadata,
@@ -93,6 +96,7 @@ impl App {
         self.selected_profile = profile;
         self.profile_selection_index = profile_index(profile);
         self.apply_automation_for_profile(profile);
+        self.last_weekday_profile_sync_day = Some(Local::now().date_naive());
         self.pending_timer_action = None;
         self.save_config();
         self.apply_blocking_for_phase();
@@ -118,6 +122,7 @@ impl App {
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
         self.profile_edit_one_time_window = 0;
+        self.profile_edit_weekday_rule = 0;
         self.profile_edit_snapshot = None;
         self.profile_selection_index = profile_index(self.selected_profile);
         self.clamp_profile_selection();
@@ -224,6 +229,7 @@ impl App {
             notification_settings: self.notification_settings,
             auto_start: self.auto_start,
             recurring_schedule: self.recurring_schedule.clone(),
+            weekday_profile_rules: self.weekday_profile_rules.clone(),
             strict_mode: self.strict_mode,
             daily_goal: self.daily_goal,
             weekly_goal: self.weekly_goal,
@@ -238,6 +244,7 @@ impl App {
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
         self.profile_edit_one_time_window = 0;
+        self.profile_edit_weekday_rule = 0;
         self.clamp_profile_edit_schedule_selection();
     }
 
@@ -247,6 +254,7 @@ impl App {
             self.notification_settings = snapshot.notification_settings;
             self.auto_start = snapshot.auto_start;
             self.recurring_schedule = snapshot.recurring_schedule;
+            self.weekday_profile_rules = snapshot.weekday_profile_rules;
             self.strict_mode = snapshot.strict_mode;
             self.daily_goal = snapshot.daily_goal;
             self.weekly_goal = snapshot.weekly_goal;
@@ -264,6 +272,7 @@ impl App {
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
         self.profile_edit_one_time_window = 0;
+        self.profile_edit_weekday_rule = 0;
         self.clamp_profile_edit_schedule_selection();
     }
 
@@ -275,6 +284,10 @@ impl App {
         let schedule_changed = self.profile_edit_snapshot.as_ref().is_some_and(|snapshot| {
             snapshot.recurring_schedule.normalized() != normalized_schedule
         });
+        let weekday_rules_changed = self
+            .profile_edit_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.weekday_profile_rules != self.weekday_profile_rules);
         let daily_goal_changed = self
             .profile_edit_snapshot
             .as_ref()
@@ -322,6 +335,12 @@ impl App {
             self.current_frame_now = now;
             self.sync_recurring_schedule(now);
         }
+        if weekday_rules_changed {
+            self.last_weekday_profile_sync_day = None;
+            let now = Local::now();
+            self.current_frame_now = now;
+            self.sync_weekday_profile_rules(now);
+        }
         if daily_goal_changed
             || weekly_goal_changed
             || monthly_goal_changed
@@ -335,6 +354,7 @@ impl App {
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
         self.profile_edit_one_time_window = 0;
+        self.profile_edit_weekday_rule = 0;
         self.clamp_profile_edit_schedule_selection();
         self.profile_edit_snapshot = None;
     }
@@ -449,6 +469,24 @@ impl App {
             }
             PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX => {
                 self.adjust_one_time_windows_collection(increase);
+            }
+            PROFILE_EDIT_WEEKDAY_RULE_INDEX => {
+                self.cycle_weekday_profile_rule(increase);
+            }
+            PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX => {
+                self.cycle_weekday_profile_rule_day(increase);
+            }
+            PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX => {
+                self.cycle_weekday_profile_rule_profile(increase);
+            }
+            PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX => {
+                self.cycle_weekday_profile_rule_blocklist(increase);
+            }
+            PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX => {
+                self.cycle_weekday_profile_rule_template(increase);
+            }
+            PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX => {
+                self.adjust_weekday_profile_rules_collection(increase);
             }
             PROFILE_EDIT_WAKATIME_PROJECT_INDEX | PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => {}
             _ => {}
