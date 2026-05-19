@@ -2463,39 +2463,53 @@ fn validate_automation_trigger_action(
             blocklist_profile,
             session_template,
             ..
-        } => {
-            if blocklist_profile.trim().is_empty() {
-                return Err(format!(
-                    "Invalid automation trigger rule at index {index}: `blocklist_profile` cannot be empty."
-                ));
-            }
-            if !blocklist_profiles
-                .iter()
-                .any(|profile| profile.name.eq_ignore_ascii_case(blocklist_profile.trim()))
-            {
-                return Err(format!(
-                    "Invalid automation trigger rule at index {index}: blocklist profile `{}` does not exist.",
-                    blocklist_profile
-                ));
-            }
-            if let Some(template) = session_template.as_deref() {
-                if template.trim().is_empty() {
-                    return Err(format!(
-                        "Invalid automation trigger rule at index {index}: `session_template` cannot be empty when provided."
-                    ));
-                }
-                if !session_templates
-                    .iter()
-                    .any(|candidate| candidate.name.eq_ignore_ascii_case(template.trim()))
-                {
-                    return Err(format!(
-                        "Invalid automation trigger rule at index {index}: session template `{template}` does not exist."
-                    ));
-                }
-            }
-            Ok(())
+        } => validate_automation_trigger_apply_defaults_action(
+            blocklist_profile,
+            session_template.as_deref(),
+            index,
+            blocklist_profiles,
+            session_templates,
+        ),
+    }
+}
+
+fn validate_automation_trigger_apply_defaults_action(
+    blocklist_profile: &str,
+    session_template: Option<&str>,
+    index: usize,
+    blocklist_profiles: &[BlocklistProfileConfig],
+    session_templates: &[SessionTemplateConfig],
+) -> Result<(), String> {
+    if blocklist_profile.trim().is_empty() {
+        return Err(format!(
+            "Invalid automation trigger rule at index {index}: `blocklist_profile` cannot be empty."
+        ));
+    }
+    if !blocklist_profiles
+        .iter()
+        .any(|profile| profile.name.eq_ignore_ascii_case(blocklist_profile.trim()))
+    {
+        return Err(format!(
+            "Invalid automation trigger rule at index {index}: blocklist profile `{}` does not exist.",
+            blocklist_profile
+        ));
+    }
+    if let Some(template) = session_template {
+        if template.trim().is_empty() {
+            return Err(format!(
+                "Invalid automation trigger rule at index {index}: `session_template` cannot be empty when provided."
+            ));
+        }
+        if !session_templates
+            .iter()
+            .any(|candidate| candidate.name.eq_ignore_ascii_case(template.trim()))
+        {
+            return Err(format!(
+                "Invalid automation trigger rule at index {index}: session template `{template}` does not exist."
+            ));
         }
     }
+    Ok(())
 }
 
 fn validate_automation_trigger_conflicts(
