@@ -91,15 +91,18 @@ impl App {
     }
 
     fn handle_timer_toggle_pause_key(&mut self) {
-        if self.timer.phase == TimerPhase::Focus
-            && self.timer.status == TimerStatus::Idle
-            && !self.has_selectable_task_label_for_focus()
-        {
-            self.phase_notification = Some(format!(
-                "Select a task label with {} before starting focus.",
-                self.shortcut_hint(ShortcutAction::OpenSessionPlanner)
-            ));
-            return;
+        if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Idle {
+            if let Err(error) = self.apply_selected_session_template_before_start() {
+                self.phase_notification = Some(error);
+                return;
+            }
+            if !self.has_selectable_task_label_for_focus() {
+                self.phase_notification = Some(format!(
+                    "Select a task label with {} before starting focus.",
+                    self.shortcut_hint(ShortcutAction::OpenSessionPlanner)
+                ));
+                return;
+            }
         }
         self.update_timer_and_sync(TimerState::toggle_pause);
     }

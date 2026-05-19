@@ -8,6 +8,7 @@ impl App {
         if self.timer.phase != TimerPhase::Focus || self.timer.status != TimerStatus::Idle {
             return Err("Cannot start focus: timer is not idle in focus phase.".to_string());
         }
+        self.apply_selected_session_template_before_start()?;
         if !self.has_selectable_task_label_for_focus() {
             return Err(format!(
                 "Cannot start focus: select a task label first (run TUI and press {}).",
@@ -171,6 +172,26 @@ impl App {
             self.timer.remaining_secs,
             self.timer.pomodoros_completed,
         )
+    }
+
+    pub fn select_session_template_for_cli(&mut self, name: Option<&str>) -> Result<bool, String> {
+        self.select_session_template(name)
+    }
+
+    pub fn apply_session_template_for_cli(&mut self, name: Option<&str>) -> Result<bool, String> {
+        self.apply_session_template(name)
+    }
+
+    pub fn create_session_template_for_cli(&mut self, name: &str) -> Result<bool, String> {
+        self.capture_session_template(name)
+    }
+
+    pub fn rename_active_session_template_for_cli(&mut self, name: &str) -> Result<bool, String> {
+        self.rename_active_session_template(name)
+    }
+
+    pub fn delete_active_session_template_for_cli(&mut self) -> Result<bool, String> {
+        self.delete_active_session_template()
     }
 
     fn ensure_focus_active_for_cli_metadata_update(&self, command: &str) -> Result<(), String> {

@@ -193,6 +193,12 @@ impl App {
             self.update_timer_and_sync(TimerState::next_phase);
         }
 
+        if let Err(error) = self.apply_selected_session_template_before_start() {
+            self.schedule_armed_occurrence_key = Some(active_occurrence_key.to_string());
+            self.phase_notification = Some(error);
+            return;
+        }
+
         if self.can_auto_start_focus_for_schedule() {
             self.update_timer_and_sync(TimerState::toggle_pause);
             self.phase_notification =
