@@ -1998,3 +1998,34 @@ fn normalize_keeps_legacy_blocked_sites_when_profiles_exist() {
     assert_eq!(cfg.selected_blocklist_profile, "Work");
     assert_eq!(cfg.blocked_sites, vec!["legacy-only.com".to_string()]);
 }
+
+#[test]
+fn normalize_merges_legacy_profile_lists_when_categories_exist() {
+    let cfg = AppConfig {
+        blocklist_profiles: vec![BlocklistProfileConfig {
+            name: "Work".to_string(),
+            sites: vec!["legacy.com".to_string()],
+            allowlist_sites: vec!["legacy-allow.com".to_string()],
+            categories: vec![BlocklistCategoryConfig {
+                name: "Social".to_string(),
+                sites: vec!["youtube.com".to_string()],
+                allowlist_sites: Vec::new(),
+            }],
+            selected_category: "Social".to_string(),
+        }],
+        selected_blocklist_profile: "Work".to_string(),
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    let profile = &cfg.blocklist_profiles[0];
+    assert!(profile.sites.contains(&"youtube.com".to_string()));
+    assert!(profile.sites.contains(&"legacy.com".to_string()));
+    assert!(profile.allowlist_sites.contains(&"legacy-allow.com".to_string()));
+    assert!(profile.categories.iter().any(|category| {
+        category
+            .sites
+            .iter()
+            .any(|site| site.eq_ignore_ascii_case("legacy.com"))
+    }));
+}

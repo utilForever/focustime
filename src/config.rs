@@ -2797,7 +2797,33 @@ fn normalize_blocklist_categories(
         }];
     }
 
+    if !legacy_sites.is_empty() || !legacy_allowlist_sites.is_empty() {
+        let target_index = normalized
+            .iter()
+            .position(|category| {
+                category
+                    .name
+                    .eq_ignore_ascii_case(&default_blocklist_category_name())
+            })
+            .unwrap_or(0);
+        merge_unique_case_insensitive(&mut normalized[target_index].sites, legacy_sites);
+        merge_unique_case_insensitive(
+            &mut normalized[target_index].allowlist_sites,
+            legacy_allowlist_sites,
+        );
+    }
+
     normalized
+}
+
+fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
+    let mut seen: HashSet<String> = target.iter().map(|value| value.to_ascii_lowercase()).collect();
+    for value in source {
+        let key = value.to_ascii_lowercase();
+        if seen.insert(key) {
+            target.push(value.clone());
+        }
+    }
 }
 
 fn normalize_selected_blocklist_category(
