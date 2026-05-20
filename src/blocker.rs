@@ -122,36 +122,54 @@ fn normalize_domain_like_input(
     input: &str,
     allow_wildcard_prefix: bool,
 ) -> Result<String, SiteValidationError> {
-    let mut hostname = input.trim().to_lowercase();
+    let hostname = extract_hostname_candidate(input)?;
+    let (hostname, wildcard_prefix) = extract_wildcard_prefix(hostname, allow_wildcard_prefix)?;
+    let hostname = strip_numeric_port(hostname)?;
+    if hostname.is_empty() {
+        return Err(SiteValidationError::MissingHostname);
+    }
+    validate_domain_host(&hostname)?;
+    if wildcard_prefix && !hostname.contains('.') {
+        return Err(SiteValidationError::InvalidLabel);
+    }
+    if wildcard_prefix {
+        Ok(format!("*.{hostname}"))
+    } else {
+        Ok(hostname)
+    }
+}
 
+fn extract_hostname_candidate(input: &str) -> Result<String, SiteValidationError> {
+    let mut hostname = input.trim().to_lowercase();
     if hostname.is_empty() {
         return Err(SiteValidationError::EmptyHostname);
     }
-
-    // Strip URI scheme (e.g. "https://example.com" → "example.com").
     if let Some(sep) = hostname.find("://") {
         hostname = hostname[sep + 3..].to_string();
     }
-
-    // Remove path, query, or fragment after the hostname.
     if let Some(pos) = hostname.find(['/', '?', '#']) {
         hostname.truncate(pos);
     }
-
     if let Some(at_pos) = hostname.rfind('@') {
         hostname = hostname[at_pos + 1..].to_string();
     }
+    Ok(hostname)
+}
 
-    let mut wildcard_prefix = false;
+fn extract_wildcard_prefix(
+    hostname: String,
+    allow_wildcard_prefix: bool,
+) -> Result<(String, bool), SiteValidationError> {
     if let Some(stripped) = hostname.strip_prefix("*.") {
         if !allow_wildcard_prefix {
             return Err(SiteValidationError::InvalidCharacter);
         }
-        wildcard_prefix = true;
-        hostname = stripped.to_string();
+        return Ok((stripped.to_string(), true));
     }
+    Ok((hostname, false))
+}
 
-    // Strip a port suffix from host:port forms when the suffix is numeric.
+fn strip_numeric_port(mut hostname: String) -> Result<String, SiteValidationError> {
     if let Some(colon_pos) = hostname.rfind(':') {
         let port = &hostname[colon_pos + 1..];
         if hostname[..colon_pos].contains(':') || !port.chars().all(|c| c.is_ascii_digit()) {
@@ -159,24 +177,19 @@ fn normalize_domain_like_input(
         }
         hostname.truncate(colon_pos);
     }
+    Ok(hostname)
+}
 
-    if hostname.is_empty() {
-        return Err(SiteValidationError::MissingHostname);
-    }
-
-    // Reject anything with internal whitespace (would produce multi-hostname lines).
+fn validate_domain_host(hostname: &str) -> Result<(), SiteValidationError> {
     if hostname.chars().any(char::is_whitespace) {
         return Err(SiteValidationError::ContainsWhitespace);
     }
-
-    // Allow only ASCII letters, digits, dots, and hyphens.
     if !hostname
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
     {
         return Err(SiteValidationError::InvalidCharacter);
     }
-
     if hostname.starts_with('.')
         || hostname.ends_with('.')
         || hostname.contains("..")
@@ -184,21 +197,12 @@ fn normalize_domain_like_input(
     {
         return Err(SiteValidationError::InvalidLabel);
     }
-
     for label in hostname.split('.') {
         if label.is_empty() || label.len() > 63 || label.starts_with('-') || label.ends_with('-') {
             return Err(SiteValidationError::InvalidLabel);
         }
     }
-
-    if wildcard_prefix {
-        if !hostname.contains('.') {
-            return Err(SiteValidationError::InvalidLabel);
-        }
-        Ok(format!("*.{hostname}"))
-    } else {
-        Ok(hostname)
-    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
