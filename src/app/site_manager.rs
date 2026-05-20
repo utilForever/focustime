@@ -343,161 +343,142 @@ impl App {
             return;
         }
 
-        match mode {
-            BlocklistProfileInputMode::Create => {
-                let has_duplicate = self
-                    .blocklist_profiles
-                    .iter()
-                    .any(|profile| profile.name.eq_ignore_ascii_case(&name));
-                if has_duplicate {
-                    self.set_site_feedback(
-                        SiteFeedbackLevel::Warning,
-                        format!("Profile `{name}` already exists"),
-                    );
-                    return;
-                }
-                self.blocklist_profiles.push(BlocklistProfileConfig {
-                    name: name.clone(),
-                    sites: Vec::new(),
-                    allowlist_sites: Vec::new(),
-                    categories: Vec::new(),
-                    selected_category: default_blocklist_category_name(),
-                });
-                self.active_blocklist_profile = self.blocklist_profiles.len().saturating_sub(1);
-                self.recompute_blocker_sites_from_active_profile();
-                self.clamp_selection();
-                self.cancel_blocklist_profile_input();
-                self.save_config();
-                self.sync_blocking_after_site_mutation();
-                self.set_site_feedback(
-                    SiteFeedbackLevel::Success,
-                    format!("Created profile `{name}`"),
-                );
-            }
-            BlocklistProfileInputMode::Rename => {
-                let old_name = self.active_blocklist_profile_name().to_string();
-                if old_name == name {
-                    self.set_site_feedback(
-                        SiteFeedbackLevel::Warning,
-                        format!("No change for profile `{name}`"),
-                    );
-                    return;
-                }
-                let has_duplicate =
-                    self.blocklist_profiles
-                        .iter()
-                        .enumerate()
-                        .any(|(index, profile)| {
-                            index != self.active_blocklist_profile
-                                && profile.name.eq_ignore_ascii_case(&name)
-                        });
-                if has_duplicate {
-                    self.set_site_feedback(
-                        SiteFeedbackLevel::Warning,
-                        format!("Profile `{name}` already exists"),
-                    );
-                    return;
-                }
-                if let Some(profile) = self
-                    .blocklist_profiles
-                    .get_mut(self.active_blocklist_profile)
-                {
-                    profile.name = name.clone();
-                }
-                self.cancel_blocklist_profile_input();
-                self.save_config();
-                self.set_site_feedback(
-                    SiteFeedbackLevel::Success,
-                    format!("Renamed profile `{old_name}` -> `{name}`"),
-                );
-            }
-            BlocklistProfileInputMode::CreateCategory => {
-                let Some(profile) = self
-                    .blocklist_profiles
-                    .get_mut(self.active_blocklist_profile)
-                else {
-                    return;
-                };
-                ensure_profile_categories(profile);
-                let has_duplicate = profile
-                    .categories
-                    .iter()
-                    .any(|category| category.name.eq_ignore_ascii_case(&name));
-                if has_duplicate {
-                    self.set_site_feedback(
-                        SiteFeedbackLevel::Warning,
-                        format!("Category `{name}` already exists"),
-                    );
-                    return;
-                }
-                profile.categories.push(BlocklistCategoryConfig {
-                    name: name.clone(),
-                    sites: Vec::new(),
-                    allowlist_sites: Vec::new(),
-                });
-                profile.selected_category = name.clone();
-                sync_profile_site_mirrors(profile);
-                self.cancel_blocklist_profile_input();
-                self.clamp_selection();
-                self.save_config();
-                self.set_site_feedback(
-                    SiteFeedbackLevel::Success,
-                    format!("Created category `{name}`"),
-                );
-            }
-            BlocklistProfileInputMode::RenameCategory => {
-                let Some(profile) = self
-                    .blocklist_profiles
-                    .get_mut(self.active_blocklist_profile)
-                else {
-                    return;
-                };
-                ensure_profile_categories(profile);
-                let index =
-                    blocklist_category_index(&profile.categories, &profile.selected_category)
-                        .min(profile.categories.len().saturating_sub(1));
-                let Some(current) = profile
-                    .categories
-                    .get(index)
-                    .map(|category| category.name.clone())
-                else {
-                    return;
-                };
-                if current.eq_ignore_ascii_case(&name) {
-                    self.set_site_feedback(
-                        SiteFeedbackLevel::Warning,
-                        format!("No change for category `{current}`"),
-                    );
-                    return;
-                }
-                let has_duplicate =
-                    profile
-                        .categories
-                        .iter()
-                        .enumerate()
-                        .any(|(candidate_index, category)| {
-                            candidate_index != index && category.name.eq_ignore_ascii_case(&name)
-                        });
-                if has_duplicate {
-                    self.set_site_feedback(
-                        SiteFeedbackLevel::Warning,
-                        format!("Category `{name}` already exists"),
-                    );
-                    return;
-                }
-                if let Some(category) = profile.categories.get_mut(index) {
-                    category.name = name.clone();
-                }
-                profile.selected_category = name.clone();
-                sync_profile_site_mirrors(profile);
-                self.cancel_blocklist_profile_input();
-                self.save_config();
-                self.set_site_feedback(
-                    SiteFeedbackLevel::Success,
-                    format!("Renamed category `{current}` -> `{name}`"),
-                );
-            }
+        let outcome = match mode {
+            BlocklistProfileInputMode::Create => self.commit_create_blocklist_profile(name),
+            BlocklistProfileInputMode::Rename => self.commit_rename_blocklist_profile(name),
+            BlocklistProfileInputMode::CreateCategory => self.commit_create_blocklist_category(name),
+            BlocklistProfileInputMode::RenameCategory => self.commit_rename_blocklist_category(name),
+        };
+
+        if let Err(message) = outcome {
+            self.set_site_feedback(SiteFeedbackLevel::Warning, message);
         }
+    }
+
+    fn commit_create_blocklist_profile(&mut self, name: String) -> Result<(), String> {
+        let has_duplicate = self
+            .blocklist_profiles
+            .iter()
+            .any(|profile| profile.name.eq_ignore_ascii_case(&name));
+        if has_duplicate {
+            return Err(format!("Profile `{name}` already exists"));
+        }
+
+        self.blocklist_profiles.push(BlocklistProfileConfig {
+            name: name.clone(),
+            sites: Vec::new(),
+            allowlist_sites: Vec::new(),
+            categories: Vec::new(),
+            selected_category: default_blocklist_category_name(),
+        });
+        self.active_blocklist_profile = self.blocklist_profiles.len().saturating_sub(1);
+        self.recompute_blocker_sites_from_active_profile();
+        self.clamp_selection();
+        self.cancel_blocklist_profile_input();
+        self.save_config();
+        self.sync_blocking_after_site_mutation();
+        self.set_site_feedback(SiteFeedbackLevel::Success, format!("Created profile `{name}`"));
+        Ok(())
+    }
+
+    fn commit_rename_blocklist_profile(&mut self, name: String) -> Result<(), String> {
+        let old_name = self.active_blocklist_profile_name().to_string();
+        if old_name == name {
+            return Err(format!("No change for profile `{name}`"));
+        }
+
+        let has_duplicate = self
+            .blocklist_profiles
+            .iter()
+            .enumerate()
+            .any(|(index, profile)| {
+                index != self.active_blocklist_profile && profile.name.eq_ignore_ascii_case(&name)
+            });
+        if has_duplicate {
+            return Err(format!("Profile `{name}` already exists"));
+        }
+
+        if let Some(profile) = self.blocklist_profiles.get_mut(self.active_blocklist_profile) {
+            profile.name = name.clone();
+        }
+        self.cancel_blocklist_profile_input();
+        self.save_config();
+        self.set_site_feedback(
+            SiteFeedbackLevel::Success,
+            format!("Renamed profile `{old_name}` -> `{name}`"),
+        );
+        Ok(())
+    }
+
+    fn commit_create_blocklist_category(&mut self, name: String) -> Result<(), String> {
+        {
+            let Some(profile) = self.blocklist_profiles.get_mut(self.active_blocklist_profile) else {
+                return Ok(());
+            };
+            ensure_profile_categories(profile);
+            let has_duplicate = profile
+                .categories
+                .iter()
+                .any(|category| category.name.eq_ignore_ascii_case(&name));
+            if has_duplicate {
+                return Err(format!("Category `{name}` already exists"));
+            }
+            profile.categories.push(BlocklistCategoryConfig {
+                name: name.clone(),
+                sites: Vec::new(),
+                allowlist_sites: Vec::new(),
+            });
+            profile.selected_category = name.clone();
+            sync_profile_site_mirrors(profile);
+        }
+
+        self.cancel_blocklist_profile_input();
+        self.clamp_selection();
+        self.save_config();
+        self.set_site_feedback(SiteFeedbackLevel::Success, format!("Created category `{name}`"));
+        Ok(())
+    }
+
+    fn commit_rename_blocklist_category(&mut self, name: String) -> Result<(), String> {
+        let current_name = {
+            let Some(profile) = self.blocklist_profiles.get_mut(self.active_blocklist_profile) else {
+                return Ok(());
+            };
+            ensure_profile_categories(profile);
+            let index = blocklist_category_index(&profile.categories, &profile.selected_category)
+                .min(profile.categories.len().saturating_sub(1));
+            let Some(current) = profile.categories.get(index).map(|category| category.name.clone())
+            else {
+                return Ok(());
+            };
+            if current.eq_ignore_ascii_case(&name) {
+                return Err(format!("No change for category `{current}`"));
+            }
+            let has_duplicate = profile
+                .categories
+                .iter()
+                .enumerate()
+                .any(|(candidate_index, category)| {
+                    candidate_index != index && category.name.eq_ignore_ascii_case(&name)
+                });
+            if has_duplicate {
+                return Err(format!("Category `{name}` already exists"));
+            }
+            if let Some(category) = profile.categories.get_mut(index) {
+                category.name = name.clone();
+            }
+            profile.selected_category = name.clone();
+            sync_profile_site_mirrors(profile);
+            current
+        };
+
+        self.cancel_blocklist_profile_input();
+        self.save_config();
+        self.set_site_feedback(
+            SiteFeedbackLevel::Success,
+            format!("Renamed category `{current_name}` -> `{name}`"),
+        );
+        Ok(())
     }
 
     fn apply_bulk_add_result(&mut self, result: BulkAddResult) -> bool {
