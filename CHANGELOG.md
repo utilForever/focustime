@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [0.12.0] - 2026-05-20
+
+### Added
+
+- **Session templates for task/profile/blocklist/schedule bundles (#314):** added reusable session-template bundles with config/runtime wiring plus CLI and planner workflows for selecting and applying templates.
+- **Day-of-week smart profile switching (#315):** added weekday rule configuration and runtime profile switching controls across CLI and TUI profile-management flows.
+- **Rule-based automation triggers (time/schedule/event) (#316):** added explicit automation trigger rules with runtime execution support and CLI/TUI management surfaces.
+- **Temporary allowlist timer with auto-expiry (#317):** added temporary allowlist entries that automatically expire, including runtime support and CLI/TUI controls.
 - **Blocklist categories and wildcard domain rules (#318):** added per-profile blocklist category management across CLI and TUI, plus wildcard subdomain rule support (`*.example.com`) in blocklist/allowlist matching with consistent effective-blocking computation.
 
 ## [0.11.1] - 2026-05-18
@@ -286,7 +294,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/utilForever/focustime/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/utilForever/focustime/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/utilForever/focustime/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/utilForever/focustime/compare/v0.10.0...v0.10.1
