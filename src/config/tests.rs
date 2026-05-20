@@ -2021,7 +2021,11 @@ fn normalize_merges_legacy_profile_lists_when_categories_exist() {
     let profile = &cfg.blocklist_profiles[0];
     assert!(profile.sites.contains(&"youtube.com".to_string()));
     assert!(profile.sites.contains(&"legacy.com".to_string()));
-    assert!(profile.allowlist_sites.contains(&"legacy-allow.com".to_string()));
+    assert!(
+        profile
+            .allowlist_sites
+            .contains(&"legacy-allow.com".to_string())
+    );
     assert!(profile.categories.iter().any(|category| {
         category
             .sites

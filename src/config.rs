@@ -2817,7 +2817,10 @@ fn normalize_blocklist_categories(
 }
 
 fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
-    let mut seen: HashSet<String> = target.iter().map(|value| value.to_ascii_lowercase()).collect();
+    let mut seen: HashSet<String> = target
+        .iter()
+        .map(|value| value.to_ascii_lowercase())
+        .collect();
     for value in source {
         let key = value.to_ascii_lowercase();
         if seen.insert(key) {
