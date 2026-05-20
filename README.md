@@ -425,8 +425,6 @@ block_command = ""
 unblock_command = ""
 diagnostics_command = ""
 
-# Strict mode for the selected profile's automation settings.
-strict_mode = false
 break_glass_duration_secs = 300
 
 [shortcuts]
@@ -487,6 +485,10 @@ focus_secs = 1800
 short_break_secs = 360
 long_break_secs = 900
 long_break_interval = 3
+
+[profile_automation.custom]
+# Strict mode for the selected profile.
+strict_mode = false
 
 [profile_automation.custom.notifications]
 enabled = true
