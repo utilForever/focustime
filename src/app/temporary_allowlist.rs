@@ -44,7 +44,7 @@ impl App {
     ) -> Result<(usize, usize), String> {
         let specs = parse_temporary_allowlist_specs(input)?;
         self.current_frame_now = Local::now();
-        prune_expired_temporary_allowlist_entries(
+        let pruned = prune_expired_temporary_allowlist_entries(
             &mut self.temporary_allowlist_entries,
             self.current_frame_now.timestamp(),
         );
@@ -56,7 +56,7 @@ impl App {
             &specs,
             self.current_frame_now.timestamp(),
         );
-        if added == 0 && refreshed == 0 {
+        if added == 0 && refreshed == 0 && pruned == 0 {
             return Ok((0, 0));
         }
 
