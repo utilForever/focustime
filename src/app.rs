@@ -1836,14 +1836,20 @@ fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<
     all_blocklist_rules_for_profile(profile)
         .into_iter()
         .filter_map(|site| normalize_domain_rule(&site).ok())
-        .filter(|site| !site.starts_with("*."))
-        .filter(|site| {
-            !allowlist_rules
-                .iter()
-                .any(|allow_rule| domain_rule_matches_host(allow_rule, site))
-        })
+        .filter(|site| !block_rule_excluded_by_allowlist(site, &allowlist_rules))
         .filter(|site| seen.insert(site.to_ascii_lowercase()))
         .collect()
+}
+
+fn block_rule_excluded_by_allowlist(block_rule: &str, allowlist_rules: &[String]) -> bool {
+    if block_rule.starts_with("*.") {
+        return allowlist_rules
+            .iter()
+            .any(|allow_rule| allow_rule.eq_ignore_ascii_case(block_rule));
+    }
+    allowlist_rules
+        .iter()
+        .any(|allow_rule| domain_rule_matches_host(allow_rule, block_rule))
 }
 
 fn all_blocklist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {

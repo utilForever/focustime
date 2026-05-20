@@ -2351,6 +2351,23 @@ fn allowlist_excludes_sites_from_effective_blocking() {
 }
 
 #[test]
+fn wildcard_rules_are_kept_in_effective_blocking() {
+    let config = AppConfig {
+        blocklist_profiles: vec![BlocklistProfileConfig {
+            name: "Work".to_string(),
+            sites: vec!["*.example.com".to_string()],
+            allowlist_sites: Vec::new(),
+            ..BlocklistProfileConfig::default()
+        }],
+        selected_blocklist_profile: "Work".to_string(),
+        ..AppConfig::default()
+    };
+    let app = App::from_config(config);
+
+    assert_eq!(app.blocker.sites, vec!["*.example.com".to_string()]);
+}
+
+#[test]
 fn site_manager_allowlist_mode_updates_effective_blocked_sites() {
     let config = AppConfig {
         blocklist_profiles: vec![BlocklistProfileConfig {
