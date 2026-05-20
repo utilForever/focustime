@@ -74,6 +74,7 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::AllowlistSites
             | ParsedToken::BlocklistSiteAdd(_)
             | ParsedToken::AllowlistSiteAdd(_)
+            | ParsedToken::AllowlistSiteAddTemporary(_)
             | ParsedToken::BlocklistSiteEdit(_)
             | ParsedToken::AllowlistSiteEdit(_)
             | ParsedToken::BlocklistSiteDelete(_)
@@ -226,6 +227,10 @@ pub(super) fn parse_primary_command(
             ParsedToken::AllowlistSiteAdd(input) => set_primary_command(
                 &mut primary,
                 PrimaryCommand::AllowlistSiteAdd(input.clone()),
+            )?,
+            ParsedToken::AllowlistSiteAddTemporary(input) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::AllowlistSiteAddTemporary(input.clone()),
             )?,
             ParsedToken::BlocklistSiteEdit(value) => set_primary_command(
                 &mut primary,
@@ -503,6 +508,12 @@ pub(super) fn finalize_cli_action(
             },
             output,
         })),
+        Some(PrimaryCommand::AllowlistSiteAddTemporary(input)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::AllowlistSiteAddTemporary { input },
+                output,
+            }))
+        }
         Some(PrimaryCommand::BlocklistSiteEdit(value)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::BlocklistSites {
                 target: SiteListTarget::Blocklist,
@@ -906,6 +917,7 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::AllowlistSites => "--allowlist-sites",
         PrimaryCommand::BlocklistSiteAdd(_) => "--blocklist-site-add",
         PrimaryCommand::AllowlistSiteAdd(_) => "--allowlist-site-add",
+        PrimaryCommand::AllowlistSiteAddTemporary(_) => "--allowlist-site-add-temporary",
         PrimaryCommand::BlocklistSiteEdit(_) => "--blocklist-site-edit",
         PrimaryCommand::AllowlistSiteEdit(_) => "--allowlist-site-edit",
         PrimaryCommand::BlocklistSiteDelete(_) => "--blocklist-site-delete",

@@ -24,9 +24,9 @@ use crate::cli::{
     SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker, SiteDeleteCommandOutput,
     SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput, SiteListTarget, StatusOutput,
     StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
-    ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput,
-    WeekdayProfileRuleConfig, WeekdayRulesCommandOutput, WeeklyGoalConfig,
-    available_break_template_views, available_theme_preset_views,
+    TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset,
+    TimerCommandOutput, TimerStateOutput, WeekdayProfileRuleConfig, WeekdayRulesCommandOutput,
+    WeeklyGoalConfig, available_break_template_views, available_theme_preset_views,
     build_blocking_preview_command_output, build_diagnostics_command_output,
     build_schedule_inspection_output, build_status_output, build_task_goal_output,
     display_input_value, effective_blocked_sites_for_profile, flush_stdout,
@@ -39,9 +39,10 @@ use crate::cli::{
     print_session_template_command_output, print_site_add_command_output,
     print_site_delete_command_output, print_site_edit_command_output,
     print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_theme_command_output, print_timer_state_output,
-    print_weekday_rules_command_output, profile_id, profile_view, selected_break_template_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    print_task_goal_command_output, print_temporary_site_add_command_output,
+    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
+    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
+    timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -106,6 +107,9 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         }
         CommandKind::BlocklistSites { target, command } => {
             execute_blocklist_sites_command(target, command, cli_command.output)
+        }
+        CommandKind::AllowlistSiteAddTemporary { input } => {
+            execute_allowlist_site_add_temporary_command(input, cli_command.output)
         }
         CommandKind::SessionTemplate { command } => {
             execute_session_template_command(command, cli_command.output)
@@ -320,6 +324,35 @@ fn execute_blocklist_sites_command(
                 OutputMode::Json => print_json(&payload)?,
             }
         }
+    }
+    Ok(())
+}
+
+fn execute_allowlist_site_add_temporary_command(
+    input: String,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut app = App::new();
+    let (added, refreshed) = app.add_temporary_allowlist_for_cli(&input)?;
+    let payload = TemporarySiteAddCommandOutput {
+        action: "allowlist-site-add-temporary",
+        updated: added > 0 || refreshed > 0,
+        profile: app.selected_blocklist_profile_name_for_cli(),
+        added,
+        refreshed,
+        active: app
+            .active_temporary_allowlist_entries()
+            .into_iter()
+            .map(|entry| TemporaryAllowlistStatusOutput {
+                site: entry.site,
+                remaining_secs: entry.remaining_secs,
+                expires_at_epoch_secs: entry.expires_at_epoch_secs,
+            })
+            .collect(),
+    };
+    match output {
+        OutputMode::Text => print_temporary_site_add_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
 }

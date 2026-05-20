@@ -189,6 +189,8 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload.get("goal").is_some());
     assert!(payload.get("weekly_goal").is_some());
     assert!(payload.get("monthly_goal").is_some());
+    assert!(payload.get("temporary_allowlist_active_count").is_some());
+    assert!(payload.get("temporary_allowlist_active").is_some());
     assert!(payload["goal"].get("carry_over").is_some());
     assert!(payload["weekly_goal"].get("carry_over").is_some());
     assert!(payload["monthly_goal"].get("carry_over").is_some());
@@ -205,6 +207,30 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload.get("live").is_some());
     assert!(payload["live"].get("focus_intention").is_some());
     assert!(payload["live"].get("task_note").is_some());
+}
+
+#[test]
+fn temporary_allowlist_add_json_is_reflected_in_status_json() {
+    let env = TestEnv::new("temporary-allowlist-json");
+
+    let add_output = env.run(&["--allowlist-site-add-temporary=reddit.com=120s", "--json"]);
+    assert_eq!(add_output.status.code(), Some(0));
+    assert!(stderr_text(&add_output).trim().is_empty());
+    let add_payload: Value = serde_json::from_slice(&add_output.stdout).expect("stdout JSON");
+    assert_eq!(add_payload["action"], "allowlist-site-add-temporary");
+    assert_eq!(add_payload["updated"], true);
+    assert_eq!(add_payload["added"], 1);
+    assert_eq!(add_payload["active"][0]["site"], "reddit.com");
+
+    let status_output = env.run(&["--status", "--json"]);
+    assert_eq!(status_output.status.code(), Some(0));
+    assert!(stderr_text(&status_output).trim().is_empty());
+    let status_payload: Value = serde_json::from_slice(&status_output.stdout).expect("stdout JSON");
+    assert_eq!(status_payload["temporary_allowlist_active_count"], 1);
+    assert_eq!(
+        status_payload["temporary_allowlist_active"][0]["site"],
+        "reddit.com"
+    );
 }
 
 #[test]
