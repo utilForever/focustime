@@ -1,5 +1,7 @@
 use crate::app::{App, normalize_task_label, task_label_index};
-use crate::config::{ProfileAutomationConfig, SessionTemplateConfig};
+use crate::config::{
+    AutomationTriggerActionConfig, ProfileAutomationConfig, SessionTemplateConfig,
+};
 
 impl App {
     pub(super) fn apply_selected_session_template_before_start(&mut self) -> Result<(), String> {
@@ -95,6 +97,7 @@ impl App {
         if let Some(template) = self.session_templates.get_mut(template_index) {
             template.name = name.to_string();
         }
+        self.rename_session_template_references(&current_name, name);
         self.save_config();
         Ok(true)
     }
@@ -110,6 +113,11 @@ impl App {
         if index >= self.session_templates.len() {
             return Err("Session template selection is invalid.".to_string());
         }
+        let removed_name = self
+            .session_templates
+            .get(index)
+            .map(|template| template.name.clone())
+            .ok_or_else(|| "Session template selection is invalid.".to_string())?;
         self.session_templates.remove(index);
         if self.session_templates.is_empty() {
             self.active_session_template = None;
@@ -124,6 +132,7 @@ impl App {
                 }
             });
         }
+        self.clear_session_template_references(&removed_name);
         self.save_config();
         Ok(true)
     }
@@ -208,5 +217,41 @@ impl App {
         self.session_templates
             .iter()
             .position(|template| template.name.eq_ignore_ascii_case(name.trim()))
+    }
+
+    fn rename_session_template_references(&mut self, previous_name: &str, next_name: &str) {
+        self.rewrite_session_template_references(previous_name, Some(next_name));
+    }
+
+    fn clear_session_template_references(&mut self, removed_name: &str) {
+        self.rewrite_session_template_references(removed_name, None);
+    }
+
+    fn rewrite_session_template_references(
+        &mut self,
+        target_name: &str,
+        replacement: Option<&str>,
+    ) {
+        let replacement = replacement.map(str::to_string);
+
+        for rule in &mut self.weekday_profile_rules {
+            if let Some(name) = rule.session_template.as_deref()
+                && name.eq_ignore_ascii_case(target_name)
+            {
+                rule.session_template = replacement.clone();
+            }
+        }
+
+        for trigger in &mut self.automation_triggers {
+            if let AutomationTriggerActionConfig::ApplyDefaults {
+                session_template, ..
+            } = &mut trigger.action
+                && session_template
+                    .as_deref()
+                    .is_some_and(|name| name.eq_ignore_ascii_case(target_name))
+            {
+                *session_template = replacement.clone();
+            }
+        }
     }
 }
