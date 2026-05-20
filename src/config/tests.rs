@@ -2026,10 +2026,23 @@ fn normalize_merges_legacy_profile_lists_when_categories_exist() {
             .allowlist_sites
             .contains(&"legacy-allow.com".to_string())
     );
+    assert!(profile
+        .categories
+        .iter()
+        .any(|category| category.name.eq_ignore_ascii_case("Social")
+            && category
+                .sites
+                .iter()
+                .any(|site| site.eq_ignore_ascii_case("youtube.com"))));
     assert!(profile.categories.iter().any(|category| {
-        category
-            .sites
-            .iter()
-            .any(|site| site.eq_ignore_ascii_case("legacy.com"))
+        category.name.eq_ignore_ascii_case("General")
+            && category
+                .sites
+                .iter()
+                .any(|site| site.eq_ignore_ascii_case("legacy.com"))
+            && category
+                .allowlist_sites
+                .iter()
+                .any(|site| site.eq_ignore_ascii_case("legacy-allow.com"))
     }));
 }

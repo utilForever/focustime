@@ -2798,14 +2798,20 @@ fn normalize_blocklist_categories(
     }
 
     if !legacy_sites.is_empty() || !legacy_allowlist_sites.is_empty() {
-        let target_index = normalized
-            .iter()
-            .position(|category| {
-                category
-                    .name
-                    .eq_ignore_ascii_case(&default_blocklist_category_name())
-            })
-            .unwrap_or(0);
+        let target_index = if let Some(index) = normalized.iter().position(|category| {
+            category
+                .name
+                .eq_ignore_ascii_case(&default_blocklist_category_name())
+        }) {
+            index
+        } else {
+            normalized.push(BlocklistCategoryConfig {
+                name: default_blocklist_category_name(),
+                sites: Vec::new(),
+                allowlist_sites: Vec::new(),
+            });
+            normalized.len().saturating_sub(1)
+        };
         merge_unique_case_insensitive(&mut normalized[target_index].sites, legacy_sites);
         merge_unique_case_insensitive(
             &mut normalized[target_index].allowlist_sites,
