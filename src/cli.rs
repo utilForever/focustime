@@ -181,15 +181,15 @@ Options:
   --session-template-create  Capture current task/profile/blocklist/schedule as a template
   --session-template-rename  Rename the active session template
   --session-template-delete  Delete the active session template
-  --blocklist-sites           List blocklist sites in active profile
-  --allowlist-sites           List allowlist sites in active profile
-  --blocklist-site-add        Add/import blocklist hostnames in active profile
-  --allowlist-site-add        Add/import allowlist hostnames in active profile
+  --blocklist-sites           List blocklist sites in active category within active profile
+  --allowlist-sites           List allowlist sites in active category within active profile
+  --blocklist-site-add        Add/import blocklist hostnames in active category within active profile
+  --allowlist-site-add        Add/import allowlist hostnames in active category within active profile
   --allowlist-site-add-temporary  Add temporary allowlist hostnames with inline duration (HOST=30m,HOST=45s)
-  --blocklist-site-edit       Replace blocklist hostname using OLD=NEW
-  --allowlist-site-edit       Replace allowlist hostname using OLD=NEW
-  --blocklist-site-delete     Delete blocklist hostname in active profile
-  --allowlist-site-delete     Delete allowlist hostname in active profile
+  --blocklist-site-edit       Replace blocklist hostname in active category using OLD=NEW
+  --allowlist-site-edit       Replace allowlist hostname in active category using OLD=NEW
+  --blocklist-site-delete     Delete blocklist hostname in active category within active profile
+  --allowlist-site-delete     Delete allowlist hostname in active category within active profile
   --diagnostics   Show setup diagnostics checks
   --blocking-preview  Preview backend-selected blocking changes without writing
   --status        Print status summary (includes live timer/session fields and latest interruption)
