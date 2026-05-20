@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Temporary allowlist timer with auto-expiry (#317):** added temporary allowlist entries that automatically expire, including runtime support and CLI/TUI controls.
 - **Blocklist categories and wildcard domain rules (#318):** added per-profile blocklist category management across CLI and TUI, plus wildcard subdomain rule support (`*.example.com`) in blocklist/allowlist matching with consistent effective-blocking computation.
 
+### Removed
+
+- Legacy top-level timer compatibility fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) are retired; configure durations under `[custom_profile]`.
+- Legacy top-level automation compatibility fields (`notifications`, `auto_start`, `strict_mode`, `recurring_schedule`) are retired; configure per-profile automation under `[profile_automation.<profile>]`.
+- Legacy top-level `blocked_sites` compatibility fallback is retired; use `[[blocklist_profiles]]` with `selected_blocklist_profile`.
+
 ## [0.11.1] - 2026-05-18
 
 ### Changed
