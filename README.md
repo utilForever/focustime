@@ -235,15 +235,15 @@ deprecation warnings when legacy compatibility fields are detected.
 
 | Legacy field/path                                                                    | Canonical replacement                                                                                                                             | Removal milestone |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval` | `[custom_profile]`                                                                                                                                | v0.12.0 (planned) |
-| Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`         | `[profile_automation.<profile>.notifications]`, `[profile_automation.<profile>.auto_start]`, and per-profile `strict_mode` / `recurring_schedule` | v0.12.0 (planned) |
-| Top-level `blocked_sites` (without canonical profiles)                               | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                                                           | v0.12.0 (planned) |
+| Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval` | `[custom_profile]`                                                                                                                                | v0.12.0           |
+| Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`         | `[profile_automation.<profile>.notifications]`, `[profile_automation.<profile>.auto_start]`, and per-profile `strict_mode` / `recurring_schedule` | v0.12.0           |
+| Top-level `blocked_sites` (without canonical profiles)                               | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                                                           | v0.12.0           |
 
 Milestone policy:
 
 - **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
-- **v0.12.0 (planned):** remove legacy field/path compatibility after the warning window
+- **v0.12.0:** remove legacy field/path compatibility after the warning window
 
 ### CLI JSON/error contract
 
@@ -847,12 +847,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.11.1`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.12.0`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.11.1](https://github.com/utilForever/focustime/releases/tag/v0.11.1).
+The latest stable release is [v0.12.0](https://github.com/utilForever/focustime/releases/tag/v0.12.0).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 
