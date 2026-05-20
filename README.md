@@ -165,6 +165,7 @@ cargo run -- --blocklist-sites
 cargo run -- --allowlist-sites --json
 cargo run -- --blocklist-site-add="youtube.com, reddit.com"
 cargo run -- --allowlist-site-add "reddit.com"
+cargo run -- --allowlist-site-add-temporary "reddit.com=30m,news.ycombinator.com=10m"
 cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
 cargo run -- --allowlist-site-delete reddit.com
 
@@ -191,7 +192,7 @@ cargo run -- --diagnostics --json
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
 
-# Show status (text or JSON, including growth/retention signals, live timer/session fields, latest interruption summary, and `selected_task_goal` in JSON)
+# Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary allowlist entries, latest interruption summary, and `selected_task_goal` in JSON)
 cargo run -- --status
 cargo run -- --status --json
 

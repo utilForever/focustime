@@ -163,7 +163,7 @@ fn site_manager_copy_for_mode(app: &App, site_list_mode: SiteListMode) -> (Strin
                 app.shortcut_hint(ShortcutAction::SiteAdd)
             ),
             format!(
-                "Press {} to add/import allowlist exceptions or {} to edit selected",
+                "Press {} to add allowlist exceptions (HOST=30m for temporary) or {} to edit selected",
                 app.shortcut_hint(ShortcutAction::SiteAdd),
                 app.shortcut_hint(ShortcutAction::SiteEdit)
             ),
@@ -226,7 +226,7 @@ fn render_site_manager_input(
     let input_title = match input_mode {
         SiteInputMode::Add => match site_list_mode {
             SiteListMode::Blocklist => " Add / Import Blocklist Sites ",
-            SiteListMode::Allowlist => " Add / Import Allowlist Sites ",
+            SiteListMode::Allowlist => " Add Allowlist Sites / Temporary Exceptions ",
         },
         SiteInputMode::Edit => match site_list_mode {
             SiteListMode::Blocklist => " Edit Blocklist Site ",
@@ -356,7 +356,7 @@ fn site_manager_hint_lines(
             }),
             Line::from(match input_mode {
                 SiteInputMode::Add => format!(
-                    "Tip: paste comma/newline hostnames, then press {}",
+                    "Tip: comma/newline entries. In Allowlist mode, use HOST=30m for temporary exceptions, then press {}",
                     app.navigation_hint(NavigationAction::Confirm)
                 ),
                 SiteInputMode::Edit => format!(
