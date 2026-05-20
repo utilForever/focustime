@@ -346,8 +346,12 @@ impl App {
         let outcome = match mode {
             BlocklistProfileInputMode::Create => self.commit_create_blocklist_profile(name),
             BlocklistProfileInputMode::Rename => self.commit_rename_blocklist_profile(name),
-            BlocklistProfileInputMode::CreateCategory => self.commit_create_blocklist_category(name),
-            BlocklistProfileInputMode::RenameCategory => self.commit_rename_blocklist_category(name),
+            BlocklistProfileInputMode::CreateCategory => {
+                self.commit_create_blocklist_category(name)
+            }
+            BlocklistProfileInputMode::RenameCategory => {
+                self.commit_rename_blocklist_category(name)
+            }
         };
 
         if let Err(message) = outcome {
@@ -377,7 +381,10 @@ impl App {
         self.cancel_blocklist_profile_input();
         self.save_config();
         self.sync_blocking_after_site_mutation();
-        self.set_site_feedback(SiteFeedbackLevel::Success, format!("Created profile `{name}`"));
+        self.set_site_feedback(
+            SiteFeedbackLevel::Success,
+            format!("Created profile `{name}`"),
+        );
         Ok(())
     }
 
@@ -398,7 +405,10 @@ impl App {
             return Err(format!("Profile `{name}` already exists"));
         }
 
-        if let Some(profile) = self.blocklist_profiles.get_mut(self.active_blocklist_profile) {
+        if let Some(profile) = self
+            .blocklist_profiles
+            .get_mut(self.active_blocklist_profile)
+        {
             profile.name = name.clone();
         }
         self.cancel_blocklist_profile_input();
@@ -412,7 +422,10 @@ impl App {
 
     fn commit_create_blocklist_category(&mut self, name: String) -> Result<(), String> {
         {
-            let Some(profile) = self.blocklist_profiles.get_mut(self.active_blocklist_profile) else {
+            let Some(profile) = self
+                .blocklist_profiles
+                .get_mut(self.active_blocklist_profile)
+            else {
                 return Ok(());
             };
             ensure_profile_categories(profile);
@@ -435,32 +448,42 @@ impl App {
         self.cancel_blocklist_profile_input();
         self.clamp_selection();
         self.save_config();
-        self.set_site_feedback(SiteFeedbackLevel::Success, format!("Created category `{name}`"));
+        self.set_site_feedback(
+            SiteFeedbackLevel::Success,
+            format!("Created category `{name}`"),
+        );
         Ok(())
     }
 
     fn commit_rename_blocklist_category(&mut self, name: String) -> Result<(), String> {
         let current_name = {
-            let Some(profile) = self.blocklist_profiles.get_mut(self.active_blocklist_profile) else {
+            let Some(profile) = self
+                .blocklist_profiles
+                .get_mut(self.active_blocklist_profile)
+            else {
                 return Ok(());
             };
             ensure_profile_categories(profile);
             let index = blocklist_category_index(&profile.categories, &profile.selected_category)
                 .min(profile.categories.len().saturating_sub(1));
-            let Some(current) = profile.categories.get(index).map(|category| category.name.clone())
+            let Some(current) = profile
+                .categories
+                .get(index)
+                .map(|category| category.name.clone())
             else {
                 return Ok(());
             };
             if current.eq_ignore_ascii_case(&name) {
                 return Err(format!("No change for category `{current}`"));
             }
-            let has_duplicate = profile
-                .categories
-                .iter()
-                .enumerate()
-                .any(|(candidate_index, category)| {
-                    candidate_index != index && category.name.eq_ignore_ascii_case(&name)
-                });
+            let has_duplicate =
+                profile
+                    .categories
+                    .iter()
+                    .enumerate()
+                    .any(|(candidate_index, category)| {
+                        candidate_index != index && category.name.eq_ignore_ascii_case(&name)
+                    });
             if has_duplicate {
                 return Err(format!("Category `{name}` already exists"));
             }
