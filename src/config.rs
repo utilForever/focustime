@@ -548,11 +548,34 @@ impl Default for ShortcutConfig {
 pub struct BlocklistProfileConfig {
     #[serde(default = "default_blocklist_profile_name")]
     pub name: String,
+    /// Deprecated flat mirror of categorized blocklist rules.
+    ///
+    /// Canonical rules live in `categories[*].sites`; this field is maintained
+    /// for load-time compatibility and helper surfaces still reading flat lists.
     #[serde(default)]
     pub sites: Vec<String>,
+    /// Deprecated flat mirror of categorized allowlist rules.
+    ///
+    /// Canonical rules live in `categories[*].allowlist_sites`.
     /// Sites that are explicitly excluded from blocking.
     ///
     /// Effective focus blocking is computed as `sites - allowlist_sites`.
+    #[serde(default)]
+    pub allowlist_sites: Vec<String>,
+    /// Category-organized block/allow rules.
+    #[serde(default)]
+    pub categories: Vec<BlocklistCategoryConfig>,
+    /// Name of the selected category inside this profile.
+    #[serde(default = "default_blocklist_category_name")]
+    pub selected_category: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BlocklistCategoryConfig {
+    #[serde(default = "default_blocklist_category_name")]
+    pub name: String,
+    #[serde(default)]
+    pub sites: Vec<String>,
     #[serde(default)]
     pub allowlist_sites: Vec<String>,
 }
@@ -561,6 +584,18 @@ impl Default for BlocklistProfileConfig {
     fn default() -> Self {
         Self {
             name: default_blocklist_profile_name(),
+            sites: Vec::new(),
+            allowlist_sites: Vec::new(),
+            categories: Vec::new(),
+            selected_category: default_blocklist_category_name(),
+        }
+    }
+}
+
+impl Default for BlocklistCategoryConfig {
+    fn default() -> Self {
+        Self {
+            name: default_blocklist_category_name(),
             sites: Vec::new(),
             allowlist_sites: Vec::new(),
         }
@@ -1255,6 +1290,10 @@ fn default_one_time_schedule_date() -> String {
 
 fn default_blocklist_profile_name() -> String {
     "Default".to_string()
+}
+
+fn default_blocklist_category_name() -> String {
+    "General".to_string()
 }
 
 fn default_break_glass_duration_secs() -> u64 {
@@ -2657,18 +2696,33 @@ fn normalize_blocklist_profiles(
         let base_name =
             normalize_nonempty_or_default_string(&profile.name, &default_blocklist_profile_name());
         let name = make_unique_profile_name(&base_name, &mut seen_names);
+        let categories = normalize_blocklist_categories(
+            &profile.categories,
+            &profile.sites,
+            &profile.allowlist_sites,
+        );
+        let selected_category =
+            normalize_selected_blocklist_category(&profile.selected_category, &categories);
+        let (sites, allowlist_sites) = flatten_blocklist_categories(&categories);
         normalized.push(BlocklistProfileConfig {
             name,
-            sites: profile.sites.clone(),
-            allowlist_sites: profile.allowlist_sites.clone(),
+            sites,
+            allowlist_sites,
+            categories,
+            selected_category,
         });
     }
 
     if normalized.is_empty() {
+        let categories = normalize_blocklist_categories(&[], legacy_blocked_sites, &[]);
+        let selected_category = normalize_selected_blocklist_category("", categories.as_slice());
+        let (sites, allowlist_sites) = flatten_blocklist_categories(&categories);
         return vec![BlocklistProfileConfig {
             name: default_blocklist_profile_name(),
-            sites: legacy_blocked_sites.to_vec(),
-            allowlist_sites: Vec::new(),
+            sites,
+            allowlist_sites,
+            categories,
+            selected_category,
         }];
     }
 
@@ -2713,6 +2767,88 @@ fn make_unique_profile_name(base_name: &str, seen_names: &mut HashSet<String>) -
         }
         suffix += 1;
     }
+}
+
+fn normalize_blocklist_categories(
+    categories: &[BlocklistCategoryConfig],
+    legacy_sites: &[String],
+    legacy_allowlist_sites: &[String],
+) -> Vec<BlocklistCategoryConfig> {
+    let mut normalized = Vec::new();
+    let mut seen_names = HashSet::new();
+    for category in categories {
+        let base_name = normalize_nonempty_or_default_string(
+            &category.name,
+            &default_blocklist_category_name(),
+        );
+        let name = make_unique_profile_name(&base_name, &mut seen_names);
+        normalized.push(BlocklistCategoryConfig {
+            name,
+            sites: category.sites.clone(),
+            allowlist_sites: category.allowlist_sites.clone(),
+        });
+    }
+
+    if normalized.is_empty() {
+        return vec![BlocklistCategoryConfig {
+            name: default_blocklist_category_name(),
+            sites: legacy_sites.to_vec(),
+            allowlist_sites: legacy_allowlist_sites.to_vec(),
+        }];
+    }
+
+    normalized
+}
+
+fn normalize_selected_blocklist_category(
+    selected_name: &str,
+    categories: &[BlocklistCategoryConfig],
+) -> String {
+    let selected_name = selected_name.trim();
+    if selected_name.is_empty() {
+        return categories
+            .first()
+            .map(|category| category.name.clone())
+            .unwrap_or_else(default_blocklist_category_name);
+    }
+
+    if let Some(category) = categories
+        .iter()
+        .find(|category| category.name.eq_ignore_ascii_case(selected_name))
+    {
+        category.name.clone()
+    } else {
+        categories
+            .first()
+            .map(|category| category.name.clone())
+            .unwrap_or_else(default_blocklist_category_name)
+    }
+}
+
+fn flatten_blocklist_categories(
+    categories: &[BlocklistCategoryConfig],
+) -> (Vec<String>, Vec<String>) {
+    let mut sites = Vec::new();
+    let mut allowlist_sites = Vec::new();
+    let mut seen_sites = HashSet::new();
+    let mut seen_allowlist_sites = HashSet::new();
+
+    for category in categories {
+        for site in &category.sites {
+            let key = site.to_ascii_lowercase();
+            if seen_sites.insert(key) {
+                sites.push(site.clone());
+            }
+        }
+        for site in &category.allowlist_sites {
+            let key = site.to_ascii_lowercase();
+            if seen_allowlist_sites.insert(key) {
+                allowlist_sites.push(site.clone());
+            }
+        }
+    }
+
+    (sites, allowlist_sites)
 }
 
 #[cfg(test)]

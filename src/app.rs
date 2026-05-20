@@ -9,14 +9,15 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crate::blocker::{
     BlockingBackendKind, BlockingBackendPolicy, BlockingIntent, BlockingPreview,
     BlockingPreviewAction, BulkAddResult, CommandBlockingBackend, EditSiteResult,
-    HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
+    HostsFileDiagnostics, InvalidSiteInput, SiteBlocker, domain_rule_matches_host,
+    normalize_domain_rule,
 };
 use crate::config::{
     AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
-    BlockingBackendPolicyConfig, BlocklistProfileConfig, BreakTemplateConfig,
-    CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig, FeatureFlagsConfig,
-    GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig,
-    ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
+    BlockingBackendPolicyConfig, BlocklistCategoryConfig, BlocklistProfileConfig,
+    BreakTemplateConfig, CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig,
+    FeatureFlagsConfig, GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig,
+    OneTimeFocusWindowConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
     RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
     SessionTemplateConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
     WakatimeRuntimeConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
@@ -173,6 +174,7 @@ const PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX: usize = 51;
 const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
+const DEFAULT_BLOCKLIST_CATEGORY_NAME: &str = "General";
 const UNLINKED_BREAK_TEMPLATE_NAME: &str = "Custom";
 #[cfg(not(test))]
 const STATS_FILE_NAME: &str = "stats.toml";
@@ -250,6 +252,13 @@ fn blocklist_profile_index(profiles: &[BlocklistProfileConfig], selected_name: &
     profiles
         .iter()
         .position(|profile| profile.name.eq_ignore_ascii_case(selected_name))
+        .unwrap_or(0)
+}
+
+fn blocklist_category_index(categories: &[BlocklistCategoryConfig], selected_name: &str) -> usize {
+    categories
+        .iter()
+        .position(|category| category.name.eq_ignore_ascii_case(selected_name))
         .unwrap_or(0)
 }
 
@@ -434,6 +443,8 @@ impl SiteListMode {
 pub enum BlocklistProfileInputMode {
     Create,
     Rename,
+    CreateCategory,
+    RenameCategory,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1371,6 +1382,42 @@ impl App {
         self.blocklist_profiles.len()
     }
 
+    pub fn active_blocklist_category_name(&self) -> &str {
+        let Some(profile) = self.blocklist_profiles.get(self.active_blocklist_profile) else {
+            return DEFAULT_BLOCKLIST_CATEGORY_NAME;
+        };
+        if profile.categories.is_empty() {
+            if profile.selected_category.trim().is_empty() {
+                return DEFAULT_BLOCKLIST_CATEGORY_NAME;
+            }
+            return profile.selected_category.as_str();
+        }
+        let index = blocklist_category_index(&profile.categories, &profile.selected_category)
+            .min(profile.categories.len().saturating_sub(1));
+        profile
+            .categories
+            .get(index)
+            .map(|category| category.name.as_str())
+            .unwrap_or(DEFAULT_BLOCKLIST_CATEGORY_NAME)
+    }
+
+    pub fn active_blocklist_category_position(&self) -> usize {
+        let Some(profile) = self.blocklist_profiles.get(self.active_blocklist_profile) else {
+            return 1;
+        };
+        if profile.categories.is_empty() {
+            return 1;
+        }
+        blocklist_category_index(&profile.categories, &profile.selected_category).saturating_add(1)
+    }
+
+    pub fn blocklist_category_count(&self) -> usize {
+        self.blocklist_profiles
+            .get(self.active_blocklist_profile)
+            .map(|profile| profile.categories.len().max(1))
+            .unwrap_or(1)
+    }
+
     pub fn active_break_template_name(&self) -> &str {
         self.active_break_template
             .and_then(|index| self.break_templates.get(index))
@@ -1781,16 +1828,56 @@ fn display_input_value(input: &str) -> String {
 }
 
 fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    let allowlist: HashSet<String> = profile
-        .allowlist_sites
+    let allowlist_rules: Vec<String> = all_allowlist_rules_for_profile(profile)
         .iter()
-        .map(|site| site.to_ascii_lowercase())
+        .filter_map(|rule| normalize_domain_rule(rule).ok())
         .collect();
-    profile
-        .sites
-        .iter()
-        .filter(|site| !allowlist.contains(&site.to_ascii_lowercase()))
-        .cloned()
+    let mut seen = HashSet::new();
+    all_blocklist_rules_for_profile(profile)
+        .into_iter()
+        .filter_map(|site| normalize_domain_rule(&site).ok())
+        .filter(|site| !site.starts_with("*."))
+        .filter(|site| {
+            !allowlist_rules
+                .iter()
+                .any(|allow_rule| domain_rule_matches_host(allow_rule, site))
+        })
+        .filter(|site| seen.insert(site.to_ascii_lowercase()))
+        .collect()
+}
+
+fn all_blocklist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
+    if profile.categories.is_empty() {
+        return dedup_case_insensitive(profile.sites.iter().cloned());
+    }
+    dedup_case_insensitive(
+        profile
+            .categories
+            .iter()
+            .flat_map(|category| category.sites.iter().cloned()),
+    )
+}
+
+fn all_allowlist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
+    if profile.categories.is_empty() {
+        return dedup_case_insensitive(profile.allowlist_sites.iter().cloned());
+    }
+    dedup_case_insensitive(
+        profile
+            .categories
+            .iter()
+            .flat_map(|category| category.allowlist_sites.iter().cloned()),
+    )
+}
+
+fn dedup_case_insensitive<I>(values: I) -> Vec<String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut seen = HashSet::new();
+    values
+        .into_iter()
+        .filter(|value| seen.insert(value.to_ascii_lowercase()))
         .collect()
 }
 

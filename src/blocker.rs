@@ -97,6 +97,110 @@ impl SiteValidationError {
     }
 }
 
+pub fn normalize_domain_rule(input: &str) -> Result<String, SiteValidationError> {
+    normalize_domain_like_input(input, true)
+}
+
+pub fn normalize_domain_host(input: &str) -> Result<String, SiteValidationError> {
+    normalize_domain_like_input(input, false)
+}
+
+pub fn domain_rule_matches_host(rule: &str, host: &str) -> bool {
+    let Ok(rule) = normalize_domain_rule(rule) else {
+        return false;
+    };
+    let Ok(host) = normalize_domain_host(host) else {
+        return false;
+    };
+    if let Some(suffix) = rule.strip_prefix("*.") {
+        return host.ends_with(&format!(".{suffix}"));
+    }
+    host == rule
+}
+
+fn normalize_domain_like_input(
+    input: &str,
+    allow_wildcard_prefix: bool,
+) -> Result<String, SiteValidationError> {
+    let mut hostname = input.trim().to_lowercase();
+
+    if hostname.is_empty() {
+        return Err(SiteValidationError::EmptyHostname);
+    }
+
+    let mut wildcard_prefix = false;
+    if let Some(stripped) = hostname.strip_prefix("*.") {
+        if !allow_wildcard_prefix {
+            return Err(SiteValidationError::InvalidCharacter);
+        }
+        wildcard_prefix = true;
+        hostname = stripped.to_string();
+    }
+
+    // Strip URI scheme (e.g. "https://example.com" → "example.com").
+    if let Some(sep) = hostname.find("://") {
+        hostname = hostname[sep + 3..].to_string();
+    }
+
+    // Remove path, query, or fragment after the hostname.
+    if let Some(pos) = hostname.find(['/', '?', '#']) {
+        hostname.truncate(pos);
+    }
+
+    if let Some(at_pos) = hostname.rfind('@') {
+        hostname = hostname[at_pos + 1..].to_string();
+    }
+
+    // Strip a port suffix from host:port forms when the suffix is numeric.
+    if let Some(colon_pos) = hostname.rfind(':') {
+        let port = &hostname[colon_pos + 1..];
+        if hostname[..colon_pos].contains(':') || !port.chars().all(|c| c.is_ascii_digit()) {
+            return Err(SiteValidationError::InvalidLabel);
+        }
+        hostname.truncate(colon_pos);
+    }
+
+    if hostname.is_empty() {
+        return Err(SiteValidationError::MissingHostname);
+    }
+
+    // Reject anything with internal whitespace (would produce multi-hostname lines).
+    if hostname.chars().any(char::is_whitespace) {
+        return Err(SiteValidationError::ContainsWhitespace);
+    }
+
+    // Allow only ASCII letters, digits, dots, and hyphens.
+    if !hostname
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
+    {
+        return Err(SiteValidationError::InvalidCharacter);
+    }
+
+    if hostname.starts_with('.')
+        || hostname.ends_with('.')
+        || hostname.contains("..")
+        || hostname.len() > 253
+    {
+        return Err(SiteValidationError::InvalidLabel);
+    }
+
+    for label in hostname.split('.') {
+        if label.is_empty() || label.len() > 63 || label.starts_with('-') || label.ends_with('-') {
+            return Err(SiteValidationError::InvalidLabel);
+        }
+    }
+
+    if wildcard_prefix {
+        if !hostname.contains('.') {
+            return Err(SiteValidationError::InvalidLabel);
+        }
+        Ok(format!("*.{hostname}"))
+    } else {
+        Ok(hostname)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidSiteInput {
     pub input: String,
@@ -381,71 +485,7 @@ impl SiteBlocker {
 
     /// Validate and normalise a user-supplied hostname.
     fn sanitize_hostname_with_reason(input: &str) -> Result<String, SiteValidationError> {
-        let mut hostname = input.trim().to_lowercase();
-
-        if hostname.is_empty() {
-            return Err(SiteValidationError::EmptyHostname);
-        }
-
-        // Strip URI scheme (e.g. "https://example.com" → "example.com").
-        if let Some(sep) = hostname.find("://") {
-            hostname = hostname[sep + 3..].to_string();
-        }
-
-        // Remove path, query, or fragment after the hostname.
-        if let Some(pos) = hostname.find(['/', '?', '#']) {
-            hostname.truncate(pos);
-        }
-
-        if let Some(at_pos) = hostname.rfind('@') {
-            hostname = hostname[at_pos + 1..].to_string();
-        }
-
-        // Strip a port suffix from host:port forms when the suffix is numeric.
-        if let Some(colon_pos) = hostname.rfind(':') {
-            let port = &hostname[colon_pos + 1..];
-            if hostname[..colon_pos].contains(':') || !port.chars().all(|c| c.is_ascii_digit()) {
-                return Err(SiteValidationError::InvalidLabel);
-            }
-            hostname.truncate(colon_pos);
-        }
-
-        if hostname.is_empty() {
-            return Err(SiteValidationError::MissingHostname);
-        }
-
-        // Reject anything with internal whitespace (would produce multi-hostname lines).
-        if hostname.chars().any(char::is_whitespace) {
-            return Err(SiteValidationError::ContainsWhitespace);
-        }
-
-        // Allow only ASCII letters, digits, dots, and hyphens.
-        if !hostname
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
-        {
-            return Err(SiteValidationError::InvalidCharacter);
-        }
-
-        if hostname.starts_with('.')
-            || hostname.ends_with('.')
-            || hostname.contains("..")
-            || hostname.len() > 253
-        {
-            return Err(SiteValidationError::InvalidLabel);
-        }
-
-        for label in hostname.split('.') {
-            if label.is_empty()
-                || label.len() > 63
-                || label.starts_with('-')
-                || label.ends_with('-')
-            {
-                return Err(SiteValidationError::InvalidLabel);
-            }
-        }
-
-        Ok(hostname)
+        normalize_domain_rule(input)
     }
 
     pub fn remove_site(&mut self, index: usize) -> Option<String> {
@@ -1308,6 +1348,20 @@ mod tests {
     }
 
     #[test]
+    fn add_site_accepts_wildcard_rules() {
+        let mut b = SiteBlocker::new();
+        b.add_site("*.Docs.Example.com".to_string());
+        assert_eq!(b.sites, vec!["*.docs.example.com"]);
+    }
+
+    #[test]
+    fn add_site_rejects_mid_label_wildcard() {
+        let mut b = SiteBlocker::new();
+        b.add_site("foo*bar.example.com".to_string());
+        assert!(b.sites.is_empty());
+    }
+
+    #[test]
     fn bulk_add_accepts_comma_and_newline_separators() {
         let mut b = SiteBlocker::new();
         let result = b.add_sites_from_input("example.com, github.com\nhttps://rust-lang.org/docs");
@@ -1383,6 +1437,28 @@ mod tests {
                 reason: SiteValidationError::MultipleHostnames,
             })
         );
+    }
+
+    #[test]
+    fn wildcard_rule_matches_subdomains_only() {
+        assert!(domain_rule_matches_host("*.example.com", "www.example.com"));
+        assert!(domain_rule_matches_host("*.example.com", "a.b.example.com"));
+        assert!(!domain_rule_matches_host("*.example.com", "example.com"));
+    }
+
+    #[test]
+    fn wildcard_rule_respects_label_boundaries() {
+        assert!(!domain_rule_matches_host("*.example.com", "badexample.com"));
+        assert!(!domain_rule_matches_host(
+            "*.example.com",
+            "example.com.bad"
+        ));
+    }
+
+    #[test]
+    fn exact_rule_matches_only_exact_hostname() {
+        assert!(domain_rule_matches_host("example.com", "example.com"));
+        assert!(!domain_rule_matches_host("example.com", "www.example.com"));
     }
 
     #[test]
