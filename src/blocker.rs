@@ -717,8 +717,18 @@ impl SiteBlocker {
     }
 
     fn apply_hosts_block_to_path(&self, hosts_path: &Path) -> io::Result<()> {
+        let hosts_sites = self.hosts_renderable_sites();
         let changed = atomic_write_hosts_to_path(hosts_path, |snapshot_content| {
-            Some(self.build_blocked_hosts_content(snapshot_content))
+            if hosts_sites.is_empty() {
+                let cleaned = Self::strip_block_section(snapshot_content);
+                if cleaned == snapshot_content {
+                    None
+                } else {
+                    Some(cleaned)
+                }
+            } else {
+                Some(self.build_blocked_hosts_content(snapshot_content, &hosts_sites))
+            }
         })?;
         if changed {
             flush_dns_cache();
@@ -806,8 +816,11 @@ impl SiteBlocker {
     ) -> BlockingPreview {
         let nl = line_ending_for(original);
         let current_section = Self::extract_block_sections(original);
+        let hosts_sites = self.hosts_renderable_sites();
         let next_section = match intent {
-            BlockingIntent::Block if !self.sites.is_empty() => Some(self.render_block_section(nl)),
+            BlockingIntent::Block if !hosts_sites.is_empty() => {
+                Some(self.render_block_section(nl, &hosts_sites))
+            }
             BlockingIntent::Block | BlockingIntent::Unblock => None,
         };
         let next_content = match next_section.as_deref() {
@@ -823,7 +836,7 @@ impl SiteBlocker {
             BlockingPreviewAction::Unblock
         };
         let effective_blocked_sites = if next_section.is_some() {
-            self.sites.clone()
+            hosts_sites
         } else {
             Vec::new()
         };
@@ -842,9 +855,9 @@ impl SiteBlocker {
         }
     }
 
-    fn build_blocked_hosts_content(&self, original: &str) -> String {
+    fn build_blocked_hosts_content(&self, original: &str, hosts_sites: &[String]) -> String {
         let nl = line_ending_for(original);
-        let section = self.render_block_section(nl);
+        let section = self.render_block_section(nl, hosts_sites);
         Self::build_hosts_content_with_section(original, &section, nl)
     }
 
@@ -860,16 +873,24 @@ impl SiteBlocker {
         content
     }
 
-    fn render_block_section(&self, nl: &str) -> String {
+    fn render_block_section(&self, nl: &str, hosts_sites: &[String]) -> String {
         let mut section = String::new();
         section.push_str(BLOCK_MARKER_START);
         section.push_str(nl);
-        for site in &self.sites {
+        for site in hosts_sites {
             append_site_entries(&mut section, site, nl);
         }
         section.push_str(BLOCK_MARKER_END);
         section.push_str(nl);
         section
+    }
+
+    fn hosts_renderable_sites(&self) -> Vec<String> {
+        self.sites
+            .iter()
+            .filter(|site| !site.starts_with("*."))
+            .cloned()
+            .collect()
     }
 
     fn extract_block_sections(content: &str) -> Option<String> {
@@ -1576,6 +1597,24 @@ mod tests {
     }
 
     #[test]
+    fn preview_block_skips_wildcard_entries_for_hosts_backend() {
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("*.example.com".to_string());
+        blocker.add_site("api.example.com".to_string());
+        let original = "127.0.0.1 localhost\n";
+
+        let preview = blocker.preview_from_hosts_content("hosts", original, BlockingIntent::Block);
+        let section = preview
+            .next_section
+            .as_deref()
+            .expect("block preview should include next section");
+
+        assert_eq!(preview.effective_blocked_sites, vec!["api.example.com"]);
+        assert!(!section.contains("*.example.com"));
+        assert!(section.contains("127.0.0.1 api.example.com"));
+    }
+
+    #[test]
     fn preview_unblock_reports_current_section_and_change() {
         let blocker = SiteBlocker::new();
         let original = "127.0.0.1 localhost\n# focustime-block-start\n127.0.0.1 example.com\n# focustime-block-end\n";
@@ -1624,7 +1663,8 @@ mod tests {
     fn preview_block_no_change_when_hosts_already_match() {
         let mut blocker = SiteBlocker::new();
         blocker.add_site("example.com".to_string());
-        let original = blocker.build_blocked_hosts_content("127.0.0.1 localhost\n");
+        let original = blocker
+            .build_blocked_hosts_content("127.0.0.1 localhost\n", &["example.com".to_string()]);
 
         let preview = blocker.preview_from_hosts_content("hosts", &original, BlockingIntent::Block);
 
