@@ -127,3 +127,5 @@ sequenceDiagram
   readability and keeps facades focused.
 - Keep platform-specific behavior explicit with `#[cfg(...)]` in the module that
   owns it.
+- For release docs updates, keep architecture-facing terminology aligned with the
+  module names and responsibility language used in `README.md` and release notes.
