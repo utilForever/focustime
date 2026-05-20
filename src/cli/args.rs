@@ -55,7 +55,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 33] = [
+    let parsers: [(&str, ValueArgParser); 34] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -103,6 +103,10 @@ fn classify_value_arg(
         ),
         ("--blocklist-site-add", classify_blocklist_site_add_arg),
         ("--allowlist-site-add", classify_allowlist_site_add_arg),
+        (
+            "--allowlist-site-add-temporary",
+            classify_allowlist_site_add_temporary_arg,
+        ),
         ("--blocklist-site-edit", classify_blocklist_site_edit_arg),
         ("--allowlist-site-edit", classify_allowlist_site_edit_arg),
         (
@@ -428,6 +432,24 @@ fn classify_allowlist_site_add_arg(
     ))
 }
 
+fn classify_allowlist_site_add_temporary_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--allowlist-site-add-temporary` requires HOST=30m style input.",
+        )?;
+        return Ok((ParsedToken::AllowlistSiteAddTemporary(value.to_string()), 2));
+    }
+    Err(invalid_usage(
+        "`--allowlist-site-add-temporary` requires HOST=30m style input. Use `--allowlist-site-add-temporary=HOST_DURATIONS` or `--allowlist-site-add-temporary HOST_DURATIONS`.",
+    ))
+}
+
 fn classify_blocklist_site_edit_arg(
     args: &[String],
     index: usize,
@@ -630,7 +652,7 @@ fn classify_automation_triggers_set_arg(
 }
 
 pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 33] = [
+    let parsers: [KeyValueParser; 34] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -660,6 +682,7 @@ pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, S
         parse_session_template_rename_key_value_arg,
         parse_blocklist_site_add_key_value_arg,
         parse_allowlist_site_add_key_value_arg,
+        parse_allowlist_site_add_temporary_key_value_arg,
         parse_blocklist_site_edit_key_value_arg,
         parse_allowlist_site_edit_key_value_arg,
         parse_blocklist_site_delete_key_value_arg,
@@ -964,6 +987,21 @@ fn parse_allowlist_site_add_key_value_arg(arg: &str) -> Result<Option<ParsedToke
         let value =
             require_nonempty_key_value(value, "`--allowlist-site-add=` requires hostnames input.")?;
         return Ok(Some(ParsedToken::AllowlistSiteAdd(value.to_string())));
+    }
+    Ok(None)
+}
+
+fn parse_allowlist_site_add_temporary_key_value_arg(
+    arg: &str,
+) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--allowlist-site-add-temporary=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--allowlist-site-add-temporary=` requires HOST=30m style input.",
+        )?;
+        return Ok(Some(ParsedToken::AllowlistSiteAddTemporary(
+            value.to_string(),
+        )));
     }
     Ok(None)
 }

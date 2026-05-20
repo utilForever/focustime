@@ -4869,6 +4869,7 @@ fn app_restores_cli_workflow_state_from_snapshot() {
         break_glass_expires_at_epoch_secs: None,
         break_glass_confirmation_pending: true,
         strict_reset_confirmation_pending: false,
+        temporary_allowlist_entries: Vec::new(),
     }));
 
     let app = App::default();
@@ -4912,6 +4913,7 @@ fn app_restores_schedule_arming_continuity_from_workflow_snapshot() {
         break_glass_expires_at_epoch_secs: None,
         break_glass_confirmation_pending: false,
         strict_reset_confirmation_pending: false,
+        temporary_allowlist_entries: Vec::new(),
     }));
 
     let app = App::from_config(config);
@@ -4943,6 +4945,7 @@ fn app_restores_strict_reset_confirmation_from_workflow_snapshot() {
         break_glass_expires_at_epoch_secs: None,
         break_glass_confirmation_pending: false,
         strict_reset_confirmation_pending: true,
+        temporary_allowlist_entries: Vec::new(),
     }));
 
     let app = App::from_config(AppConfig {
@@ -4965,6 +4968,7 @@ fn app_reports_partial_runtime_recovery_notice_for_ignored_workflow_artifacts() 
         break_glass_expires_at_epoch_secs: None,
         break_glass_confirmation_pending: true,
         strict_reset_confirmation_pending: true,
+        temporary_allowlist_entries: Vec::new(),
     }));
 
     let app = App::default();

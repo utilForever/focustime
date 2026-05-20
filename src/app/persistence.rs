@@ -4,7 +4,12 @@ use crate::app::{
     blocking_backend_config_for_persistence, format_duration_label, occurrence_key, profile_index,
     profile_spec_for, task_label_index,
 };
-use crate::session_recovery::{self, InProgressSessionSnapshot, WorkflowStateSnapshot};
+use crate::session_recovery::{
+    self, InProgressSessionSnapshot, WorkflowStateSnapshot, WorkflowTemporaryAllowlistEntrySnapshot,
+};
+use crate::temporary_allowlist::{
+    TemporaryAllowlistEntry, prune_expired_temporary_allowlist_entries,
+};
 use chrono::{LocalResult, TimeZone};
 use std::time::Instant;
 
@@ -69,6 +74,7 @@ impl App {
             break_glass_expires_at_epoch_secs,
             break_glass_confirmation_pending,
             strict_reset_confirmation_pending,
+            temporary_allowlist_entries,
         } = snapshot;
 
         self.reset_cli_workflow_runtime_state_for_restore();
@@ -93,6 +99,11 @@ impl App {
             break_glass_confirmation_pending,
             &mut ignored_runtime_artifacts,
         );
+        self.restore_temporary_allowlist_runtime_state(
+            temporary_allowlist_entries,
+            &mut ignored_runtime_artifacts,
+        );
+        self.recompute_blocker_sites_from_active_profile();
         self.restore_strict_reset_runtime_state(
             strict_reset_confirmation_pending,
             &mut ignored_runtime_artifacts,
@@ -124,6 +135,7 @@ impl App {
         self.last_schedule_occurrence_key = None;
         self.pending_timer_action = None;
         self.break_glass_expires_at = None;
+        self.temporary_allowlist_entries.clear();
     }
 
     fn restore_schedule_delay_runtime_state(
@@ -221,6 +233,35 @@ impl App {
             self.pending_timer_action = Some(PendingTimerAction::Reset);
         } else {
             push_ignored_artifact(ignored_runtime_artifacts, "strict reset confirmation");
+        }
+    }
+
+    fn restore_temporary_allowlist_runtime_state(
+        &mut self,
+        temporary_allowlist_entries: Vec<WorkflowTemporaryAllowlistEntrySnapshot>,
+        ignored_runtime_artifacts: &mut Vec<&'static str>,
+    ) {
+        let mut restored = Vec::new();
+        let mut ignored_count = 0usize;
+        for entry in temporary_allowlist_entries {
+            let profile = entry.profile.trim().to_string();
+            let site = entry.site.trim().to_string();
+            if profile.is_empty()
+                || site.is_empty()
+                || entry.expires_at_epoch_secs <= self.current_frame_now.timestamp()
+            {
+                ignored_count += 1;
+                continue;
+            }
+            restored.push(TemporaryAllowlistEntry {
+                profile,
+                site,
+                expires_at_epoch_secs: entry.expires_at_epoch_secs,
+            });
+        }
+        self.temporary_allowlist_entries = restored;
+        if ignored_count > 0 {
+            push_ignored_artifact(ignored_runtime_artifacts, "temporary allowlist entries");
         }
     }
 
@@ -358,6 +399,10 @@ impl App {
 
     pub(super) fn sync_cli_workflow_state(&mut self) -> Result<(), String> {
         let now = Local::now();
+        prune_expired_temporary_allowlist_entries(
+            &mut self.temporary_allowlist_entries,
+            now.timestamp(),
+        );
         let focus_active = self.focus_session_active_for_current_state();
         let active_occurrence_key = self
             .active_schedule_occurrence_at(now)
@@ -382,6 +427,20 @@ impl App {
             self.break_glass_confirmation_pending() && focus_active;
         let strict_reset_confirmation_pending =
             self.strict_reset_confirmation_pending() && self.strict_mode_enforced_for_focus();
+        let temporary_allowlist_entries = self
+            .temporary_allowlist_entries
+            .iter()
+            .filter(|entry| {
+                !entry.profile.trim().is_empty()
+                    && !entry.site.trim().is_empty()
+                    && entry.expires_at_epoch_secs > now.timestamp()
+            })
+            .map(|entry| WorkflowTemporaryAllowlistEntrySnapshot {
+                profile: entry.profile.clone(),
+                site: entry.site.clone(),
+                expires_at_epoch_secs: entry.expires_at_epoch_secs,
+            })
+            .collect::<Vec<_>>();
         let schedule_armed_occurrence_key = if !focus_active {
             self.schedule_armed_occurrence_key
                 .clone()
@@ -411,6 +470,7 @@ impl App {
             break_glass_expires_at_epoch_secs,
             break_glass_confirmation_pending,
             strict_reset_confirmation_pending,
+            temporary_allowlist_entries,
         };
 
         let should_persist = snapshot.schedule_delayed_occurrence_key.is_some()
@@ -418,7 +478,8 @@ impl App {
             || snapshot.last_schedule_occurrence_key.is_some()
             || snapshot.break_glass_expires_at_epoch_secs.is_some()
             || snapshot.break_glass_confirmation_pending
-            || snapshot.strict_reset_confirmation_pending;
+            || snapshot.strict_reset_confirmation_pending
+            || !snapshot.temporary_allowlist_entries.is_empty();
         if should_persist {
             session_recovery::save_workflow_state(&snapshot)
                 .map_err(|error| format!("workflow state save failed: {error}"))

@@ -10,8 +10,9 @@ use crate::cli::{
     SetupCheckLevel, SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput,
     SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary,
     StatsRetentionStatusOutput, StatusOutput, StrictCommandOutput, TaskGoalCommandOutput,
-    TaskGoalOutput, ThemeCommandOutput, TimerStateOutput, WeekdayRulesCommandOutput, Write,
-    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
+    TaskGoalOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, TimerStateOutput,
+    WeekdayRulesCommandOutput, Write, format_schedule_conflict,
+    inspect_schedule_conflicts_from_config, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -191,6 +192,32 @@ pub(super) fn print_site_add_command_output(payload: &SiteAddCommandOutput) {
     );
 }
 
+pub(super) fn print_temporary_site_add_command_output(payload: &TemporarySiteAddCommandOutput) {
+    if payload.updated {
+        println!(
+            "Temporary allowlist updated in profile `{}`: added {}, refreshed {}.",
+            payload.profile, payload.added, payload.refreshed
+        );
+    } else {
+        println!(
+            "No temporary allowlist changes were applied in profile `{}`.",
+            payload.profile
+        );
+    }
+    if payload.active.is_empty() {
+        println!("Active temporary exceptions: none");
+        return;
+    }
+    println!("Active temporary exceptions ({}):", payload.active.len());
+    for entry in &payload.active {
+        println!(
+            "  - {} (expires in {})",
+            entry.site,
+            format_duration(entry.remaining_secs)
+        );
+    }
+}
+
 pub(super) fn print_site_edit_command_output(payload: &SiteEditCommandOutput) {
     if payload.updated {
         println!(
@@ -287,6 +314,17 @@ pub(super) fn print_status_output(payload: &StatusOutput) {
         "Blocklist profile: {} ({} sites)",
         payload.selected_blocklist_profile, payload.blocked_sites_count
     );
+    println!(
+        "Temporary allowlist active: {}",
+        payload.temporary_allowlist_active_count
+    );
+    for entry in &payload.temporary_allowlist_active {
+        println!(
+            "  - {} (expires in {})",
+            entry.site,
+            format_duration(entry.remaining_secs)
+        );
+    }
     println!(
         "Strict mode: {}",
         if payload.strict_mode { "on" } else { "off" }

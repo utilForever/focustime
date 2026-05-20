@@ -7,6 +7,7 @@ mod schedule;
 mod session_recovery;
 mod stats;
 mod task_labels;
+mod temporary_allowlist;
 mod timer;
 mod ui;
 mod wakatime;

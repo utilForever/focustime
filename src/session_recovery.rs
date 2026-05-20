@@ -110,6 +110,18 @@ pub struct WorkflowStateSnapshot {
     pub break_glass_confirmation_pending: bool,
     #[serde(default)]
     pub strict_reset_confirmation_pending: bool,
+    #[serde(default)]
+    pub temporary_allowlist_entries: Vec<WorkflowTemporaryAllowlistEntrySnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct WorkflowTemporaryAllowlistEntrySnapshot {
+    #[serde(default)]
+    pub profile: String,
+    #[serde(default)]
+    pub site: String,
+    #[serde(default)]
+    pub expires_at_epoch_secs: i64,
 }
 
 impl InProgressSessionSnapshot {
@@ -705,6 +717,7 @@ selected_profile = "classic"
             break_glass_expires_at_epoch_secs: None,
             break_glass_confirmation_pending: true,
             strict_reset_confirmation_pending: false,
+            temporary_allowlist_entries: Vec::new(),
         })
         .expect("save should succeed");
 

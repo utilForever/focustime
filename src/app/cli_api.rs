@@ -90,6 +90,13 @@ impl App {
         self.sync_cli_workflow_state()
     }
 
+    pub fn add_temporary_allowlist_for_cli(
+        &mut self,
+        input: &str,
+    ) -> Result<(usize, usize), String> {
+        self.add_temporary_allowlist_entries_for_active_profile_from_input(input)
+    }
+
     pub fn blocking_preview_for_cli(&self) -> Result<BlockingPreview, String> {
         self.compute_blocking_preview()
             .map_err(|error| format!("Failed to generate blocking preview: {error}"))
@@ -129,6 +136,10 @@ impl App {
 
     pub fn selected_profile_id(&self) -> ProfileId {
         self.selected_profile
+    }
+
+    pub fn selected_blocklist_profile_name_for_cli(&self) -> String {
+        self.active_blocklist_profile_name().to_string()
     }
 
     pub fn selected_task_label_for_cli(&self) -> Option<String> {

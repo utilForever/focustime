@@ -367,7 +367,7 @@ fn timer_status_text_shows_active_break_glass_state() {
         crossterm::event::KeyModifiers::NONE,
     ));
 
-    let (_, _, break_glass_status) = timer_status_text(&app);
+    let (_, _, break_glass_status, _) = timer_status_text(&app);
     assert!(break_glass_status.contains("Break-glass: active"));
 }
 

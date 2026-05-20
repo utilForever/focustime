@@ -2,6 +2,7 @@ use crate::cli::*;
 use crate::config::{AutomationTriggerActionConfig, AutomationTriggerConditionConfig};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
+    WorkflowStateSnapshot, WorkflowTemporaryAllowlistEntrySnapshot,
 };
 use chrono::{Datelike, Duration};
 #[cfg(unix)]
@@ -1024,6 +1025,20 @@ fn parse_blocklist_site_add_with_equals() {
                 command: BlocklistSiteCommandKind::Add {
                     input: "github.com,news.ycombinator.com".to_string()
                 }
+            },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_allowlist_site_add_temporary_with_equals() {
+    let parsed = parse(&["--allowlist-site-add-temporary=reddit.com=30m,docs.rs=45s"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::AllowlistSiteAddTemporary {
+                input: "reddit.com=30m,docs.rs=45s".to_string()
             },
             output: OutputMode::Text
         })
@@ -2074,6 +2089,43 @@ fn build_status_output_excludes_allowlist_from_blocked_sites_count() {
     let output = build_status_output(&config, &stats);
 
     assert_eq!(output.blocked_sites_count, 1);
+}
+
+#[test]
+fn build_status_output_includes_active_temporary_allowlist_entries() {
+    let now_epoch_secs = chrono::Local::now().timestamp();
+    session_recovery::set_test_load_workflow_state(Some(WorkflowStateSnapshot {
+        temporary_allowlist_entries: vec![
+            WorkflowTemporaryAllowlistEntrySnapshot {
+                profile: "Work".to_string(),
+                site: "reddit.com".to_string(),
+                expires_at_epoch_secs: now_epoch_secs + 120,
+            },
+            WorkflowTemporaryAllowlistEntrySnapshot {
+                profile: "Work".to_string(),
+                site: "expired.com".to_string(),
+                expires_at_epoch_secs: now_epoch_secs - 1,
+            },
+            WorkflowTemporaryAllowlistEntrySnapshot {
+                profile: "Personal".to_string(),
+                site: "youtube.com".to_string(),
+                expires_at_epoch_secs: now_epoch_secs + 120,
+            },
+        ],
+        ..WorkflowStateSnapshot::default()
+    }));
+
+    let config = AppConfig {
+        selected_blocklist_profile: "Work".to_string(),
+        ..AppConfig::default()
+    };
+    let output = build_status_output(&config, &FocusStats::default());
+    session_recovery::set_test_load_workflow_state(None);
+
+    assert_eq!(output.temporary_allowlist_active_count, 1);
+    assert_eq!(output.temporary_allowlist_active[0].site, "reddit.com");
+    assert!(output.temporary_allowlist_active[0].remaining_secs <= 120);
+    assert!(output.temporary_allowlist_active[0].remaining_secs > 0);
 }
 
 #[test]

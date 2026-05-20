@@ -3,9 +3,9 @@ use crate::cli::{
     DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS,
     DailyGoalSnapshot, Datelike, FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput,
     NaiveDate, ProfileId, ProfileSpec, ProfileView, SessionOutput, StatsRetentionStatusOutput,
-    StatusOutput, TaskGoalOutput, ThemePreset, ThemePresetView, TimerPhase, TimerStatus,
-    TodayOutput, carry_over_goal_target, current_day_key, effective_blocked_sites_for_profile,
-    session_recovery,
+    StatusOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput, ThemePreset, ThemePresetView,
+    TimerPhase, TimerStatus, TodayOutput, carry_over_goal_target, current_day_key,
+    effective_blocked_sites_for_profile, session_recovery,
 };
 use crate::timer::TimerState;
 
@@ -36,6 +36,8 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         .map(|profile| effective_blocked_sites_for_profile(profile).len())
         .unwrap_or_default();
     let selected_automation = config.profile_automation_for(config.selected_profile);
+    let temporary_allowlist_active = active_temporary_allowlist_status(config);
+    let temporary_allowlist_active_count = temporary_allowlist_active.len();
     let live = build_live_status_output(config, selected_task_label.clone());
     let session = build_session_output(&live);
     let latest_interruption = stats.latest_session_interruption();
@@ -69,6 +71,8 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         task_note,
         selected_blocklist_profile: config.selected_blocklist_profile.clone(),
         blocked_sites_count: active_sites_count,
+        temporary_allowlist_active_count,
+        temporary_allowlist_active,
         strict_mode: selected_automation.strict_mode,
         goal: GoalOutput {
             configured: goal_snapshot.has_any_target(),
@@ -120,6 +124,45 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         },
         live,
     }
+}
+
+fn active_temporary_allowlist_status(config: &AppConfig) -> Vec<TemporaryAllowlistStatusOutput> {
+    let now_epoch_secs = chrono::Local::now().timestamp();
+    let selected_profile = config.selected_blocklist_profile.trim();
+    if selected_profile.is_empty() {
+        return Vec::new();
+    }
+    let Ok(Some(workflow_state)) = session_recovery::load_workflow_state() else {
+        return Vec::new();
+    };
+
+    let mut active = workflow_state
+        .temporary_allowlist_entries
+        .into_iter()
+        .filter(|entry| entry.profile.eq_ignore_ascii_case(selected_profile))
+        .filter(|entry| entry.expires_at_epoch_secs > now_epoch_secs)
+        .filter_map(|entry| {
+            let site = entry.site.trim().to_string();
+            if site.is_empty() {
+                return None;
+            }
+            Some(TemporaryAllowlistStatusOutput {
+                site,
+                remaining_secs: (entry.expires_at_epoch_secs - now_epoch_secs) as u64,
+                expires_at_epoch_secs: entry.expires_at_epoch_secs,
+            })
+        })
+        .collect::<Vec<_>>();
+    active.sort_by(|left, right| {
+        left.remaining_secs
+            .cmp(&right.remaining_secs)
+            .then_with(|| {
+                left.site
+                    .to_ascii_lowercase()
+                    .cmp(&right.site.to_ascii_lowercase())
+            })
+    });
+    active
 }
 
 fn build_session_output(live: &LiveStatusOutput) -> SessionOutput {

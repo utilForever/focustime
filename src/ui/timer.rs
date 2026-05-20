@@ -123,7 +123,8 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let (status_text, strict_status_text, break_glass_status_text) = timer_status_text(app);
+    let (status_text, strict_status_text, break_glass_status_text, temporary_allowlist_status_text) =
+        timer_status_text(app);
     let profile_line = format!(
         "🗂  Profile: {} ({})",
         app.selected_profile_name(),
@@ -167,7 +168,9 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let goal_text = readable_goal_streak_text(&format_timer_goal_streak_line(app));
     let (waka_text, waka_color) = wakatime_status_line(app);
     let (schedule_next_text, schedule_status_text) = app.recurring_schedule_display_texts();
-    let strict_and_break_glass = format!("{strict_status_text} · {break_glass_status_text}");
+    let strict_and_break_glass = format!(
+        "{strict_status_text} · {break_glass_status_text} · {temporary_allowlist_status_text}"
+    );
 
     let mut lines = vec![
         Line::styled(task_text, task_style),
@@ -214,7 +217,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-pub(super) fn timer_status_text(app: &App) -> (String, String, String) {
+pub(super) fn timer_status_text(app: &App) -> (String, String, String, String) {
     let status_text = match app.timer.status {
         TimerStatus::Running => "📍 Status: ▶ Running".to_string(),
         TimerStatus::Paused => "📍 Status: ⏸ Paused".to_string(),
@@ -245,7 +248,22 @@ pub(super) fn timer_status_text(app: &App) -> (String, String, String) {
     } else {
         "🚨 Break-glass: off".to_string()
     };
-    (status_text, strict_text, break_glass_text)
+    let temporary_allowlist_text =
+        if let Some(next_expiry_secs) = app.next_temporary_allowlist_expiry_remaining_secs() {
+            format!(
+                "⏳ Temp allowlist: {} active (next {})",
+                app.active_temporary_allowlist_count(),
+                format_duration_label(next_expiry_secs)
+            )
+        } else {
+            "⏳ Temp allowlist: off".to_string()
+        };
+    (
+        status_text,
+        strict_text,
+        break_glass_text,
+        temporary_allowlist_text,
+    )
 }
 
 fn render_timer_phase_notice(frame: &mut Frame, app: &App, area: Rect) {
