@@ -965,3 +965,61 @@ where
         .filter(|value| seen.insert(value.to_ascii_lowercase()))
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::effective_blocked_sites_for_profile;
+    use crate::config::BlocklistCategoryConfig;
+
+    #[test]
+    fn effective_blocked_sites_keeps_wildcard_only_rules() {
+        let profile = crate::config::BlocklistProfileConfig {
+            sites: vec!["*.Example.com".to_string()],
+            ..crate::config::BlocklistProfileConfig::default()
+        };
+
+        assert_eq!(
+            effective_blocked_sites_for_profile(&profile),
+            vec!["*.example.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn effective_blocked_sites_keeps_wildcard_when_allowlist_is_exact_host() {
+        let profile = crate::config::BlocklistProfileConfig {
+            sites: vec!["*.example.com".to_string()],
+            allowlist_sites: vec!["ads.example.com".to_string()],
+            ..crate::config::BlocklistProfileConfig::default()
+        };
+
+        assert_eq!(
+            effective_blocked_sites_for_profile(&profile),
+            vec!["*.example.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn effective_blocked_sites_aggregates_categories_and_dedups_case_insensitively() {
+        let profile = crate::config::BlocklistProfileConfig {
+            sites: vec!["legacy-top-level.com".to_string()],
+            categories: vec![
+                BlocklistCategoryConfig {
+                    name: "Social".to_string(),
+                    sites: vec!["News.com".to_string(), "*.example.com".to_string()],
+                    allowlist_sites: vec!["news.com".to_string()],
+                },
+                BlocklistCategoryConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["*.EXAMPLE.com".to_string(), "forum.example.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+            ],
+            ..crate::config::BlocklistProfileConfig::default()
+        };
+
+        assert_eq!(
+            effective_blocked_sites_for_profile(&profile),
+            vec!["*.example.com".to_string(), "forum.example.com".to_string()]
+        );
+    }
+}
