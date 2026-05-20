@@ -128,15 +128,6 @@ fn normalize_domain_like_input(
         return Err(SiteValidationError::EmptyHostname);
     }
 
-    let mut wildcard_prefix = false;
-    if let Some(stripped) = hostname.strip_prefix("*.") {
-        if !allow_wildcard_prefix {
-            return Err(SiteValidationError::InvalidCharacter);
-        }
-        wildcard_prefix = true;
-        hostname = stripped.to_string();
-    }
-
     // Strip URI scheme (e.g. "https://example.com" → "example.com").
     if let Some(sep) = hostname.find("://") {
         hostname = hostname[sep + 3..].to_string();
@@ -149,6 +140,15 @@ fn normalize_domain_like_input(
 
     if let Some(at_pos) = hostname.rfind('@') {
         hostname = hostname[at_pos + 1..].to_string();
+    }
+
+    let mut wildcard_prefix = false;
+    if let Some(stripped) = hostname.strip_prefix("*.") {
+        if !allow_wildcard_prefix {
+            return Err(SiteValidationError::InvalidCharacter);
+        }
+        wildcard_prefix = true;
+        hostname = stripped.to_string();
     }
 
     // Strip a port suffix from host:port forms when the suffix is numeric.
@@ -1453,6 +1453,14 @@ mod tests {
             "*.example.com",
             "example.com.bad"
         ));
+    }
+
+    #[test]
+    fn normalize_domain_rule_supports_wildcards_after_url_prefix_stripping() {
+        assert_eq!(
+            normalize_domain_rule("https://*.example.com/path").unwrap(),
+            "*.example.com"
+        );
     }
 
     #[test]
