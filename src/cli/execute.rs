@@ -448,93 +448,117 @@ pub(super) fn apply_blocklist_category_command(
     ensure_blocklist_profiles(config);
     let profile_index = selected_blocklist_profile_index(config);
     ensure_blocklist_categories(&mut config.blocklist_profiles[profile_index]);
+    let profile = &mut config.blocklist_profiles[profile_index];
 
     let (action, updated) = match command {
-        BlocklistCategoryCommandKind::Select { category } => {
-            let mut updated = false;
-            if let Some(category) = category {
-                let profile = &mut config.blocklist_profiles[profile_index];
-                let index = profile
-                    .categories
-                    .iter()
-                    .position(|candidate| candidate.name.eq_ignore_ascii_case(category.trim()))
-                    .ok_or_else(|| format!("Unknown blocklist category `{category}`."))?;
-                let selected = profile.categories[index].name.clone();
-                if !profile.selected_category.eq_ignore_ascii_case(&selected) {
-                    profile.selected_category = selected;
-                    updated = true;
-                }
-            }
-            ("blocklist-category", updated)
-        }
-        BlocklistCategoryCommandKind::Create { name } => {
-            let profile = &mut config.blocklist_profiles[profile_index];
-            let name = name.trim().to_string();
-            if name.is_empty() {
-                return Err("Category name cannot be empty.".to_string());
-            }
-            if profile
-                .categories
-                .iter()
-                .any(|category| category.name.eq_ignore_ascii_case(&name))
-            {
-                return Err(format!("Category `{name}` already exists."));
-            }
-            profile
-                .categories
-                .push(crate::config::BlocklistCategoryConfig {
-                    name: name.clone(),
-                    sites: Vec::new(),
-                    allowlist_sites: Vec::new(),
-                });
-            profile.selected_category = name;
-            ("blocklist-category-create", true)
-        }
-        BlocklistCategoryCommandKind::Rename { name } => {
-            let profile = &mut config.blocklist_profiles[profile_index];
-            let index = selected_blocklist_category_index(profile);
-            let current = profile.categories[index].name.clone();
-            let name = name.trim().to_string();
-            if name.is_empty() {
-                return Err("Category name cannot be empty.".to_string());
-            }
-            if current.eq_ignore_ascii_case(&name) {
-                ("blocklist-category-rename", false)
-            } else {
-                let duplicate =
-                    profile
-                        .categories
-                        .iter()
-                        .enumerate()
-                        .any(|(candidate_index, category)| {
-                            candidate_index != index && category.name.eq_ignore_ascii_case(&name)
-                        });
-                if duplicate {
-                    return Err(format!("Category `{name}` already exists."));
-                }
-                profile.categories[index].name = name.clone();
-                profile.selected_category = name;
-                ("blocklist-category-rename", true)
-            }
-        }
-        BlocklistCategoryCommandKind::Delete => {
-            let profile = &mut config.blocklist_profiles[profile_index];
-            if profile.categories.len() <= 1 {
-                return Err("At least one blocklist category is required.".to_string());
-            }
-            let index = selected_blocklist_category_index(profile);
-            profile.categories.remove(index);
-            let next_index = index.min(profile.categories.len().saturating_sub(1));
-            profile.selected_category = profile.categories[next_index].name.clone();
-            ("blocklist-category-delete", true)
-        }
+        BlocklistCategoryCommandKind::Select { category } => (
+            "blocklist-category",
+            handle_select_blocklist_category(profile, category)?,
+        ),
+        BlocklistCategoryCommandKind::Create { name } => (
+            "blocklist-category-create",
+            handle_create_blocklist_category(profile, name)?,
+        ),
+        BlocklistCategoryCommandKind::Rename { name } => (
+            "blocklist-category-rename",
+            handle_rename_blocklist_category(profile, name)?,
+        ),
+        BlocklistCategoryCommandKind::Delete => (
+            "blocklist-category-delete",
+            handle_delete_blocklist_category(profile)?,
+        ),
     };
 
-    sync_profile_site_mirrors(&mut config.blocklist_profiles[profile_index]);
+    sync_profile_site_mirrors(profile);
     sync_selected_blocklist_profile(config);
     Ok(build_blocklist_category_command_output(
         config, action, updated,
     ))
+}
+
+fn handle_select_blocklist_category(
+    profile: &mut BlocklistProfileConfig,
+    category: Option<String>,
+) -> Result<bool, String> {
+    let Some(category) = category else {
+        return Ok(false);
+    };
+    let index = profile
+        .categories
+        .iter()
+        .position(|candidate| candidate.name.eq_ignore_ascii_case(category.trim()))
+        .ok_or_else(|| format!("Unknown blocklist category `{category}`."))?;
+    let selected = profile.categories[index].name.clone();
+    if profile.selected_category.eq_ignore_ascii_case(&selected) {
+        return Ok(false);
+    }
+    profile.selected_category = selected;
+    Ok(true)
+}
+
+fn handle_create_blocklist_category(
+    profile: &mut BlocklistProfileConfig,
+    name: String,
+) -> Result<bool, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Category name cannot be empty.".to_string());
+    }
+    if profile
+        .categories
+        .iter()
+        .any(|category| category.name.eq_ignore_ascii_case(&name))
+    {
+        return Err(format!("Category `{name}` already exists."));
+    }
+    profile
+        .categories
+        .push(crate::config::BlocklistCategoryConfig {
+            name: name.clone(),
+            sites: Vec::new(),
+            allowlist_sites: Vec::new(),
+        });
+    profile.selected_category = name;
+    Ok(true)
+}
+
+fn handle_rename_blocklist_category(
+    profile: &mut BlocklistProfileConfig,
+    name: String,
+) -> Result<bool, String> {
+    let index = selected_blocklist_category_index(profile);
+    let current = profile.categories[index].name.clone();
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Category name cannot be empty.".to_string());
+    }
+    if current.eq_ignore_ascii_case(&name) {
+        return Ok(false);
+    }
+    let duplicate = profile
+        .categories
+        .iter()
+        .enumerate()
+        .any(|(candidate_index, category)| {
+            candidate_index != index && category.name.eq_ignore_ascii_case(&name)
+        });
+    if duplicate {
+        return Err(format!("Category `{name}` already exists."));
+    }
+    profile.categories[index].name = name.clone();
+    profile.selected_category = name;
+    Ok(true)
+}
+
+fn handle_delete_blocklist_category(profile: &mut BlocklistProfileConfig) -> Result<bool, String> {
+    if profile.categories.len() <= 1 {
+        return Err("At least one blocklist category is required.".to_string());
+    }
+    let index = selected_blocklist_category_index(profile);
+    profile.categories.remove(index);
+    let next_index = index.min(profile.categories.len().saturating_sub(1));
+    profile.selected_category = profile.categories[next_index].name.clone();
+    Ok(true)
 }
 
 fn handle_select_blocklist_profile(
