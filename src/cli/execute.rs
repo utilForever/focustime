@@ -14,6 +14,7 @@ use crate::config::validate_automation_trigger_rules;
 
 use crate::cli::{
     AppConfig, AutomationTriggerRuleConfig, AutomationTriggersCommandOutput, BackupOutput,
+    BlocklistCategoryCommandKind, BlocklistCategoryCommandOutput, BlocklistCategorySummaryOutput,
     BlocklistProfileCommandKind, BlocklistProfileCommandOutput, BlocklistProfileConfig,
     BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, BreakGlassCommandOutput, CliCommand,
     CommandKind, DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats,
@@ -31,18 +32,18 @@ use crate::cli::{
     build_schedule_inspection_output, build_status_output, build_task_goal_output,
     display_input_value, effective_blocked_sites_for_profile, flush_stdout,
     print_automation_triggers_command_output, print_backup_output,
-    print_blocking_preview_command_output, print_blocklist_profile_command_output,
-    print_break_glass_command_output, print_diagnostics_command_output, print_export_output,
-    print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
-    print_profile_output, print_restore_output, print_schedule_command_output,
-    print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_session_template_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
-    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
-    timer_status_id,
+    print_blocking_preview_command_output, print_blocklist_category_command_output,
+    print_blocklist_profile_command_output, print_break_glass_command_output,
+    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
+    print_goal_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
+    print_session_metadata_command_output, print_session_template_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_weekday_rules_command_output, profile_id, profile_view, selected_break_template_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -104,6 +105,9 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
+        }
+        CommandKind::BlocklistCategory { command } => {
+            execute_blocklist_category_command(command, cli_command.output)
         }
         CommandKind::BlocklistSites { target, command } => {
             execute_blocklist_sites_command(target, command, cli_command.output)
@@ -274,6 +278,24 @@ fn execute_blocklist_profile_command(
     Ok(())
 }
 
+fn execute_blocklist_category_command(
+    command: BlocklistCategoryCommandKind,
+    output: OutputMode,
+) -> Result<(), String> {
+    let mut config = AppConfig::load().normalized();
+    let payload = apply_blocklist_category_command(&mut config, command)?;
+    if payload.updated {
+        config
+            .save()
+            .map_err(|error| format!("Failed to save blocklist category settings: {error}"))?;
+    }
+    match output {
+        OutputMode::Text => print_blocklist_category_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
 fn execute_blocklist_sites_command(
     target: SiteListTarget,
     command: BlocklistSiteCommandKind,
@@ -419,6 +441,126 @@ pub(super) fn apply_blocklist_profile_command(
     ))
 }
 
+pub(super) fn apply_blocklist_category_command(
+    config: &mut AppConfig,
+    command: BlocklistCategoryCommandKind,
+) -> Result<BlocklistCategoryCommandOutput, String> {
+    ensure_blocklist_profiles(config);
+    let profile_index = selected_blocklist_profile_index(config);
+    ensure_blocklist_categories(&mut config.blocklist_profiles[profile_index]);
+    let profile = &mut config.blocklist_profiles[profile_index];
+
+    let (action, updated) = match command {
+        BlocklistCategoryCommandKind::Select { category } => (
+            "blocklist-category",
+            handle_select_blocklist_category(profile, category)?,
+        ),
+        BlocklistCategoryCommandKind::Create { name } => (
+            "blocklist-category-create",
+            handle_create_blocklist_category(profile, name)?,
+        ),
+        BlocklistCategoryCommandKind::Rename { name } => (
+            "blocklist-category-rename",
+            handle_rename_blocklist_category(profile, name)?,
+        ),
+        BlocklistCategoryCommandKind::Delete => (
+            "blocklist-category-delete",
+            handle_delete_blocklist_category(profile)?,
+        ),
+    };
+
+    sync_profile_site_mirrors(profile);
+    sync_selected_blocklist_profile(config);
+    Ok(build_blocklist_category_command_output(
+        config, action, updated,
+    ))
+}
+
+fn handle_select_blocklist_category(
+    profile: &mut BlocklistProfileConfig,
+    category: Option<String>,
+) -> Result<bool, String> {
+    let Some(category) = category else {
+        return Ok(false);
+    };
+    let index = profile
+        .categories
+        .iter()
+        .position(|candidate| candidate.name.eq_ignore_ascii_case(category.trim()))
+        .ok_or_else(|| format!("Unknown blocklist category `{category}`."))?;
+    let selected = profile.categories[index].name.clone();
+    if profile.selected_category.eq_ignore_ascii_case(&selected) {
+        return Ok(false);
+    }
+    profile.selected_category = selected;
+    Ok(true)
+}
+
+fn handle_create_blocklist_category(
+    profile: &mut BlocklistProfileConfig,
+    name: String,
+) -> Result<bool, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Category name cannot be empty.".to_string());
+    }
+    if profile
+        .categories
+        .iter()
+        .any(|category| category.name.eq_ignore_ascii_case(&name))
+    {
+        return Err(format!("Category `{name}` already exists."));
+    }
+    profile
+        .categories
+        .push(crate::config::BlocklistCategoryConfig {
+            name: name.clone(),
+            sites: Vec::new(),
+            allowlist_sites: Vec::new(),
+        });
+    profile.selected_category = name;
+    Ok(true)
+}
+
+fn handle_rename_blocklist_category(
+    profile: &mut BlocklistProfileConfig,
+    name: String,
+) -> Result<bool, String> {
+    let index = selected_blocklist_category_index(profile);
+    let current = profile.categories[index].name.clone();
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Category name cannot be empty.".to_string());
+    }
+    if current.eq_ignore_ascii_case(&name) {
+        return Ok(false);
+    }
+    let duplicate = profile
+        .categories
+        .iter()
+        .enumerate()
+        .any(|(candidate_index, category)| {
+            candidate_index != index && category.name.eq_ignore_ascii_case(&name)
+        });
+    if duplicate {
+        return Err(format!("Category `{name}` already exists."));
+    }
+    profile.categories[index].name = name.clone();
+    profile.selected_category = name;
+    Ok(true)
+}
+
+fn handle_delete_blocklist_category(profile: &mut BlocklistProfileConfig) -> Result<bool, String> {
+    if profile.categories.len() <= 1 {
+        return Err("At least one blocklist category is required.".to_string());
+    }
+    let index = selected_blocklist_category_index(profile);
+    profile.categories.remove(index);
+    let next_index = index.min(profile.categories.len().saturating_sub(1));
+    profile.selected_category = profile.categories[next_index].name.clone();
+    Ok(true)
+}
+
 fn handle_select_blocklist_profile(
     config: &mut AppConfig,
     profile: Option<String>,
@@ -454,6 +596,12 @@ fn handle_create_blocklist_profile(
         name: name.clone(),
         sites: Vec::new(),
         allowlist_sites: Vec::new(),
+        categories: vec![crate::config::BlocklistCategoryConfig {
+            name: "General".to_string(),
+            sites: Vec::new(),
+            allowlist_sites: Vec::new(),
+        }],
+        selected_category: "General".to_string(),
     });
     config.selected_blocklist_profile = name;
     Ok(("blocklist-profile-create", true))
@@ -516,6 +664,7 @@ pub(super) fn apply_site_add_command(
     let result = working.add_sites_from_input(input);
     let updated = !result.added.is_empty();
     *active_profile_sites_mut(config, index, target) = working.sites.clone();
+    sync_profile_site_mirrors(&mut config.blocklist_profiles[index]);
     if updated {
         sync_selected_blocklist_profile(config);
     }
@@ -525,6 +674,7 @@ pub(super) fn apply_site_add_command(
         action: "site-add",
         updated,
         profile: active_profile.name.clone(),
+        category: active_profile.selected_category.clone(),
         target,
         added: result.added,
         duplicates: result.duplicates,
@@ -562,12 +712,14 @@ pub(super) fn apply_site_edit_command(
     match result {
         EditSiteResult::Updated { old, new } => {
             *active_profile_sites_mut(config, index, target) = working.sites.clone();
+            sync_profile_site_mirrors(&mut config.blocklist_profiles[index]);
             sync_selected_blocklist_profile(config);
             let active_profile = &config.blocklist_profiles[index];
             Ok(SiteEditCommandOutput {
                 action: "site-edit",
                 updated: true,
                 profile: active_profile.name.clone(),
+                category: active_profile.selected_category.clone(),
                 target,
                 previous: old,
                 current: new,
@@ -582,6 +734,7 @@ pub(super) fn apply_site_edit_command(
                 action: "site-edit",
                 updated: false,
                 profile: active_profile.name.clone(),
+                category: active_profile.selected_category.clone(),
                 target,
                 previous: hostname.clone(),
                 current: hostname,
@@ -624,6 +777,7 @@ pub(super) fn apply_site_delete_command(
         .remove_site(delete_index)
         .ok_or_else(|| format!("Site `{site}` was not found in {}.", target.id()))?;
     *active_profile_sites_mut(config, index, target) = working.sites.clone();
+    sync_profile_site_mirrors(&mut config.blocklist_profiles[index]);
     sync_selected_blocklist_profile(config);
 
     let active_profile = &config.blocklist_profiles[index];
@@ -631,6 +785,7 @@ pub(super) fn apply_site_delete_command(
         action: "site-delete",
         updated: true,
         profile: active_profile.name.clone(),
+        category: active_profile.selected_category.clone(),
         target,
         removed,
         sites: active_profile_sites(config, index, target).to_vec(),
@@ -645,6 +800,8 @@ fn ensure_blocklist_profiles(config: &mut AppConfig) {
             .push(BlocklistProfileConfig::default());
         config.selected_blocklist_profile = config.blocklist_profiles[0].name.clone();
     }
+    let index = selected_blocklist_profile_index(config);
+    ensure_blocklist_categories(&mut config.blocklist_profiles[index]);
 }
 
 fn blocklist_profile_index_by_name(
@@ -669,9 +826,18 @@ fn active_profile_sites(
     profile_index: usize,
     target: SiteListTarget,
 ) -> &[String] {
+    let profile = &config.blocklist_profiles[profile_index];
+    if profile.categories.is_empty() {
+        return match target {
+            SiteListTarget::Blocklist => &profile.sites,
+            SiteListTarget::Allowlist => &profile.allowlist_sites,
+        };
+    }
+    let category_index = selected_blocklist_category_index(profile);
+    let category = &profile.categories[category_index];
     match target {
-        SiteListTarget::Blocklist => &config.blocklist_profiles[profile_index].sites,
-        SiteListTarget::Allowlist => &config.blocklist_profiles[profile_index].allowlist_sites,
+        SiteListTarget::Blocklist => &category.sites,
+        SiteListTarget::Allowlist => &category.allowlist_sites,
     }
 }
 
@@ -680,9 +846,13 @@ fn active_profile_sites_mut(
     profile_index: usize,
     target: SiteListTarget,
 ) -> &mut Vec<String> {
+    ensure_blocklist_categories(&mut config.blocklist_profiles[profile_index]);
+    let category_index =
+        selected_blocklist_category_index(&config.blocklist_profiles[profile_index]);
+    let category = &mut config.blocklist_profiles[profile_index].categories[category_index];
     match target {
-        SiteListTarget::Blocklist => &mut config.blocklist_profiles[profile_index].sites,
-        SiteListTarget::Allowlist => &mut config.blocklist_profiles[profile_index].allowlist_sites,
+        SiteListTarget::Blocklist => &mut category.sites,
+        SiteListTarget::Allowlist => &mut category.allowlist_sites,
     }
 }
 
@@ -719,6 +889,38 @@ fn build_blocklist_profile_command_output(
         updated,
         selected_blocklist_profile: selected_name,
         profiles,
+    }
+}
+
+fn build_blocklist_category_command_output(
+    config: &AppConfig,
+    action: &'static str,
+    updated: bool,
+) -> BlocklistCategoryCommandOutput {
+    let profile_index = selected_blocklist_profile_index(config);
+    let profile = &config.blocklist_profiles[profile_index];
+    let selected_category = if profile.categories.is_empty() {
+        "General".to_string()
+    } else {
+        let index = selected_blocklist_category_index(profile);
+        profile.categories[index].name.clone()
+    };
+    let categories = profile
+        .categories
+        .iter()
+        .map(|category| BlocklistCategorySummaryOutput {
+            name: category.name.clone(),
+            active: category.name.eq_ignore_ascii_case(&selected_category),
+            blocklist_sites_count: category.sites.len(),
+            allowlist_sites_count: category.allowlist_sites.len(),
+        })
+        .collect();
+    BlocklistCategoryCommandOutput {
+        action,
+        updated,
+        selected_blocklist_profile: profile.name.clone(),
+        selected_blocklist_category: selected_category,
+        categories,
     }
 }
 
@@ -764,6 +966,7 @@ fn build_site_list_command_output(
         return SiteListCommandOutput {
             action,
             profile: fallback,
+            category: "General".to_string(),
             target,
             sites: Vec::new(),
             effective_blocked_sites_count: 0,
@@ -774,6 +977,7 @@ fn build_site_list_command_output(
     SiteListCommandOutput {
         action,
         profile: profile.name.clone(),
+        category: profile.selected_category.clone(),
         target,
         sites: active_profile_sites(config, index, target).to_vec(),
         effective_blocked_sites_count: effective_blocked_sites_for_profile(profile).len(),
@@ -788,6 +992,75 @@ fn invalid_site_entries_output(values: &[InvalidSiteInput]) -> Vec<InvalidSiteEn
             reason: invalid.reason.message().to_string(),
         })
         .collect()
+}
+
+fn ensure_blocklist_categories(profile: &mut BlocklistProfileConfig) {
+    if profile.categories.is_empty() {
+        profile
+            .categories
+            .push(crate::config::BlocklistCategoryConfig {
+                name: "General".to_string(),
+                sites: profile.sites.clone(),
+                allowlist_sites: profile.allowlist_sites.clone(),
+            });
+    }
+    let selected = profile.selected_category.trim().to_string();
+    if selected.is_empty() {
+        profile.selected_category = profile
+            .categories
+            .first()
+            .map(|category| category.name.clone())
+            .unwrap_or_else(|| "General".to_string());
+    } else if let Some(category) = profile
+        .categories
+        .iter()
+        .find(|category| category.name.eq_ignore_ascii_case(&selected))
+    {
+        profile.selected_category = category.name.clone();
+    } else {
+        profile.selected_category = profile
+            .categories
+            .first()
+            .map(|category| category.name.clone())
+            .unwrap_or_else(|| "General".to_string());
+    }
+}
+
+fn selected_blocklist_category_index(profile: &BlocklistProfileConfig) -> usize {
+    profile
+        .categories
+        .iter()
+        .position(|category| {
+            category
+                .name
+                .eq_ignore_ascii_case(&profile.selected_category)
+        })
+        .unwrap_or(0)
+}
+
+fn sync_profile_site_mirrors(profile: &mut BlocklistProfileConfig) {
+    let mut sites: Vec<String> = Vec::new();
+    let mut allowlist_sites: Vec<String> = Vec::new();
+    for category in &profile.categories {
+        for site in &category.sites {
+            if !sites
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(site))
+            {
+                sites.push(site.clone());
+            }
+        }
+        for site in &category.allowlist_sites {
+            if !allowlist_sites
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(site))
+            {
+                allowlist_sites.push(site.clone());
+            }
+        }
+    }
+    profile.sites = sites;
+    profile.allowlist_sites = allowlist_sites;
 }
 
 fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Result<(), String> {

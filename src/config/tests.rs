@@ -109,11 +109,13 @@ fn round_trip_full_config() {
                 name: "Work".to_string(),
                 sites: vec!["example.com".to_string(), "reddit.com".to_string()],
                 allowlist_sites: vec!["reddit.com".to_string()],
+                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Study".to_string(),
                 sites: vec!["x.com".to_string()],
                 allowlist_sites: Vec::new(),
+                ..BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "Study".to_string(),
@@ -473,11 +475,13 @@ fn normalize_session_templates_deduplicates_and_filters_invalid_entries() {
                 name: "Work".to_string(),
                 sites: vec!["youtube.com".to_string()],
                 allowlist_sites: Vec::new(),
+                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Study".to_string(),
                 sites: vec!["reddit.com".to_string()],
                 allowlist_sites: Vec::new(),
+                ..BlocklistProfileConfig::default()
             },
         ],
         session_templates: vec![
@@ -874,11 +878,13 @@ fn normalize_automation_trigger_apply_defaults_resolves_references() {
                 name: "Default".to_string(),
                 sites: Vec::new(),
                 allowlist_sites: Vec::new(),
+                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Work".to_string(),
                 sites: Vec::new(),
                 allowlist_sites: Vec::new(),
+                ..BlocklistProfileConfig::default()
             },
         ],
         session_templates: vec![SessionTemplateConfig {
@@ -989,6 +995,7 @@ fn validate_automation_trigger_rules_accepts_distinct_valid_rules() {
             name: "Work".to_string(),
             sites: Vec::new(),
             allowlist_sites: Vec::new(),
+            ..BlocklistProfileConfig::default()
         },
     ];
     let templates = vec![SessionTemplateConfig {
@@ -1765,11 +1772,13 @@ fn normalize_deduplicates_profile_names_and_fixes_selection() {
                 name: "Work".to_string(),
                 sites: vec!["a.com".to_string()],
                 allowlist_sites: vec!["b.com".to_string()],
+                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "work".to_string(),
                 sites: vec!["b.com".to_string()],
                 allowlist_sites: Vec::new(),
+                ..BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "missing".to_string(),
@@ -1790,6 +1799,7 @@ fn normalize_keeps_legacy_blocked_sites_empty_for_profile_only_config() {
             name: "Work".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
+            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Work".to_string(),
         ..AppConfig::default()
@@ -1978,6 +1988,7 @@ fn normalize_keeps_legacy_blocked_sites_when_profiles_exist() {
             name: "Work".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
+            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Work".to_string(),
         ..AppConfig::default()
@@ -1986,4 +1997,51 @@ fn normalize_keeps_legacy_blocked_sites_when_profiles_exist() {
 
     assert_eq!(cfg.selected_blocklist_profile, "Work");
     assert_eq!(cfg.blocked_sites, vec!["legacy-only.com".to_string()]);
+}
+
+#[test]
+fn normalize_merges_legacy_profile_lists_when_categories_exist() {
+    let cfg = AppConfig {
+        blocklist_profiles: vec![BlocklistProfileConfig {
+            name: "Work".to_string(),
+            sites: vec!["legacy.com".to_string()],
+            allowlist_sites: vec!["legacy-allow.com".to_string()],
+            categories: vec![BlocklistCategoryConfig {
+                name: "Social".to_string(),
+                sites: vec!["youtube.com".to_string()],
+                allowlist_sites: Vec::new(),
+            }],
+            selected_category: "Social".to_string(),
+        }],
+        selected_blocklist_profile: "Work".to_string(),
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    let profile = &cfg.blocklist_profiles[0];
+    assert!(profile.sites.contains(&"youtube.com".to_string()));
+    assert!(profile.sites.contains(&"legacy.com".to_string()));
+    assert!(
+        profile
+            .allowlist_sites
+            .contains(&"legacy-allow.com".to_string())
+    );
+    assert!(profile.categories.iter().any(|category| {
+        category.name.eq_ignore_ascii_case("Social")
+            && category
+                .sites
+                .iter()
+                .any(|site| site.eq_ignore_ascii_case("youtube.com"))
+    }));
+    assert!(profile.categories.iter().any(|category| {
+        category.name.eq_ignore_ascii_case("General")
+            && category
+                .sites
+                .iter()
+                .any(|site| site.eq_ignore_ascii_case("legacy.com"))
+            && category
+                .allowlist_sites
+                .iter()
+                .any(|site| site.eq_ignore_ascii_case("legacy-allow.com"))
+    }));
 }

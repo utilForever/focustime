@@ -97,6 +97,114 @@ impl SiteValidationError {
     }
 }
 
+pub fn normalize_domain_rule(input: &str) -> Result<String, SiteValidationError> {
+    normalize_domain_like_input(input, true)
+}
+
+pub fn normalize_domain_host(input: &str) -> Result<String, SiteValidationError> {
+    normalize_domain_like_input(input, false)
+}
+
+pub fn domain_rule_matches_host(rule: &str, host: &str) -> bool {
+    let Ok(rule) = normalize_domain_rule(rule) else {
+        return false;
+    };
+    let Ok(host) = normalize_domain_host(host) else {
+        return false;
+    };
+    if let Some(suffix) = rule.strip_prefix("*.") {
+        return host.ends_with(&format!(".{suffix}"));
+    }
+    host == rule
+}
+
+fn normalize_domain_like_input(
+    input: &str,
+    allow_wildcard_prefix: bool,
+) -> Result<String, SiteValidationError> {
+    let hostname = extract_hostname_candidate(input)?;
+    let (hostname, wildcard_prefix) = extract_wildcard_prefix(hostname, allow_wildcard_prefix)?;
+    let hostname = strip_numeric_port(hostname)?;
+    if hostname.is_empty() {
+        return Err(SiteValidationError::MissingHostname);
+    }
+    validate_domain_host(&hostname)?;
+    if wildcard_prefix && !hostname.contains('.') {
+        return Err(SiteValidationError::InvalidLabel);
+    }
+    if wildcard_prefix {
+        Ok(format!("*.{hostname}"))
+    } else {
+        Ok(hostname)
+    }
+}
+
+fn extract_hostname_candidate(input: &str) -> Result<String, SiteValidationError> {
+    let mut hostname = input.trim().to_lowercase();
+    if hostname.is_empty() {
+        return Err(SiteValidationError::EmptyHostname);
+    }
+    if let Some(sep) = hostname.find("://") {
+        hostname = hostname[sep + 3..].to_string();
+    }
+    if let Some(pos) = hostname.find(['/', '?', '#']) {
+        hostname.truncate(pos);
+    }
+    if let Some(at_pos) = hostname.rfind('@') {
+        hostname = hostname[at_pos + 1..].to_string();
+    }
+    Ok(hostname)
+}
+
+fn extract_wildcard_prefix(
+    hostname: String,
+    allow_wildcard_prefix: bool,
+) -> Result<(String, bool), SiteValidationError> {
+    if let Some(stripped) = hostname.strip_prefix("*.") {
+        if !allow_wildcard_prefix {
+            return Err(SiteValidationError::InvalidCharacter);
+        }
+        return Ok((stripped.to_string(), true));
+    }
+    Ok((hostname, false))
+}
+
+fn strip_numeric_port(mut hostname: String) -> Result<String, SiteValidationError> {
+    if let Some(colon_pos) = hostname.rfind(':') {
+        let port = &hostname[colon_pos + 1..];
+        if hostname[..colon_pos].contains(':') || !port.chars().all(|c| c.is_ascii_digit()) {
+            return Err(SiteValidationError::InvalidLabel);
+        }
+        hostname.truncate(colon_pos);
+    }
+    Ok(hostname)
+}
+
+fn validate_domain_host(hostname: &str) -> Result<(), SiteValidationError> {
+    if hostname.chars().any(char::is_whitespace) {
+        return Err(SiteValidationError::ContainsWhitespace);
+    }
+    if !hostname
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
+    {
+        return Err(SiteValidationError::InvalidCharacter);
+    }
+    if hostname.starts_with('.')
+        || hostname.ends_with('.')
+        || hostname.contains("..")
+        || hostname.len() > 253
+    {
+        return Err(SiteValidationError::InvalidLabel);
+    }
+    for label in hostname.split('.') {
+        if label.is_empty() || label.len() > 63 || label.starts_with('-') || label.ends_with('-') {
+            return Err(SiteValidationError::InvalidLabel);
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidSiteInput {
     pub input: String,
@@ -381,71 +489,7 @@ impl SiteBlocker {
 
     /// Validate and normalise a user-supplied hostname.
     fn sanitize_hostname_with_reason(input: &str) -> Result<String, SiteValidationError> {
-        let mut hostname = input.trim().to_lowercase();
-
-        if hostname.is_empty() {
-            return Err(SiteValidationError::EmptyHostname);
-        }
-
-        // Strip URI scheme (e.g. "https://example.com" → "example.com").
-        if let Some(sep) = hostname.find("://") {
-            hostname = hostname[sep + 3..].to_string();
-        }
-
-        // Remove path, query, or fragment after the hostname.
-        if let Some(pos) = hostname.find(['/', '?', '#']) {
-            hostname.truncate(pos);
-        }
-
-        if let Some(at_pos) = hostname.rfind('@') {
-            hostname = hostname[at_pos + 1..].to_string();
-        }
-
-        // Strip a port suffix from host:port forms when the suffix is numeric.
-        if let Some(colon_pos) = hostname.rfind(':') {
-            let port = &hostname[colon_pos + 1..];
-            if hostname[..colon_pos].contains(':') || !port.chars().all(|c| c.is_ascii_digit()) {
-                return Err(SiteValidationError::InvalidLabel);
-            }
-            hostname.truncate(colon_pos);
-        }
-
-        if hostname.is_empty() {
-            return Err(SiteValidationError::MissingHostname);
-        }
-
-        // Reject anything with internal whitespace (would produce multi-hostname lines).
-        if hostname.chars().any(char::is_whitespace) {
-            return Err(SiteValidationError::ContainsWhitespace);
-        }
-
-        // Allow only ASCII letters, digits, dots, and hyphens.
-        if !hostname
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
-        {
-            return Err(SiteValidationError::InvalidCharacter);
-        }
-
-        if hostname.starts_with('.')
-            || hostname.ends_with('.')
-            || hostname.contains("..")
-            || hostname.len() > 253
-        {
-            return Err(SiteValidationError::InvalidLabel);
-        }
-
-        for label in hostname.split('.') {
-            if label.is_empty()
-                || label.len() > 63
-                || label.starts_with('-')
-                || label.ends_with('-')
-            {
-                return Err(SiteValidationError::InvalidLabel);
-            }
-        }
-
-        Ok(hostname)
+        normalize_domain_rule(input)
     }
 
     pub fn remove_site(&mut self, index: usize) -> Option<String> {
@@ -677,8 +721,18 @@ impl SiteBlocker {
     }
 
     fn apply_hosts_block_to_path(&self, hosts_path: &Path) -> io::Result<()> {
+        let hosts_sites = self.hosts_renderable_sites();
         let changed = atomic_write_hosts_to_path(hosts_path, |snapshot_content| {
-            Some(self.build_blocked_hosts_content(snapshot_content))
+            if hosts_sites.is_empty() {
+                let cleaned = Self::strip_block_section(snapshot_content);
+                if cleaned == snapshot_content {
+                    None
+                } else {
+                    Some(cleaned)
+                }
+            } else {
+                Some(self.build_blocked_hosts_content(snapshot_content, &hosts_sites))
+            }
         })?;
         if changed {
             flush_dns_cache();
@@ -766,8 +820,11 @@ impl SiteBlocker {
     ) -> BlockingPreview {
         let nl = line_ending_for(original);
         let current_section = Self::extract_block_sections(original);
+        let hosts_sites = self.hosts_renderable_sites();
         let next_section = match intent {
-            BlockingIntent::Block if !self.sites.is_empty() => Some(self.render_block_section(nl)),
+            BlockingIntent::Block if !hosts_sites.is_empty() => {
+                Some(self.render_block_section(nl, &hosts_sites))
+            }
             BlockingIntent::Block | BlockingIntent::Unblock => None,
         };
         let next_content = match next_section.as_deref() {
@@ -783,7 +840,7 @@ impl SiteBlocker {
             BlockingPreviewAction::Unblock
         };
         let effective_blocked_sites = if next_section.is_some() {
-            self.sites.clone()
+            hosts_sites
         } else {
             Vec::new()
         };
@@ -802,9 +859,9 @@ impl SiteBlocker {
         }
     }
 
-    fn build_blocked_hosts_content(&self, original: &str) -> String {
+    fn build_blocked_hosts_content(&self, original: &str, hosts_sites: &[String]) -> String {
         let nl = line_ending_for(original);
-        let section = self.render_block_section(nl);
+        let section = self.render_block_section(nl, hosts_sites);
         Self::build_hosts_content_with_section(original, &section, nl)
     }
 
@@ -820,16 +877,24 @@ impl SiteBlocker {
         content
     }
 
-    fn render_block_section(&self, nl: &str) -> String {
+    fn render_block_section(&self, nl: &str, hosts_sites: &[String]) -> String {
         let mut section = String::new();
         section.push_str(BLOCK_MARKER_START);
         section.push_str(nl);
-        for site in &self.sites {
+        for site in hosts_sites {
             append_site_entries(&mut section, site, nl);
         }
         section.push_str(BLOCK_MARKER_END);
         section.push_str(nl);
         section
+    }
+
+    fn hosts_renderable_sites(&self) -> Vec<String> {
+        self.sites
+            .iter()
+            .filter(|site| !site.starts_with("*."))
+            .cloned()
+            .collect()
     }
 
     fn extract_block_sections(content: &str) -> Option<String> {
@@ -1308,6 +1373,20 @@ mod tests {
     }
 
     #[test]
+    fn add_site_accepts_wildcard_rules() {
+        let mut b = SiteBlocker::new();
+        b.add_site("*.Docs.Example.com".to_string());
+        assert_eq!(b.sites, vec!["*.docs.example.com"]);
+    }
+
+    #[test]
+    fn add_site_rejects_mid_label_wildcard() {
+        let mut b = SiteBlocker::new();
+        b.add_site("foo*bar.example.com".to_string());
+        assert!(b.sites.is_empty());
+    }
+
+    #[test]
     fn bulk_add_accepts_comma_and_newline_separators() {
         let mut b = SiteBlocker::new();
         let result = b.add_sites_from_input("example.com, github.com\nhttps://rust-lang.org/docs");
@@ -1383,6 +1462,36 @@ mod tests {
                 reason: SiteValidationError::MultipleHostnames,
             })
         );
+    }
+
+    #[test]
+    fn wildcard_rule_matches_subdomains_only() {
+        assert!(domain_rule_matches_host("*.example.com", "www.example.com"));
+        assert!(domain_rule_matches_host("*.example.com", "a.b.example.com"));
+        assert!(!domain_rule_matches_host("*.example.com", "example.com"));
+    }
+
+    #[test]
+    fn wildcard_rule_respects_label_boundaries() {
+        assert!(!domain_rule_matches_host("*.example.com", "badexample.com"));
+        assert!(!domain_rule_matches_host(
+            "*.example.com",
+            "example.com.bad"
+        ));
+    }
+
+    #[test]
+    fn normalize_domain_rule_supports_wildcards_after_url_prefix_stripping() {
+        assert_eq!(
+            normalize_domain_rule("https://*.example.com/path").unwrap(),
+            "*.example.com"
+        );
+    }
+
+    #[test]
+    fn exact_rule_matches_only_exact_hostname() {
+        assert!(domain_rule_matches_host("example.com", "example.com"));
+        assert!(!domain_rule_matches_host("example.com", "www.example.com"));
     }
 
     #[test]
@@ -1492,6 +1601,24 @@ mod tests {
     }
 
     #[test]
+    fn preview_block_skips_wildcard_entries_for_hosts_backend() {
+        let mut blocker = SiteBlocker::new();
+        blocker.add_site("*.example.com".to_string());
+        blocker.add_site("api.example.com".to_string());
+        let original = "127.0.0.1 localhost\n";
+
+        let preview = blocker.preview_from_hosts_content("hosts", original, BlockingIntent::Block);
+        let section = preview
+            .next_section
+            .as_deref()
+            .expect("block preview should include next section");
+
+        assert_eq!(preview.effective_blocked_sites, vec!["api.example.com"]);
+        assert!(!section.contains("*.example.com"));
+        assert!(section.contains("127.0.0.1 api.example.com"));
+    }
+
+    #[test]
     fn preview_unblock_reports_current_section_and_change() {
         let blocker = SiteBlocker::new();
         let original = "127.0.0.1 localhost\n# focustime-block-start\n127.0.0.1 example.com\n# focustime-block-end\n";
@@ -1540,7 +1667,8 @@ mod tests {
     fn preview_block_no_change_when_hosts_already_match() {
         let mut blocker = SiteBlocker::new();
         blocker.add_site("example.com".to_string());
-        let original = blocker.build_blocked_hosts_content("127.0.0.1 localhost\n");
+        let original = blocker
+            .build_blocked_hosts_content("127.0.0.1 localhost\n", &["example.com".to_string()]);
 
         let preview = blocker.preview_from_hosts_content("hosts", &original, BlockingIntent::Block);
 

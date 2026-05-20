@@ -1,17 +1,16 @@
-use std::collections::HashSet;
-
+use crate::blocker::{domain_rule_matches_host, normalize_domain_rule};
 use crate::cli::{
     AutomationTriggersCommandOutput, BackupOutput, BlockingPreviewAction,
-    BlockingPreviewCommandOutput, BlocklistProfileCommandOutput, BlocklistProfileConfig,
-    BreakGlassCommandOutput, DiagnosticsCommandOutput, ExportOutput, FocusScoreOutput,
-    GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, ProfileOutput, RecurringScheduleConfig,
-    RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput,
-    Serialize, SessionMetadataCommandOutput, SessionTemplateCommandOutput, SetupCheck,
-    SetupCheckLevel, SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput,
-    SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary,
-    StatsRetentionStatusOutput, StatusOutput, StrictCommandOutput, TaskGoalCommandOutput,
-    TaskGoalOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, TimerStateOutput,
-    WeekdayRulesCommandOutput, Write, format_schedule_conflict,
+    BlockingPreviewCommandOutput, BlocklistCategoryCommandOutput, BlocklistProfileCommandOutput,
+    BlocklistProfileConfig, BreakGlassCommandOutput, DiagnosticsCommandOutput, ExportOutput,
+    FocusScoreOutput, GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, ProfileOutput,
+    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput,
+    ScheduleInspectionOutput, Serialize, SessionMetadataCommandOutput,
+    SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
+    SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
+    StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput, StrictCommandOutput,
+    TaskGoalCommandOutput, TaskGoalOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput,
+    TimerStateOutput, WeekdayRulesCommandOutput, Write, format_schedule_conflict,
     inspect_schedule_conflicts_from_config, io,
 };
 
@@ -108,6 +107,28 @@ pub(super) fn print_blocklist_profile_command_output(payload: &BlocklistProfileC
     }
 }
 
+pub(super) fn print_blocklist_category_command_output(payload: &BlocklistCategoryCommandOutput) {
+    if payload.updated {
+        println!("Blocklist category updated.");
+    }
+    println!(
+        "Selected blocklist profile/category: {} / {}",
+        payload.selected_blocklist_profile, payload.selected_blocklist_category
+    );
+    if payload.categories.is_empty() {
+        println!("Categories: none");
+        return;
+    }
+    println!("Categories:");
+    for category in &payload.categories {
+        let marker = if category.active { "*" } else { " " };
+        println!(
+            "  {marker} {} (blocklist {}, allowlist {})",
+            category.name, category.blocklist_sites_count, category.allowlist_sites_count
+        );
+    }
+}
+
 pub(super) fn print_session_template_command_output(payload: &SessionTemplateCommandOutput) {
     if payload.updated {
         println!("Session template updated.");
@@ -139,8 +160,9 @@ pub(super) fn print_session_template_command_output(payload: &SessionTemplateCom
 
 pub(super) fn print_site_list_command_output(payload: &SiteListCommandOutput) {
     println!(
-        "Active profile `{}` {} entries: {}",
+        "Active profile/category `{}` / `{}` {} entries: {}",
         payload.profile,
+        payload.category,
         payload.target.id(),
         payload.sites.len()
     );
@@ -156,16 +178,18 @@ pub(super) fn print_site_list_command_output(payload: &SiteListCommandOutput) {
 pub(super) fn print_site_add_command_output(payload: &SiteAddCommandOutput) {
     if payload.updated {
         println!(
-            "Added {} hostname(s) to {} in profile `{}`.",
+            "Added {} hostname(s) to {} in profile/category `{}` / `{}`.",
             payload.added.len(),
             payload.target.id(),
-            payload.profile
+            payload.profile,
+            payload.category
         );
     } else {
         println!(
-            "No {} hostnames were added in profile `{}`.",
+            "No {} hostnames were added in profile/category `{}` / `{}`.",
             payload.target.id(),
-            payload.profile
+            payload.profile,
+            payload.category
         );
     }
     if !payload.duplicates.is_empty() {
@@ -221,18 +245,20 @@ pub(super) fn print_temporary_site_add_command_output(payload: &TemporarySiteAdd
 pub(super) fn print_site_edit_command_output(payload: &SiteEditCommandOutput) {
     if payload.updated {
         println!(
-            "Updated {} hostname in profile `{}`: {} -> {}",
+            "Updated {} hostname in profile/category `{}` / `{}`: {} -> {}",
             payload.target.id(),
             payload.profile,
+            payload.category,
             payload.previous,
             payload.current
         );
     } else {
         println!(
-            "No change for {} hostname `{}` in profile `{}`.",
+            "No change for {} hostname `{}` in profile/category `{}` / `{}`.",
             payload.target.id(),
             payload.current,
-            payload.profile
+            payload.profile,
+            payload.category
         );
     }
     println!(
@@ -248,10 +274,11 @@ pub(super) fn print_site_edit_command_output(payload: &SiteEditCommandOutput) {
 
 pub(super) fn print_site_delete_command_output(payload: &SiteDeleteCommandOutput) {
     println!(
-        "Deleted {} hostname `{}` from profile `{}`.",
+        "Deleted {} hostname `{}` from profile/category `{}` / `{}`.",
         payload.target.id(),
         payload.removed,
-        payload.profile
+        payload.profile,
+        payload.category
     );
     println!(
         "{} entries now: {}",
@@ -879,15 +906,120 @@ pub(super) fn display_input_value(value: &str) -> String {
 }
 
 pub(super) fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    let allowlist: HashSet<String> = profile
-        .allowlist_sites
+    let allowlist_rules: Vec<String> = all_allowlist_rules_for_profile(profile)
         .iter()
-        .map(|site| site.to_ascii_lowercase())
+        .filter_map(|rule| normalize_domain_rule(rule).ok())
         .collect();
-    profile
-        .sites
-        .iter()
-        .filter(|site| !allowlist.contains(&site.to_ascii_lowercase()))
-        .cloned()
+
+    let mut seen = std::collections::HashSet::new();
+    all_blocklist_rules_for_profile(profile)
+        .into_iter()
+        .filter_map(|site| normalize_domain_rule(&site).ok())
+        .filter(|site| !block_rule_excluded_by_allowlist(site, &allowlist_rules))
+        .filter(|site| seen.insert(site.to_ascii_lowercase()))
         .collect()
+}
+
+fn block_rule_excluded_by_allowlist(block_rule: &str, allowlist_rules: &[String]) -> bool {
+    if block_rule.starts_with("*.") {
+        return allowlist_rules
+            .iter()
+            .any(|allow_rule| allow_rule.eq_ignore_ascii_case(block_rule));
+    }
+    allowlist_rules
+        .iter()
+        .any(|allow_rule| domain_rule_matches_host(allow_rule, block_rule))
+}
+
+fn all_blocklist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
+    if profile.categories.is_empty() {
+        return dedup_case_insensitive(profile.sites.iter().cloned());
+    }
+    dedup_case_insensitive(
+        profile
+            .categories
+            .iter()
+            .flat_map(|category| category.sites.iter().cloned()),
+    )
+}
+
+fn all_allowlist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
+    if profile.categories.is_empty() {
+        return dedup_case_insensitive(profile.allowlist_sites.iter().cloned());
+    }
+    dedup_case_insensitive(
+        profile
+            .categories
+            .iter()
+            .flat_map(|category| category.allowlist_sites.iter().cloned()),
+    )
+}
+
+fn dedup_case_insensitive<I>(values: I) -> Vec<String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut seen = std::collections::HashSet::new();
+    values
+        .into_iter()
+        .filter(|value| seen.insert(value.to_ascii_lowercase()))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::effective_blocked_sites_for_profile;
+    use crate::config::BlocklistCategoryConfig;
+
+    #[test]
+    fn effective_blocked_sites_keeps_wildcard_only_rules() {
+        let profile = crate::config::BlocklistProfileConfig {
+            sites: vec!["*.Example.com".to_string()],
+            ..crate::config::BlocklistProfileConfig::default()
+        };
+
+        assert_eq!(
+            effective_blocked_sites_for_profile(&profile),
+            vec!["*.example.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn effective_blocked_sites_keeps_wildcard_when_allowlist_is_exact_host() {
+        let profile = crate::config::BlocklistProfileConfig {
+            sites: vec!["*.example.com".to_string()],
+            allowlist_sites: vec!["ads.example.com".to_string()],
+            ..crate::config::BlocklistProfileConfig::default()
+        };
+
+        assert_eq!(
+            effective_blocked_sites_for_profile(&profile),
+            vec!["*.example.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn effective_blocked_sites_aggregates_categories_and_dedups_case_insensitively() {
+        let profile = crate::config::BlocklistProfileConfig {
+            sites: vec!["legacy-top-level.com".to_string()],
+            categories: vec![
+                BlocklistCategoryConfig {
+                    name: "Social".to_string(),
+                    sites: vec!["News.com".to_string(), "*.example.com".to_string()],
+                    allowlist_sites: vec!["news.com".to_string()],
+                },
+                BlocklistCategoryConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["*.EXAMPLE.com".to_string(), "forum.example.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+            ],
+            ..crate::config::BlocklistProfileConfig::default()
+        };
+
+        assert_eq!(
+            effective_blocked_sites_for_profile(&profile),
+            vec!["*.example.com".to_string(), "forum.example.com".to_string()]
+        );
+    }
 }

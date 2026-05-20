@@ -46,16 +46,17 @@ use output::{
     build_blocking_preview_command_output, build_diagnostics_command_output,
     build_schedule_inspection_output, display_input_value, effective_blocked_sites_for_profile,
     flush_stdout, print_automation_triggers_command_output, print_backup_output,
-    print_blocking_preview_command_output, print_blocklist_profile_command_output,
-    print_break_glass_command_output, print_diagnostics_command_output, print_export_output,
-    print_goal_carry_command_output, print_goal_command_output, print_json, print_json_compact,
-    print_profile_output, print_restore_output, print_schedule_command_output,
-    print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_session_template_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
+    print_blocking_preview_command_output, print_blocklist_category_command_output,
+    print_blocklist_profile_command_output, print_break_glass_command_output,
+    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
+    print_goal_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
+    print_session_metadata_command_output, print_session_template_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_weekday_rules_command_output,
 };
 use parsing::{
     finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_global_tokens,
@@ -114,6 +115,10 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --blocklist-profile-create=PROFILE_NAME [--json]
   focustime --blocklist-profile-rename=PROFILE_NAME [--json]
   focustime --blocklist-profile-delete [--json]
+  focustime --blocklist-category [CATEGORY_NAME] [--json]
+  focustime --blocklist-category-create=CATEGORY_NAME [--json]
+  focustime --blocklist-category-rename=CATEGORY_NAME [--json]
+  focustime --blocklist-category-delete [--json]
   focustime --session-template [TEMPLATE_NAME] [--json]
   focustime --session-template-apply [TEMPLATE_NAME] [--json]
   focustime --session-template-create=TEMPLATE_NAME [--json]
@@ -167,20 +172,24 @@ Options:
   --blocklist-profile-create  Create a blocklist profile and select it
   --blocklist-profile-rename  Rename the active blocklist profile
   --blocklist-profile-delete  Delete the active blocklist profile
+  --blocklist-category         Show active blocklist category, or set active category
+  --blocklist-category-create  Create a blocklist category in active profile and select it
+  --blocklist-category-rename  Rename the active blocklist category
+  --blocklist-category-delete  Delete the active blocklist category
   --session-template         Show active session template, or set active template
   --session-template-apply   Apply a template by name (or apply active template)
   --session-template-create  Capture current task/profile/blocklist/schedule as a template
   --session-template-rename  Rename the active session template
   --session-template-delete  Delete the active session template
-  --blocklist-sites           List blocklist sites in active profile
-  --allowlist-sites           List allowlist sites in active profile
-  --blocklist-site-add        Add/import blocklist hostnames in active profile
-  --allowlist-site-add        Add/import allowlist hostnames in active profile
+  --blocklist-sites           List blocklist sites in active category within active profile
+  --allowlist-sites           List allowlist sites in active category within active profile
+  --blocklist-site-add        Add/import blocklist hostnames in active category within active profile
+  --allowlist-site-add        Add/import allowlist hostnames in active category within active profile
   --allowlist-site-add-temporary  Add temporary allowlist hostnames with inline duration (HOST=30m,HOST=45s)
-  --blocklist-site-edit       Replace blocklist hostname using OLD=NEW
-  --allowlist-site-edit       Replace allowlist hostname using OLD=NEW
-  --blocklist-site-delete     Delete blocklist hostname in active profile
-  --allowlist-site-delete     Delete allowlist hostname in active profile
+  --blocklist-site-edit       Replace blocklist hostname in active category using OLD=NEW
+  --allowlist-site-edit       Replace allowlist hostname in active category using OLD=NEW
+  --blocklist-site-delete     Delete blocklist hostname in active category within active profile
+  --allowlist-site-delete     Delete allowlist hostname in active category within active profile
   --diagnostics   Show setup diagnostics checks
   --blocking-preview  Preview backend-selected blocking changes without writing
   --status        Print status summary (includes live timer/session fields and latest interruption)
@@ -313,6 +322,9 @@ pub enum CommandKind {
     BlocklistProfile {
         command: BlocklistProfileCommandKind,
     },
+    BlocklistCategory {
+        command: BlocklistCategoryCommandKind,
+    },
     BlocklistSites {
         target: SiteListTarget,
         command: BlocklistSiteCommandKind,
@@ -380,6 +392,10 @@ enum PrimaryCommand {
     BlocklistProfileCreate(String),
     BlocklistProfileRename(String),
     BlocklistProfileDelete,
+    BlocklistCategory(Option<String>),
+    BlocklistCategoryCreate(String),
+    BlocklistCategoryRename(String),
+    BlocklistCategoryDelete,
     SessionTemplate(Option<String>),
     SessionTemplateApply(Option<String>),
     SessionTemplateCreate(String),
@@ -441,6 +457,10 @@ enum ParsedToken {
     BlocklistProfileCreate(String),
     BlocklistProfileRename(String),
     BlocklistProfileDelete,
+    BlocklistCategory(Option<String>),
+    BlocklistCategoryCreate(String),
+    BlocklistCategoryRename(String),
+    BlocklistCategoryDelete,
     SessionTemplate(Option<String>),
     SessionTemplateApply(Option<String>),
     SessionTemplateCreate(String),
@@ -487,6 +507,14 @@ pub struct SiteEditValue {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlocklistProfileCommandKind {
     Select { profile: Option<String> },
+    Create { name: String },
+    Rename { name: String },
+    Delete,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlocklistCategoryCommandKind {
+    Select { category: Option<String> },
     Create { name: String },
     Rename { name: String },
     Delete,
@@ -840,6 +868,23 @@ struct BlocklistProfileCommandOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct BlocklistCategorySummaryOutput {
+    name: String,
+    active: bool,
+    blocklist_sites_count: usize,
+    allowlist_sites_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct BlocklistCategoryCommandOutput {
+    action: &'static str,
+    updated: bool,
+    selected_blocklist_profile: String,
+    selected_blocklist_category: String,
+    categories: Vec<BlocklistCategorySummaryOutput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct SessionTemplateSummaryOutput {
     name: String,
     active: bool,
@@ -861,6 +906,7 @@ struct SessionTemplateCommandOutput {
 struct SiteListCommandOutput {
     action: &'static str,
     profile: String,
+    category: String,
     target: SiteListTarget,
     sites: Vec<String>,
     effective_blocked_sites_count: usize,
@@ -877,6 +923,7 @@ struct SiteAddCommandOutput {
     action: &'static str,
     updated: bool,
     profile: String,
+    category: String,
     target: SiteListTarget,
     added: Vec<String>,
     duplicates: Vec<String>,
@@ -900,6 +947,7 @@ struct SiteEditCommandOutput {
     action: &'static str,
     updated: bool,
     profile: String,
+    category: String,
     target: SiteListTarget,
     previous: String,
     current: String,
@@ -912,6 +960,7 @@ struct SiteDeleteCommandOutput {
     action: &'static str,
     updated: bool,
     profile: String,
+    category: String,
     target: SiteListTarget,
     removed: String,
     sites: Vec<String>,

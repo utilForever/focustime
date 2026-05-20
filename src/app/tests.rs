@@ -2269,11 +2269,13 @@ fn site_manager_switches_between_blocklist_profiles() {
                 name: "Work".to_string(),
                 sites: vec!["a.com".to_string()],
                 allowlist_sites: Vec::new(),
+                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Study".to_string(),
                 sites: vec!["b.com".to_string(), "c.com".to_string()],
                 allowlist_sites: Vec::new(),
+                ..BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "Work".to_string(),
@@ -2302,11 +2304,13 @@ fn site_manager_allowlist_mode_clamps_selection_on_profile_switch() {
                 name: "Study".to_string(),
                 sites: vec!["study.com".to_string()],
                 allowlist_sites: vec!["allow-a.com".to_string(), "allow-b.com".to_string()],
+                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Work".to_string(),
                 sites: vec!["work.com".to_string(), "news.com".to_string()],
                 allowlist_sites: vec!["news.com".to_string()],
+                ..BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "Study".to_string(),
@@ -2336,6 +2340,7 @@ fn allowlist_excludes_sites_from_effective_blocking() {
             name: "Work".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
+            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Work".to_string(),
         ..AppConfig::default()
@@ -2346,12 +2351,30 @@ fn allowlist_excludes_sites_from_effective_blocking() {
 }
 
 #[test]
+fn wildcard_rules_are_kept_in_effective_blocking() {
+    let config = AppConfig {
+        blocklist_profiles: vec![BlocklistProfileConfig {
+            name: "Work".to_string(),
+            sites: vec!["*.example.com".to_string()],
+            allowlist_sites: Vec::new(),
+            ..BlocklistProfileConfig::default()
+        }],
+        selected_blocklist_profile: "Work".to_string(),
+        ..AppConfig::default()
+    };
+    let app = App::from_config(config);
+
+    assert_eq!(app.blocker.sites, vec!["*.example.com".to_string()]);
+}
+
+#[test]
 fn site_manager_allowlist_mode_updates_effective_blocked_sites() {
     let config = AppConfig {
         blocklist_profiles: vec![BlocklistProfileConfig {
             name: "Default".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
+            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Default".to_string(),
         ..AppConfig::default()

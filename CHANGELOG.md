@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Blocklist categories and wildcard domain rules (#318):** added per-profile blocklist category management across CLI and TUI, plus wildcard subdomain rule support (`*.example.com`) in blocklist/allowlist matching with consistent effective-blocking computation.
+
 ## [0.11.1] - 2026-05-18
 
 ### Changed

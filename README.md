@@ -151,6 +151,13 @@ cargo run -- --blocklist-profile-create Study
 cargo run -- --blocklist-profile-rename "Deep Work"
 cargo run -- --blocklist-profile-delete --json
 
+# Manage categories within the active blocklist profile
+cargo run -- --blocklist-category
+cargo run -- --blocklist-category Social
+cargo run -- --blocklist-category-create "Work Chat"
+cargo run -- --blocklist-category-rename "Deep Focus"
+cargo run -- --blocklist-category-delete --json
+
 # Manage session templates (task/profile/blocklist/schedule bundles)
 cargo run -- --session-template
 cargo run -- --session-template "Deep Flow"
@@ -163,7 +170,8 @@ cargo run -- --session-template-delete --json
 # Manage blocklist/allowlist sites for the active blocklist profile
 cargo run -- --blocklist-sites
 cargo run -- --allowlist-sites --json
-cargo run -- --blocklist-site-add="youtube.com, reddit.com"
+cargo run -- --blocklist-category Social
+cargo run -- --blocklist-site-add="youtube.com, *.facebook.com"
 cargo run -- --allowlist-site-add "reddit.com"
 cargo run -- --allowlist-site-add-temporary "reddit.com=30m,news.ycombinator.com=10m"
 cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
@@ -394,6 +402,10 @@ CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-dela
 `--weekday-rules*`, `--session-template*`, `--break-glass-trigger`, and `--break-glass-cancel` for
 non-interactive inspection and in-session workflow control.
 
+Blocklist rules support exact hosts and wildcard subdomain rules. `*.example.com`
+matches `docs.example.com` and `api.example.com`, but does **not** match
+`example.com`.
+
 ### Example config
 
 ```toml
@@ -438,11 +450,24 @@ long_break_interval = 3
 
 [[blocklist_profiles]]
 name = "Work"
-sites = ["youtube.com", "reddit.com"]
+selected_category = "Social"
+
+[[blocklist_profiles.categories]]
+name = "Social"
+sites = ["youtube.com", "*.facebook.com", "reddit.com"]
 allowlist_sites = ["reddit.com"]
+
+[[blocklist_profiles.categories]]
+name = "News"
+sites = ["news.ycombinator.com"]
+allowlist_sites = []
 
 [[blocklist_profiles]]
 name = "Study"
+selected_category = "General"
+
+[[blocklist_profiles.categories]]
+name = "General"
 sites = ["x.com", "news.ycombinator.com"]
 allowlist_sites = []
 
@@ -559,9 +584,13 @@ Open the site manager from timer view with **`b`**.
 - `d` or `Delete`: remove the selected hostname
 - `m`: toggle between editing blocklist sites and allowlist exceptions
 - `[` / `]`: switch active blocklist profile
+- `←` / `→`: switch active category in the current profile
 - `n`: create a blocklist profile
 - `r`: rename the active blocklist profile
 - `x`: delete the active blocklist profile
+- `Ctrl+n`: create a blocklist category
+- `Ctrl+r`: rename the active blocklist category
+- `Ctrl+x`: delete the active blocklist category
 - `↑/↓` (default `navigate_up`/`navigate_down`): move selection
 - `b`: return to timer view
 - `Esc` (default `cancel`): return to timer view only when add/edit mode is not active
@@ -569,13 +598,16 @@ Open the site manager from timer view with **`b`**.
 Add/import input supports:
 
 - single hostnames (`youtube.com`)
+- wildcard subdomain rules (`*.example.com`; subdomains only)
 - comma-separated lists (`youtube.com, reddit.com`)
 - newline-separated lists (paste multi-line blocklists, then press `Enter`)
 - while add/import or edit mode is active, `Enter` (default `confirm`) commits and `Esc` (default `cancel`) cancels the current draft
 
 Invalid and duplicate entries are reported inline so you can fix them without leaving the view.
 
-Allowlist entries act as explicit exceptions: effective focus blocking is computed as **blocklist sites minus allowlist sites** for the active profile.
+Allowlist entries act as explicit exceptions: effective focus blocking is computed as
+**blocklist sites minus allowlist sites** for the active profile, using exact and
+wildcard rule matching.
 
 For hosts-based blocking to apply reliably, keep DNS-over-HTTPS disabled in your browser.
 If you configure the command backend, ensure your custom commands enforce equivalent restrictions.
