@@ -5272,6 +5272,156 @@ fn session_planner_template_delete_non_active_keeps_active_template() {
 }
 
 #[test]
+fn session_template_rename_updates_weekday_and_automation_references() {
+    let mut app = App::default();
+    app.task_labels = vec!["Docs".to_string()];
+    app.selected_task_label = Some("Docs".to_string());
+    app.capture_session_template("Template A")
+        .expect("template A should be created");
+
+    app.weekday_profile_rules = vec![WeekdayProfileRuleConfig {
+        day: "mon".to_string(),
+        profile: ProfileId::Classic,
+        blocklist_profile: "Default".to_string(),
+        session_template: Some("template a".to_string()),
+    }];
+    app.automation_triggers = vec![AutomationTriggerRuleConfig {
+        trigger: AutomationTriggerConditionConfig::FocusStarted,
+        action: AutomationTriggerActionConfig::ApplyDefaults {
+            profile: ProfileId::Classic,
+            blocklist_profile: "Default".to_string(),
+            session_template: Some("TEMPLATE A".to_string()),
+        },
+    }];
+
+    let updated = app
+        .rename_session_template_at(0, "Template B")
+        .expect("rename should succeed");
+
+    assert!(updated);
+    assert_eq!(
+        app.weekday_profile_rules[0].session_template.as_deref(),
+        Some("Template B")
+    );
+    let Some(AutomationTriggerRuleConfig {
+        action:
+            AutomationTriggerActionConfig::ApplyDefaults {
+                session_template, ..
+            },
+        ..
+    }) = app.automation_triggers.first()
+    else {
+        panic!("expected apply-defaults trigger");
+    };
+    assert_eq!(session_template.as_deref(), Some("Template B"));
+}
+
+#[test]
+fn session_template_delete_clears_weekday_and_automation_references() {
+    let mut app = App::default();
+    app.task_labels = vec!["Docs".to_string(), "Review".to_string()];
+
+    app.selected_task_label = Some("Docs".to_string());
+    app.capture_session_template("Template A")
+        .expect("template A should be created");
+    app.selected_task_label = Some("Review".to_string());
+    app.capture_session_template("Template B")
+        .expect("template B should be created");
+
+    app.weekday_profile_rules = vec![
+        WeekdayProfileRuleConfig {
+            day: "mon".to_string(),
+            profile: ProfileId::Classic,
+            blocklist_profile: "Default".to_string(),
+            session_template: Some("template a".to_string()),
+        },
+        WeekdayProfileRuleConfig {
+            day: "tue".to_string(),
+            profile: ProfileId::Classic,
+            blocklist_profile: "Default".to_string(),
+            session_template: Some("Template B".to_string()),
+        },
+    ];
+    app.automation_triggers = vec![
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::FocusStarted,
+            action: AutomationTriggerActionConfig::ApplyDefaults {
+                profile: ProfileId::Classic,
+                blocklist_profile: "Default".to_string(),
+                session_template: Some("TEMPLATE A".to_string()),
+            },
+        },
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::FocusCompleted,
+            action: AutomationTriggerActionConfig::ApplyDefaults {
+                profile: ProfileId::Classic,
+                blocklist_profile: "Default".to_string(),
+                session_template: Some("Template B".to_string()),
+            },
+        },
+    ];
+
+    app.delete_session_template_at(0)
+        .expect("delete should succeed");
+
+    assert_eq!(app.session_templates.len(), 1);
+    assert_eq!(app.session_templates[0].name, "Template B");
+    assert_eq!(app.weekday_profile_rules[0].session_template, None);
+    assert_eq!(
+        app.weekday_profile_rules[1].session_template.as_deref(),
+        Some("Template B")
+    );
+    let Some(AutomationTriggerRuleConfig {
+        action:
+            AutomationTriggerActionConfig::ApplyDefaults {
+                session_template, ..
+            },
+        ..
+    }) = app.automation_triggers.first()
+    else {
+        panic!("expected apply-defaults trigger");
+    };
+    assert!(session_template.is_none());
+    let Some(AutomationTriggerRuleConfig {
+        action:
+            AutomationTriggerActionConfig::ApplyDefaults {
+                session_template, ..
+            },
+        ..
+    }) = app.automation_triggers.get(1)
+    else {
+        panic!("expected second apply-defaults trigger");
+    };
+    assert_eq!(session_template.as_deref(), Some("Template B"));
+}
+
+#[test]
+fn session_template_chained_rename_and_create_preserves_duplicate_validation() {
+    let mut app = App::default();
+    app.task_labels = vec!["Docs".to_string()];
+    app.selected_task_label = Some("Docs".to_string());
+
+    app.capture_session_template("Template A")
+        .expect("template A should be created");
+    app.rename_session_template_at(0, "Template B")
+        .expect("rename should succeed");
+    app.capture_session_template("Template A")
+        .expect("template A should be creatable again");
+
+    let names = app
+        .session_templates
+        .iter()
+        .map(|template| template.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(names, vec!["Template B", "Template A"]);
+
+    let err = app
+        .rename_session_template_at(1, "Template B")
+        .expect_err("rename to duplicate should fail");
+    assert!(err.contains("Template `Template B` already exists."));
+}
+
+#[test]
 fn session_planner_rename_moves_task_goal_target() {
     let mut app = App::default();
     app.task_labels = vec!["Docs".to_string()];
