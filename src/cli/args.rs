@@ -55,7 +55,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 34] = [
+    let parsers: [(&str, ValueArgParser); 37] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -87,6 +87,15 @@ fn classify_value_arg(
         (
             "--blocklist-profile-rename",
             classify_blocklist_profile_rename_arg,
+        ),
+        ("--blocklist-category", classify_blocklist_category_arg),
+        (
+            "--blocklist-category-create",
+            classify_blocklist_category_create_arg,
+        ),
+        (
+            "--blocklist-category-rename",
+            classify_blocklist_category_rename_arg,
         ),
         ("--session-template", classify_session_template_arg),
         (
@@ -147,6 +156,7 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--diagnostics" => Some(ParsedToken::Diagnostics),
         "--blocking-preview" => Some(ParsedToken::BlockingPreview),
         "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
+        "--blocklist-category-delete" => Some(ParsedToken::BlocklistCategoryDelete),
         "--session-template-delete" => Some(ParsedToken::SessionTemplateDelete),
         "--blocklist-sites" => Some(ParsedToken::BlocklistSites),
         "--allowlist-sites" => Some(ParsedToken::AllowlistSites),
@@ -332,6 +342,59 @@ fn classify_blocklist_profile_rename_arg(
     }
     Err(invalid_usage(
         "`--blocklist-profile-rename` requires a profile name. Use `--blocklist-profile-rename=NAME` or `--blocklist-profile-rename NAME`.",
+    ))
+}
+
+fn classify_blocklist_category_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        if next.trim().is_empty() {
+            return Err(invalid_usage(
+                "`--blocklist-category` requires a category name when a value is provided.",
+            ));
+        }
+        return Ok((ParsedToken::BlocklistCategory(Some(next.clone())), 2));
+    }
+    Ok((ParsedToken::BlocklistCategory(None), 1))
+}
+
+fn classify_blocklist_category_create_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--blocklist-category-create` requires a category name.",
+        )?;
+        return Ok((ParsedToken::BlocklistCategoryCreate(value.to_string()), 2));
+    }
+    Err(invalid_usage(
+        "`--blocklist-category-create` requires a category name. Use `--blocklist-category-create=NAME` or `--blocklist-category-create NAME`.",
+    ))
+}
+
+fn classify_blocklist_category_rename_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--blocklist-category-rename` requires a category name.",
+        )?;
+        return Ok((ParsedToken::BlocklistCategoryRename(value.to_string()), 2));
+    }
+    Err(invalid_usage(
+        "`--blocklist-category-rename` requires a category name. Use `--blocklist-category-rename=NAME` or `--blocklist-category-rename NAME`.",
     ))
 }
 
@@ -652,7 +715,7 @@ fn classify_automation_triggers_set_arg(
 }
 
 pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 34] = [
+    let parsers: [KeyValueParser; 37] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -676,6 +739,9 @@ pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, S
         parse_blocklist_profile_key_value_arg,
         parse_blocklist_profile_create_key_value_arg,
         parse_blocklist_profile_rename_key_value_arg,
+        parse_blocklist_category_key_value_arg,
+        parse_blocklist_category_create_key_value_arg,
+        parse_blocklist_category_rename_key_value_arg,
         parse_session_template_key_value_arg,
         parse_session_template_apply_key_value_arg,
         parse_session_template_create_key_value_arg,
@@ -929,6 +995,43 @@ fn parse_blocklist_profile_rename_key_value_arg(arg: &str) -> Result<Option<Pars
             "`--blocklist-profile-rename=` requires a profile name.",
         )?;
         return Ok(Some(ParsedToken::BlocklistProfileRename(value.to_string())));
+    }
+    Ok(None)
+}
+
+fn parse_blocklist_category_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--blocklist-category=") {
+        let value =
+            require_nonempty_key_value(value, "`--blocklist-category=` requires a category name.")?;
+        return Ok(Some(ParsedToken::BlocklistCategory(Some(
+            value.to_string(),
+        ))));
+    }
+    Ok(None)
+}
+
+fn parse_blocklist_category_create_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--blocklist-category-create=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--blocklist-category-create=` requires a category name.",
+        )?;
+        return Ok(Some(ParsedToken::BlocklistCategoryCreate(
+            value.to_string(),
+        )));
+    }
+    Ok(None)
+}
+
+fn parse_blocklist_category_rename_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--blocklist-category-rename=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--blocklist-category-rename=` requires a category name.",
+        )?;
+        return Ok(Some(ParsedToken::BlocklistCategoryRename(
+            value.to_string(),
+        )));
     }
     Ok(None)
 }
