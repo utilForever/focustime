@@ -335,7 +335,7 @@ impl App {
                 &self.session_templates,
             )
         {
-            self.config_error = Some(error);
+            self.config_error = Some(format!("Invalid automation trigger rules: {error}"));
             return;
         }
         if automation_triggers_changed {

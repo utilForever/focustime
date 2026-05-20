@@ -3642,6 +3642,40 @@ fn commit_profile_edit_rejects_invalid_automation_trigger_rules() {
 }
 
 #[test]
+fn commit_profile_edit_rejects_conflicting_automation_trigger_rules() {
+    let mut app = App::default();
+    app.begin_profile_edit();
+    app.profile_edit_automation_triggers = vec![
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time {
+                days: vec!["mon".to_string(), "wed".to_string()],
+                at: "09:00".to_string(),
+            },
+            action: AutomationTriggerActionConfig::StartFocus,
+        },
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time {
+                days: vec!["wednesday".to_string()],
+                at: "09:00".to_string(),
+            },
+            action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 300 },
+        },
+    ];
+
+    app.commit_profile_edit();
+
+    assert!(app.profile_edit_active);
+    assert!(app.profile_edit_snapshot.is_some());
+    assert!(app.automation_triggers.is_empty());
+    assert!(app.config_error.as_deref().is_some_and(|error| {
+        error.contains("Invalid automation trigger rules")
+            && error.contains("rule #1")
+            && error.contains("rule #2")
+            && error.contains("time trigger `wed@09:00`")
+    }));
+}
+
+#[test]
 fn profile_edit_stages_automation_trigger_changes_until_commit() {
     let mut app = App::default();
     let initial_rule = AutomationTriggerRuleConfig {

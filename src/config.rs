@@ -2422,7 +2422,7 @@ pub fn validate_automation_trigger_rules(
     blocklist_profiles: &[BlocklistProfileConfig],
     session_templates: &[SessionTemplateConfig],
 ) -> Result<(), String> {
-    let mut seen_trigger_keys: HashMap<String, usize> = HashMap::new();
+    let mut seen_trigger_keys: HashMap<String, AutomationTriggerConflictRule> = HashMap::new();
     for (index, rule) in rules.iter().enumerate() {
         validate_automation_trigger_rule(
             rule,
@@ -2440,11 +2440,11 @@ fn validate_automation_trigger_rule(
     index: usize,
     blocklist_profiles: &[BlocklistProfileConfig],
     session_templates: &[SessionTemplateConfig],
-    seen_trigger_keys: &mut HashMap<String, usize>,
+    seen_trigger_keys: &mut HashMap<String, AutomationTriggerConflictRule>,
 ) -> Result<(), String> {
     validate_automation_trigger_condition(&rule.trigger, index)?;
     validate_automation_trigger_action(&rule.action, index, blocklist_profiles, session_templates)?;
-    validate_automation_trigger_conflicts(&rule.trigger, index, seen_trigger_keys)?;
+    validate_automation_trigger_conflicts(&rule.trigger, &rule.action, index, seen_trigger_keys)?;
     Ok(())
 }
 
@@ -2553,17 +2553,31 @@ fn validate_automation_trigger_apply_defaults_action(
 
 fn validate_automation_trigger_conflicts(
     trigger: &AutomationTriggerConditionConfig,
+    action: &AutomationTriggerActionConfig,
     index: usize,
-    seen_trigger_keys: &mut HashMap<String, usize>,
+    seen_trigger_keys: &mut HashMap<String, AutomationTriggerConflictRule>,
 ) -> Result<(), String> {
     let conflict_keys = automation_trigger_conflict_keys(trigger);
     for trigger_key in conflict_keys {
-        if let Some(previous_index) = seen_trigger_keys.insert(trigger_key.clone(), index) {
+        if let Some(previous_rule) = seen_trigger_keys.get(&trigger_key)
+            && automation_trigger_actions_conflict(&previous_rule.action, action)
+        {
+            let previous_action = format_automation_trigger_action(&previous_rule.action);
+            let current_action = format_automation_trigger_action(action);
             return Err(format!(
-                "Conflicting automation trigger rules at indexes {previous_index} and {index}: both target `{}`. Keep one rule per trigger condition.",
-                format_automation_trigger_conflict_key(&trigger_key)
+                "Conflicting automation trigger rules: rule #{} (`{previous_action}`) conflicts with rule #{} (`{current_action}`) because both target {}. Keep one rule per trigger condition, or change one trigger so they do not overlap.",
+                previous_rule.index + 1,
+                index + 1,
+                format_automation_trigger_conflict_key(&trigger_key),
             ));
         }
+        seen_trigger_keys.insert(
+            trigger_key,
+            AutomationTriggerConflictRule {
+                index,
+                action: action.clone(),
+            },
+        );
     }
     Ok(())
 }
@@ -2603,6 +2617,29 @@ fn format_automation_trigger_conflict_key(key: &str) -> String {
         return format!("time trigger `{rest}`");
     }
     format!("event trigger `{key}`")
+}
+
+#[derive(Debug, Clone)]
+struct AutomationTriggerConflictRule {
+    index: usize,
+    action: AutomationTriggerActionConfig,
+}
+
+fn automation_trigger_actions_conflict(
+    _existing: &AutomationTriggerActionConfig,
+    _candidate: &AutomationTriggerActionConfig,
+) -> bool {
+    // Automation trigger matrix: overlapping trigger identities always conflict today,
+    // regardless of action type. We keep this explicit helper to evolve policy later.
+    true
+}
+
+fn format_automation_trigger_action(action: &AutomationTriggerActionConfig) -> &'static str {
+    match action {
+        AutomationTriggerActionConfig::StartFocus => "start_focus",
+        AutomationTriggerActionConfig::DelayScheduleStart { .. } => "delay_schedule_start",
+        AutomationTriggerActionConfig::ApplyDefaults { .. } => "apply_defaults",
+    }
 }
 
 fn normalize_weekday_profile_rules(

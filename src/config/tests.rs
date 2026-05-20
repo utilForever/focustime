@@ -966,7 +966,68 @@ fn validate_automation_trigger_rules_rejects_conflicting_rules() {
             .unwrap_err();
 
     assert!(error.contains("Conflicting automation trigger rules"));
+    assert!(error.contains("rule #1"));
+    assert!(error.contains("rule #2"));
+    assert!(error.contains("start_focus"));
+    assert!(error.contains("delay_schedule_start"));
     assert!(error.contains("time trigger"));
+    assert!(error.contains("do not overlap"));
+}
+
+#[test]
+fn validate_automation_trigger_rules_rejects_event_conflicts_with_action_diagnostics() {
+    let rules = vec![
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::FocusStarted,
+            action: AutomationTriggerActionConfig::StartFocus,
+        },
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::FocusStarted,
+            action: AutomationTriggerActionConfig::ApplyDefaults {
+                profile: ProfileId::DeepWork,
+                blocklist_profile: "Default".to_string(),
+                session_template: None,
+            },
+        },
+    ];
+
+    let error =
+        validate_automation_trigger_rules(&rules, &[BlocklistProfileConfig::default()], &[])
+            .unwrap_err();
+
+    assert!(error.contains("rule #1"));
+    assert!(error.contains("rule #2"));
+    assert!(error.contains("start_focus"));
+    assert!(error.contains("apply_defaults"));
+    assert!(error.contains("event trigger `focus_started`"));
+}
+
+#[test]
+fn validate_automation_trigger_rules_rejects_multi_day_time_overlap() {
+    let rules = vec![
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time {
+                days: vec!["mon".to_string(), "tue".to_string()],
+                at: "09:00".to_string(),
+            },
+            action: AutomationTriggerActionConfig::StartFocus,
+        },
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time {
+                days: vec!["tuesday".to_string()],
+                at: "09:00".to_string(),
+            },
+            action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 60 },
+        },
+    ];
+
+    let error =
+        validate_automation_trigger_rules(&rules, &[BlocklistProfileConfig::default()], &[])
+            .unwrap_err();
+
+    assert!(error.contains("rule #1"));
+    assert!(error.contains("rule #2"));
+    assert!(error.contains("time trigger `tue@09:00`"));
 }
 
 #[test]

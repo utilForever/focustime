@@ -1369,14 +1369,7 @@ fn execute_automation_triggers_command(
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(rules) = rules {
-        config.automation_triggers = rules;
-        config = config.normalized();
-        validate_automation_trigger_rules(
-            &config.automation_triggers,
-            &config.blocklist_profiles,
-            &config.session_templates,
-        )
-        .map_err(|error| format!("Invalid automation trigger rules: {error}"))?;
+        config.automation_triggers = validate_and_normalize_automation_triggers(rules, &config)?;
         config
             .save()
             .map_err(|error| format!("Failed to save automation trigger rules: {error}"))?;
@@ -1393,6 +1386,22 @@ fn execute_automation_triggers_command(
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
+}
+
+fn validate_and_normalize_automation_triggers(
+    rules: Vec<AutomationTriggerRuleConfig>,
+    config: &AppConfig,
+) -> Result<Vec<AutomationTriggerRuleConfig>, String> {
+    validate_automation_trigger_rules(
+        &rules,
+        &config.blocklist_profiles,
+        &config.session_templates,
+    )
+    .map_err(|error| format!("Invalid automation trigger rules: {error}"))?;
+
+    let mut normalized = config.clone();
+    normalized.automation_triggers = rules;
+    Ok(normalized.normalized().automation_triggers)
 }
 
 fn execute_schedule_delay_command(output: OutputMode) -> Result<(), String> {
@@ -2077,5 +2086,44 @@ mod tests {
         let interrupted = wait_thread.join().expect("watch wait thread should join");
         WATCH_INTERRUPTED.store(false, Ordering::SeqCst);
         assert!(interrupted);
+    }
+
+    #[test]
+    fn validate_and_normalize_automation_triggers_rejects_invalid_delay_without_clamping() {
+        let config = AppConfig::default().normalized();
+        let rules = vec![AutomationTriggerRuleConfig {
+            trigger: crate::config::AutomationTriggerConditionConfig::ScheduleWindowEnd,
+            action: crate::config::AutomationTriggerActionConfig::DelayScheduleStart {
+                delay_secs: 0,
+            },
+        }];
+
+        let error = validate_and_normalize_automation_triggers(rules, &config).unwrap_err();
+
+        assert!(error.contains("Invalid automation trigger rules"));
+        assert!(error.contains("delay_secs"));
+    }
+
+    #[test]
+    fn validate_and_normalize_automation_triggers_normalizes_valid_day_aliases() {
+        let config = AppConfig::default().normalized();
+        let rules = vec![AutomationTriggerRuleConfig {
+            trigger: crate::config::AutomationTriggerConditionConfig::Time {
+                days: vec!["MONDAY".to_string(), "monday".to_string()],
+                at: "09:00".to_string(),
+            },
+            action: crate::config::AutomationTriggerActionConfig::StartFocus,
+        }];
+
+        let normalized = validate_and_normalize_automation_triggers(rules, &config)
+            .expect("valid rules should normalize");
+
+        assert_eq!(
+            normalized[0].trigger,
+            crate::config::AutomationTriggerConditionConfig::Time {
+                days: vec!["mon".to_string()],
+                at: "09:00".to_string(),
+            }
+        );
     }
 }
