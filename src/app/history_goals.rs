@@ -269,7 +269,7 @@ pub(crate) fn weekly_daily_goal_allocation_for_context(
                 .get(index)
                 .copied()
                 .and_then(|value| u32::try_from(value).ok())
-                .unwrap_or(u32::MAX),
+                .unwrap_or(0),
             allocatable: weights.get(index).copied().unwrap_or(0) > 0,
             weight_minutes: weights.get(index).copied().unwrap_or(0),
         })
