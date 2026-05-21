@@ -9,8 +9,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crate::blocker::{
     BlockingBackendKind, BlockingBackendPolicy, BlockingIntent, BlockingPreview,
     BlockingPreviewAction, BulkAddResult, CommandBlockingBackend, EditSiteResult,
-    HostsFileDiagnostics, InvalidSiteInput, SiteBlocker, domain_rule_matches_host,
-    normalize_domain_rule,
+    HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
 };
 use crate::config::{
     AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
@@ -1828,63 +1827,7 @@ fn display_input_value(input: &str) -> String {
 }
 
 fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    let allowlist_rules: Vec<String> = all_allowlist_rules_for_profile(profile)
-        .iter()
-        .filter_map(|rule| normalize_domain_rule(rule).ok())
-        .collect();
-    let mut seen = HashSet::new();
-    all_blocklist_rules_for_profile(profile)
-        .into_iter()
-        .filter_map(|site| normalize_domain_rule(&site).ok())
-        .filter(|site| !block_rule_excluded_by_allowlist(site, &allowlist_rules))
-        .filter(|site| seen.insert(site.to_ascii_lowercase()))
-        .collect()
-}
-
-fn block_rule_excluded_by_allowlist(block_rule: &str, allowlist_rules: &[String]) -> bool {
-    if block_rule.starts_with("*.") {
-        return allowlist_rules
-            .iter()
-            .any(|allow_rule| allow_rule.eq_ignore_ascii_case(block_rule));
-    }
-    allowlist_rules
-        .iter()
-        .any(|allow_rule| domain_rule_matches_host(allow_rule, block_rule))
-}
-
-fn all_blocklist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    if profile.categories.is_empty() {
-        return dedup_case_insensitive(profile.sites.iter().cloned());
-    }
-    dedup_case_insensitive(
-        profile
-            .categories
-            .iter()
-            .flat_map(|category| category.sites.iter().cloned()),
-    )
-}
-
-fn all_allowlist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    if profile.categories.is_empty() {
-        return dedup_case_insensitive(profile.allowlist_sites.iter().cloned());
-    }
-    dedup_case_insensitive(
-        profile
-            .categories
-            .iter()
-            .flat_map(|category| category.allowlist_sites.iter().cloned()),
-    )
-}
-
-fn dedup_case_insensitive<I>(values: I) -> Vec<String>
-where
-    I: IntoIterator<Item = String>,
-{
-    let mut seen = HashSet::new();
-    values
-        .into_iter()
-        .filter(|value| seen.insert(value.to_ascii_lowercase()))
-        .collect()
+    crate::config::effective_blocked_sites_for_profile(profile)
 }
 
 fn permission_remediation_guidance() -> &'static str {

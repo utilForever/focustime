@@ -2368,6 +2368,30 @@ fn wildcard_rules_are_kept_in_effective_blocking() {
 }
 
 #[test]
+fn runtime_effective_blocking_canonicalizes_dotted_and_punycode_rules() {
+    let config = AppConfig {
+        blocklist_profiles: vec![BlocklistProfileConfig {
+            name: "Work".to_string(),
+            sites: vec![
+                ".Example.com".to_string(),
+                "*.xn--bcher-kva.example.".to_string(),
+                "api.example.com.".to_string(),
+            ],
+            allowlist_sites: vec![".example.com".to_string()],
+            ..BlocklistProfileConfig::default()
+        }],
+        selected_blocklist_profile: "Work".to_string(),
+        ..AppConfig::default()
+    };
+    let app = App::from_config(config);
+
+    assert_eq!(
+        app.blocker.sites,
+        vec!["*.xn--bcher-kva.example".to_string()]
+    );
+}
+
+#[test]
 fn site_manager_allowlist_mode_updates_effective_blocked_sites() {
     let config = AppConfig {
         blocklist_profiles: vec![BlocklistProfileConfig {

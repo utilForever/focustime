@@ -124,7 +124,7 @@ fn normalize_domain_like_input(
 ) -> Result<String, SiteValidationError> {
     let hostname = extract_hostname_candidate(input)?;
     let (hostname, wildcard_prefix) = extract_wildcard_prefix(hostname, allow_wildcard_prefix)?;
-    let hostname = strip_numeric_port(hostname)?;
+    let hostname = strip_trailing_root_dots(strip_numeric_port(hostname)?);
     if hostname.is_empty() {
         return Err(SiteValidationError::MissingHostname);
     }
@@ -166,6 +166,9 @@ fn extract_wildcard_prefix(
         }
         return Ok((stripped.to_string(), true));
     }
+    if let Some(stripped) = hostname.strip_prefix('.') {
+        return Ok((stripped.to_string(), allow_wildcard_prefix));
+    }
     Ok((hostname, false))
 }
 
@@ -178,6 +181,13 @@ fn strip_numeric_port(mut hostname: String) -> Result<String, SiteValidationErro
         hostname.truncate(colon_pos);
     }
     Ok(hostname)
+}
+
+fn strip_trailing_root_dots(mut hostname: String) -> String {
+    while hostname.ends_with('.') {
+        hostname.pop();
+    }
+    hostname
 }
 
 fn validate_domain_host(hostname: &str) -> Result<(), SiteValidationError> {
@@ -1486,6 +1496,47 @@ mod tests {
             normalize_domain_rule("https://*.example.com/path").unwrap(),
             "*.example.com"
         );
+    }
+
+    #[test]
+    fn normalize_domain_rule_canonicalizes_dotted_forms() {
+        assert_eq!(
+            normalize_domain_rule(".Example.com").unwrap(),
+            "*.example.com"
+        );
+        assert_eq!(
+            normalize_domain_rule("example.com.").unwrap(),
+            "example.com"
+        );
+        assert_eq!(
+            normalize_domain_rule("https://.Example.com./path").unwrap(),
+            "*.example.com"
+        );
+        assert_eq!(
+            normalize_domain_rule(".com").unwrap_err(),
+            SiteValidationError::InvalidLabel
+        );
+    }
+
+    #[test]
+    fn normalize_domain_host_canonicalizes_root_dot_forms() {
+        assert_eq!(
+            normalize_domain_host(".WWW.Example.com.").unwrap(),
+            "www.example.com"
+        );
+    }
+
+    #[test]
+    fn wildcard_matching_handles_punycode_and_dotted_forms() {
+        assert!(domain_rule_matches_host(
+            ".xn--bcher-kva.example",
+            "shop.xn--bcher-kva.example."
+        ));
+        assert!(domain_rule_matches_host(
+            "*.example.com.",
+            "service.example.com"
+        ));
+        assert!(!domain_rule_matches_host("*.example.com.", "example.com."));
     }
 
     #[test]

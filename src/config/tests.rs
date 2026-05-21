@@ -2106,3 +2106,35 @@ fn normalize_merges_legacy_profile_lists_when_categories_exist() {
                 .any(|site| site.eq_ignore_ascii_case("legacy-allow.com"))
     }));
 }
+
+#[test]
+fn effective_blocked_sites_wildcard_allowlist_covers_narrower_wildcard_blocks() {
+    let profile = BlocklistProfileConfig {
+        sites: vec![
+            "*.api.example.com".to_string(),
+            "*.deep.api.example.com".to_string(),
+            "*.other.com".to_string(),
+        ],
+        allowlist_sites: vec!["*.example.com".to_string()],
+        ..BlocklistProfileConfig::default()
+    };
+
+    assert_eq!(
+        effective_blocked_sites_for_profile(&profile),
+        vec!["*.other.com".to_string()]
+    );
+}
+
+#[test]
+fn effective_blocked_sites_exact_allowlist_does_not_cancel_wildcard_block() {
+    let profile = BlocklistProfileConfig {
+        sites: vec!["*.api.example.com".to_string()],
+        allowlist_sites: vec!["api.example.com".to_string()],
+        ..BlocklistProfileConfig::default()
+    };
+
+    assert_eq!(
+        effective_blocked_sites_for_profile(&profile),
+        vec!["*.api.example.com".to_string()]
+    );
+}
