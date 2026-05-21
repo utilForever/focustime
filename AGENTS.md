@@ -104,7 +104,7 @@ cargo audit
 
 - Conventional Commits: `feat:`, `fix:`, `refactor:`, `perf:`, `test:`, `docs:`, `chore:`
 - Split commits by behavior or another meaningful unit of change.
-- Release commits: `feat: vX.Y.Z — short summary` (for example, `feat: v0.12.0 — short summary`)
+- Release commits: `feat: vX.Y.Z — short summary` (for example, `feat: v0.12.1 — short summary`)
 - Hotfix: `fix: description` (no version in message)
 
 ## Release Documentation Checklist
@@ -116,7 +116,7 @@ When preparing a release update, keep these files aligned:
 - `README.md` release automation and latest-release references
 - `CHANGELOG.md` release section and compare links
 - `CONTRIBUTING.md` release workflow/tag examples
-- Release tag examples in docs use the current target release version (for example, `v0.12.0`)
+- Release tag examples in docs use the current target release version (for example, `v0.12.1`)
 - `AGENTS.md` release checklist and process guidance
 - `ARCHITECTURE.md` when release-facing guidance changes
 
