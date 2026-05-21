@@ -656,6 +656,8 @@ struct StatusOutput {
     selected_blocklist_profile: String,
     blocked_sites_count: usize,
     temporary_allowlist_active_count: usize,
+    temporary_allowlist_next_expiry_remaining_secs: Option<u64>,
+    temporary_allowlist_next_expiry_epoch_secs: Option<i64>,
     temporary_allowlist_active: Vec<TemporaryAllowlistStatusOutput>,
     strict_mode: bool,
     goal: GoalOutput,

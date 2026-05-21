@@ -190,6 +190,16 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload.get("weekly_goal").is_some());
     assert!(payload.get("monthly_goal").is_some());
     assert!(payload.get("temporary_allowlist_active_count").is_some());
+    assert!(
+        payload
+            .get("temporary_allowlist_next_expiry_remaining_secs")
+            .is_some()
+    );
+    assert!(
+        payload
+            .get("temporary_allowlist_next_expiry_epoch_secs")
+            .is_some()
+    );
     assert!(payload.get("temporary_allowlist_active").is_some());
     assert!(payload["goal"].get("carry_over").is_some());
     assert!(payload["weekly_goal"].get("carry_over").is_some());
@@ -227,6 +237,14 @@ fn temporary_allowlist_add_json_is_reflected_in_status_json() {
     assert!(stderr_text(&status_output).trim().is_empty());
     let status_payload: Value = serde_json::from_slice(&status_output.stdout).expect("stdout JSON");
     assert_eq!(status_payload["temporary_allowlist_active_count"], 1);
+    assert_eq!(
+        status_payload["temporary_allowlist_next_expiry_remaining_secs"],
+        status_payload["temporary_allowlist_active"][0]["remaining_secs"]
+    );
+    assert_eq!(
+        status_payload["temporary_allowlist_next_expiry_epoch_secs"],
+        status_payload["temporary_allowlist_active"][0]["expires_at_epoch_secs"]
+    );
     assert_eq!(
         status_payload["temporary_allowlist_active"][0]["site"],
         "reddit.com"

@@ -38,6 +38,12 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let selected_automation = config.profile_automation_for(config.selected_profile);
     let temporary_allowlist_active = active_temporary_allowlist_status(config);
     let temporary_allowlist_active_count = temporary_allowlist_active.len();
+    let temporary_allowlist_next_expiry_remaining_secs = temporary_allowlist_active
+        .first()
+        .map(|entry| entry.remaining_secs);
+    let temporary_allowlist_next_expiry_epoch_secs = temporary_allowlist_active
+        .first()
+        .map(|entry| entry.expires_at_epoch_secs);
     let live = build_live_status_output(config, selected_task_label.clone());
     let session = build_session_output(&live);
     let latest_interruption = stats.latest_session_interruption();
@@ -72,6 +78,8 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         selected_blocklist_profile: config.selected_blocklist_profile.clone(),
         blocked_sites_count: active_sites_count,
         temporary_allowlist_active_count,
+        temporary_allowlist_next_expiry_remaining_secs,
+        temporary_allowlist_next_expiry_epoch_secs,
         temporary_allowlist_active,
         strict_mode: selected_automation.strict_mode,
         goal: GoalOutput {

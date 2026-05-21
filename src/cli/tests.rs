@@ -2136,6 +2136,14 @@ fn build_status_output_includes_active_temporary_allowlist_entries() {
     session_recovery::set_test_load_workflow_state(None);
 
     assert_eq!(output.temporary_allowlist_active_count, 1);
+    assert_eq!(
+        output.temporary_allowlist_next_expiry_remaining_secs,
+        Some(output.temporary_allowlist_active[0].remaining_secs)
+    );
+    assert_eq!(
+        output.temporary_allowlist_next_expiry_epoch_secs,
+        Some(output.temporary_allowlist_active[0].expires_at_epoch_secs)
+    );
     assert_eq!(output.temporary_allowlist_active[0].site, "reddit.com");
     assert!(output.temporary_allowlist_active[0].remaining_secs <= 120);
     assert!(output.temporary_allowlist_active[0].remaining_secs > 0);
