@@ -372,6 +372,44 @@ fn timer_status_text_shows_active_break_glass_state() {
 }
 
 #[test]
+fn timer_session_status_lines_include_active_temporary_allowlist_entries() {
+    let mut app = App::default();
+    let (added, refreshed) = app
+        .add_temporary_allowlist_for_cli("reddit.com=120s,news.ycombinator.com=180s")
+        .expect("temporary allowlist entries should be accepted");
+    assert_eq!(added, 2);
+    assert_eq!(refreshed, 0);
+
+    let lines = timer_session_status_lines_for_width(&app, 80);
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("Temp allowlist: 2 active"))
+    );
+    assert!(lines.iter().any(|line| line.contains("reddit.com")));
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("news.ycombinator.com"))
+    );
+}
+
+#[test]
+fn timer_session_status_lines_compact_temporary_allowlist_in_narrow_layouts() {
+    let mut app = App::default();
+    let (added, refreshed) = app
+        .add_temporary_allowlist_for_cli("reddit.com=120s,news.ycombinator.com=180s")
+        .expect("temporary allowlist entries should be accepted");
+    assert_eq!(added, 2);
+    assert_eq!(refreshed, 0);
+
+    let lines = timer_session_status_lines_for_width(&app, 50);
+    assert!(lines.iter().any(|line| line.contains("⏳ Temp: 2 active")));
+    assert!(lines.iter().any(|line| line.contains("reddit.com")));
+    assert!(lines.iter().any(|line| line.contains("+1 more")));
+}
+
+#[test]
 fn timer_secondary_hint_includes_setup_shortcut_in_strict_mode() {
     let mut app = App::default();
     app.strict_mode = true;

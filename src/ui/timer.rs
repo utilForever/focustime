@@ -168,9 +168,6 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let goal_text = readable_goal_streak_text(&format_timer_goal_streak_line(app));
     let (waka_text, waka_color) = wakatime_status_line(app);
     let (schedule_next_text, schedule_status_text) = app.recurring_schedule_display_texts();
-    let strict_and_break_glass = format!(
-        "{strict_status_text} · {break_glass_status_text} · {temporary_allowlist_status_text}"
-    );
 
     let mut lines = vec![
         Line::styled(task_text, task_style),
@@ -209,10 +206,18 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
         ));
     }
     lines.push(Line::styled(waka_text, Style::default().fg(waka_color)));
-    lines.push(Line::styled(
-        strict_and_break_glass,
-        Style::default().fg(app_color(app, Color::DarkGray)),
-    ));
+    for status_line in timer_session_status_lines(
+        strict_status_text,
+        break_glass_status_text,
+        temporary_allowlist_status_text,
+        app,
+        inner.width,
+    ) {
+        lines.push(Line::styled(
+            status_line,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ));
+    }
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
@@ -263,6 +268,85 @@ pub(super) fn timer_status_text(app: &App) -> (String, String, String, String) {
         strict_text,
         break_glass_text,
         temporary_allowlist_text,
+    )
+}
+
+fn timer_session_status_lines(
+    strict_status_text: String,
+    break_glass_status_text: String,
+    temporary_allowlist_status_text: String,
+    app: &App,
+    width: u16,
+) -> Vec<String> {
+    let mut lines = vec![strict_status_text, break_glass_status_text];
+
+    if width < 56 {
+        if let Some(next_expiry_secs) = app.next_temporary_allowlist_expiry_remaining_secs() {
+            lines.push(format!(
+                "⏳ Temp: {} active (next {})",
+                app.active_temporary_allowlist_count(),
+                format_duration_label(next_expiry_secs)
+            ));
+        } else {
+            lines.push("⏳ Temp: off".to_string());
+        }
+    } else {
+        lines.push(temporary_allowlist_status_text);
+    }
+
+    let active_entries = app.active_temporary_allowlist_entries();
+    if active_entries.is_empty() {
+        return lines;
+    }
+
+    let max_visible_entries = if width < 56 {
+        1
+    } else if width < 76 {
+        2
+    } else {
+        3
+    };
+
+    for entry in active_entries.iter().take(max_visible_entries) {
+        if width < 56 {
+            lines.push(format!(
+                "  • {} ({})",
+                entry.site,
+                format_duration_label(entry.remaining_secs)
+            ));
+        } else {
+            lines.push(format!(
+                "  • {} (expires in {})",
+                entry.site,
+                format_duration_label(entry.remaining_secs)
+            ));
+        }
+    }
+
+    let hidden_entries = active_entries.len().saturating_sub(max_visible_entries);
+    if hidden_entries > 0 {
+        if width < 56 {
+            lines.push(format!("  • +{hidden_entries} more"));
+        } else if hidden_entries == 1 {
+            lines.push("  • +1 more active exception".to_string());
+        } else {
+            lines.push(format!("  • +{hidden_entries} more active exceptions"));
+        }
+    }
+
+    lines
+}
+
+#[cfg(test)]
+pub(super) fn timer_session_status_lines_for_width(app: &App, width: u16) -> Vec<String> {
+    let (_, strict_status_text, break_glass_status_text, temporary_allowlist_status_text) =
+        timer_status_text(app);
+    timer_session_status_lines(
+        strict_status_text,
+        break_glass_status_text,
+        temporary_allowlist_status_text,
+        app,
+        width,
     )
 }
 
