@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [0.12.1] - 2026-05-21
+
+### Changed
+
+- **Temporary allowlist visibility improvements (#353):** improved temporary allowlist status visibility across CLI status output and timer UI layouts, including narrow terminal widths.
+
+### Fixed
+
+- **Wildcard matching edge-case correctness fixes (#352):** normalized wildcard-domain matching and effective blocked-site computation so broader allowlist coverage is honored consistently.
+- **Automation rule conflict validation clarity (#351):** strengthened pre-save validation and clearer diagnostics for conflicting automation trigger rules in CLI and TUI flows.
+- **Template action reference integrity (#350):** preserved template references during rename/delete operations to avoid broken template links.
+
 ## [0.12.0] - 2026-05-20
 
 ### Added
@@ -300,7 +312,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/utilForever/focustime/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/utilForever/focustime/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/utilForever/focustime/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/utilForever/focustime/compare/v0.10.1...v0.11.0
