@@ -278,63 +278,102 @@ fn timer_session_status_lines(
     app: &App,
     width: u16,
 ) -> Vec<String> {
+    let narrow = is_narrow_timer_status(width);
     let mut lines = vec![strict_status_text, break_glass_status_text];
-
-    if width < 56 {
-        if let Some(next_expiry_secs) = app.next_temporary_allowlist_expiry_remaining_secs() {
-            lines.push(format!(
-                "⏳ Temp: {} active (next {})",
-                app.active_temporary_allowlist_count(),
-                format_duration_label(next_expiry_secs)
-            ));
-        } else {
-            lines.push("⏳ Temp: off".to_string());
-        }
-    } else {
-        lines.push(temporary_allowlist_status_text);
-    }
+    lines.push(timer_temporary_allowlist_summary_line(
+        app,
+        narrow,
+        temporary_allowlist_status_text,
+    ));
 
     let active_entries = app.active_temporary_allowlist_entries();
     if active_entries.is_empty() {
         return lines;
     }
 
-    let max_visible_entries = if width < 56 {
+    let max_visible_entries = max_visible_temporary_allowlist_entries(width);
+
+    for entry in active_entries.iter().take(max_visible_entries) {
+        lines.push(timer_temporary_allowlist_entry_line(
+            &entry.site,
+            entry.remaining_secs,
+            narrow,
+        ));
+    }
+
+    if let Some(more_entries_line) = timer_temporary_allowlist_more_entries_line(
+        active_entries.len(),
+        max_visible_entries,
+        narrow,
+    ) {
+        lines.push(more_entries_line);
+    }
+
+    lines
+}
+
+fn is_narrow_timer_status(width: u16) -> bool {
+    width < 56
+}
+
+fn max_visible_temporary_allowlist_entries(width: u16) -> usize {
+    if width < 56 {
         1
     } else if width < 76 {
         2
     } else {
         3
-    };
+    }
+}
 
-    for entry in active_entries.iter().take(max_visible_entries) {
-        if width < 56 {
-            lines.push(format!(
-                "  • {} ({})",
-                entry.site,
-                format_duration_label(entry.remaining_secs)
-            ));
-        } else {
-            lines.push(format!(
-                "  • {} (expires in {})",
-                entry.site,
-                format_duration_label(entry.remaining_secs)
-            ));
-        }
+fn timer_temporary_allowlist_summary_line(
+    app: &App,
+    narrow: bool,
+    temporary_allowlist_status_text: String,
+) -> String {
+    if !narrow {
+        return temporary_allowlist_status_text;
     }
 
-    let hidden_entries = active_entries.len().saturating_sub(max_visible_entries);
-    if hidden_entries > 0 {
-        if width < 56 {
-            lines.push(format!("  • +{hidden_entries} more"));
-        } else if hidden_entries == 1 {
-            lines.push("  • +1 more active exception".to_string());
-        } else {
-            lines.push(format!("  • +{hidden_entries} more active exceptions"));
-        }
+    match app.next_temporary_allowlist_expiry_remaining_secs() {
+        Some(next_expiry_secs) => format!(
+            "⏳ Temp: {} active (next {})",
+            app.active_temporary_allowlist_count(),
+            format_duration_label(next_expiry_secs)
+        ),
+        None => "⏳ Temp: off".to_string(),
     }
+}
 
-    lines
+fn timer_temporary_allowlist_entry_line(site: &str, remaining_secs: u64, narrow: bool) -> String {
+    if narrow {
+        format!("  • {} ({})", site, format_duration_label(remaining_secs))
+    } else {
+        format!(
+            "  • {} (expires in {})",
+            site,
+            format_duration_label(remaining_secs)
+        )
+    }
+}
+
+fn timer_temporary_allowlist_more_entries_line(
+    total_entries: usize,
+    max_visible_entries: usize,
+    narrow: bool,
+) -> Option<String> {
+    let hidden_entries = total_entries.saturating_sub(max_visible_entries);
+    if hidden_entries == 0 {
+        return None;
+    }
+    if narrow {
+        return Some(format!("  • +{hidden_entries} more"));
+    }
+    if hidden_entries == 1 {
+        Some("  • +1 more active exception".to_string())
+    } else {
+        Some(format!("  • +{hidden_entries} more active exceptions"))
+    }
 }
 
 #[cfg(test)]
