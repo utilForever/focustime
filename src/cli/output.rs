@@ -12,6 +12,7 @@ use crate::cli::{
     TimerStateOutput, WeekdayRulesCommandOutput, Write, format_schedule_conflict,
     inspect_schedule_conflicts_from_config, io,
 };
+use chrono::{Local, TimeZone};
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
     if payload.updated {
@@ -340,16 +341,39 @@ pub(super) fn print_status_output(payload: &StatusOutput) {
         "Blocklist profile: {} ({} sites)",
         payload.selected_blocklist_profile, payload.blocked_sites_count
     );
-    println!(
-        "Temporary allowlist active: {}",
-        payload.temporary_allowlist_active_count
-    );
-    for entry in &payload.temporary_allowlist_active {
+    if payload.temporary_allowlist_active.is_empty() {
+        println!("Temporary allowlist: off");
+    } else {
+        let next_expiry_text = match (
+            payload.temporary_allowlist_next_expiry_remaining_secs,
+            payload.temporary_allowlist_next_expiry_epoch_secs,
+        ) {
+            (Some(remaining_secs), Some(epoch_secs)) => format!(
+                " (next expiry in {}{})",
+                format_duration(remaining_secs),
+                format_expiry_clock_suffix(epoch_secs)
+            ),
+            (Some(remaining_secs), None) => {
+                format!(" (next expiry in {})", format_duration(remaining_secs))
+            }
+            (None, Some(epoch_secs)) => {
+                format!(" (next expiry{})", format_expiry_clock_suffix(epoch_secs))
+            }
+            (None, None) => String::new(),
+        };
         println!(
-            "  - {} (expires in {})",
-            entry.site,
-            format_duration(entry.remaining_secs)
+            "Temporary allowlist: {} active{}",
+            payload.temporary_allowlist_active_count, next_expiry_text
         );
+        println!("Active temporary exceptions:");
+        for entry in &payload.temporary_allowlist_active {
+            println!(
+                "  - {} (expires in {}{})",
+                entry.site,
+                format_duration(entry.remaining_secs),
+                format_expiry_clock_suffix(entry.expires_at_epoch_secs)
+            );
+        }
     }
     println!(
         "Strict mode: {}",
@@ -893,6 +917,14 @@ pub(super) fn format_duration(secs: u64) -> String {
         (m, 0) => format!("{m}m"),
         (m, s) => format!("{m}m {s}s"),
     }
+}
+
+fn format_expiry_clock_suffix(epoch_secs: i64) -> String {
+    Local
+        .timestamp_opt(epoch_secs, 0)
+        .single()
+        .map(|datetime| format!(" at {}", datetime.format("%H:%M:%S")))
+        .unwrap_or_default()
 }
 
 pub(super) fn display_input_value(value: &str) -> String {
