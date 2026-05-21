@@ -619,10 +619,18 @@ pub fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> 
 }
 
 fn block_rule_excluded_by_allowlist(block_rule: &str, allowlist_rules: &[String]) -> bool {
-    if block_rule.starts_with("*.") {
-        return allowlist_rules
-            .iter()
-            .any(|allow_rule| allow_rule.eq_ignore_ascii_case(block_rule));
+    if let Some(block_suffix) = block_rule.strip_prefix("*.") {
+        let block_suffix = block_suffix.to_ascii_lowercase();
+        return allowlist_rules.iter().any(|allow_rule| {
+            if allow_rule.eq_ignore_ascii_case(block_rule) {
+                return true;
+            }
+            let Some(allow_suffix) = allow_rule.strip_prefix("*.") else {
+                return false;
+            };
+            let allow_suffix = allow_suffix.to_ascii_lowercase();
+            block_suffix == allow_suffix || block_suffix.ends_with(&format!(".{allow_suffix}"))
+        });
     }
     allowlist_rules
         .iter()
