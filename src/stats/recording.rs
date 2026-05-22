@@ -1,8 +1,10 @@
 use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, FocusSessionMetadata, FocusSessionRecord,
-    FocusStats, ProfileId, SessionInterruptionEvent, SessionInterruptionReason, month_key_for_day,
-    normalize_session_metadata_text, normalize_task_label, task_label_index, week_key_for_day,
+    FocusStats, ProfileId, SessionInterruptionEvent, SessionInterruptionReason, TimeOfDayBucket,
+    month_key_for_day, normalize_session_metadata_text, normalize_task_label, task_label_index,
+    week_key_for_day,
 };
+use chrono::Timelike;
 
 impl FocusStats {
     pub fn record_focus_elapsed(
@@ -54,6 +56,25 @@ impl FocusStats {
         focused_seconds: u64,
         profile: Option<ProfileId>,
     ) {
+        self.record_completed_pomodoro_with_metadata_at(
+            day_key,
+            goal,
+            metadata,
+            focused_seconds,
+            profile,
+            Some(current_timestamp_epoch_secs()),
+        );
+    }
+
+    pub fn record_completed_pomodoro_with_metadata_at(
+        &mut self,
+        day_key: &str,
+        goal: DailyGoalSnapshot,
+        metadata: FocusSessionMetadata<'_>,
+        focused_seconds: u64,
+        profile: Option<ProfileId>,
+        completion_timestamp_epoch_secs: Option<u64>,
+    ) {
         self.session.pomodoros_completed = self.session.pomodoros_completed.saturating_add(1);
         let daily = self.daily.entry(day_key.to_string()).or_default();
         daily.pomodoros_completed = daily.pomodoros_completed.saturating_add(1);
@@ -79,6 +100,10 @@ impl FocusStats {
                 task_note,
                 focused_seconds,
                 profile,
+                completion_timestamp_epoch_secs,
+                completion_time_of_day_bucket: completion_time_of_day_bucket(
+                    completion_timestamp_epoch_secs,
+                ),
             });
         }
     }
@@ -175,4 +200,15 @@ impl FocusStats {
         self.monthly_goal_snapshots.insert(key, goal);
         true
     }
+}
+
+fn current_timestamp_epoch_secs() -> u64 {
+    chrono::Local::now().timestamp().max(0) as u64
+}
+
+fn completion_time_of_day_bucket(epoch_secs: Option<u64>) -> Option<TimeOfDayBucket> {
+    let epoch = i64::try_from(epoch_secs?).ok()?;
+    let timestamp = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0)?;
+    let local_time = timestamp.with_timezone(&chrono::Local);
+    Some(TimeOfDayBucket::from_hour(local_time.hour()))
 }

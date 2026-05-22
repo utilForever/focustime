@@ -29,11 +29,6 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
 
     let session_stats = app.session_stats();
     let today_stats = app.today_stats();
-    let recent_active_days = app
-        .recent_daily_stats(7)
-        .into_iter()
-        .filter(|(_, stats)| stats.pomodoros_completed > 0 || stats.focused_seconds > 0)
-        .count();
     let focus_score_line = readable_focus_score_text(&format_history_focus_score_line(app));
     let goals_line = readable_goal_streak_text(&format_history_goal_streak_line(app));
     let risk_line = format_history_focus_risk_line(app);
@@ -42,6 +37,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
     let growth_summary = app.stats_growth_summary();
     let retention_preview = app.stats_retention_preview();
     let retention = app.stats_retention_config();
+    let comparison_filters = app.history_comparison_filter_summary();
     let growth_line = format!(
         "Stats growth: {} records · ~{} · {}",
         growth_summary.total_record_count,
@@ -87,10 +83,6 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
             Style::default().fg(app_color(app, Color::DarkGray)),
         ),
         Line::styled(
-            format!("Active days (7d): {recent_active_days}"),
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        ),
-        Line::styled(
             interruption_line,
             Style::default().fg(app_color(app, Color::DarkGray)),
         ),
@@ -100,6 +92,10 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         ),
         Line::styled(
             retention_line,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
+        Line::styled(
+            comparison_filters,
             Style::default().fg(app_color(app, Color::DarkGray)),
         ),
     ])
@@ -130,30 +126,30 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         ])
         .split(content_layout[1]);
 
-    let task_total_items: Vec<ListItem> = app
-        .task_focus_totals(6)
+    let comparison_items: Vec<ListItem> = app
+        .history_comparison_rows(6)
         .into_iter()
-        .map(|stats| {
-            let goal_summary = app
-                .task_goal_progress_for_label(&stats.task_label)
-                .map(|progress| format_task_goal_progress_summary(&progress))
-                .unwrap_or_else(|| "goal off".to_string());
+        .map(|entry| {
             ListItem::new(format!(
-                "  {} · 🍅{} · {}m · {}",
-                stats.task_label,
-                stats.pomodoros_completed,
-                stats.focused_minutes(),
-                goal_summary
+                "  {} · {}m · 🍅{} · {}%",
+                entry.label,
+                entry.focused_minutes(),
+                entry.sessions_completed,
+                entry.focus_share_pct
             ))
         })
         .collect();
+    let comparison_title = format!(
+        " Comparison: {} ",
+        app.history_comparison_dimension().label()
+    );
     render_history_panel(
         frame,
         app,
         left_sections[0],
-        " Task Totals ",
-        task_total_items,
-        "  No task totals yet.",
+        comparison_title.as_str(),
+        comparison_items,
+        "  No comparison rows for active slices.",
     );
 
     let task_trend_items: Vec<ListItem> = app
@@ -269,8 +265,12 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         inner[3],
         vec![
             Line::from(format!(
-                "History: {} Export CSV + JSON",
-                app.shortcut_hint(ShortcutAction::ExportStatsHistory)
+                "History: {} Export CSV + JSON | Compare: [{}/{}] Dim [{}/{}] Task [[/]] Profile [,/.] Time",
+                app.shortcut_hint(ShortcutAction::ExportStatsHistory),
+                app.navigation_label(NavigationAction::MoveLeft),
+                app.navigation_label(NavigationAction::MoveRight),
+                app.navigation_label(NavigationAction::MoveUp),
+                app.navigation_label(NavigationAction::MoveDown),
             )),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
@@ -318,7 +318,7 @@ fn render_history_panel(
     frame: &mut Frame,
     app: &App,
     area: Rect,
-    title: &'static str,
+    title: &str,
     items: Vec<ListItem>,
     empty_message: &'static str,
 ) {
@@ -518,6 +518,7 @@ pub(super) fn format_task_trend_delta(trend: &crate::stats::TaskTrend) -> String
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn format_task_goal_progress_summary(
     progress: &crate::stats::TaskGoalProgress,
 ) -> String {

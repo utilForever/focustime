@@ -4358,6 +4358,110 @@ fn history_view_toggles_from_timer_mode() {
 }
 
 #[test]
+fn history_view_cycles_comparison_dimensions_with_arrow_keys() {
+    let mut app = App::default();
+    app.handle_key(key(KeyCode::Char('h')));
+    assert_eq!(app.mode, AppMode::StatsHistory);
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::TaskLabel
+    );
+
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::Profile
+    );
+
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::TimeOfDay
+    );
+
+    app.handle_key(key(KeyCode::Left));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::Profile
+    );
+}
+
+#[test]
+fn history_view_comparison_dimension_wraps_in_both_directions() {
+    let mut app = App::default();
+    app.handle_key(key(KeyCode::Char('h')));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::TaskLabel
+    );
+
+    app.handle_key(key(KeyCode::Left));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::TimeOfDay
+    );
+
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::TaskLabel
+    );
+
+    app.handle_key(key(KeyCode::Right));
+    app.handle_key(key(KeyCode::Right));
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::TaskLabel
+    );
+}
+
+#[test]
+fn history_view_comparison_filters_cycle_with_wrap_and_stale_task_selection() {
+    let mut app = App::default();
+    app.task_labels = vec!["Alpha".to_string(), "Beta".to_string()];
+    app.handle_key(key(KeyCode::Char('h')));
+
+    assert_eq!(app.history_task_filter, None);
+    app.handle_key(key(KeyCode::Down));
+    assert_eq!(app.history_task_filter.as_deref(), Some("Alpha"));
+    app.handle_key(key(KeyCode::Down));
+    assert_eq!(app.history_task_filter.as_deref(), Some("Beta"));
+    app.handle_key(key(KeyCode::Down));
+    assert_eq!(app.history_task_filter, None);
+
+    app.history_task_filter = Some("Ghost".to_string());
+    app.handle_key(key(KeyCode::Down));
+    assert_eq!(app.history_task_filter.as_deref(), Some("Alpha"));
+    app.history_task_filter = Some("Ghost".to_string());
+    app.handle_key(key(KeyCode::Up));
+    assert_eq!(app.history_task_filter.as_deref(), Some("Beta"));
+
+    assert_eq!(app.history_profile_filter, None);
+    app.handle_key(key(KeyCode::Char(']')));
+    assert_eq!(
+        app.history_profile_filter,
+        Some(crate::stats::ProfileBucket::Classic)
+    );
+    app.handle_key(key(KeyCode::Char('[')));
+    assert_eq!(app.history_profile_filter, None);
+
+    assert_eq!(app.history_time_of_day_filter, None);
+    app.handle_key(key(KeyCode::Char('.')));
+    assert_eq!(
+        app.history_time_of_day_filter,
+        Some(crate::stats::TimeOfDayBucket::Morning)
+    );
+    app.handle_key(key(KeyCode::Char(',')));
+    assert_eq!(app.history_time_of_day_filter, None);
+    app.handle_key(key(KeyCode::Char(',')));
+    assert_eq!(
+        app.history_time_of_day_filter,
+        Some(crate::stats::TimeOfDayBucket::Unknown)
+    );
+}
+
+#[test]
 fn custom_cancel_shortcut_controls_history_back_navigation() {
     let config = AppConfig {
         shortcuts: ShortcutConfig {

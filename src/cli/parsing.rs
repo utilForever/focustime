@@ -1,10 +1,11 @@
 use crate::cli::{
     AutomationTriggerRuleConfig, BlocklistCategoryCommandKind, BlocklistProfileCommandKind,
-    BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind, DEFAULT_WATCH_INTERVAL_SECS,
-    DailyGoalConfig, MonthlyGoalConfig, NaiveDate, OneTimeFocusWindowConfig, OutputMode,
-    ParsedToken, PrimaryCommand, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
-    SessionTemplateCommandKind, SiteEditValue, SiteListTarget, ThemePreset, USAGE_TEXT,
-    WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind, ComparisonDimension,
+    DEFAULT_STATUS_COMPARISON_LIMIT, DEFAULT_WATCH_INTERVAL_SECS, DailyGoalConfig,
+    MonthlyGoalConfig, NaiveDate, OneTimeFocusWindowConfig, OutputMode, ParsedToken,
+    PrimaryCommand, ProfileBucket, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
+    SessionTemplateCommandKind, SiteEditValue, SiteListTarget, StatusComparisonOptions,
+    ThemePreset, TimeOfDayBucket, USAGE_TEXT, WeekdayProfileRuleConfig, WeeklyGoalConfig,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -39,6 +40,11 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::TaskNote(_)
             | ParsedToken::Status
             | ParsedToken::Watch(_)
+            | ParsedToken::CompareBy(_)
+            | ParsedToken::CompareTask(_)
+            | ParsedToken::CompareProfile(_)
+            | ParsedToken::CompareTimeOfDay(_)
+            | ParsedToken::CompareLimit(_)
             | ParsedToken::Profile(_)
             | ParsedToken::Theme(_)
             | ParsedToken::Goal(_)
@@ -118,6 +124,11 @@ pub(super) fn parse_primary_command(
             }
             ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
             ParsedToken::Watch(_) => {}
+            ParsedToken::CompareBy(_)
+            | ParsedToken::CompareTask(_)
+            | ParsedToken::CompareProfile(_)
+            | ParsedToken::CompareTimeOfDay(_)
+            | ParsedToken::CompareLimit(_) => {}
             ParsedToken::Profile(profile) => {
                 set_primary_command(&mut primary, PrimaryCommand::Profile(*profile))?
             }
@@ -282,6 +293,8 @@ pub(super) fn finalize_cli_action(
     output: OutputMode,
     primary: Option<PrimaryCommand>,
     watch_interval_secs: Option<u64>,
+    comparison: StatusComparisonOptions,
+    has_comparison_options: bool,
 ) -> Result<CliAction, String> {
     if show_help {
         return Ok(CliAction::ShowHelp);
@@ -289,6 +302,11 @@ pub(super) fn finalize_cli_action(
 
     if watch_interval_secs.is_some() && !matches!(primary, Some(PrimaryCommand::Status)) {
         return Err(invalid_usage("`--watch` is only valid with `--status`."));
+    }
+    if has_comparison_options && !matches!(primary, Some(PrimaryCommand::Status)) {
+        return Err(invalid_usage(
+            "`--compare-*` options are only valid with `--status`.",
+        ));
     }
 
     match primary {
@@ -423,6 +441,7 @@ pub(super) fn finalize_cli_action(
         Some(PrimaryCommand::Status) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Status {
                 watch_interval_secs,
+                comparison,
             },
             output,
         })),
@@ -996,6 +1015,149 @@ pub(super) fn parse_watch_interval_option(tokens: &[ParsedToken]) -> Result<Opti
     Ok(interval)
 }
 
+#[derive(Default)]
+struct StatusComparisonParseFlags {
+    has_dimension: bool,
+    has_task: bool,
+    has_profile: bool,
+    has_time_of_day: bool,
+    has_limit: bool,
+    has_any_option: bool,
+}
+
+fn apply_status_comparison_token(
+    token: &ParsedToken,
+    options: &mut StatusComparisonOptions,
+    flags: &mut StatusComparisonParseFlags,
+) -> Result<(), String> {
+    match token {
+        ParsedToken::CompareBy(dimension) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_dimension,
+                "`--compare-by` can only be specified once.",
+            )?;
+            options.dimension = *dimension;
+        }
+        ParsedToken::CompareTask(task) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_task,
+                "`--compare-task` can only be specified once.",
+            )?;
+            options.task_label = task.clone();
+        }
+        ParsedToken::CompareProfile(profile) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_profile,
+                "`--compare-profile` can only be specified once.",
+            )?;
+            options.profile = *profile;
+        }
+        ParsedToken::CompareTimeOfDay(bucket) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_time_of_day,
+                "`--compare-time` can only be specified once.",
+            )?;
+            options.time_of_day = *bucket;
+        }
+        ParsedToken::CompareLimit(limit) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_limit,
+                "`--compare-limit` can only be specified once.",
+            )?;
+            options.limit = *limit;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn mark_compare_option_seen(flag: &mut bool, message: &str) -> Result<(), String> {
+    if *flag {
+        return Err(invalid_usage(message));
+    }
+    *flag = true;
+    Ok(())
+}
+
+pub(super) fn parse_status_comparison_options(
+    tokens: &[ParsedToken],
+) -> Result<(StatusComparisonOptions, bool), String> {
+    let mut options = StatusComparisonOptions::default();
+    let mut flags = StatusComparisonParseFlags::default();
+
+    for token in tokens {
+        apply_status_comparison_token(token, &mut options, &mut flags)?;
+    }
+
+    if options.limit == 0 {
+        return Err(invalid_usage(
+            "`--compare-limit` requires a positive whole number.",
+        ));
+    }
+    if !flags.has_limit {
+        options.limit = DEFAULT_STATUS_COMPARISON_LIMIT;
+    }
+    Ok((options, flags.has_any_option))
+}
+
+pub(super) fn parse_compare_by_value(value: &str) -> Result<ComparisonDimension, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "task" | "task-label" | "task_label" => Ok(ComparisonDimension::TaskLabel),
+        "profile" => Ok(ComparisonDimension::Profile),
+        "time-of-day" | "time_of_day" | "timeofday" | "time" => Ok(ComparisonDimension::TimeOfDay),
+        _ => Err(invalid_usage(&format!(
+            "Invalid compare dimension `{value}`. Use `task`, `profile`, or `time-of-day`."
+        ))),
+    }
+}
+
+pub(super) fn parse_compare_profile_value(value: &str) -> Result<Option<ProfileBucket>, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "all" => Ok(None),
+        "classic" => Ok(Some(ProfileBucket::Classic)),
+        "deep-work" | "deep_work" | "deepwork" => Ok(Some(ProfileBucket::DeepWork)),
+        "custom" => Ok(Some(ProfileBucket::Custom)),
+        "unknown" => Ok(Some(ProfileBucket::Unknown)),
+        _ => Err(invalid_usage(&format!(
+            "Invalid compare profile `{value}`. Use `classic`, `deep-work`, `custom`, `unknown`, or `all`."
+        ))),
+    }
+}
+
+pub(super) fn parse_compare_time_of_day_value(
+    value: &str,
+) -> Result<Option<TimeOfDayBucket>, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "all" => Ok(None),
+        "morning" => Ok(Some(TimeOfDayBucket::Morning)),
+        "afternoon" => Ok(Some(TimeOfDayBucket::Afternoon)),
+        "evening" => Ok(Some(TimeOfDayBucket::Evening)),
+        "night" => Ok(Some(TimeOfDayBucket::Night)),
+        "unknown" => Ok(Some(TimeOfDayBucket::Unknown)),
+        _ => Err(invalid_usage(&format!(
+            "Invalid compare time bucket `{value}`. Use `morning`, `afternoon`, `evening`, `night`, `unknown`, or `all`."
+        ))),
+    }
+}
+
+pub(super) fn parse_compare_limit_value(value: &str) -> Result<usize, String> {
+    let trimmed = value.trim();
+    let limit = trimmed
+        .parse::<usize>()
+        .map_err(|_| invalid_usage("`--compare-limit` requires a positive whole number."))?;
+    if limit == 0 {
+        return Err(invalid_usage(
+            "`--compare-limit` requires a positive whole number.",
+        ));
+    }
+    Ok(limit)
+}
+
 pub(super) fn parse_watch_interval_secs(value: &str) -> Result<u64, String> {
     let trimmed = value.trim();
     let secs = trimmed
@@ -1018,3 +1180,6 @@ pub(super) fn require_nonempty_key_value<'a>(
     }
     Ok(value)
 }
+
+#[cfg(test)]
+mod tests;

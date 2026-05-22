@@ -30,12 +30,12 @@ use crate::schedule::{
     next_one_time_occurrence_after, occurrence_key, pick_active_occurrence, pick_next_occurrence,
 };
 use crate::stats::{
-    BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusRiskForecast,
-    FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats,
-    ProfileEffectiveness, ProfileTotals, SessionInterruptionEvent, SessionInterruptionReason,
-    SessionStats, StatsGrowthSummary, StatsRetentionPruneResult, TaskGoalProgress, TaskTotals,
-    TaskTrend, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target,
-    current_day_key,
+    BreakGlassOverrideEvent, ComparisonDimension, DailyGoalSnapshot, DailyStats,
+    ExportedStatsFiles, FocusRiskForecast, FocusSessionMetadata, FocusStats, GoalStreak,
+    MonthlyHeatmap, MonthlyStats, ProfileBucket, ProfileEffectiveness, ProfileTotals,
+    SessionInterruptionEvent, SessionInterruptionReason, SessionStats, StatsGrowthSummary,
+    StatsRetentionPruneResult, TaskGoalProgress, TaskTotals, TaskTrend, TimeOfDayBucket,
+    WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::temporary_allowlist::{
@@ -54,6 +54,7 @@ mod automation_triggers;
 mod break_glass;
 mod cli_api;
 mod feedback_diagnostics;
+mod history_comparison;
 mod history_goals;
 mod mode_keys;
 mod persistence;
@@ -723,6 +724,10 @@ pub struct App {
     /// Last error from persisting focus stats.
     pub stats_error: Option<String>,
     pub history_feedback: Option<HistoryFeedback>,
+    history_comparison_dimension: ComparisonDimension,
+    history_task_filter: Option<String>,
+    history_profile_filter: Option<ProfileBucket>,
+    history_time_of_day_filter: Option<TimeOfDayBucket>,
     pub phase_notification: Option<String>,
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
@@ -930,6 +935,10 @@ impl App {
             config_error: initial_config_error,
             stats_error,
             history_feedback: None,
+            history_comparison_dimension: ComparisonDimension::TaskLabel,
+            history_task_filter: None,
+            history_profile_filter: None,
+            history_time_of_day_filter: None,
             phase_notification: None,
             wakatime: WakatimeTracker::new_with_settings(
                 WakatimeHeartbeatMetadata {
@@ -1195,6 +1204,8 @@ impl App {
         )
     }
 
+    #[cfg(test)]
+    #[allow(dead_code)]
     pub fn recent_daily_stats(&self, limit: usize) -> Vec<(String, DailyStats)> {
         self.stats.recent_daily(limit)
     }
@@ -1253,10 +1264,12 @@ impl App {
         self.stats.profile_effectiveness()
     }
 
+    #[allow(dead_code)]
     pub fn task_focus_totals(&self, limit: usize) -> Vec<TaskTotals> {
         self.stats.task_totals(limit)
     }
 
+    #[allow(dead_code)]
     pub fn task_goal_progress_for_label(&self, label: &str) -> Option<TaskGoalProgress> {
         self.stats.task_goal_progress_for_label(label)
     }

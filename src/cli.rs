@@ -20,8 +20,9 @@ use crate::config::{
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
 use crate::stats::{
-    DailyGoalSnapshot, FocusRiskForecast, FocusStats, SessionInterruptionEvent, StatsGrowthSummary,
-    StatsRetentionPruneResult, carry_over_goal_target, current_day_key,
+    ComparisonDimension, DailyGoalSnapshot, FocusRiskForecast, FocusStats,
+    ProductivityComparisonRow, ProfileBucket, SessionInterruptionEvent, StatsGrowthSummary,
+    StatsRetentionPruneResult, TimeOfDayBucket, carry_over_goal_target, current_day_key,
 };
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -59,17 +60,20 @@ use output::{
     print_weekday_rules_command_output,
 };
 use parsing::{
-    finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_global_tokens,
-    parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_primary_command,
-    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
-    parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
-    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
-    require_nonempty_key_value,
+    finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_compare_by_value,
+    parse_compare_limit_value, parse_compare_profile_value, parse_compare_time_of_day_value,
+    parse_global_tokens, parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value,
+    parse_primary_command, parse_profile_id, parse_schedule_value, parse_site_edit_value,
+    parse_status_comparison_options, parse_strict_value, parse_task_goal_value, parse_theme_preset,
+    parse_watch_interval_option, parse_watch_interval_secs, parse_weekday_rules_value,
+    parse_weekly_goal_value, require_nonempty_key_value,
 };
+#[cfg(test)]
+use status::build_status_output;
 use status::{
-    available_break_template_views, available_theme_preset_views, build_status_output,
-    build_task_goal_output, profile_id, profile_view, selected_break_template_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    available_break_template_views, available_theme_preset_views,
+    build_status_output_with_comparison, build_task_goal_output, profile_id, profile_view,
+    selected_break_template_view, theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const USAGE_TEXT: &str = r#"Usage:
@@ -135,7 +139,7 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --allowlist-site-delete=HOSTNAME [--json]
   focustime --diagnostics [--json]
   focustime --blocking-preview [--json]
-  focustime --status [--watch[=SECONDS]] [--json]
+  focustime --status [--watch[=SECONDS]] [--compare-by=task|profile|time-of-day] [--compare-task=LABEL|all] [--compare-profile=classic|deep-work|custom|unknown|all] [--compare-time=morning|afternoon|evening|night|unknown|all] [--compare-limit=N] [--json]
   focustime --backup[=DIR] [--json]
   focustime --restore[=DIR] [--json]
   focustime --export[=DIR] [--json]
@@ -194,6 +198,11 @@ Options:
   --blocking-preview  Preview backend-selected blocking changes without writing
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
+  --compare-by    Status comparison dimension: task | profile | time-of-day
+  --compare-task  Status comparison task slice label, or `all` to clear
+  --compare-profile  Status comparison profile slice: classic | deep-work | custom | unknown | all
+  --compare-time  Status comparison time-of-day slice: morning | afternoon | evening | night | unknown | all
+  --compare-limit Status comparison row limit (positive integer)
   --backup        Back up config.toml and stats.toml to current directory or DIR
   --restore       Restore config.toml and stats.toml from current directory or DIR
   --export        Export stats to current directory or DIR
@@ -209,6 +218,28 @@ pub enum OutputMode {
 const EXIT_CODE_RUNTIME_ERROR: i32 = 1;
 const EXIT_CODE_USAGE_ERROR: i32 = 2;
 const DEFAULT_WATCH_INTERVAL_SECS: u64 = 1;
+const DEFAULT_STATUS_COMPARISON_LIMIT: usize = 6;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusComparisonOptions {
+    pub dimension: ComparisonDimension,
+    pub task_label: Option<String>,
+    pub profile: Option<ProfileBucket>,
+    pub time_of_day: Option<TimeOfDayBucket>,
+    pub limit: usize,
+}
+
+impl Default for StatusComparisonOptions {
+    fn default() -> Self {
+        Self {
+            dimension: ComparisonDimension::TaskLabel,
+            task_label: None,
+            profile: None,
+            time_of_day: None,
+            limit: DEFAULT_STATUS_COMPARISON_LIMIT,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -309,6 +340,7 @@ pub enum CommandKind {
     BlockingPreview,
     Status {
         watch_interval_secs: Option<u64>,
+        comparison: StatusComparisonOptions,
     },
     Backup {
         dir: Option<PathBuf>,
@@ -430,6 +462,11 @@ enum ParsedToken {
     TaskNote(Option<String>),
     Status,
     Watch(Option<u64>),
+    CompareBy(ComparisonDimension),
+    CompareTask(Option<String>),
+    CompareProfile(Option<ProfileBucket>),
+    CompareTimeOfDay(Option<TimeOfDayBucket>),
+    CompareLimit(usize),
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
@@ -667,6 +704,16 @@ struct WeeklyAllocationOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct StatusComparisonOutput {
+    dimension: ComparisonDimension,
+    task_filter: Option<String>,
+    profile_filter: Option<ProfileBucket>,
+    time_of_day_filter: Option<TimeOfDayBucket>,
+    limit: usize,
+    rows: Vec<ProductivityComparisonRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct StatusOutput {
     day: String,
     selected_profile: ProfileView,
@@ -692,6 +739,7 @@ struct StatusOutput {
     today: TodayOutput,
     latest_interruption: Option<SessionInterruptionEvent>,
     focus_score: FocusScoreOutput,
+    comparison: StatusComparisonOutput,
     focus_risk: FocusRiskForecast,
     stats_growth: StatsGrowthSummary,
     stats_retention: StatsRetentionStatusOutput,
@@ -1026,8 +1074,17 @@ where
     let primary = parse_primary_command(&tokens).map_err(|message| usage_error(output, message))?;
     let watch_interval_secs =
         parse_watch_interval_option(&tokens).map_err(|message| usage_error(output, message))?;
-    finalize_cli_action(show_help, output, primary, watch_interval_secs)
-        .map_err(|message| usage_error(output, message))
+    let (comparison, has_comparison_options) =
+        parse_status_comparison_options(&tokens).map_err(|message| usage_error(output, message))?;
+    finalize_cli_action(
+        show_help,
+        output,
+        primary,
+        watch_interval_secs,
+        comparison,
+        has_comparison_options,
+    )
+    .map_err(|message| usage_error(output, message))
 }
 
 pub fn runtime_error(output: OutputMode, message: String) -> CliError {

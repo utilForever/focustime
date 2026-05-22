@@ -35,7 +35,7 @@ mod trends;
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
 const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
-const EXPORT_SCHEMA_VERSION: u32 = 5;
+const EXPORT_SCHEMA_VERSION: u32 = 6;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -372,6 +372,10 @@ pub struct FocusSessionRecord {
     pub focused_seconds: u64,
     #[serde(default)]
     pub profile: Option<ProfileId>,
+    #[serde(default)]
+    pub completion_timestamp_epoch_secs: Option<u64>,
+    #[serde(default)]
+    pub completion_time_of_day_bucket: Option<TimeOfDayBucket>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -414,7 +418,8 @@ pub struct SessionInterruptionEvent {
     pub profile: Option<ProfileId>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ProfileBucket {
     Classic,
     DeepWork,
@@ -430,6 +435,115 @@ impl ProfileBucket {
             Self::Custom => "Custom",
             Self::Unknown => "Unknown",
         }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Classic => "classic",
+            Self::DeepWork => "deep_work",
+            Self::Custom => "custom",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimeOfDayBucket {
+    Morning,
+    Afternoon,
+    Evening,
+    Night,
+    Unknown,
+}
+
+impl TimeOfDayBucket {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Morning => "Morning",
+            Self::Afternoon => "Afternoon",
+            Self::Evening => "Evening",
+            Self::Night => "Night",
+            Self::Unknown => "Unknown",
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Morning => "morning",
+            Self::Afternoon => "afternoon",
+            Self::Evening => "evening",
+            Self::Night => "night",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    pub fn from_hour(hour: u32) -> Self {
+        match hour {
+            5..=11 => Self::Morning,
+            12..=16 => Self::Afternoon,
+            17..=21 => Self::Evening,
+            0..=4 | 22..=23 => Self::Night,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ComparisonDimension {
+    TaskLabel,
+    Profile,
+    TimeOfDay,
+}
+
+impl ComparisonDimension {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::TaskLabel => "Task",
+            Self::Profile => "Profile",
+            Self::TimeOfDay => "Time of Day",
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::TaskLabel => "task_label",
+            Self::Profile => "profile",
+            Self::TimeOfDay => "time_of_day",
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ProductivityComparisonFilter {
+    pub task_label: Option<String>,
+    pub profile: Option<ProfileBucket>,
+    pub time_of_day: Option<TimeOfDayBucket>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProductivityComparisonRow {
+    pub dimension: ComparisonDimension,
+    pub label: String,
+    pub task_label: Option<String>,
+    pub profile: Option<ProfileBucket>,
+    pub time_of_day: Option<TimeOfDayBucket>,
+    pub sessions_completed: u32,
+    pub focused_seconds: u64,
+    pub focus_share_pct: u8,
+}
+
+impl ProductivityComparisonRow {
+    pub fn focused_minutes(&self) -> u64 {
+        self.focused_seconds / 60
+    }
+
+    pub fn average_focused_minutes_per_session(&self) -> u64 {
+        if self.sessions_completed == 0 {
+            return 0;
+        }
+        (self.focused_seconds / u64::from(self.sessions_completed)) / 60
     }
 }
 
@@ -571,6 +685,7 @@ struct StatsExport {
     weekly_consistency: Vec<WeeklyConsistencyExportRow>,
     focus_scores: Vec<FocusScoreExportRow>,
     profile_effectiveness: Vec<ProfileEffectivenessExportRow>,
+    productivity_comparisons: Vec<ProductivityComparisonExportRow>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -681,6 +796,20 @@ struct ProfileEffectivenessExportRow {
     focus_share_pct: u8,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct ProductivityComparisonExportRow {
+    dimension: ComparisonDimension,
+    label: String,
+    task_label: Option<String>,
+    profile: Option<String>,
+    time_of_day: Option<TimeOfDayBucket>,
+    sessions_completed: u32,
+    focused_seconds: u64,
+    focused_minutes: u64,
+    average_focused_minutes_per_session: u64,
+    focus_share_pct: u8,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct CsvExportRow {
     schema_version: u32,
@@ -720,6 +849,9 @@ struct CsvExportRow {
     focus_score_pct: Option<u8>,
     average_focused_minutes_per_session: Option<u64>,
     focus_share_pct: Option<u8>,
+    comparison_dimension: Option<String>,
+    comparison_label: Option<String>,
+    time_of_day_bucket: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]

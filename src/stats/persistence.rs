@@ -83,6 +83,8 @@ impl FocusStats {
                     task_note,
                     focused_seconds: session.focused_seconds,
                     profile: session.profile,
+                    completion_timestamp_epoch_secs: session.completion_timestamp_epoch_secs,
+                    completion_time_of_day_bucket: session.completion_time_of_day_bucket,
                 });
             }
         }

@@ -1,9 +1,10 @@
 use crate::stats::{
-    BreakGlassOverrideExportRow, CSV_EXPORT_FILE_NAME, CsvExportRow, DailyExportRow,
-    EXPORT_SCHEMA_VERSION, ExportedStatsFiles, FocusScoreExportRow, FocusStats,
-    JSON_EXPORT_FILE_NAME, Path, ProfileEffectivenessExportRow, SessionExportRow,
-    SessionInterruptionExportRow, StatsExport, TaskTotalsExportRow, TaskTrendExportRow,
-    WeeklyConsistencyExportRow, WeeklyExportRow, format_week_label, fs, io, write_atomic_bytes,
+    BreakGlassOverrideExportRow, CSV_EXPORT_FILE_NAME, ComparisonDimension, CsvExportRow,
+    DailyExportRow, EXPORT_SCHEMA_VERSION, ExportedStatsFiles, FocusScoreExportRow, FocusStats,
+    JSON_EXPORT_FILE_NAME, Path, ProductivityComparisonExportRow, ProductivityComparisonFilter,
+    ProfileEffectivenessExportRow, SessionExportRow, SessionInterruptionExportRow, StatsExport,
+    TaskTotalsExportRow, TaskTrendExportRow, WeeklyConsistencyExportRow, WeeklyExportRow,
+    format_week_label, fs, io, write_atomic_bytes,
 };
 
 impl FocusStats {
@@ -39,6 +40,7 @@ impl FocusStats {
             weekly_consistency: self.export_weekly_consistency_rows(),
             focus_scores: self.export_focus_score_rows(),
             profile_effectiveness: self.export_profile_effectiveness_rows(),
+            productivity_comparisons: self.export_productivity_comparison_rows(),
         }
     }
 
@@ -210,6 +212,38 @@ impl FocusStats {
             })
             .collect()
     }
+
+    fn export_productivity_comparison_rows(&self) -> Vec<ProductivityComparisonExportRow> {
+        let filter = ProductivityComparisonFilter::default();
+        [
+            ComparisonDimension::TaskLabel,
+            ComparisonDimension::Profile,
+            ComparisonDimension::TimeOfDay,
+        ]
+        .into_iter()
+        .flat_map(|dimension| {
+            self.productivity_comparison(dimension, &filter, usize::MAX)
+                .into_iter()
+                .map(move |entry| {
+                    let focused_minutes = entry.focused_minutes();
+                    let average_focused_minutes_per_session =
+                        entry.average_focused_minutes_per_session();
+                    ProductivityComparisonExportRow {
+                        dimension,
+                        label: entry.label,
+                        task_label: entry.task_label,
+                        profile: entry.profile.map(|profile| profile.label().to_string()),
+                        time_of_day: entry.time_of_day,
+                        sessions_completed: entry.sessions_completed,
+                        focused_seconds: entry.focused_seconds,
+                        focused_minutes,
+                        average_focused_minutes_per_session,
+                        focus_share_pct: entry.focus_share_pct,
+                    }
+                })
+        })
+        .collect()
+    }
 }
 
 impl StatsExport {
@@ -267,6 +301,9 @@ impl StatsExport {
             focus_score_pct: None,
             average_focused_minutes_per_session: None,
             focus_share_pct: None,
+            comparison_dimension: None,
+            comparison_label: None,
+            time_of_day_bucket: None,
         }
     }
 
@@ -281,7 +318,8 @@ impl StatsExport {
                 + self.task_trends.len()
                 + self.weekly_consistency.len()
                 + self.focus_scores.len()
-                + self.profile_effectiveness.len(),
+                + self.profile_effectiveness.len()
+                + self.productivity_comparisons.len(),
         );
 
         for daily in &self.daily {
@@ -415,6 +453,25 @@ impl StatsExport {
                 ),
                 focus_share_pct: Some(profile.focus_share_pct),
                 ..Self::csv_row_defaults("profile_effectiveness")
+            });
+        }
+
+        for comparison in &self.productivity_comparisons {
+            rows.push(CsvExportRow {
+                pomodoros_completed: comparison.sessions_completed,
+                focused_seconds: comparison.focused_seconds,
+                focused_minutes: comparison.focused_minutes,
+                task_label: comparison.task_label.clone(),
+                profile_name: comparison.profile.clone(),
+                sessions_completed: Some(comparison.sessions_completed),
+                average_focused_minutes_per_session: Some(
+                    comparison.average_focused_minutes_per_session,
+                ),
+                focus_share_pct: Some(comparison.focus_share_pct),
+                comparison_dimension: Some(comparison.dimension.id().to_string()),
+                comparison_label: Some(comparison.label.clone()),
+                time_of_day_bucket: comparison.time_of_day.map(|bucket| bucket.id().to_string()),
+                ..Self::csv_row_defaults("productivity_comparison")
             });
         }
 
