@@ -24,9 +24,9 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .margin(2)
         .constraints([
             Constraint::Length(dashboard_height), // dashboard + borders
-            Constraint::Min(6),    // history panels
-            Constraint::Length(1), // status line
-            Constraint::Length(3), // hints
+            Constraint::Min(6),                   // history panels
+            Constraint::Length(1),                // status line
+            Constraint::Length(3),                // hints
         ])
         .split(outer);
 
