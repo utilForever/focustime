@@ -2583,6 +2583,92 @@ fn build_status_output_weekly_carry_over_skips_when_previous_period_has_no_snaps
 }
 
 #[test]
+fn build_status_output_includes_weekly_allocation_breakdown() {
+    let mut stats = FocusStats::default();
+    let today = current_day_key();
+    let baseline_goal = DailyGoalSnapshot::default();
+    stats.record_focus_elapsed(&today, 30 * 60, baseline_goal);
+    stats.record_completed_pomodoro(&today, baseline_goal);
+
+    let config = AppConfig {
+        weekly_goal: WeeklyGoalConfig {
+            minutes: 210,
+            pomodoros: 7,
+        },
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec![
+                    "mon".to_string(),
+                    "tue".to_string(),
+                    "wed".to_string(),
+                    "thu".to_string(),
+                    "fri".to_string(),
+                    "sat".to_string(),
+                    "sun".to_string(),
+                ],
+                start: "09:00".to_string(),
+                end: "10:00".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+
+    let output = build_status_output(&config, &stats);
+    assert!(output.weekly_allocation.available);
+    assert_eq!(
+        output.weekly_allocation.allocatable_days,
+        output.weekly_allocation.remaining_days_in_week
+    );
+    assert!(!output.weekly_allocation.days.is_empty());
+    assert_eq!(
+        output.weekly_allocation.today_minutes_target,
+        output.weekly_allocation.days[0].minutes_target
+    );
+    assert_eq!(
+        output.weekly_allocation.today_pomodoros_target,
+        output.weekly_allocation.days[0].pomodoros_target
+    );
+    assert_eq!(
+        output
+            .weekly_allocation
+            .days
+            .iter()
+            .map(|day| day.minutes_target)
+            .sum::<u64>(),
+        output.weekly_allocation.remaining_minutes
+    );
+    assert_eq!(
+        output
+            .weekly_allocation
+            .days
+            .iter()
+            .map(|day| day.pomodoros_target)
+            .sum::<u32>(),
+        output.weekly_allocation.remaining_pomodoros
+    );
+}
+
+#[test]
+fn build_status_output_weekly_allocation_uses_equal_split_fallback_without_schedule() {
+    let config = AppConfig {
+        weekly_goal: WeeklyGoalConfig {
+            minutes: 90,
+            pomodoros: 3,
+        },
+        ..AppConfig::default()
+    };
+    let output = build_status_output(&config, &FocusStats::default());
+
+    assert!(output.weekly_allocation.available);
+    assert!(!output.weekly_allocation.uses_schedule_weights);
+    assert_eq!(
+        output.weekly_allocation.allocatable_days,
+        output.weekly_allocation.remaining_days_in_week
+    );
+}
+
+#[test]
 fn build_status_output_monthly_carry_over_uses_previous_snapshot_after_goal_change() {
     let mut stats = FocusStats::default();
     let today = current_day_key();
