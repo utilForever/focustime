@@ -201,6 +201,37 @@ fn readable_goal_streak_text_normalizes_off_state() {
 }
 
 #[test]
+fn history_focus_risk_line_shows_low_risk_when_goals_are_off() {
+    let app = App::default();
+    assert_eq!(
+        format_history_focus_risk_line(&app),
+        "Risk: D low 0% · W low 0% · M low 0% · S low 0% · D status goal off"
+    );
+}
+
+#[test]
+fn history_focus_risk_line_marks_alert_for_high_risk_forecast() {
+    let app = App::from_config_for_tests(AppConfig {
+        daily_goal: crate::config::DailyGoalConfig {
+            minutes: 120,
+            pomodoros: 4,
+        },
+        weekly_goal: crate::config::WeeklyGoalConfig {
+            minutes: 600,
+            pomodoros: 24,
+        },
+        monthly_goal: crate::config::MonthlyGoalConfig {
+            minutes: 2400,
+            pomodoros: 96,
+        },
+        ..AppConfig::default()
+    });
+    let line = format_history_focus_risk_line(&app);
+    assert!(line.contains("Risk: D high"));
+    assert!(line.contains("ALERT"));
+}
+
+#[test]
 fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
     let mut app = App::default();
     app.handle_key(crossterm::event::KeyEvent::new(

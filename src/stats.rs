@@ -147,6 +147,121 @@ pub struct WeeklyFocusScore {
     pub focus_score_pct: Option<u8>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FocusRiskLevel {
+    Low,
+    Medium,
+    High,
+}
+
+impl FocusRiskLevel {
+    pub fn from_score(score_pct: u8) -> Self {
+        if score_pct >= 70 {
+            Self::High
+        } else if score_pct >= 40 {
+            Self::Medium
+        } else {
+            Self::Low
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+        }
+    }
+
+    pub fn triggers_alert(self) -> bool {
+        matches!(self, Self::Medium | Self::High)
+    }
+
+    fn rank(self) -> u8 {
+        match self {
+            Self::Low => 0,
+            Self::Medium => 1,
+            Self::High => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GoalPeriod {
+    Daily,
+    Weekly,
+    Monthly,
+}
+
+impl GoalPeriod {
+    pub fn short_label(self) -> &'static str {
+        match self {
+            Self::Daily => "D",
+            Self::Weekly => "W",
+            Self::Monthly => "M",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FocusRiskSignal {
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GoalRiskForecast {
+    pub period: GoalPeriod,
+    pub configured: bool,
+    pub met: bool,
+    pub completion_pct: Option<u8>,
+    pub risk_score_pct: u8,
+    pub risk_level: FocusRiskLevel,
+    pub signals: Vec<FocusRiskSignal>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StreakRiskForecast {
+    pub configured: bool,
+    pub current_streak: u32,
+    pub best_streak: u32,
+    pub today_goal_met: bool,
+    pub recent_goal_reliability_pct: u8,
+    pub risk_score_pct: u8,
+    pub risk_level: FocusRiskLevel,
+    pub signals: Vec<FocusRiskSignal>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FocusRiskForecast {
+    pub daily_goal: GoalRiskForecast,
+    pub weekly_goal: GoalRiskForecast,
+    pub monthly_goal: GoalRiskForecast,
+    pub streak: StreakRiskForecast,
+}
+
+impl FocusRiskForecast {
+    pub fn highest_risk_level(&self) -> FocusRiskLevel {
+        let mut level = self.daily_goal.risk_level;
+        for candidate in [
+            self.weekly_goal.risk_level,
+            self.monthly_goal.risk_level,
+            self.streak.risk_level,
+        ] {
+            if candidate.rank() > level.rank() {
+                level = candidate;
+            }
+        }
+        level
+    }
+
+    pub fn alert_active(&self) -> bool {
+        self.highest_risk_level().triggers_alert()
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MonthlyStats {
     pub year: i32,

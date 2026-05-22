@@ -672,6 +672,97 @@ fn weekly_focus_score_includes_goal_enabled_idle_weeks() {
 }
 
 #[test]
+fn focus_risk_forecast_flags_high_risk_for_unmet_goals_and_streak() {
+    let mut stats = FocusStats::default();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap();
+    let day_key = day.format("%Y-%m-%d").to_string();
+    stats.insert_daily_for_tests(
+        &day_key,
+        DailyStats {
+            pomodoros_completed: 1,
+            focused_seconds: 20 * 60,
+            goal: None,
+        },
+    );
+
+    let forecast = stats.focus_risk_forecast_for_day(
+        day,
+        DailyGoalSnapshot {
+            minutes: 120,
+            pomodoros: 4,
+        },
+        DailyGoalSnapshot {
+            minutes: 600,
+            pomodoros: 24,
+        },
+        DailyGoalSnapshot {
+            minutes: 2400,
+            pomodoros: 96,
+        },
+    );
+
+    assert_eq!(forecast.daily_goal.risk_level, FocusRiskLevel::High);
+    assert_eq!(forecast.streak.risk_level, FocusRiskLevel::High);
+    assert!(forecast.alert_active());
+}
+
+#[test]
+fn focus_risk_forecast_stays_low_when_goals_are_met() {
+    let mut stats = FocusStats::default();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap();
+    let day_key = day.format("%Y-%m-%d").to_string();
+    stats.insert_daily_for_tests(
+        &day_key,
+        DailyStats {
+            pomodoros_completed: 1,
+            focused_seconds: 25 * 60,
+            goal: None,
+        },
+    );
+
+    let forecast = stats.focus_risk_forecast_for_day(
+        day,
+        DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        },
+        DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        },
+        DailyGoalSnapshot {
+            minutes: 25,
+            pomodoros: 1,
+        },
+    );
+
+    assert_eq!(forecast.daily_goal.risk_score_pct, 0);
+    assert_eq!(forecast.weekly_goal.risk_score_pct, 0);
+    assert_eq!(forecast.monthly_goal.risk_score_pct, 0);
+    assert_eq!(forecast.daily_goal.risk_level, FocusRiskLevel::Low);
+    assert!(!forecast.alert_active());
+}
+
+#[test]
+fn focus_risk_forecast_marks_goals_off_when_targets_are_disabled() {
+    let stats = FocusStats::default();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap();
+    let forecast = stats.focus_risk_forecast_for_day(
+        day,
+        DailyGoalSnapshot::default(),
+        DailyGoalSnapshot::default(),
+        DailyGoalSnapshot::default(),
+    );
+
+    assert!(!forecast.daily_goal.configured);
+    assert!(!forecast.weekly_goal.configured);
+    assert!(!forecast.monthly_goal.configured);
+    assert!(!forecast.streak.configured);
+    assert_eq!(forecast.daily_goal.signals[0].value, "goal off",);
+    assert!(!forecast.alert_active());
+}
+
+#[test]
 fn persisted_stats_round_trip_preserves_daily_history() {
     let mut original = FocusStats::default();
     let goal = DailyGoalSnapshot {
