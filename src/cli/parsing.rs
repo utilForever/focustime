@@ -1015,69 +1015,83 @@ pub(super) fn parse_watch_interval_option(tokens: &[ParsedToken]) -> Result<Opti
     Ok(interval)
 }
 
+#[derive(Default)]
+struct StatusComparisonParseFlags {
+    has_dimension: bool,
+    has_task: bool,
+    has_profile: bool,
+    has_time_of_day: bool,
+    has_limit: bool,
+    has_any_option: bool,
+}
+
+fn apply_status_comparison_token(
+    token: &ParsedToken,
+    options: &mut StatusComparisonOptions,
+    flags: &mut StatusComparisonParseFlags,
+) -> Result<(), String> {
+    match token {
+        ParsedToken::CompareBy(dimension) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_dimension,
+                "`--compare-by` can only be specified once.",
+            )?;
+            options.dimension = *dimension;
+        }
+        ParsedToken::CompareTask(task) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_task,
+                "`--compare-task` can only be specified once.",
+            )?;
+            options.task_label = task.clone();
+        }
+        ParsedToken::CompareProfile(profile) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_profile,
+                "`--compare-profile` can only be specified once.",
+            )?;
+            options.profile = *profile;
+        }
+        ParsedToken::CompareTimeOfDay(bucket) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_time_of_day,
+                "`--compare-time` can only be specified once.",
+            )?;
+            options.time_of_day = *bucket;
+        }
+        ParsedToken::CompareLimit(limit) => {
+            flags.has_any_option = true;
+            mark_compare_option_seen(
+                &mut flags.has_limit,
+                "`--compare-limit` can only be specified once.",
+            )?;
+            options.limit = *limit;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn mark_compare_option_seen(flag: &mut bool, message: &str) -> Result<(), String> {
+    if *flag {
+        return Err(invalid_usage(message));
+    }
+    *flag = true;
+    Ok(())
+}
+
 pub(super) fn parse_status_comparison_options(
     tokens: &[ParsedToken],
 ) -> Result<(StatusComparisonOptions, bool), String> {
     let mut options = StatusComparisonOptions::default();
-    let mut has_dimension = false;
-    let mut has_task = false;
-    let mut has_profile = false;
-    let mut has_time_of_day = false;
-    let mut has_limit = false;
-    let mut has_any_option = false;
+    let mut flags = StatusComparisonParseFlags::default();
 
     for token in tokens {
-        match token {
-            ParsedToken::CompareBy(dimension) => {
-                has_any_option = true;
-                if has_dimension {
-                    return Err(invalid_usage("`--compare-by` can only be specified once."));
-                }
-                has_dimension = true;
-                options.dimension = *dimension;
-            }
-            ParsedToken::CompareTask(task) => {
-                has_any_option = true;
-                if has_task {
-                    return Err(invalid_usage(
-                        "`--compare-task` can only be specified once.",
-                    ));
-                }
-                has_task = true;
-                options.task_label = task.clone();
-            }
-            ParsedToken::CompareProfile(profile) => {
-                has_any_option = true;
-                if has_profile {
-                    return Err(invalid_usage(
-                        "`--compare-profile` can only be specified once.",
-                    ));
-                }
-                has_profile = true;
-                options.profile = *profile;
-            }
-            ParsedToken::CompareTimeOfDay(bucket) => {
-                has_any_option = true;
-                if has_time_of_day {
-                    return Err(invalid_usage(
-                        "`--compare-time` can only be specified once.",
-                    ));
-                }
-                has_time_of_day = true;
-                options.time_of_day = *bucket;
-            }
-            ParsedToken::CompareLimit(limit) => {
-                has_any_option = true;
-                if has_limit {
-                    return Err(invalid_usage(
-                        "`--compare-limit` can only be specified once.",
-                    ));
-                }
-                has_limit = true;
-                options.limit = *limit;
-            }
-            _ => {}
-        }
+        apply_status_comparison_token(token, &mut options, &mut flags)?;
     }
 
     if options.limit == 0 {
@@ -1085,11 +1099,10 @@ pub(super) fn parse_status_comparison_options(
             "`--compare-limit` requires a positive whole number.",
         ));
     }
-    if !has_limit {
+    if !flags.has_limit {
         options.limit = DEFAULT_STATUS_COMPARISON_LIMIT;
     }
-
-    Ok((options, has_any_option))
+    Ok((options, flags.has_any_option))
 }
 
 pub(super) fn parse_compare_by_value(value: &str) -> Result<ComparisonDimension, String> {
