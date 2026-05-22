@@ -20,7 +20,7 @@ use crate::config::{
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
 use crate::stats::{
-    DailyGoalSnapshot, FocusStats, SessionInterruptionEvent, StatsGrowthSummary,
+    DailyGoalSnapshot, FocusRiskForecast, FocusStats, SessionInterruptionEvent, StatsGrowthSummary,
     StatsRetentionPruneResult, carry_over_goal_target, current_day_key,
 };
 use crate::timer::{
@@ -692,6 +692,7 @@ struct StatusOutput {
     today: TodayOutput,
     latest_interruption: Option<SessionInterruptionEvent>,
     focus_score: FocusScoreOutput,
+    focus_risk: FocusRiskForecast,
     stats_growth: StatsGrowthSummary,
     stats_retention: StatsRetentionStatusOutput,
     live: LiveStatusOutput,

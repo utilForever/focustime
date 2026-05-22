@@ -404,6 +404,7 @@ pub(super) fn print_status_output(payload: &StatusOutput) {
         println!("Last interruption: none");
     }
     print_status_focus_score_line(&payload.focus_score);
+    print_status_focus_risk_line(&payload.focus_risk);
     print_status_growth_line(&payload.stats_growth);
     print_status_retention_line(&payload.stats_retention);
     println!(
@@ -514,6 +515,56 @@ fn print_status_focus_score_line(focus_score: &FocusScoreOutput) {
         println!(
             "Focus score: n/a (weekly goal off; consistency {}%)",
             focus_score.consistency_score_pct
+        );
+    }
+}
+
+fn print_status_focus_risk_line(forecast: &crate::stats::FocusRiskForecast) {
+    let daily_label = forecast.daily_goal.period.short_label();
+    let weekly_label = forecast.weekly_goal.period.short_label();
+    let monthly_label = forecast.monthly_goal.period.short_label();
+    let alert_suffix = if forecast.alert_active() {
+        " (alert)"
+    } else {
+        ""
+    };
+    println!(
+        "Focus risk: {} {} {}% | {} {} {}% | {} {} {}% | Streak {} {}%{}",
+        daily_label,
+        forecast.daily_goal.risk_level.label(),
+        forecast.daily_goal.risk_score_pct,
+        weekly_label,
+        forecast.weekly_goal.risk_level.label(),
+        forecast.weekly_goal.risk_score_pct,
+        monthly_label,
+        forecast.monthly_goal.risk_level.label(),
+        forecast.monthly_goal.risk_score_pct,
+        forecast.streak.risk_level.label(),
+        forecast.streak.risk_score_pct,
+        alert_suffix
+    );
+
+    let mut highest_label = daily_label;
+    let mut highest_score = forecast.daily_goal.risk_score_pct;
+    let mut highest_signal = forecast.daily_goal.signals.first();
+    if forecast.weekly_goal.risk_score_pct > highest_score {
+        highest_label = weekly_label;
+        highest_score = forecast.weekly_goal.risk_score_pct;
+        highest_signal = forecast.weekly_goal.signals.first();
+    }
+    if forecast.monthly_goal.risk_score_pct > highest_score {
+        highest_label = monthly_label;
+        highest_score = forecast.monthly_goal.risk_score_pct;
+        highest_signal = forecast.monthly_goal.signals.first();
+    }
+    if forecast.streak.risk_score_pct > highest_score {
+        highest_label = "Streak";
+        highest_signal = forecast.streak.signals.first();
+    }
+    if let Some(signal) = highest_signal {
+        println!(
+            "Focus risk signal: {highest_label} {} ({})",
+            signal.label, signal.value
         );
     }
 }

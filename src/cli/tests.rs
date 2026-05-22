@@ -2254,6 +2254,8 @@ fn build_status_output_reports_daily_weekly_monthly_goal_state() {
     assert!(in_period_output.focus_score.available);
     assert_eq!(in_period_output.focus_score.completion_score_pct, Some(100));
     assert!(in_period_output.focus_score.focus_score_pct.is_some());
+    assert_eq!(in_period_output.focus_risk.daily_goal.risk_score_pct, 0);
+    assert!(!in_period_output.focus_risk.daily_goal.signals.is_empty());
 
     let boundary_config = AppConfig {
         daily_goal: DailyGoalConfig {
@@ -2277,6 +2279,7 @@ fn build_status_output_reports_daily_weekly_monthly_goal_state() {
     assert!(!boundary_output.weekly_goal.met);
     assert!(!boundary_output.monthly_goal.met);
     assert!(boundary_output.focus_score.available);
+    assert!(boundary_output.focus_risk.alert_active());
 }
 
 #[test]
@@ -2327,6 +2330,8 @@ fn build_status_output_includes_unconfigured_selected_task_goal() {
     assert!(!selected_task_goal.met);
     assert!(!output.focus_score.available);
     assert!(output.focus_score.focus_score_pct.is_none());
+    assert!(!output.focus_risk.daily_goal.configured);
+    assert!(!output.focus_risk.streak.configured);
 }
 
 #[test]

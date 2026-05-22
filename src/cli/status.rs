@@ -63,6 +63,12 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let focus_score_pct = completion_score_pct.map(|completion| {
         (u16::from(consistency_score_pct) + u16::from(completion)).div_ceil(2) as u8
     });
+    let focus_risk = stats.focus_risk_forecast_for_day(
+        day_date,
+        goal_snapshot,
+        weekly_goal_snapshot,
+        monthly_goal_snapshot,
+    );
     let weekly_allocation = build_weekly_allocation_output(
         day_date,
         weekly_goal_snapshot,
@@ -129,6 +135,7 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
             consistency_score_pct,
             completion_score_pct,
         },
+        focus_risk,
         stats_growth,
         stats_retention: StatsRetentionStatusOutput {
             preset: config.stats_retention.preset.id(),
