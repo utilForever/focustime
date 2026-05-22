@@ -2,10 +2,11 @@ use crate::cli::{
     AutomationTriggerRuleConfig, BlocklistCategoryCommandKind, BlocklistProfileCommandKind,
     BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind, ComparisonDimension,
     DEFAULT_STATUS_COMPARISON_LIMIT, DEFAULT_WATCH_INTERVAL_SECS, DailyGoalConfig,
-    MonthlyGoalConfig, NaiveDate, OneTimeFocusWindowConfig, OutputMode, ParsedToken,
-    PrimaryCommand, ProfileBucket, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
-    SessionTemplateCommandKind, SiteEditValue, SiteListTarget, StatusComparisonOptions,
-    ThemePreset, TimeOfDayBucket, USAGE_TEXT, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    HistoryDashboardCommandKind, HistoryKpiCardId, MonthlyGoalConfig, NaiveDate,
+    OneTimeFocusWindowConfig, OutputMode, ParsedToken, PrimaryCommand, ProfileBucket, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, SessionTemplateCommandKind, SiteEditValue,
+    SiteListTarget, StatusComparisonOptions, ThemePreset, TimeOfDayBucket, USAGE_TEXT,
+    WeekdayProfileRuleConfig, WeeklyGoalConfig,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -81,6 +82,10 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::SessionTemplateCreate(_)
             | ParsedToken::SessionTemplateRename(_)
             | ParsedToken::SessionTemplateDelete
+            | ParsedToken::HistoryDashboard
+            | ParsedToken::HistoryDashboardPin(_)
+            | ParsedToken::HistoryDashboardUnpin(_)
+            | ParsedToken::HistoryDashboardOrder(_)
             | ParsedToken::BlocklistSites
             | ParsedToken::AllowlistSites
             | ParsedToken::BlocklistSiteAdd(_)
@@ -245,6 +250,19 @@ pub(super) fn parse_primary_command(
             ParsedToken::SessionTemplateDelete => {
                 set_primary_command(&mut primary, PrimaryCommand::SessionTemplateDelete)?
             }
+            ParsedToken::HistoryDashboard => {
+                set_primary_command(&mut primary, PrimaryCommand::HistoryDashboard)?
+            }
+            ParsedToken::HistoryDashboardPin(card) => {
+                set_primary_command(&mut primary, PrimaryCommand::HistoryDashboardPin(*card))?
+            }
+            ParsedToken::HistoryDashboardUnpin(card) => {
+                set_primary_command(&mut primary, PrimaryCommand::HistoryDashboardUnpin(*card))?
+            }
+            ParsedToken::HistoryDashboardOrder(order) => set_primary_command(
+                &mut primary,
+                PrimaryCommand::HistoryDashboardOrder(order.clone()),
+            )?,
             ParsedToken::BlocklistSites => {
                 set_primary_command(&mut primary, PrimaryCommand::BlocklistSites)?
             }
@@ -549,6 +567,34 @@ pub(super) fn finalize_cli_action(
             },
             output,
         })),
+        Some(PrimaryCommand::HistoryDashboard) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::HistoryDashboard {
+                command: HistoryDashboardCommandKind::Show,
+            },
+            output,
+        })),
+        Some(PrimaryCommand::HistoryDashboardPin(card)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::HistoryDashboard {
+                command: HistoryDashboardCommandKind::Pin { card },
+            },
+            output,
+        })),
+        Some(PrimaryCommand::HistoryDashboardUnpin(card)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::HistoryDashboard {
+                    command: HistoryDashboardCommandKind::Unpin { card },
+                },
+                output,
+            }))
+        }
+        Some(PrimaryCommand::HistoryDashboardOrder(order)) => {
+            Ok(CliAction::RunCommand(CliCommand {
+                kind: CommandKind::HistoryDashboard {
+                    command: HistoryDashboardCommandKind::SetOrder { order },
+                },
+                output,
+            }))
+        }
         Some(PrimaryCommand::BlocklistSites) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::BlocklistSites {
                 target: SiteListTarget::Blocklist,
@@ -639,6 +685,48 @@ pub(super) fn parse_theme_preset(value: &str) -> Result<ThemePreset, String> {
             "Invalid theme preset `{value}`. Use `classic`, `high-contrast`, or `deuteranopia-friendly`."
         ))),
     }
+}
+
+pub(super) fn parse_history_kpi_card_id(value: &str) -> Result<HistoryKpiCardId, String> {
+    HistoryKpiCardId::from_id(value).ok_or_else(|| {
+        invalid_usage(&format!(
+            "Invalid history dashboard card `{value}`. Use one of: session_summary, focus_score, goal_streak, focus_risk, weekly_allocation, last_interruption, stats_growth, retention, comparison_filters."
+        ))
+    })
+}
+
+pub(super) fn parse_history_dashboard_order_value(
+    value: &str,
+) -> Result<Vec<HistoryKpiCardId>, String> {
+    let entries: Vec<&str> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .collect();
+    if entries.is_empty() {
+        return Err(invalid_usage(
+            "`--history-dashboard-order` requires a comma-separated list of KPI card IDs.",
+        ));
+    }
+    let mut order = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let card = parse_history_kpi_card_id(entry)?;
+        if order.contains(&card) {
+            return Err(invalid_usage(&format!(
+                "Duplicate history dashboard card `{}` in `--history-dashboard-order`.",
+                card.id()
+            )));
+        }
+        order.push(card);
+    }
+
+    let required = HistoryKpiCardId::all();
+    if order.len() != required.len() || required.iter().any(|card| !order.contains(card)) {
+        return Err(invalid_usage(
+            "`--history-dashboard-order` must include every KPI card exactly once.",
+        ));
+    }
+    Ok(order)
 }
 
 pub(super) fn parse_task_goal_value(
@@ -986,6 +1074,10 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::SessionTemplateCreate(_) => "--session-template-create",
         PrimaryCommand::SessionTemplateRename(_) => "--session-template-rename",
         PrimaryCommand::SessionTemplateDelete => "--session-template-delete",
+        PrimaryCommand::HistoryDashboard => "--history-dashboard",
+        PrimaryCommand::HistoryDashboardPin(_) => "--history-dashboard-pin",
+        PrimaryCommand::HistoryDashboardUnpin(_) => "--history-dashboard-unpin",
+        PrimaryCommand::HistoryDashboardOrder(_) => "--history-dashboard-order",
         PrimaryCommand::BlocklistSites => "--blocklist-sites",
         PrimaryCommand::AllowlistSites => "--allowlist-sites",
         PrimaryCommand::BlocklistSiteAdd(_) => "--blocklist-site-add",

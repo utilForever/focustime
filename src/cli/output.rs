@@ -2,15 +2,16 @@ use crate::cli::{
     AutomationTriggersCommandOutput, BackupOutput, BlockingPreviewAction,
     BlockingPreviewCommandOutput, BlocklistCategoryCommandOutput, BlocklistProfileCommandOutput,
     BlocklistProfileConfig, BreakGlassCommandOutput, DiagnosticsCommandOutput, ExportOutput,
-    FocusScoreOutput, GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, ProfileOutput,
-    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput,
-    ScheduleInspectionOutput, Serialize, SessionMetadataCommandOutput,
-    SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
-    SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
-    StatsGrowthSummary, StatsRetentionStatusOutput, StatusComparisonOutput, StatusOutput,
-    StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, TemporarySiteAddCommandOutput,
-    ThemeCommandOutput, TimerStateOutput, WeekdayRulesCommandOutput, Write,
-    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
+    FocusScoreOutput, GoalCarryCommandOutput, GoalCommandOutput, GoalOutput,
+    HistoryDashboardCommandOutput, ProfileOutput, RecurringScheduleConfig, RestoreOutput,
+    ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput, Serialize,
+    SessionMetadataCommandOutput, SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel,
+    SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
+    SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput,
+    StatusComparisonOutput, StatusOutput, StrictCommandOutput, TaskGoalCommandOutput,
+    TaskGoalOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, TimerStateOutput,
+    WeekdayRulesCommandOutput, Write, format_schedule_conflict,
+    inspect_schedule_conflicts_from_config, io,
 };
 use chrono::{Local, TimeZone};
 
@@ -155,6 +156,23 @@ pub(super) fn print_session_template_command_output(payload: &SessionTemplateCom
             template.blocklist_profile,
             template.schedule_windows_count
         );
+    }
+}
+
+pub(super) fn print_history_dashboard_command_output(payload: &HistoryDashboardCommandOutput) {
+    if payload.updated {
+        println!("History dashboard updated.");
+    }
+    println!("Card order: {}", payload.card_order.join(", "));
+    println!("Pinned cards: {}", payload.pinned_cards.join(", "));
+    if payload.cards.is_empty() {
+        println!("Cards: none");
+        return;
+    }
+    println!("Cards:");
+    for card in &payload.cards {
+        let marker = if card.pinned { "*" } else { " " };
+        println!("  {marker} {} ({})", card.label, card.id);
     }
 }
 
