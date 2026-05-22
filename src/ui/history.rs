@@ -17,19 +17,20 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .style(Style::default().fg(app_color(app, Color::Cyan)));
     frame.render_widget(block, outer);
 
+    let dashboard_cards = app.history_dashboard_cards();
+    let dashboard_height = (dashboard_cards.len() as u16).saturating_add(2);
     let inner = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(9), // overview
+            Constraint::Length(dashboard_height), // dashboard + borders
             Constraint::Min(6),    // history panels
             Constraint::Length(1), // status line
             Constraint::Length(3), // hints
         ])
         .split(outer);
 
-    let overview_lines: Vec<Line> = app
-        .history_dashboard_cards()
+    let overview_lines: Vec<Line> = dashboard_cards
         .into_iter()
         .map(|card| {
             let selected = card == app.history_dashboard_selected_card();
