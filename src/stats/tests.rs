@@ -996,6 +996,29 @@ fn legacy_focus_sessions_keep_empty_metadata() {
 }
 
 #[test]
+fn persisted_focus_session_uses_stored_time_of_day_bucket() {
+    let persisted_toml = r#"
+            [[focus_sessions]]
+            date = "2026-04-09"
+            task_label = "Project A"
+            focused_seconds = 1800
+            completion_timestamp_epoch_secs = 1712617200
+            completion_time_of_day_bucket = "morning"
+        "#;
+    let restored = FocusStats::try_from_toml(persisted_toml).unwrap();
+
+    let rows = restored.productivity_comparison(
+        ComparisonDimension::TimeOfDay,
+        &ProductivityComparisonFilter::default(),
+        10,
+    );
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].label, "Morning");
+    assert_eq!(rows[0].sessions_completed, 1);
+    assert_eq!(rows[0].focused_minutes(), 30);
+}
+
+#[test]
 fn session_export_preserves_persisted_metadata_fields() {
     let mut stats = FocusStats::default();
     let goal = DailyGoalSnapshot {

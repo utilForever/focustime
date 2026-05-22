@@ -374,6 +374,8 @@ pub struct FocusSessionRecord {
     pub profile: Option<ProfileId>,
     #[serde(default)]
     pub completion_timestamp_epoch_secs: Option<u64>,
+    #[serde(default)]
+    pub completion_time_of_day_bucket: Option<TimeOfDayBucket>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

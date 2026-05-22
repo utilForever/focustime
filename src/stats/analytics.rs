@@ -696,6 +696,9 @@ impl FocusStats {
 }
 
 fn focus_session_time_of_day(session: &FocusSessionRecord) -> TimeOfDayBucket {
+    if let Some(bucket) = session.completion_time_of_day_bucket {
+        return bucket;
+    }
     let Some(epoch_secs) = session.completion_timestamp_epoch_secs else {
         return TimeOfDayBucket::Unknown;
     };
@@ -705,8 +708,7 @@ fn focus_session_time_of_day(session: &FocusSessionRecord) -> TimeOfDayBucket {
     let Some(timestamp) = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0) else {
         return TimeOfDayBucket::Unknown;
     };
-    let local_time = timestamp.with_timezone(&chrono::Local);
-    TimeOfDayBucket::from_hour(local_time.hour())
+    TimeOfDayBucket::from_hour(timestamp.hour())
 }
 
 #[derive(Debug, Clone, Copy)]

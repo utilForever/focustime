@@ -1,8 +1,10 @@
 use crate::stats::{
     BreakGlassOverrideEvent, DailyGoalSnapshot, FocusSessionMetadata, FocusSessionRecord,
-    FocusStats, ProfileId, SessionInterruptionEvent, SessionInterruptionReason, month_key_for_day,
-    normalize_session_metadata_text, normalize_task_label, task_label_index, week_key_for_day,
+    FocusStats, ProfileId, SessionInterruptionEvent, SessionInterruptionReason, TimeOfDayBucket,
+    month_key_for_day, normalize_session_metadata_text, normalize_task_label, task_label_index,
+    week_key_for_day,
 };
+use chrono::Timelike;
 
 impl FocusStats {
     pub fn record_focus_elapsed(
@@ -99,6 +101,9 @@ impl FocusStats {
                 focused_seconds,
                 profile,
                 completion_timestamp_epoch_secs,
+                completion_time_of_day_bucket: completion_time_of_day_bucket(
+                    completion_timestamp_epoch_secs,
+                ),
             });
         }
     }
@@ -199,4 +204,11 @@ impl FocusStats {
 
 fn current_timestamp_epoch_secs() -> u64 {
     chrono::Local::now().timestamp().max(0) as u64
+}
+
+fn completion_time_of_day_bucket(epoch_secs: Option<u64>) -> Option<TimeOfDayBucket> {
+    let epoch = i64::try_from(epoch_secs?).ok()?;
+    let timestamp = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0)?;
+    let local_time = timestamp.with_timezone(&chrono::Local);
+    Some(TimeOfDayBucket::from_hour(local_time.hour()))
 }
