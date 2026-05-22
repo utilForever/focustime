@@ -229,6 +229,16 @@ impl App {
             self.mode = AppMode::Timer;
         } else if self.shortcut_matches(ShortcutAction::ExportStatsHistory, &key) {
             self.export_stats_history();
+        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardSelectPrevious, &key) {
+            self.cycle_history_dashboard_selected_card(false);
+        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardSelectNext, &key) {
+            self.cycle_history_dashboard_selected_card(true);
+        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardTogglePin, &key) {
+            self.toggle_history_dashboard_pin_for_selected_card();
+        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardMoveLeft, &key) {
+            self.move_history_dashboard_selected_card(false);
+        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardMoveRight, &key) {
+            self.move_history_dashboard_selected_card(true);
         } else if self.navigation_matches(NavigationAction::MoveLeft, &key) {
             self.cycle_history_comparison_dimension(false);
         } else if self.navigation_matches(NavigationAction::MoveRight, &key) {

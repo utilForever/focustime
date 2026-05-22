@@ -1,3 +1,4 @@
+use crate::config::HistoryKpiCardId;
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, HistoryFeedbackLevel,
     Layout, Line, List, ListItem, Modifier, NavigationAction, Paragraph, Rect, ShortcutAction,
@@ -23,84 +24,37 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
             Constraint::Length(9), // overview
             Constraint::Min(6),    // history panels
             Constraint::Length(1), // status line
-            Constraint::Length(2), // hints
+            Constraint::Length(3), // hints
         ])
         .split(outer);
 
-    let session_stats = app.session_stats();
-    let today_stats = app.today_stats();
-    let focus_score_line = readable_focus_score_text(&format_history_focus_score_line(app));
-    let goals_line = readable_goal_streak_text(&format_history_goal_streak_line(app));
-    let risk_line = format_history_focus_risk_line(app);
-    let weekly_allocation_line = format_history_weekly_allocation_line(app);
-    let interruption_line = format_history_interruption_line(app);
-    let growth_summary = app.stats_growth_summary();
-    let retention_preview = app.stats_retention_preview();
-    let retention = app.stats_retention_config();
-    let comparison_filters = app.history_comparison_filter_summary();
-    let growth_line = format!(
-        "Stats growth: {} records · ~{} · {}",
-        growth_summary.total_record_count,
-        format_bytes(growth_summary.estimated_bytes),
-        format_top_sections(&growth_summary.high_volume_sections)
-    );
-    let retention_line = if retention_preview.any_removed() {
-        format!(
-            "Retention: {} · prunes {} old record(s) on next save",
-            retention.preset.id(),
-            retention_preview.total_removed()
-        )
-    } else {
-        format!("Retention: {} · no pending prune", retention.preset.id())
-    };
-    let overview = Paragraph::new(vec![
-        Line::styled(
-            format!(
-                "Session 🍅{} · {}m | Today 🍅{} · {}m",
-                session_stats.pomodoros_completed,
-                session_stats.focused_minutes(),
-                today_stats.pomodoros_completed,
-                today_stats.focused_minutes()
-            ),
-            Style::default()
-                .fg(app_color(app, Color::White))
-                .add_modifier(Modifier::BOLD),
-        ),
-        Line::styled(
-            focus_score_line,
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        ),
-        Line::styled(
-            goals_line,
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        ),
-        Line::styled(
-            risk_line,
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        ),
-        Line::styled(
-            weekly_allocation_line,
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        ),
-        Line::styled(
-            interruption_line,
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        ),
-        Line::styled(
-            growth_line,
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        ),
-        Line::styled(
-            retention_line,
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        ),
-        Line::styled(
-            comparison_filters,
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        ),
-    ])
-    .block(Block::default().borders(Borders::ALL).title(" Overview "))
-    .wrap(Wrap { trim: true });
+    let overview_lines: Vec<Line> = app
+        .history_dashboard_cards()
+        .into_iter()
+        .map(|card| {
+            let selected = card == app.history_dashboard_selected_card();
+            let pinned = app.history_dashboard_card_is_pinned(card);
+            let style = if selected {
+                Style::default()
+                    .fg(app_color(app, Color::White))
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(app_color(app, Color::DarkGray))
+            };
+            Line::styled(
+                format!(
+                    "{}{} {}",
+                    if selected { ">" } else { " " },
+                    if pinned { "*" } else { "-" },
+                    history_kpi_card_text(app, card)
+                ),
+                style,
+            )
+        })
+        .collect();
+    let overview = Paragraph::new(overview_lines)
+        .block(Block::default().borders(Borders::ALL).title(" Dashboard "))
+        .wrap(Wrap { trim: true });
     frame.render_widget(overview, inner[0]);
 
     let content_layout = Layout::default()
@@ -272,6 +226,14 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
                 app.navigation_label(NavigationAction::MoveUp),
                 app.navigation_label(NavigationAction::MoveDown),
             )),
+            Line::from(format!(
+                "Dashboard: Select {}/{} Toggle pin {} Move {}/{}",
+                app.shortcut_hint(ShortcutAction::HistoryDashboardSelectPrevious),
+                app.shortcut_hint(ShortcutAction::HistoryDashboardSelectNext),
+                app.shortcut_hint(ShortcutAction::HistoryDashboardTogglePin),
+                app.shortcut_hint(ShortcutAction::HistoryDashboardMoveLeft),
+                app.shortcut_hint(ShortcutAction::HistoryDashboardMoveRight),
+            )),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
                     "View: [{}/{}] Back  [{}/Ctrl-C] Quit (Locked)",
@@ -289,6 +251,55 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
             }),
         ],
     );
+}
+
+fn history_kpi_card_text(app: &App, card: HistoryKpiCardId) -> String {
+    match card {
+        HistoryKpiCardId::SessionSummary => {
+            let session_stats = app.session_stats();
+            let today_stats = app.today_stats();
+            format!(
+                "Session {} pomodoros · {}m | Today {} pomodoros · {}m",
+                session_stats.pomodoros_completed,
+                session_stats.focused_minutes(),
+                today_stats.pomodoros_completed,
+                today_stats.focused_minutes()
+            )
+        }
+        HistoryKpiCardId::FocusScore => {
+            readable_focus_score_text(&format_history_focus_score_line(app))
+        }
+        HistoryKpiCardId::GoalStreak => {
+            readable_goal_streak_text(&format_history_goal_streak_line(app))
+        }
+        HistoryKpiCardId::FocusRisk => format_history_focus_risk_line(app),
+        HistoryKpiCardId::WeeklyAllocation => format_history_weekly_allocation_line(app),
+        HistoryKpiCardId::LastInterruption => format_history_interruption_line(app),
+        HistoryKpiCardId::StatsGrowth => {
+            let growth_summary = app.stats_growth_summary();
+            format!(
+                "Stats growth: {} records · ~{} · {}",
+                growth_summary.total_record_count,
+                format_bytes(growth_summary.estimated_bytes),
+                format_top_sections(&growth_summary.high_volume_sections)
+            )
+        }
+        HistoryKpiCardId::Retention => {
+            let retention_preview = app.stats_retention_preview();
+            let retention = app.stats_retention_config();
+            if retention_preview.any_removed() {
+                format!(
+                    "Retention: {} · prunes {} old record(s) on next save",
+                    retention.preset.id(),
+                    retention_preview.total_removed()
+                )
+            } else {
+                format!("Retention: {} · no pending prune", retention.preset.id())
+            }
+        }
+        HistoryKpiCardId::ComparisonFilters => app.history_comparison_filter_summary(),
+        HistoryKpiCardId::Unknown => "Unknown KPI card".to_string(),
+    }
 }
 
 pub(super) fn readable_goal_streak_text(text: &str) -> String {

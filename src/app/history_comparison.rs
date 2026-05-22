@@ -1,4 +1,5 @@
-use crate::app::App;
+use crate::app::{App, HistoryFeedbackLevel};
+use crate::config::HistoryKpiCardId;
 use crate::stats::{
     ComparisonDimension, ProductivityComparisonFilter, ProductivityComparisonRow, ProfileBucket,
     TimeOfDayBucket,
@@ -54,6 +55,137 @@ impl App {
             .map(|value| value.label().to_string())
             .unwrap_or_else(|| "All".to_string());
         format!("Slices: task {task} · profile {profile} · time {time_of_day}")
+    }
+
+    pub fn history_dashboard_card_order(&self) -> &[HistoryKpiCardId] {
+        &self.history_dashboard_card_order
+    }
+
+    pub fn history_dashboard_pinned_cards(&self) -> &[HistoryKpiCardId] {
+        &self.history_dashboard_pinned_cards
+    }
+
+    pub fn history_dashboard_cards(&self) -> Vec<HistoryKpiCardId> {
+        let mut cards = self.history_dashboard_pinned_cards.clone();
+        for card in &self.history_dashboard_card_order {
+            if !cards.contains(card) {
+                cards.push(*card);
+            }
+        }
+        cards
+    }
+
+    pub fn history_dashboard_selected_card(&self) -> HistoryKpiCardId {
+        self.history_dashboard_selected_card
+    }
+
+    pub fn history_dashboard_card_is_pinned(&self, card: HistoryKpiCardId) -> bool {
+        self.history_dashboard_pinned_cards.contains(&card)
+    }
+
+    pub(super) fn cycle_history_dashboard_selected_card(&mut self, forward: bool) {
+        let cards = self.history_dashboard_cards();
+        if cards.is_empty() {
+            return;
+        }
+        let current_index = cards
+            .iter()
+            .position(|card| *card == self.history_dashboard_selected_card)
+            .unwrap_or(0);
+        let next_index = if forward {
+            (current_index + 1) % cards.len()
+        } else {
+            (current_index + cards.len() - 1) % cards.len()
+        };
+        self.history_dashboard_selected_card = cards[next_index];
+    }
+
+    pub(super) fn toggle_history_dashboard_pin_for_selected_card(&mut self) {
+        let selected = self.history_dashboard_selected_card;
+        if let Some(index) = self
+            .history_dashboard_pinned_cards
+            .iter()
+            .position(|card| *card == selected)
+        {
+            if self.history_dashboard_pinned_cards.len() <= 1 {
+                self.set_history_feedback(
+                    HistoryFeedbackLevel::Warning,
+                    "At least one KPI card must remain pinned.",
+                );
+                return;
+            }
+            self.history_dashboard_pinned_cards.remove(index);
+            self.set_history_feedback(
+                HistoryFeedbackLevel::Success,
+                format!("Unpinned KPI card `{}`.", selected.id()),
+            );
+            return;
+        }
+
+        let order_index = self
+            .history_dashboard_card_order
+            .iter()
+            .position(|card| *card == selected)
+            .unwrap_or(usize::MAX);
+        let insert_at = self
+            .history_dashboard_pinned_cards
+            .iter()
+            .position(|card| {
+                self.history_dashboard_card_order
+                    .iter()
+                    .position(|candidate| candidate == card)
+                    .unwrap_or(usize::MAX)
+                    > order_index
+            })
+            .unwrap_or(self.history_dashboard_pinned_cards.len());
+        self.history_dashboard_pinned_cards
+            .insert(insert_at, selected);
+        self.set_history_feedback(
+            HistoryFeedbackLevel::Success,
+            format!("Pinned KPI card `{}`.", selected.id()),
+        );
+    }
+
+    pub(super) fn move_history_dashboard_selected_card(&mut self, right: bool) {
+        let selected = self.history_dashboard_selected_card;
+        let Some(index) = self
+            .history_dashboard_pinned_cards
+            .iter()
+            .position(|card| *card == selected)
+        else {
+            self.set_history_feedback(
+                HistoryFeedbackLevel::Warning,
+                "Pin the selected KPI card before reordering it.",
+            );
+            return;
+        };
+
+        let target_index = if right {
+            if index + 1 >= self.history_dashboard_pinned_cards.len() {
+                self.set_history_feedback(
+                    HistoryFeedbackLevel::Warning,
+                    "Selected KPI card is already at the right edge.",
+                );
+                return;
+            }
+            index + 1
+        } else {
+            if index == 0 {
+                self.set_history_feedback(
+                    HistoryFeedbackLevel::Warning,
+                    "Selected KPI card is already at the left edge.",
+                );
+                return;
+            }
+            index - 1
+        };
+
+        self.history_dashboard_pinned_cards
+            .swap(index, target_index);
+        self.set_history_feedback(
+            HistoryFeedbackLevel::Success,
+            format!("Moved KPI card `{}`.", selected.id()),
+        );
     }
 
     pub(super) fn cycle_history_comparison_dimension(&mut self, forward: bool) {
