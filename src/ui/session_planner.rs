@@ -21,7 +21,7 @@ pub(super) fn render_session_planner(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1), // current task
+            Constraint::Length(2), // current task + weekly allocation
             Constraint::Min(4),    // task/template lists
             Constraint::Length(3), // task label input
             Constraint::Length(1), // feedback
@@ -50,11 +50,14 @@ fn render_session_planner_selected_task(frame: &mut Frame, app: &App, area: Rect
         .active_session_template_name()
         .map_or_else(|| "none".to_string(), str::to_string);
     let weekly_allocation = planner_weekly_allocation_summary(app);
-    let selected_text = format!(
-        "{selected_task}   |   Active template: {selected_template}   |   {weekly_allocation}"
-    );
+    let selected_text = vec![
+        Line::from(format!(
+            "{selected_task}   |   Active template: {selected_template}"
+        )),
+        Line::from(weekly_allocation),
+    ];
     frame.render_widget(
-        Paragraph::new(Line::from(selected_text))
+        Paragraph::new(selected_text)
             .style(Style::default().fg(app_color(app, Color::White)))
             .wrap(Wrap { trim: true }),
         area,
