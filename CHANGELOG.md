@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Productivity comparison analytics across task/profile/time-of-day (#325):** added unified comparison rows in History and CLI status (`--compare-*`), including export coverage in `focustime-stats.json/.csv`.
+## [0.13.0] - 2026-05-22
+
+### Added
+
+- **Weekly-to-daily goal auto-allocation planner (#356):** added deterministic remaining-week allocation with schedule-weighted/equal-split distribution, surfaced in Session Planner/Focus History and CLI status outputs.
+- **Focus-risk forecasting for goal and streak misses (#357):** added proactive risk scoring with explainable signals for daily/weekly/monthly goals and streak continuity across CLI status and History surfaces.
+- **Productivity comparison analytics across task/profile/time-of-day (#358):** added unified comparison rows in History and CLI status (`--compare-*`), including export coverage in `focustime-stats.json/.csv`.
+- **Custom dashboard with pinable KPI cards (#359):** added configurable Focus History KPI cards with persistent pin/order behavior and CLI management commands (`--history-dashboard*`).
 
 ## [0.12.1] - 2026-05-21
 
@@ -314,7 +321,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/utilForever/focustime/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/utilForever/focustime/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/utilForever/focustime/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/utilForever/focustime/compare/v0.11.0...v0.11.1
