@@ -203,6 +203,8 @@ cargo run -- --blocking-preview --json
 # Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary allowlist entries, latest interruption summary, and `selected_task_goal` in JSON)
 cargo run -- --status
 cargo run -- --status --json
+cargo run -- --status --compare-by=profile --compare-limit=5
+cargo run -- --status --compare-by=time-of-day --compare-task=Docs --compare-time=morning --json
 
 # Watch status continuously (default 1s cadence, optional seconds override; Ctrl-C exits cleanly)
 cargo run -- --status --watch
@@ -747,6 +749,7 @@ Override events are recorded for audit visibility in the History view and includ
 - weekly consistency score (`active_days / 7`, rounded to `%`) derived from daily activity
 - weekly focus score KPI (50/50 blend of consistency and weekly goal completion; `n/a` when weekly goal is off)
 - profile effectiveness comparison (focus share % and average focused minutes per completed session)
+- productivity comparison rows by task/profile/time-of-day with optional slice filters
 - per-task totals (pomodoros and focused minutes) derived from labeled focus sessions
 - per-task trend summaries in History (`last 7 days` vs `previous 7 days`)
 - per-task cumulative goals (minutes/pomodoros) with per-label progress and met/in-progress evaluation
@@ -775,16 +778,18 @@ inactive when today's goal is off.
 From timer view:
 
 - press **`h`** to open the history panel with weekly and daily summaries
+- while history is open, use **`←/→`** to switch comparison dimension; **`↑/↓`** task filter; **`[`/`]`** profile filter; **`,`/`.`** time-of-day filter
 - while the history panel is open, press **`e`** to export `focustime-stats.json` and `focustime-stats.csv` into the current working directory
 - press **`h`** or **`Esc`** to return to timer view
 
 Exports include daily/weekly aggregates, weekly consistency, weekly focus score,
-profile effectiveness, task summaries/trends, interruption records, and labeled
-focus-session records where task labels were attached. Focus-session rows
+profile effectiveness, productivity comparisons, task summaries/trends,
+interruption records, and labeled focus-session records where task labels were
+attached. Focus-session rows
 persist and export first-class `focus_intention` and `task_note` fields; when
 dedicated metadata input is not provided, both fields default to the selected
 `task_label`. Interruption records include structured `reason` values and
-remaining-time metadata. Export files expose `schema_version` (currently `5`)
+remaining-time metadata. Export files expose `schema_version` (currently `6`)
 so downstream consumers can handle versioned contracts explicitly.
 
 ## The way the system works

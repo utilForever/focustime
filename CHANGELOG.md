@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Productivity comparison analytics across task/profile/time-of-day (#325):** added unified comparison rows in History and CLI status (`--compare-*`), including export coverage in `focustime-stats.json/.csv`.
+
 ## [0.12.1] - 2026-05-21
 
 ### Changed
