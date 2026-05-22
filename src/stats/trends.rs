@@ -43,6 +43,7 @@ impl FocusStats {
         by_task
     }
 
+    #[cfg(test)]
     #[allow(dead_code)]
     pub fn recent_daily(&self, limit: usize) -> Vec<(String, DailyStats)> {
         self.daily

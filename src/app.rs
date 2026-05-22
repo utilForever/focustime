@@ -1204,6 +1204,7 @@ impl App {
         )
     }
 
+    #[cfg(test)]
     #[allow(dead_code)]
     pub fn recent_daily_stats(&self, limit: usize) -> Vec<(String, DailyStats)> {
         self.stats.recent_daily(limit)
