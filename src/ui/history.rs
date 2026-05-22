@@ -20,7 +20,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(7), // overview
+            Constraint::Length(8), // overview
             Constraint::Min(6),    // history panels
             Constraint::Length(1), // status line
             Constraint::Length(2), // hints
@@ -36,6 +36,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         .count();
     let focus_score_line = readable_focus_score_text(&format_history_focus_score_line(app));
     let goals_line = readable_goal_streak_text(&format_history_goal_streak_line(app));
+    let weekly_allocation_line = format_history_weekly_allocation_line(app);
     let interruption_line = format_history_interruption_line(app);
     let growth_summary = app.stats_growth_summary();
     let retention_preview = app.stats_retention_preview();
@@ -74,6 +75,10 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         ),
         Line::styled(
             goals_line,
+            Style::default().fg(app_color(app, Color::DarkGray)),
+        ),
+        Line::styled(
+            weekly_allocation_line,
             Style::default().fg(app_color(app, Color::DarkGray)),
         ),
         Line::styled(
@@ -411,6 +416,30 @@ pub(super) fn format_history_focus_score_line(app: &App) -> String {
         },
         None => "Focus score: n/a".to_string(),
     }
+}
+
+pub(super) fn format_history_weekly_allocation_line(app: &App) -> String {
+    let allocation = app.weekly_daily_goal_allocation();
+    if !allocation.has_any_target() {
+        return "Weekly allocation: off".to_string();
+    }
+    if allocation.remaining_minutes == 0 && allocation.remaining_pomodoros == 0 {
+        return format!(
+            "Weekly allocation: met · 0m/0p remaining · {} day(s) left",
+            allocation.remaining_days_in_week
+        );
+    }
+
+    let today_target = allocation.today_target();
+    format!(
+        "Weekly allocation: today {}m/{}p · remaining {}m/{}p across {}/{} days",
+        today_target.minutes,
+        today_target.pomodoros,
+        allocation.remaining_minutes,
+        allocation.remaining_pomodoros,
+        allocation.allocatable_days,
+        allocation.remaining_days_in_week
+    )
 }
 
 pub(super) fn format_history_interruption_line(app: &App) -> String {
