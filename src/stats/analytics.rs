@@ -1,11 +1,12 @@
 use crate::stats::{
-    BTreeMap, BTreeSet, DailyGoalSnapshot, Datelike, FocusStats, HeatmapDayStats, MonthlyHeatmap,
+    BTreeMap, BTreeSet, DailyGoalSnapshot, Datelike, FocusRiskForecast, FocusRiskLevel,
+    FocusRiskSignal, FocusStats, GoalPeriod, GoalRiskForecast, HeatmapDayStats, MonthlyHeatmap,
     MonthlyStats, ProfileBucket, ProfileEffectiveness, ProfileEffectivenessAccumulator,
     ProfileTotals, StatsGrowthSection, StatsGrowthSummary, StatsRetentionConfig,
-    StatsRetentionPruneResult, WeeklyConsistency, WeeklyFocusScore, WeeklyStats,
-    average_two_percentages, consistency_score_from_active_days, daily_has_activity, days_in_month,
-    format_week_label, month_key_for_day, parse_week_label, percentage_round_nearest,
-    profile_bucket_for, week_key_for_day, weekly_completion_score_pct,
+    StatsRetentionPruneResult, StreakRiskForecast, WeeklyConsistency, WeeklyFocusScore,
+    WeeklyStats, average_two_percentages, consistency_score_from_active_days, daily_has_activity,
+    days_in_month, format_week_label, month_key_for_day, parse_week_label,
+    percentage_round_nearest, profile_bucket_for, week_key_for_day, weekly_completion_score_pct,
 };
 
 impl FocusStats {
@@ -122,6 +123,55 @@ impl FocusStats {
 
     pub fn latest_weekly_focus_score(&self) -> Option<WeeklyFocusScore> {
         self.recent_weekly_focus_scores(1).into_iter().next()
+    }
+
+    pub fn focus_risk_forecast_for_day(
+        &self,
+        day: chrono::NaiveDate,
+        daily_goal: DailyGoalSnapshot,
+        weekly_goal: DailyGoalSnapshot,
+        monthly_goal: DailyGoalSnapshot,
+    ) -> FocusRiskForecast {
+        let day_key = day.format("%Y-%m-%d").to_string();
+        let daily_stats = self.daily_for(&day_key);
+        let weekly_stats = self.weekly_for_day(day);
+        let monthly_stats = self.monthly_for_day(day);
+        let cadence = rolling_cadence_window(self, day, 7);
+        let daily_goal_forecast = goal_risk_forecast(
+            GoalPeriod::Daily,
+            daily_goal,
+            daily_stats.focused_minutes(),
+            daily_stats.pomodoros_completed,
+            1,
+            cadence,
+        );
+        let weekly_goal_forecast = goal_risk_forecast(
+            GoalPeriod::Weekly,
+            weekly_goal,
+            weekly_stats.focused_minutes(),
+            weekly_stats.pomodoros_completed,
+            remaining_days_in_week(day),
+            cadence,
+        );
+        let monthly_goal_forecast = goal_risk_forecast(
+            GoalPeriod::Monthly,
+            monthly_goal,
+            monthly_stats.focused_minutes(),
+            monthly_stats.pomodoros_completed,
+            remaining_days_in_month(day),
+            cadence,
+        );
+
+        let streak = self.goal_streak_with_day_goal(day, daily_goal, daily_stats, |_| daily_goal);
+        let streak_forecast =
+            streak_risk_forecast(self, day, daily_goal, daily_stats, cadence, streak);
+
+        FocusRiskForecast {
+            daily_goal: daily_goal_forecast,
+            weekly_goal: weekly_goal_forecast,
+            monthly_goal: monthly_goal_forecast,
+            streak: streak_forecast,
+        }
     }
 
     pub fn recent_monthly(&self, limit: usize) -> Vec<MonthlyStats> {
@@ -532,6 +582,337 @@ impl FocusStats {
         let mut cloned = self.clone();
         cloned.apply_retention_policy(retention, reference_day)
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CadenceWindow {
+    window_days: u8,
+    active_days: u8,
+    focused_minutes: u64,
+    pomodoros_completed: u32,
+}
+
+impl CadenceWindow {
+    fn consistency_pct(self) -> u8 {
+        consistency_score_from_active_days(self.active_days)
+    }
+
+    fn average_daily_minutes(self) -> u64 {
+        self.focused_minutes / u64::from(self.window_days.max(1))
+    }
+
+    fn average_daily_pomodoros(self) -> u64 {
+        u64::from(self.pomodoros_completed) / u64::from(self.window_days.max(1))
+    }
+}
+
+fn rolling_cadence_window(
+    stats: &FocusStats,
+    day: chrono::NaiveDate,
+    window_days: u8,
+) -> CadenceWindow {
+    let mut cadence = CadenceWindow {
+        window_days: window_days.max(1),
+        active_days: 0,
+        focused_minutes: 0,
+        pomodoros_completed: 0,
+    };
+    for offset in 0..cadence.window_days {
+        let candidate = day
+            .checked_sub_signed(chrono::Duration::days(i64::from(offset)))
+            .unwrap_or(day);
+        let day_key = candidate.format("%Y-%m-%d").to_string();
+        let day_stats = stats.daily_for(&day_key);
+        if daily_has_activity(day_stats) {
+            cadence.active_days = cadence
+                .active_days
+                .saturating_add(1)
+                .min(cadence.window_days);
+        }
+        cadence.focused_minutes = cadence
+            .focused_minutes
+            .saturating_add(day_stats.focused_minutes());
+        cadence.pomodoros_completed = cadence
+            .pomodoros_completed
+            .saturating_add(day_stats.pomodoros_completed);
+    }
+    cadence
+}
+
+fn goal_risk_forecast(
+    period: GoalPeriod,
+    goal: DailyGoalSnapshot,
+    completed_minutes: u64,
+    completed_pomodoros: u32,
+    remaining_days: u32,
+    cadence: CadenceWindow,
+) -> GoalRiskForecast {
+    if !goal.has_any_target() {
+        return GoalRiskForecast {
+            period,
+            configured: false,
+            met: false,
+            completion_pct: None,
+            risk_score_pct: 0,
+            risk_level: FocusRiskLevel::Low,
+            signals: vec![risk_signal("status", "goal off")],
+        };
+    }
+
+    let met = goal.is_met_by_totals(completed_minutes, completed_pomodoros);
+    let completion_pct = completion_pct_for_totals(goal, completed_minutes, completed_pomodoros);
+    let completion_gap = completion_pct.map_or(0, |pct| 100_u8.saturating_sub(pct));
+    let consistency_pct = cadence.consistency_pct();
+    let consistency_gap = 100_u8.saturating_sub(consistency_pct);
+    let pace_gap = pace_gap_pct(
+        goal,
+        completed_minutes,
+        completed_pomodoros,
+        remaining_days,
+        cadence,
+    );
+    let risk_score_pct = if met {
+        0
+    } else {
+        weighted_pct(&[(completion_gap, 55), (consistency_gap, 20), (pace_gap, 25)])
+    };
+    let risk_level = FocusRiskLevel::from_score(risk_score_pct);
+
+    let mut signals = vec![
+        risk_signal("completion", &format!("{}%", completion_pct.unwrap_or(0))),
+        risk_signal(
+            "consistency",
+            &format!(
+                "{}% ({}/{} days)",
+                consistency_pct, cadence.active_days, cadence.window_days
+            ),
+        ),
+    ];
+    if met {
+        signals.push(risk_signal("pace", "goal already met"));
+    } else {
+        signals.push(risk_signal(
+            "pace",
+            &format!(
+                "{}% gap with {} day(s) left",
+                pace_gap,
+                remaining_days.max(1)
+            ),
+        ));
+    }
+
+    GoalRiskForecast {
+        period,
+        configured: true,
+        met,
+        completion_pct,
+        risk_score_pct,
+        risk_level,
+        signals,
+    }
+}
+
+fn streak_risk_forecast(
+    stats: &FocusStats,
+    day: chrono::NaiveDate,
+    daily_goal: DailyGoalSnapshot,
+    today_stats: crate::stats::DailyStats,
+    cadence: CadenceWindow,
+    streak: crate::stats::GoalStreak,
+) -> StreakRiskForecast {
+    if !daily_goal.has_any_target() {
+        return StreakRiskForecast {
+            configured: false,
+            current_streak: 0,
+            best_streak: 0,
+            today_goal_met: false,
+            recent_goal_reliability_pct: 0,
+            risk_score_pct: 0,
+            risk_level: FocusRiskLevel::Low,
+            signals: vec![risk_signal("status", "daily goal off")],
+        };
+    }
+
+    let today_goal_met = daily_goal.is_met_by(today_stats);
+    let reliability_pct = rolling_goal_reliability_pct(stats, day, daily_goal, 7);
+    let consistency_pct = cadence.consistency_pct();
+    let today_pressure = if today_goal_met { 20 } else { 90 };
+    let reliability_gap = 100_u8.saturating_sub(reliability_pct);
+    let consistency_gap = 100_u8.saturating_sub(consistency_pct);
+    let mut risk_score_pct = weighted_pct(&[
+        (today_pressure, 45),
+        (reliability_gap, 35),
+        (consistency_gap, 20),
+    ]);
+    risk_score_pct = if streak.current >= 7 {
+        risk_score_pct.saturating_add(10).min(100)
+    } else if streak.current >= 3 {
+        risk_score_pct.saturating_add(5).min(100)
+    } else {
+        risk_score_pct
+    };
+    let risk_level = FocusRiskLevel::from_score(risk_score_pct);
+
+    let signals = vec![
+        risk_signal(
+            "today",
+            if today_goal_met {
+                "met so far"
+            } else {
+                "not met yet"
+            },
+        ),
+        risk_signal("recent reliability", &format!("{reliability_pct}%")),
+        risk_signal(
+            "consistency",
+            &format!(
+                "{}% ({}/{} days)",
+                consistency_pct, cadence.active_days, cadence.window_days
+            ),
+        ),
+        risk_signal(
+            "streak",
+            &format!("{}d current / {}d best", streak.current, streak.best),
+        ),
+    ];
+
+    StreakRiskForecast {
+        configured: true,
+        current_streak: streak.current,
+        best_streak: streak.best,
+        today_goal_met,
+        recent_goal_reliability_pct: reliability_pct,
+        risk_score_pct,
+        risk_level,
+        signals,
+    }
+}
+
+fn rolling_goal_reliability_pct(
+    stats: &FocusStats,
+    day: chrono::NaiveDate,
+    fallback_goal: DailyGoalSnapshot,
+    window_days: u8,
+) -> u8 {
+    let mut eligible_days = 0_u32;
+    let mut met_days = 0_u32;
+    for offset in 0..window_days.max(1) {
+        let candidate = day
+            .checked_sub_signed(chrono::Duration::days(i64::from(offset)))
+            .unwrap_or(day);
+        let day_key = candidate.format("%Y-%m-%d").to_string();
+        let day_stats = stats.daily_for(&day_key);
+        let has_observed_day =
+            candidate == day || stats.daily.contains_key(&day_key) || daily_has_activity(day_stats);
+        if !has_observed_day {
+            continue;
+        }
+        let configured_goal = stats
+            .daily
+            .get(&day_key)
+            .and_then(|entry| entry.goal)
+            .unwrap_or(fallback_goal);
+        if !configured_goal.has_any_target() {
+            continue;
+        }
+        eligible_days = eligible_days.saturating_add(1);
+        if configured_goal.is_met_by(day_stats) {
+            met_days = met_days.saturating_add(1);
+        }
+    }
+
+    if eligible_days == 0 {
+        0
+    } else {
+        percentage_round_nearest(u64::from(met_days), u64::from(eligible_days))
+    }
+}
+
+fn completion_pct_for_totals(
+    goal: DailyGoalSnapshot,
+    focused_minutes: u64,
+    pomodoros_completed: u32,
+) -> Option<u8> {
+    weekly_completion_score_pct(
+        goal,
+        WeeklyStats {
+            pomodoros_completed,
+            focused_seconds: focused_minutes.saturating_mul(60),
+            ..WeeklyStats::default()
+        },
+    )
+}
+
+fn pace_gap_pct(
+    goal: DailyGoalSnapshot,
+    completed_minutes: u64,
+    completed_pomodoros: u32,
+    remaining_days: u32,
+    cadence: CadenceWindow,
+) -> u8 {
+    let days_remaining = u64::from(remaining_days.max(1));
+    let remaining_minutes = goal.minutes.saturating_sub(completed_minutes);
+    let remaining_pomodoros = u64::from(goal.pomodoros.saturating_sub(completed_pomodoros));
+    let required_minutes_per_day = if goal.minutes > 0 {
+        div_ceil_u64(remaining_minutes, days_remaining)
+    } else {
+        0
+    };
+    let required_pomodoros_per_day = if goal.pomodoros > 0 {
+        div_ceil_u64(remaining_pomodoros, days_remaining)
+    } else {
+        0
+    };
+
+    let minutes_gap = gap_pct(cadence.average_daily_minutes(), required_minutes_per_day);
+    let pomodoros_gap = gap_pct(
+        cadence.average_daily_pomodoros(),
+        required_pomodoros_per_day,
+    );
+    minutes_gap.max(pomodoros_gap)
+}
+
+fn gap_pct(recent_rate: u64, required_rate: u64) -> u8 {
+    if required_rate == 0 || recent_rate >= required_rate {
+        return 0;
+    }
+    percentage_round_nearest(required_rate.saturating_sub(recent_rate), required_rate)
+}
+
+fn weighted_pct(parts: &[(u8, u16)]) -> u8 {
+    let total_weight = parts.iter().fold(0_u64, |total, (_, weight)| {
+        total.saturating_add(u64::from(*weight))
+    });
+    if total_weight == 0 {
+        return 0;
+    }
+    let weighted_sum = parts.iter().fold(0_u64, |total, (value, weight)| {
+        total.saturating_add(u64::from(*value).saturating_mul(u64::from(*weight)))
+    });
+    ((weighted_sum.saturating_add(total_weight / 2)) / total_weight).min(u64::from(u8::MAX)) as u8
+}
+
+fn risk_signal(label: &str, value: &str) -> FocusRiskSignal {
+    FocusRiskSignal {
+        label: label.to_string(),
+        value: value.to_string(),
+    }
+}
+
+fn remaining_days_in_week(day: chrono::NaiveDate) -> u32 {
+    7_u32.saturating_sub(day.weekday().num_days_from_monday())
+}
+
+fn remaining_days_in_month(day: chrono::NaiveDate) -> u32 {
+    let total_days = days_in_month(day.year(), day.month());
+    total_days.saturating_sub(day.day()).saturating_add(1)
+}
+
+fn div_ceil_u64(value: u64, divisor: u64) -> u64 {
+    if divisor == 0 {
+        return value;
+    }
+    value.div_ceil(divisor)
 }
 
 fn stats_growth_section(

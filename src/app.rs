@@ -30,7 +30,7 @@ use crate::schedule::{
     next_one_time_occurrence_after, occurrence_key, pick_active_occurrence, pick_next_occurrence,
 };
 use crate::stats::{
-    BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles,
+    BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusRiskForecast,
     FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats,
     ProfileEffectiveness, ProfileTotals, SessionInterruptionEvent, SessionInterruptionReason,
     SessionStats, StatsGrowthSummary, StatsRetentionPruneResult, TaskGoalProgress, TaskTotals,
@@ -1211,6 +1211,16 @@ impl App {
 
     pub fn latest_weekly_focus_score(&self) -> Option<WeeklyFocusScore> {
         self.stats.latest_weekly_focus_score()
+    }
+
+    pub fn focus_risk_forecast(&self) -> FocusRiskForecast {
+        let today = Local::now().date_naive();
+        self.stats.focus_risk_forecast_for_day(
+            today,
+            self.effective_daily_goal_snapshot_for_day(today),
+            self.effective_weekly_goal_snapshot_for_day(today),
+            self.effective_monthly_goal_snapshot_for_day(today),
+        )
     }
 
     pub fn recent_monthly_stats(&self, limit: usize) -> Vec<MonthlyStats> {
