@@ -1,9 +1,11 @@
 use crate::cli::{
     KeyValueParser, OsString, OutputMode, ParsedToken, PathBuf, ValueArgParser, invalid_usage,
-    parse_automation_triggers_value, parse_goal_carry_value, parse_goal_value,
-    parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
-    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_watch_interval_secs,
-    parse_weekday_rules_value, parse_weekly_goal_value, require_nonempty_key_value,
+    parse_automation_triggers_value, parse_compare_by_value, parse_compare_limit_value,
+    parse_compare_profile_value, parse_compare_time_of_day_value, parse_goal_carry_value,
+    parse_goal_value, parse_monthly_goal_value, parse_profile_id, parse_schedule_value,
+    parse_site_edit_value, parse_strict_value, parse_task_goal_value, parse_theme_preset,
+    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 
 pub(super) fn infer_output_mode_from_os_args(args: &[OsString]) -> OutputMode {
@@ -55,7 +57,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 37] = [
+    let parsers: [(&str, ValueArgParser); 42] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -76,6 +78,11 @@ fn classify_value_arg(
             classify_automation_triggers_set_arg,
         ),
         ("--watch", classify_watch_arg),
+        ("--compare-by", classify_compare_by_arg),
+        ("--compare-task", classify_compare_task_arg),
+        ("--compare-profile", classify_compare_profile_arg),
+        ("--compare-time", classify_compare_time_of_day_arg),
+        ("--compare-limit", classify_compare_limit_arg),
         ("--backup", classify_backup_arg),
         ("--restore", classify_restore_arg),
         ("--export", classify_export_arg),
@@ -290,6 +297,105 @@ fn classify_watch_arg(args: &[String], index: usize) -> Result<(ParsedToken, usi
         ));
     }
     Ok((ParsedToken::Watch(None), 1))
+}
+
+fn classify_compare_by_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--compare-by` requires `task`, `profile`, or `time-of-day`.",
+        )?;
+        return Ok((ParsedToken::CompareBy(parse_compare_by_value(value)?), 2));
+    }
+    Err(invalid_usage(
+        "`--compare-by` requires a value. Use `--compare-by=task`, `--compare-by=profile`, or `--compare-by=time-of-day`.",
+    ))
+}
+
+fn classify_compare_task_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value =
+            require_nonempty_key_value(next, "`--compare-task` requires a task label or `all`.")?;
+        let task = if value.trim().eq_ignore_ascii_case("all") {
+            None
+        } else {
+            Some(value.to_string())
+        };
+        return Ok((ParsedToken::CompareTask(task), 2));
+    }
+    Err(invalid_usage(
+        "`--compare-task` requires a value. Use `--compare-task=LABEL` or `--compare-task=all`.",
+    ))
+}
+
+fn classify_compare_profile_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--compare-profile` requires `classic`, `deep-work`, `custom`, `unknown`, or `all`.",
+        )?;
+        return Ok((
+            ParsedToken::CompareProfile(parse_compare_profile_value(value)?),
+            2,
+        ));
+    }
+    Err(invalid_usage(
+        "`--compare-profile` requires a value. Use `--compare-profile=classic|deep-work|custom|unknown|all`.",
+    ))
+}
+
+fn classify_compare_time_of_day_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--compare-time` requires `morning`, `afternoon`, `evening`, `night`, `unknown`, or `all`.",
+        )?;
+        return Ok((
+            ParsedToken::CompareTimeOfDay(parse_compare_time_of_day_value(value)?),
+            2,
+        ));
+    }
+    Err(invalid_usage(
+        "`--compare-time` requires a value. Use `--compare-time=morning|afternoon|evening|night|unknown|all`.",
+    ))
+}
+
+fn classify_compare_limit_arg(
+    args: &[String],
+    index: usize,
+) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--compare-limit` requires a positive whole number.",
+        )?;
+        return Ok((
+            ParsedToken::CompareLimit(parse_compare_limit_value(value)?),
+            2,
+        ));
+    }
+    Err(invalid_usage(
+        "`--compare-limit` requires a value. Use `--compare-limit=NUMBER`.",
+    ))
 }
 
 fn classify_blocklist_profile_arg(
@@ -715,7 +821,7 @@ fn classify_automation_triggers_set_arg(
 }
 
 pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 37] = [
+    let parsers: [KeyValueParser; 42] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -733,6 +839,11 @@ pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, S
         parse_weekday_rules_set_key_value_arg,
         parse_automation_triggers_set_key_value_arg,
         parse_watch_key_value_arg,
+        parse_compare_by_key_value_arg,
+        parse_compare_task_key_value_arg,
+        parse_compare_profile_key_value_arg,
+        parse_compare_time_of_day_key_value_arg,
+        parse_compare_limit_key_value_arg,
         parse_backup_key_value_arg,
         parse_restore_key_value_arg,
         parse_export_key_value_arg,
@@ -964,6 +1075,70 @@ fn parse_watch_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
         return Ok(Some(ParsedToken::Watch(Some(parse_watch_interval_secs(
             value,
         )?))));
+    }
+    Ok(None)
+}
+
+fn parse_compare_by_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--compare-by=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--compare-by=` requires `task`, `profile`, or `time-of-day`.",
+        )?;
+        return Ok(Some(ParsedToken::CompareBy(parse_compare_by_value(value)?)));
+    }
+    Ok(None)
+}
+
+fn parse_compare_task_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--compare-task=") {
+        let value =
+            require_nonempty_key_value(value, "`--compare-task=` requires a task label or `all`.")?;
+        let task = if value.trim().eq_ignore_ascii_case("all") {
+            None
+        } else {
+            Some(value.to_string())
+        };
+        return Ok(Some(ParsedToken::CompareTask(task)));
+    }
+    Ok(None)
+}
+
+fn parse_compare_profile_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--compare-profile=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--compare-profile=` requires `classic`, `deep-work`, `custom`, `unknown`, or `all`.",
+        )?;
+        return Ok(Some(ParsedToken::CompareProfile(
+            parse_compare_profile_value(value)?,
+        )));
+    }
+    Ok(None)
+}
+
+fn parse_compare_time_of_day_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--compare-time=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--compare-time=` requires `morning`, `afternoon`, `evening`, `night`, `unknown`, or `all`.",
+        )?;
+        return Ok(Some(ParsedToken::CompareTimeOfDay(
+            parse_compare_time_of_day_value(value)?,
+        )));
+    }
+    Ok(None)
+}
+
+fn parse_compare_limit_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--compare-limit=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--compare-limit=` requires a positive whole number.",
+        )?;
+        return Ok(Some(ParsedToken::CompareLimit(parse_compare_limit_value(
+            value,
+        )?)));
     }
     Ok(None)
 }

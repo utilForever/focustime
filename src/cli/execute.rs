@@ -23,13 +23,14 @@ use crate::cli::{
     RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput,
     SessionMetadataCommandOutput, SessionTemplateCommandKind, SessionTemplateCommandOutput,
     SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker, SiteDeleteCommandOutput,
-    SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput, SiteListTarget, StatusOutput,
-    StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
-    TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset,
-    TimerCommandOutput, TimerStateOutput, WeekdayProfileRuleConfig, WeekdayRulesCommandOutput,
-    WeeklyGoalConfig, available_break_template_views, available_theme_preset_views,
+    SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput, SiteListTarget,
+    StatusComparisonOptions, StatusOutput, StrictCommandOutput, TaskCommandOutput,
+    TaskGoalCommandOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
+    TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
+    TimerStateOutput, WeekdayProfileRuleConfig, WeekdayRulesCommandOutput, WeeklyGoalConfig,
+    available_break_template_views, available_theme_preset_views,
     build_blocking_preview_command_output, build_diagnostics_command_output,
-    build_schedule_inspection_output, build_status_output, build_task_goal_output,
+    build_schedule_inspection_output, build_status_output_with_comparison, build_task_goal_output,
     display_input_value, effective_blocked_sites_for_profile, flush_stdout,
     print_automation_triggers_command_output, print_backup_output,
     print_blocking_preview_command_output, print_blocklist_category_command_output,
@@ -99,7 +100,8 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::BlockingPreview => execute_blocking_preview_command(cli_command.output),
         CommandKind::Status {
             watch_interval_secs,
-        } => execute_status_command(cli_command.output, watch_interval_secs),
+            comparison,
+        } => execute_status_command(cli_command.output, watch_interval_secs, comparison),
         CommandKind::Backup { dir } => execute_backup_command(dir, cli_command.output),
         CommandKind::Restore { dir } => execute_restore_command(dir, cli_command.output),
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
@@ -1448,16 +1450,21 @@ fn execute_blocking_preview_command(output: OutputMode) -> Result<(), String> {
 fn execute_status_command(
     output: OutputMode,
     watch_interval_secs: Option<u64>,
+    comparison: StatusComparisonOptions,
 ) -> Result<(), String> {
     if let Some(interval_secs) = watch_interval_secs {
-        return execute_status_watch_command(output, interval_secs);
+        return execute_status_watch_command(output, interval_secs, comparison);
     }
 
-    let payload = load_status_output()?;
+    let payload = load_status_output(&comparison)?;
     emit_status_output(&payload, output, false)
 }
 
-fn execute_status_watch_command(output: OutputMode, interval_secs: u64) -> Result<(), String> {
+fn execute_status_watch_command(
+    output: OutputMode,
+    interval_secs: u64,
+    comparison: StatusComparisonOptions,
+) -> Result<(), String> {
     if interval_secs == 0 {
         return Err("`--watch` interval must be greater than 0 seconds.".to_string());
     }
@@ -1472,7 +1479,7 @@ fn execute_status_watch_command(output: OutputMode, interval_secs: u64) -> Resul
             break;
         }
 
-        let payload = load_status_output()?;
+        let payload = load_status_output(&comparison)?;
         emit_status_output(&payload, output, true)?;
         flush_stdout()?;
 
@@ -1568,11 +1575,13 @@ unsafe fn install_platform_watch_interrupt_handler() -> Result<(), String> {
     Ok(())
 }
 
-fn load_status_output() -> Result<StatusOutput, String> {
+fn load_status_output(comparison: &StatusComparisonOptions) -> Result<StatusOutput, String> {
     let config = AppConfig::load().normalized();
     let stats = FocusStats::load_with_options(stats_load_options(&config))
         .map_err(|error| format!("Failed to load stats: {error}"))?;
-    Ok(build_status_output(&config, &stats))
+    Ok(build_status_output_with_comparison(
+        &config, &stats, comparison,
+    ))
 }
 
 fn emit_status_output(

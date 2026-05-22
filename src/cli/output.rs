@@ -7,10 +7,10 @@ use crate::cli::{
     ScheduleInspectionOutput, Serialize, SessionMetadataCommandOutput,
     SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
     SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
-    StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput, StrictCommandOutput,
-    TaskGoalCommandOutput, TaskGoalOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput,
-    TimerStateOutput, WeekdayRulesCommandOutput, Write, format_schedule_conflict,
-    inspect_schedule_conflicts_from_config, io,
+    StatsGrowthSummary, StatsRetentionStatusOutput, StatusComparisonOutput, StatusOutput,
+    StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, TemporarySiteAddCommandOutput,
+    ThemeCommandOutput, TimerStateOutput, WeekdayRulesCommandOutput, Write,
+    format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 use chrono::{Local, TimeZone};
 
@@ -404,6 +404,7 @@ pub(super) fn print_status_output(payload: &StatusOutput) {
         println!("Last interruption: none");
     }
     print_status_focus_score_line(&payload.focus_score);
+    print_status_comparison_line(&payload.comparison);
     print_status_focus_risk_line(&payload.focus_risk);
     print_status_growth_line(&payload.stats_growth);
     print_status_retention_line(&payload.stats_retention);
@@ -515,6 +516,39 @@ fn print_status_focus_score_line(focus_score: &FocusScoreOutput) {
         println!(
             "Focus score: n/a (weekly goal off; consistency {}%)",
             focus_score.consistency_score_pct
+        );
+    }
+}
+
+fn print_status_comparison_line(comparison: &StatusComparisonOutput) {
+    let task_filter = comparison.task_filter.as_deref().unwrap_or("all");
+    let profile_filter = comparison
+        .profile_filter
+        .map(|profile| profile.label().to_string())
+        .unwrap_or_else(|| "All".to_string());
+    let time_filter = comparison
+        .time_of_day_filter
+        .map(|bucket| bucket.label().to_string())
+        .unwrap_or_else(|| "All".to_string());
+    println!(
+        "Comparison: {} | task {} | profile {} | time {} | limit {}",
+        comparison.dimension.id(),
+        task_filter,
+        profile_filter,
+        time_filter,
+        comparison.limit
+    );
+    if comparison.rows.is_empty() {
+        println!("Comparison rows: none");
+        return;
+    }
+    for row in &comparison.rows {
+        println!(
+            "  - {}: {} min, {} sessions, {}% share",
+            row.label,
+            row.focused_minutes(),
+            row.sessions_completed,
+            row.focus_share_pct
         );
     }
 }

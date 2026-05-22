@@ -4,13 +4,24 @@ use crate::cli::{
     DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS,
     DailyGoalSnapshot, Datelike, FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput,
     NaiveDate, ProfileId, ProfileSpec, ProfileView, SessionOutput, StatsRetentionStatusOutput,
-    StatusOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput, ThemePreset, ThemePresetView,
-    TimerPhase, TimerStatus, TodayOutput, WeeklyAllocationDayOutput, WeeklyAllocationOutput,
-    carry_over_goal_target, current_day_key, effective_blocked_sites_for_profile, session_recovery,
+    StatusComparisonOptions, StatusComparisonOutput, StatusOutput, TaskGoalOutput,
+    TemporaryAllowlistStatusOutput, ThemePreset, ThemePresetView, TimerPhase, TimerStatus,
+    TodayOutput, WeeklyAllocationDayOutput, WeeklyAllocationOutput, carry_over_goal_target,
+    current_day_key, effective_blocked_sites_for_profile, session_recovery,
 };
+use crate::stats::ProductivityComparisonFilter;
 use crate::timer::TimerState;
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> StatusOutput {
+    build_status_output_with_comparison(config, stats, &StatusComparisonOptions::default())
+}
+
+pub(super) fn build_status_output_with_comparison(
+    config: &AppConfig,
+    stats: &FocusStats,
+    comparison: &StatusComparisonOptions,
+) -> StatusOutput {
     let day = current_day_key();
     let day_date = NaiveDate::parse_from_str(&day, "%Y-%m-%d")
         .expect("current_day_key should always be a valid ISO date");
@@ -69,6 +80,13 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         weekly_goal_snapshot,
         monthly_goal_snapshot,
     );
+    let comparison_filter = ProductivityComparisonFilter {
+        task_label: comparison.task_label.clone(),
+        profile: comparison.profile,
+        time_of_day: comparison.time_of_day,
+    };
+    let comparison_rows =
+        stats.productivity_comparison(comparison.dimension, &comparison_filter, comparison.limit);
     let weekly_allocation = build_weekly_allocation_output(
         day_date,
         weekly_goal_snapshot,
@@ -134,6 +152,14 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
             focus_score_pct,
             consistency_score_pct,
             completion_score_pct,
+        },
+        comparison: StatusComparisonOutput {
+            dimension: comparison.dimension,
+            task_filter: comparison.task_label.clone(),
+            profile_filter: comparison.profile,
+            time_of_day_filter: comparison.time_of_day,
+            limit: comparison.limit,
+            rows: comparison_rows,
         },
         focus_risk,
         stats_growth,
