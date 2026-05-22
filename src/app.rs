@@ -15,12 +15,12 @@ use crate::config::{
     AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
     BlockingBackendPolicyConfig, BlocklistCategoryConfig, BlocklistProfileConfig,
     BreakTemplateConfig, CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig,
-    FeatureFlagsConfig, GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig,
-    OneTimeFocusWindowConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
-    SessionTemplateConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
-    WakatimeRuntimeConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
-    validate_automation_trigger_rules,
+    FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig, HistoryKpiCardId,
+    MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
+    ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
+    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeekdayProfileRuleConfig,
+    WeeklyGoalConfig, validate_automation_trigger_rules,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -728,6 +728,9 @@ pub struct App {
     history_task_filter: Option<String>,
     history_profile_filter: Option<ProfileBucket>,
     history_time_of_day_filter: Option<TimeOfDayBucket>,
+    history_dashboard_card_order: Vec<HistoryKpiCardId>,
+    history_dashboard_pinned_cards: Vec<HistoryKpiCardId>,
+    history_dashboard_selected_card: HistoryKpiCardId,
     pub phase_notification: Option<String>,
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
@@ -830,6 +833,7 @@ impl App {
         let monthly_goal = config.monthly_goal;
         let goal_carry_over = config.goal_carry_over;
         let stats_retention = config.stats_retention;
+        let history_dashboard = config.history_dashboard;
         let wakatime_metadata = config.wakatime;
         let wakatime_runtime = config.wakatime_runtime;
         let blocklist_profiles = config.blocklist_profiles.clone();
@@ -892,6 +896,11 @@ impl App {
         );
         let setup_diagnostics =
             SetupDiagnostics::collect(&blocker, setup_deprecation_warnings.clone());
+        let history_dashboard_selected_card = history_dashboard
+            .card_order
+            .first()
+            .copied()
+            .unwrap_or(HistoryKpiCardId::SessionSummary);
         let mut app = Self {
             timer,
             should_quit: false,
@@ -939,6 +948,9 @@ impl App {
             history_task_filter: None,
             history_profile_filter: None,
             history_time_of_day_filter: None,
+            history_dashboard_card_order: history_dashboard.card_order,
+            history_dashboard_pinned_cards: history_dashboard.pinned_cards,
+            history_dashboard_selected_card,
             phase_notification: None,
             wakatime: WakatimeTracker::new_with_settings(
                 WakatimeHeartbeatMetadata {

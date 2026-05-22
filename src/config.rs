@@ -140,6 +140,9 @@ pub struct AppConfig {
     /// Retention policy for persisted stats history.
     #[serde(default)]
     pub stats_retention: StatsRetentionConfig,
+    /// History dashboard KPI card layout (pinning + display order).
+    #[serde(default)]
+    pub history_dashboard: HistoryDashboardConfig,
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
     pub wakatime: WakatimeMetadataConfig,
@@ -299,6 +302,16 @@ pub struct ShortcutConfig {
     pub back_stats_history: String,
     #[serde(default = "default_shortcut_export_stats_history")]
     pub export_stats_history: String,
+    #[serde(default = "default_shortcut_history_dashboard_select_previous")]
+    pub history_dashboard_select_previous: String,
+    #[serde(default = "default_shortcut_history_dashboard_select_next")]
+    pub history_dashboard_select_next: String,
+    #[serde(default = "default_shortcut_history_dashboard_toggle_pin")]
+    pub history_dashboard_toggle_pin: String,
+    #[serde(default = "default_shortcut_history_dashboard_move_left")]
+    pub history_dashboard_move_left: String,
+    #[serde(default = "default_shortcut_history_dashboard_move_right")]
+    pub history_dashboard_move_right: String,
     #[serde(default = "default_shortcut_back_setup_diagnostics")]
     pub back_setup_diagnostics: String,
     #[serde(default = "default_shortcut_refresh_setup_diagnostics")]
@@ -455,6 +468,26 @@ impl ShortcutConfig {
                 &self.export_stats_history,
                 &default_shortcut_export_stats_history(),
             ),
+            history_dashboard_select_previous: normalize_shortcut_token(
+                &self.history_dashboard_select_previous,
+                &default_shortcut_history_dashboard_select_previous(),
+            ),
+            history_dashboard_select_next: normalize_shortcut_token(
+                &self.history_dashboard_select_next,
+                &default_shortcut_history_dashboard_select_next(),
+            ),
+            history_dashboard_toggle_pin: normalize_shortcut_token(
+                &self.history_dashboard_toggle_pin,
+                &default_shortcut_history_dashboard_toggle_pin(),
+            ),
+            history_dashboard_move_left: normalize_shortcut_token(
+                &self.history_dashboard_move_left,
+                &default_shortcut_history_dashboard_move_left(),
+            ),
+            history_dashboard_move_right: normalize_shortcut_token(
+                &self.history_dashboard_move_right,
+                &default_shortcut_history_dashboard_move_right(),
+            ),
             back_setup_diagnostics: normalize_shortcut_token(
                 &self.back_setup_diagnostics,
                 &default_shortcut_back_setup_diagnostics(),
@@ -531,6 +564,11 @@ impl Default for ShortcutConfig {
             select_next_break_template: default_shortcut_select_next_break_template(),
             back_stats_history: default_shortcut_back_stats_history(),
             export_stats_history: default_shortcut_export_stats_history(),
+            history_dashboard_select_previous: default_shortcut_history_dashboard_select_previous(),
+            history_dashboard_select_next: default_shortcut_history_dashboard_select_next(),
+            history_dashboard_toggle_pin: default_shortcut_history_dashboard_toggle_pin(),
+            history_dashboard_move_left: default_shortcut_history_dashboard_move_left(),
+            history_dashboard_move_right: default_shortcut_history_dashboard_move_right(),
             back_setup_diagnostics: default_shortcut_back_setup_diagnostics(),
             refresh_setup_diagnostics: default_shortcut_refresh_setup_diagnostics(),
             navigate_up: default_shortcut_navigate_up(),
@@ -1179,6 +1217,179 @@ pub struct StatsRetentionWindows {
     pub keep_monthly_goal_snapshots_days: Option<u16>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryKpiCardId {
+    SessionSummary,
+    FocusScore,
+    GoalStreak,
+    FocusRisk,
+    WeeklyAllocation,
+    LastInterruption,
+    StatsGrowth,
+    Retention,
+    ComparisonFilters,
+    Unknown,
+}
+
+impl HistoryKpiCardId {
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::SessionSummary => "session_summary",
+            Self::FocusScore => "focus_score",
+            Self::GoalStreak => "goal_streak",
+            Self::FocusRisk => "focus_risk",
+            Self::WeeklyAllocation => "weekly_allocation",
+            Self::LastInterruption => "last_interruption",
+            Self::StatsGrowth => "stats_growth",
+            Self::Retention => "retention",
+            Self::ComparisonFilters => "comparison_filters",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::SessionSummary => "Session Summary",
+            Self::FocusScore => "Focus Score",
+            Self::GoalStreak => "Goal Streak",
+            Self::FocusRisk => "Focus Risk",
+            Self::WeeklyAllocation => "Weekly Allocation",
+            Self::LastInterruption => "Last Interruption",
+            Self::StatsGrowth => "Stats Growth",
+            Self::Retention => "Retention",
+            Self::ComparisonFilters => "Comparison Filters",
+            Self::Unknown => "Unknown",
+        }
+    }
+
+    pub const fn all() -> [Self; 9] {
+        [
+            Self::SessionSummary,
+            Self::FocusScore,
+            Self::GoalStreak,
+            Self::FocusRisk,
+            Self::WeeklyAllocation,
+            Self::LastInterruption,
+            Self::StatsGrowth,
+            Self::Retention,
+            Self::ComparisonFilters,
+        ]
+    }
+
+    pub fn from_id(value: &str) -> Option<Self> {
+        let parsed = Self::from_config_value(value);
+        if parsed == Self::Unknown {
+            None
+        } else {
+            Some(parsed)
+        }
+    }
+
+    fn from_config_value(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "session_summary" | "session-summary" | "sessionsummary" => Self::SessionSummary,
+            "focus_score" | "focus-score" | "focusscore" => Self::FocusScore,
+            "goal_streak" | "goal-streak" | "goalstreak" => Self::GoalStreak,
+            "focus_risk" | "focus-risk" | "focusrisk" => Self::FocusRisk,
+            "weekly_allocation" | "weekly-allocation" | "weeklyallocation" => {
+                Self::WeeklyAllocation
+            }
+            "last_interruption" | "last-interruption" | "lastinterruption" => {
+                Self::LastInterruption
+            }
+            "stats_growth" | "stats-growth" | "statsgrowth" => Self::StatsGrowth,
+            "retention" => Self::Retention,
+            "comparison_filters" | "comparison-filters" | "comparisonfilters" => {
+                Self::ComparisonFilters
+            }
+            _ => Self::Unknown,
+        }
+    }
+
+    fn is_unknown(self) -> bool {
+        self == Self::Unknown
+    }
+}
+
+impl<'de> Deserialize<'de> for HistoryKpiCardId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_config_value(&value))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HistoryDashboardConfig {
+    #[serde(default = "default_history_dashboard_card_order")]
+    pub card_order: Vec<HistoryKpiCardId>,
+    #[serde(default = "default_history_dashboard_pinned_cards")]
+    pub pinned_cards: Vec<HistoryKpiCardId>,
+}
+
+impl HistoryDashboardConfig {
+    pub fn normalized(&self) -> Self {
+        let card_order = normalize_history_dashboard_card_order(&self.card_order);
+        let pinned_cards =
+            normalize_history_dashboard_pinned_cards(&self.pinned_cards, &card_order);
+        Self {
+            card_order,
+            pinned_cards,
+        }
+    }
+}
+
+fn normalize_history_dashboard_card_order(input: &[HistoryKpiCardId]) -> Vec<HistoryKpiCardId> {
+    let mut card_order = Vec::new();
+    for card in input {
+        if card.is_unknown() || card_order.contains(card) {
+            continue;
+        }
+        card_order.push(*card);
+    }
+
+    if card_order.is_empty() {
+        return default_history_dashboard_card_order();
+    }
+
+    for card in HistoryKpiCardId::all() {
+        if !card_order.contains(&card) {
+            card_order.push(card);
+        }
+    }
+    card_order
+}
+
+fn normalize_history_dashboard_pinned_cards(
+    input: &[HistoryKpiCardId],
+    card_order: &[HistoryKpiCardId],
+) -> Vec<HistoryKpiCardId> {
+    let mut pinned_cards = Vec::new();
+    for card in input {
+        if card.is_unknown() || pinned_cards.contains(card) || !card_order.contains(card) {
+            continue;
+        }
+        pinned_cards.push(*card);
+    }
+
+    if pinned_cards.is_empty() {
+        return card_order.to_vec();
+    }
+    pinned_cards
+}
+
+impl Default for HistoryDashboardConfig {
+    fn default() -> Self {
+        Self {
+            card_order: default_history_dashboard_card_order(),
+            pinned_cards: default_history_dashboard_pinned_cards(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WakatimeTaskMappingConfig {
     #[serde(default)]
@@ -1518,6 +1729,26 @@ fn default_shortcut_export_stats_history() -> String {
     "e".to_string()
 }
 
+fn default_shortcut_history_dashboard_select_previous() -> String {
+    "k".to_string()
+}
+
+fn default_shortcut_history_dashboard_select_next() -> String {
+    "j".to_string()
+}
+
+fn default_shortcut_history_dashboard_toggle_pin() -> String {
+    "p".to_string()
+}
+
+fn default_shortcut_history_dashboard_move_left() -> String {
+    "<".to_string()
+}
+
+fn default_shortcut_history_dashboard_move_right() -> String {
+    ">".to_string()
+}
+
 fn default_shortcut_back_setup_diagnostics() -> String {
     "d".to_string()
 }
@@ -1556,6 +1787,14 @@ fn default_shortcut_delete() -> String {
 
 fn default_shortcut_backspace() -> String {
     "backspace".to_string()
+}
+
+fn default_history_dashboard_pinned_cards() -> Vec<HistoryKpiCardId> {
+    HistoryKpiCardId::all().to_vec()
+}
+
+fn default_history_dashboard_card_order() -> Vec<HistoryKpiCardId> {
+    HistoryKpiCardId::all().to_vec()
 }
 
 fn default_break_templates() -> Vec<BreakTemplateConfig> {
@@ -1848,6 +2087,7 @@ impl Default for AppConfig {
             monthly_goal: MonthlyGoalConfig::default(),
             goal_carry_over: GoalCarryOverConfig::default(),
             stats_retention: StatsRetentionConfig::default(),
+            history_dashboard: HistoryDashboardConfig::default(),
             wakatime: WakatimeMetadataConfig::default(),
             wakatime_runtime: WakatimeRuntimeConfig::default(),
             feature_flags: FeatureFlagsConfig::default(),
@@ -2052,6 +2292,7 @@ impl AppConfig {
         );
         self.blocking_backend = self.blocking_backend.normalized();
         self.schedule_runtime = self.schedule_runtime.normalized();
+        self.history_dashboard = self.history_dashboard.normalized();
         self.wakatime = self.wakatime.normalized();
         self.wakatime_runtime = self.wakatime_runtime.normalized();
         self.shortcuts = self.shortcuts.normalized();

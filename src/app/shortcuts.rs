@@ -41,6 +41,11 @@ pub enum ShortcutAction {
     SelectNextBreakTemplate,
     BackStatsHistory,
     ExportStatsHistory,
+    HistoryDashboardSelectPrevious,
+    HistoryDashboardSelectNext,
+    HistoryDashboardTogglePin,
+    HistoryDashboardMoveLeft,
+    HistoryDashboardMoveRight,
     BackSetupDiagnostics,
     RefreshSetupDiagnostics,
 }
@@ -114,9 +119,14 @@ const PROFILE_MANAGER_SCOPE_ACTIONS: [ShortcutAction; 4] = [
     ShortcutAction::SelectNextBreakTemplate,
 ];
 
-const STATS_HISTORY_SCOPE_ACTIONS: [ShortcutAction; 2] = [
+const STATS_HISTORY_SCOPE_ACTIONS: [ShortcutAction; 7] = [
     ShortcutAction::BackStatsHistory,
     ShortcutAction::ExportStatsHistory,
+    ShortcutAction::HistoryDashboardSelectPrevious,
+    ShortcutAction::HistoryDashboardSelectNext,
+    ShortcutAction::HistoryDashboardTogglePin,
+    ShortcutAction::HistoryDashboardMoveLeft,
+    ShortcutAction::HistoryDashboardMoveRight,
 ];
 
 const SETUP_SCOPE_ACTIONS: [ShortcutAction; 2] = [
@@ -363,6 +373,21 @@ impl ShortcutBindings {
             ),
             back_stats_history: key_token(self.key(ShortcutAction::BackStatsHistory)),
             export_stats_history: key_token(self.key(ShortcutAction::ExportStatsHistory)),
+            history_dashboard_select_previous: key_token(
+                self.key(ShortcutAction::HistoryDashboardSelectPrevious),
+            ),
+            history_dashboard_select_next: key_token(
+                self.key(ShortcutAction::HistoryDashboardSelectNext),
+            ),
+            history_dashboard_toggle_pin: key_token(
+                self.key(ShortcutAction::HistoryDashboardTogglePin),
+            ),
+            history_dashboard_move_left: key_token(
+                self.key(ShortcutAction::HistoryDashboardMoveLeft),
+            ),
+            history_dashboard_move_right: key_token(
+                self.key(ShortcutAction::HistoryDashboardMoveRight),
+            ),
             back_setup_diagnostics: key_token(self.key(ShortcutAction::BackSetupDiagnostics)),
             refresh_setup_diagnostics: key_token(self.key(ShortcutAction::RefreshSetupDiagnostics)),
             navigate_up: navigation_key_token(self.navigation_key(NavigationAction::MoveUp)),
@@ -537,6 +562,11 @@ fn requested_shortcut_char(config: &ShortcutConfig, action: ShortcutAction) -> c
         ShortcutAction::SelectNextBreakTemplate => &config.select_next_break_template,
         ShortcutAction::BackStatsHistory => &config.back_stats_history,
         ShortcutAction::ExportStatsHistory => &config.export_stats_history,
+        ShortcutAction::HistoryDashboardSelectPrevious => &config.history_dashboard_select_previous,
+        ShortcutAction::HistoryDashboardSelectNext => &config.history_dashboard_select_next,
+        ShortcutAction::HistoryDashboardTogglePin => &config.history_dashboard_toggle_pin,
+        ShortcutAction::HistoryDashboardMoveLeft => &config.history_dashboard_move_left,
+        ShortcutAction::HistoryDashboardMoveRight => &config.history_dashboard_move_right,
         ShortcutAction::BackSetupDiagnostics => &config.back_setup_diagnostics,
         ShortcutAction::RefreshSetupDiagnostics => &config.refresh_setup_diagnostics,
     };
@@ -594,6 +624,11 @@ fn default_shortcut_char(action: ShortcutAction) -> char {
         ShortcutAction::SelectNextBreakTemplate => ']',
         ShortcutAction::BackStatsHistory => 'h',
         ShortcutAction::ExportStatsHistory => 'e',
+        ShortcutAction::HistoryDashboardSelectPrevious => 'k',
+        ShortcutAction::HistoryDashboardSelectNext => 'j',
+        ShortcutAction::HistoryDashboardTogglePin => 'p',
+        ShortcutAction::HistoryDashboardMoveLeft => '<',
+        ShortcutAction::HistoryDashboardMoveRight => '>',
         ShortcutAction::BackSetupDiagnostics => 'd',
         ShortcutAction::RefreshSetupDiagnostics => 'r',
     }

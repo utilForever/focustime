@@ -1,8 +1,8 @@
 use crate::app::{
     App, AppConfig, BlocklistCategoryConfig, BlocklistProfileConfig,
-    DEFAULT_BLOCKLIST_PROFILE_NAME, Local, PendingTimerAction, TimerPhase, TimerState, TimerStatus,
-    blocking_backend_config_for_persistence, format_duration_label, occurrence_key, profile_index,
-    profile_spec_for, task_label_index,
+    DEFAULT_BLOCKLIST_PROFILE_NAME, HistoryDashboardConfig, Local, PendingTimerAction, TimerPhase,
+    TimerState, TimerStatus, blocking_backend_config_for_persistence, format_duration_label,
+    occurrence_key, profile_index, profile_spec_for, task_label_index,
 };
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, WorkflowStateSnapshot, WorkflowTemporaryAllowlistEntrySnapshot,
@@ -557,6 +557,10 @@ impl App {
             monthly_goal: self.monthly_goal,
             goal_carry_over: self.goal_carry_over,
             stats_retention: self.stats_retention,
+            history_dashboard: HistoryDashboardConfig {
+                card_order: self.history_dashboard_card_order().to_vec(),
+                pinned_cards: self.history_dashboard_pinned_cards().to_vec(),
+            },
             wakatime: self.wakatime_metadata.clone(),
             wakatime_runtime: self.wakatime_runtime.clone(),
             feature_flags: self.feature_flags,

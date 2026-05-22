@@ -2,7 +2,8 @@ use crate::app::*;
 use crate::blocker;
 use crate::config::{
     AutomationTriggerActionConfig, AutomationTriggerConditionConfig, AutomationTriggerRuleConfig,
-    FeatureFlagsConfig, ShortcutConfig, StatsRetentionConfig, WeekdayProfileRuleConfig,
+    FeatureFlagsConfig, HistoryDashboardConfig, HistoryKpiCardId, ShortcutConfig,
+    StatsRetentionConfig, WeekdayProfileRuleConfig,
 };
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
@@ -147,6 +148,7 @@ fn selected_builtin_profile_is_applied_on_startup() {
         monthly_goal: MonthlyGoalConfig::default(),
         goal_carry_over: GoalCarryOverConfig::default(),
         stats_retention: StatsRetentionConfig::default(),
+        history_dashboard: HistoryDashboardConfig::default(),
         selected_theme_preset: ThemePreset::Classic,
         wakatime: WakatimeMetadataConfig::default(),
         wakatime_runtime: WakatimeRuntimeConfig::default(),
@@ -4459,6 +4461,104 @@ fn history_view_comparison_filters_cycle_with_wrap_and_stale_task_selection() {
         app.history_time_of_day_filter,
         Some(crate::stats::TimeOfDayBucket::Unknown)
     );
+}
+
+#[test]
+fn history_dashboard_shortcuts_toggle_reorder_and_persist() {
+    let mut app = App::from_config(AppConfig {
+        history_dashboard: HistoryDashboardConfig {
+            card_order: vec![
+                HistoryKpiCardId::SessionSummary,
+                HistoryKpiCardId::FocusScore,
+                HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::FocusRisk,
+                HistoryKpiCardId::WeeklyAllocation,
+                HistoryKpiCardId::LastInterruption,
+                HistoryKpiCardId::StatsGrowth,
+                HistoryKpiCardId::Retention,
+                HistoryKpiCardId::ComparisonFilters,
+            ],
+            pinned_cards: vec![
+                HistoryKpiCardId::SessionSummary,
+                HistoryKpiCardId::FocusScore,
+            ],
+        },
+        ..AppConfig::default()
+    });
+    app.handle_key(key(KeyCode::Char('h')));
+
+    assert_eq!(
+        app.history_dashboard_selected_card(),
+        HistoryKpiCardId::SessionSummary
+    );
+    app.handle_key(key(KeyCode::Char('j')));
+    assert_eq!(
+        app.history_dashboard_selected_card(),
+        HistoryKpiCardId::FocusScore
+    );
+
+    app.handle_key(key(KeyCode::Char('p')));
+    assert_eq!(
+        app.history_dashboard_pinned_cards(),
+        &[HistoryKpiCardId::SessionSummary]
+    );
+    app.handle_key(key(KeyCode::Char('p')));
+    assert_eq!(
+        app.history_dashboard_pinned_cards(),
+        &[
+            HistoryKpiCardId::SessionSummary,
+            HistoryKpiCardId::FocusScore
+        ]
+    );
+
+    app.handle_key(key(KeyCode::Char('<')));
+    assert_eq!(
+        app.history_dashboard_pinned_cards(),
+        &[
+            HistoryKpiCardId::FocusScore,
+            HistoryKpiCardId::SessionSummary
+        ]
+    );
+
+    let persisted = app.persisted_config();
+    assert_eq!(
+        persisted.history_dashboard.pinned_cards,
+        vec![
+            HistoryKpiCardId::FocusScore,
+            HistoryKpiCardId::SessionSummary
+        ]
+    );
+}
+
+#[test]
+fn history_dashboard_prevents_unpinning_last_card() {
+    let mut app = App::from_config(AppConfig {
+        history_dashboard: HistoryDashboardConfig {
+            card_order: vec![
+                HistoryKpiCardId::SessionSummary,
+                HistoryKpiCardId::FocusScore,
+                HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::FocusRisk,
+                HistoryKpiCardId::WeeklyAllocation,
+                HistoryKpiCardId::LastInterruption,
+                HistoryKpiCardId::StatsGrowth,
+                HistoryKpiCardId::Retention,
+                HistoryKpiCardId::ComparisonFilters,
+            ],
+            pinned_cards: vec![HistoryKpiCardId::SessionSummary],
+        },
+        ..AppConfig::default()
+    });
+    app.handle_key(key(KeyCode::Char('h')));
+    app.handle_key(key(KeyCode::Char('p')));
+
+    assert_eq!(
+        app.history_dashboard_pinned_cards(),
+        &[HistoryKpiCardId::SessionSummary]
+    );
+    let feedback = app.history_feedback.as_ref().expect("warning expected");
+    assert_eq!(feedback.level, HistoryFeedbackLevel::Warning);
+    assert!(feedback.message.contains("must remain pinned"));
 }
 
 #[test]

@@ -13,9 +13,9 @@ use crate::app::{SetupCheck, SetupCheckLevel, SetupDiagnostics};
 use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
     AppConfig, AutomationTriggerRuleConfig, BlocklistProfileConfig, BreakTemplateConfig,
-    CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, ThemePreset, WeekdayProfileRuleConfig,
-    WeeklyGoalConfig,
+    CustomProfileConfig, DailyGoalConfig, HistoryKpiCardId, MonthlyGoalConfig,
+    OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
+    ThemePreset, WeekdayProfileRuleConfig, WeeklyGoalConfig,
 };
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
@@ -40,8 +40,8 @@ use args::{classify_args, infer_output_mode_from_os_args};
 use execute::execute_cli_command;
 #[cfg(test)]
 use execute::{
-    apply_blocklist_profile_command, apply_site_add_command, apply_site_delete_command,
-    apply_site_edit_command,
+    apply_blocklist_profile_command, apply_history_dashboard_command, apply_site_add_command,
+    apply_site_delete_command, apply_site_edit_command,
 };
 use output::{
     build_blocking_preview_command_output, build_diagnostics_command_output,
@@ -50,19 +50,20 @@ use output::{
     print_blocking_preview_command_output, print_blocklist_category_command_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
     print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
-    print_goal_command_output, print_json, print_json_compact, print_profile_output,
-    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
-    print_session_metadata_command_output, print_session_template_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output,
-    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
-    print_weekday_rules_command_output,
+    print_goal_command_output, print_history_dashboard_command_output, print_json,
+    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
+    print_schedule_delay_command_output, print_session_metadata_command_output,
+    print_session_template_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_temporary_site_add_command_output,
+    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
 };
 use parsing::{
     finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_compare_by_value,
     parse_compare_limit_value, parse_compare_profile_value, parse_compare_time_of_day_value,
-    parse_global_tokens, parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value,
+    parse_global_tokens, parse_goal_carry_value, parse_goal_value,
+    parse_history_dashboard_order_value, parse_history_kpi_card_id, parse_monthly_goal_value,
     parse_primary_command, parse_profile_id, parse_schedule_value, parse_site_edit_value,
     parse_status_comparison_options, parse_strict_value, parse_task_goal_value, parse_theme_preset,
     parse_watch_interval_option, parse_watch_interval_secs, parse_weekday_rules_value,
@@ -128,6 +129,10 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --session-template-create=TEMPLATE_NAME [--json]
   focustime --session-template-rename=TEMPLATE_NAME [--json]
   focustime --session-template-delete [--json]
+  focustime --history-dashboard [--json]
+  focustime --history-dashboard-pin=CARD_ID [--json]
+  focustime --history-dashboard-unpin=CARD_ID [--json]
+  focustime --history-dashboard-order=CARD_IDS [--json]
   focustime --blocklist-sites [--json]
   focustime --allowlist-sites [--json]
   focustime --blocklist-site-add=HOSTNAMES [--json]
@@ -185,6 +190,10 @@ Options:
   --session-template-create  Capture current task/profile/blocklist/schedule as a template
   --session-template-rename  Rename the active session template
   --session-template-delete  Delete the active session template
+  --history-dashboard       Show KPI dashboard card order + pinned cards
+  --history-dashboard-pin   Pin a KPI card by ID
+  --history-dashboard-unpin Unpin a KPI card by ID
+  --history-dashboard-order Replace full KPI card order with a complete comma-separated list
   --blocklist-sites           List blocklist sites in active category within active profile
   --allowlist-sites           List allowlist sites in active category within active profile
   --blocklist-site-add        Add/import blocklist hostnames in active category within active profile
@@ -367,6 +376,9 @@ pub enum CommandKind {
     SessionTemplate {
         command: SessionTemplateCommandKind,
     },
+    HistoryDashboard {
+        command: HistoryDashboardCommandKind,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -433,6 +445,10 @@ enum PrimaryCommand {
     SessionTemplateCreate(String),
     SessionTemplateRename(String),
     SessionTemplateDelete,
+    HistoryDashboard,
+    HistoryDashboardPin(HistoryKpiCardId),
+    HistoryDashboardUnpin(HistoryKpiCardId),
+    HistoryDashboardOrder(Vec<HistoryKpiCardId>),
     BlocklistSites,
     AllowlistSites,
     BlocklistSiteAdd(String),
@@ -503,6 +519,10 @@ enum ParsedToken {
     SessionTemplateCreate(String),
     SessionTemplateRename(String),
     SessionTemplateDelete,
+    HistoryDashboard,
+    HistoryDashboardPin(HistoryKpiCardId),
+    HistoryDashboardUnpin(HistoryKpiCardId),
+    HistoryDashboardOrder(Vec<HistoryKpiCardId>),
     BlocklistSites,
     AllowlistSites,
     BlocklistSiteAdd(String),
@@ -572,6 +592,14 @@ pub enum SessionTemplateCommandKind {
     Create { name: String },
     Rename { name: String },
     Delete,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HistoryDashboardCommandKind {
+    Show,
+    Pin { card: HistoryKpiCardId },
+    Unpin { card: HistoryKpiCardId },
+    SetOrder { order: Vec<HistoryKpiCardId> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -975,6 +1003,22 @@ struct SessionTemplateCommandOutput {
     updated: bool,
     selected_session_template: Option<String>,
     templates: Vec<SessionTemplateSummaryOutput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct HistoryDashboardCardOutput {
+    id: &'static str,
+    label: &'static str,
+    pinned: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct HistoryDashboardCommandOutput {
+    action: &'static str,
+    updated: bool,
+    card_order: Vec<&'static str>,
+    pinned_cards: Vec<&'static str>,
+    cards: Vec<HistoryDashboardCardOutput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

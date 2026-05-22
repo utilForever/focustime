@@ -1,6 +1,6 @@
 use crate::config::{
-    AppConfig, ProfileId, RecurringScheduleConfig, SessionTemplateConfig, ShortcutConfig,
-    ThemePreset,
+    AppConfig, HistoryDashboardConfig, HistoryKpiCardId, ProfileId, RecurringScheduleConfig,
+    SessionTemplateConfig, ShortcutConfig, ThemePreset,
 };
 use crate::ui::*;
 use chrono::{Datelike, Duration, NaiveDate};
@@ -713,6 +713,62 @@ fn history_view_hints_include_export_shortcut() {
 
     let text = terminal_text(&terminal, width, height);
     assert!(text.contains("[e] Export CSV + JSON"));
+}
+
+#[test]
+fn history_view_hints_include_dashboard_controls() {
+    let width = 140;
+    let height = 40;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+    let mut app = App::default();
+    app.mode = AppMode::StatsHistory;
+
+    terminal
+        .draw(|frame| render(frame, &app))
+        .expect("render should succeed");
+
+    let text = terminal_text(&terminal, width, height);
+    assert!(text.contains("Dashboard: Select [k]/[j]"), "{text}");
+    assert!(text.contains("Toggle pin [p]"), "{text}");
+    assert!(text.contains("Move [<]/[>]"), "{text}");
+}
+
+#[test]
+fn history_view_dashboard_shows_selected_and_pinned_markers() {
+    let width = 120;
+    let height = 24;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
+    let mut app = App::from_config_for_tests(AppConfig {
+        history_dashboard: HistoryDashboardConfig {
+            card_order: vec![
+                HistoryKpiCardId::SessionSummary,
+                HistoryKpiCardId::FocusScore,
+                HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::FocusRisk,
+                HistoryKpiCardId::WeeklyAllocation,
+                HistoryKpiCardId::LastInterruption,
+                HistoryKpiCardId::StatsGrowth,
+                HistoryKpiCardId::Retention,
+                HistoryKpiCardId::ComparisonFilters,
+            ],
+            pinned_cards: vec![
+                HistoryKpiCardId::SessionSummary,
+                HistoryKpiCardId::FocusScore,
+            ],
+        },
+        ..AppConfig::default()
+    });
+    app.mode = AppMode::StatsHistory;
+
+    terminal
+        .draw(|frame| render(frame, &app))
+        .expect("render should succeed");
+
+    let text = terminal_text(&terminal, width, height);
+    assert!(text.contains(">* Session"));
+    assert!(text.contains("* Focus"));
 }
 
 #[test]
