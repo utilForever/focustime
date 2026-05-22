@@ -1521,6 +1521,95 @@ fn weekly_goal_progress_carries_full_previous_week_when_snapshot_exists_without_
 }
 
 #[test]
+fn weekly_daily_goal_allocation_uses_schedule_weights_for_remaining_days() {
+    let config = AppConfig {
+        weekly_goal: WeeklyGoalConfig {
+            minutes: 300,
+            pomodoros: 10,
+        },
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![RecurringFocusWindowConfig {
+                days: vec!["wed".to_string(), "thu".to_string(), "fri".to_string()],
+                start: "09:00".to_string(),
+                end: "12:00".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 22).expect("test day should be valid");
+    assert_eq!(day.weekday(), chrono::Weekday::Wed);
+
+    app.insert_daily_stats_for_tests(
+        "2026-04-21",
+        crate::stats::DailyStats {
+            pomodoros_completed: 2,
+            focused_seconds: 60 * 60,
+            goal: None,
+        },
+    );
+
+    let allocation = app.weekly_daily_goal_allocation_for_day(day);
+    assert!(allocation.has_any_target());
+    assert_eq!(allocation.remaining_minutes, 240);
+    assert_eq!(allocation.remaining_pomodoros, 8);
+    assert_eq!(allocation.remaining_days_in_week, 5);
+    assert_eq!(allocation.allocatable_days, 3);
+    assert!(allocation.uses_schedule_weights);
+    assert_eq!(allocation.daily_targets.len(), 5);
+
+    assert_eq!(allocation.daily_targets[0].minutes_target, 80);
+    assert_eq!(allocation.daily_targets[0].pomodoros_target, 3);
+    assert_eq!(allocation.daily_targets[1].minutes_target, 80);
+    assert_eq!(allocation.daily_targets[1].pomodoros_target, 3);
+    assert_eq!(allocation.daily_targets[2].minutes_target, 80);
+    assert_eq!(allocation.daily_targets[2].pomodoros_target, 2);
+    assert_eq!(allocation.daily_targets[3].minutes_target, 0);
+    assert_eq!(allocation.daily_targets[3].pomodoros_target, 0);
+    assert_eq!(allocation.daily_targets[4].minutes_target, 0);
+    assert_eq!(allocation.daily_targets[4].pomodoros_target, 0);
+}
+
+#[test]
+fn weekly_daily_goal_allocation_falls_back_to_equal_split_without_schedule_windows() {
+    let config = AppConfig {
+        weekly_goal: WeeklyGoalConfig {
+            minutes: 100,
+            pomodoros: 5,
+        },
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 24).expect("test day should be valid");
+    assert_eq!(day.weekday(), chrono::Weekday::Fri);
+
+    app.insert_daily_stats_for_tests(
+        "2026-04-23",
+        crate::stats::DailyStats {
+            pomodoros_completed: 2,
+            focused_seconds: 10 * 60,
+            goal: None,
+        },
+    );
+
+    let allocation = app.weekly_daily_goal_allocation_for_day(day);
+    assert!(allocation.has_any_target());
+    assert_eq!(allocation.remaining_minutes, 90);
+    assert_eq!(allocation.remaining_pomodoros, 3);
+    assert_eq!(allocation.remaining_days_in_week, 3);
+    assert_eq!(allocation.allocatable_days, 3);
+    assert!(!allocation.uses_schedule_weights);
+    assert_eq!(allocation.daily_targets.len(), 3);
+
+    for target in allocation.daily_targets {
+        assert_eq!(target.minutes_target, 30);
+        assert_eq!(target.pomodoros_target, 1);
+        assert!(target.allocatable);
+    }
+}
+
+#[test]
 fn sync_goal_snapshot_for_day_keeps_weekly_and_monthly_carry_across_idle_boundaries() {
     let config = AppConfig {
         weekly_goal: WeeklyGoalConfig {
