@@ -52,6 +52,7 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.stats_retention, StatsRetentionConfig::default());
+    assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     assert_eq!(cfg.wakatime_runtime, WakatimeRuntimeConfig::default());
     assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
@@ -272,6 +273,24 @@ fn round_trip_full_config() {
         stats_retention: StatsRetentionConfig {
             preset: StatsRetentionPreset::Aggressive,
         },
+        history_dashboard: HistoryDashboardConfig {
+            card_order: vec![
+                HistoryKpiCardId::FocusScore,
+                HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::SessionSummary,
+                HistoryKpiCardId::FocusRisk,
+                HistoryKpiCardId::WeeklyAllocation,
+                HistoryKpiCardId::LastInterruption,
+                HistoryKpiCardId::StatsGrowth,
+                HistoryKpiCardId::Retention,
+                HistoryKpiCardId::ComparisonFilters,
+            ],
+            pinned_cards: vec![
+                HistoryKpiCardId::FocusScore,
+                HistoryKpiCardId::SessionSummary,
+                HistoryKpiCardId::Retention,
+            ],
+        },
         wakatime: WakatimeMetadataConfig {
             project: "Team Focus".to_string(),
             language: "Focus Session".to_string(),
@@ -360,6 +379,7 @@ fn round_trip_full_config() {
     assert_eq!(parsed.monthly_goal, original.monthly_goal);
     assert_eq!(parsed.goal_carry_over, original.goal_carry_over);
     assert_eq!(parsed.stats_retention, original.stats_retention);
+    assert_eq!(parsed.history_dashboard, original.history_dashboard);
     assert_eq!(parsed.wakatime, original.wakatime);
     assert_eq!(parsed.wakatime_runtime, original.wakatime_runtime);
     assert_eq!(parsed.feature_flags, original.feature_flags);
@@ -397,9 +417,68 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
+    assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
     assert_eq!(cfg.shortcuts, ShortcutConfig::default());
+}
+
+#[test]
+fn normalize_history_dashboard_filters_unknown_and_appends_missing_cards() {
+    let cfg = AppConfig {
+        history_dashboard: HistoryDashboardConfig {
+            card_order: vec![
+                HistoryKpiCardId::Unknown,
+                HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::FocusScore,
+            ],
+            pinned_cards: vec![HistoryKpiCardId::GoalStreak],
+        },
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(
+        cfg.history_dashboard.card_order[0],
+        HistoryKpiCardId::GoalStreak
+    );
+    assert_eq!(
+        cfg.history_dashboard.card_order[1],
+        HistoryKpiCardId::FocusScore
+    );
+    assert_eq!(
+        cfg.history_dashboard.card_order.len(),
+        HistoryKpiCardId::all().len()
+    );
+    for card in HistoryKpiCardId::all() {
+        assert!(cfg.history_dashboard.card_order.contains(&card));
+    }
+}
+
+#[test]
+fn normalize_history_dashboard_filters_unknown_and_duplicate_pins() {
+    let cfg = AppConfig {
+        history_dashboard: HistoryDashboardConfig {
+            card_order: vec![HistoryKpiCardId::FocusScore, HistoryKpiCardId::Retention],
+            pinned_cards: vec![
+                HistoryKpiCardId::Unknown,
+                HistoryKpiCardId::Retention,
+                HistoryKpiCardId::Retention,
+                HistoryKpiCardId::LastInterruption,
+            ],
+        },
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(
+        cfg.history_dashboard.pinned_cards,
+        vec![
+            HistoryKpiCardId::Retention,
+            HistoryKpiCardId::LastInterruption
+        ]
+    );
 }
 
 #[test]
@@ -1208,6 +1287,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         monthly_goal: MonthlyGoalConfig::default(),
         goal_carry_over: GoalCarryOverConfig::default(),
         stats_retention: StatsRetentionConfig::default(),
+        history_dashboard: HistoryDashboardConfig::default(),
         wakatime: WakatimeMetadataConfig::default(),
         wakatime_runtime: WakatimeRuntimeConfig::default(),
         feature_flags: FeatureFlagsConfig::default(),
@@ -1262,6 +1342,7 @@ fn load_returns_default_when_config_file_is_corrupt() {
     assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
+    assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
 }
 
