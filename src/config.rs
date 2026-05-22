@@ -1332,38 +1332,53 @@ pub struct HistoryDashboardConfig {
 
 impl HistoryDashboardConfig {
     pub fn normalized(&self) -> Self {
-        let mut card_order = Vec::new();
-        for card in &self.card_order {
-            if card.is_unknown() || card_order.contains(card) {
-                continue;
-            }
-            card_order.push(*card);
-        }
-        if card_order.is_empty() {
-            card_order = default_history_dashboard_card_order();
-        } else {
-            for card in HistoryKpiCardId::all() {
-                if !card_order.contains(&card) {
-                    card_order.push(card);
-                }
-            }
-        }
-
-        let mut pinned_cards = Vec::new();
-        for card in &self.pinned_cards {
-            if card.is_unknown() || pinned_cards.contains(card) || !card_order.contains(card) {
-                continue;
-            }
-            pinned_cards.push(*card);
-        }
-        if pinned_cards.is_empty() {
-            pinned_cards = card_order.clone();
-        }
+        let card_order = normalize_history_dashboard_card_order(&self.card_order);
+        let pinned_cards =
+            normalize_history_dashboard_pinned_cards(&self.pinned_cards, &card_order);
         Self {
             card_order,
             pinned_cards,
         }
     }
+}
+
+fn normalize_history_dashboard_card_order(input: &[HistoryKpiCardId]) -> Vec<HistoryKpiCardId> {
+    let mut card_order = Vec::new();
+    for card in input {
+        if card.is_unknown() || card_order.contains(card) {
+            continue;
+        }
+        card_order.push(*card);
+    }
+
+    if card_order.is_empty() {
+        return default_history_dashboard_card_order();
+    }
+
+    for card in HistoryKpiCardId::all() {
+        if !card_order.contains(&card) {
+            card_order.push(card);
+        }
+    }
+    card_order
+}
+
+fn normalize_history_dashboard_pinned_cards(
+    input: &[HistoryKpiCardId],
+    card_order: &[HistoryKpiCardId],
+) -> Vec<HistoryKpiCardId> {
+    let mut pinned_cards = Vec::new();
+    for card in input {
+        if card.is_unknown() || pinned_cards.contains(card) || !card_order.contains(card) {
+            continue;
+        }
+        pinned_cards.push(*card);
+    }
+
+    if pinned_cards.is_empty() {
+        return card_order.to_vec();
+    }
+    pinned_cards
 }
 
 impl Default for HistoryDashboardConfig {
