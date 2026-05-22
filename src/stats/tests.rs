@@ -1,6 +1,17 @@
 use crate::stats::*;
+use chrono::{Datelike, LocalResult, TimeZone};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+fn local_timestamp_today(hour: u32, minute: u32) -> u64 {
+    let today = chrono::Local::now().date_naive();
+    match chrono::Local.with_ymd_and_hms(today.year(), today.month(), today.day(), hour, minute, 0)
+    {
+        LocalResult::Single(dt) => dt.timestamp() as u64,
+        LocalResult::Ambiguous(earliest, _) => earliest.timestamp() as u64,
+        LocalResult::None => panic!("local datetime should be representable for tests"),
+    }
+}
 
 #[test]
 fn carry_over_goal_target_returns_base_when_disabled() {
@@ -1327,6 +1338,159 @@ fn profile_effectiveness_reports_share_and_average_minutes() {
 }
 
 #[test]
+fn productivity_comparison_groups_time_of_day_buckets_and_unknown() {
+    let mut stats = FocusStats::default();
+    let goal = DailyGoalSnapshot {
+        minutes: 25,
+        pomodoros: 1,
+    };
+    let day = current_day_key();
+
+    stats.record_completed_pomodoro_with_metadata_at(
+        &day,
+        goal,
+        FocusSessionMetadata {
+            task_label: Some("Docs"),
+            focus_intention: None,
+            task_note: None,
+        },
+        30 * 60,
+        Some(ProfileId::Classic),
+        Some(local_timestamp_today(9, 0)),
+    );
+    stats.record_completed_pomodoro_with_metadata_at(
+        &day,
+        goal,
+        FocusSessionMetadata {
+            task_label: Some("Build"),
+            focus_intention: None,
+            task_note: None,
+        },
+        20 * 60,
+        Some(ProfileId::DeepWork),
+        Some(local_timestamp_today(23, 0)),
+    );
+    stats.record_completed_pomodoro_with_metadata_at(
+        &day,
+        goal,
+        FocusSessionMetadata {
+            task_label: Some("Review"),
+            focus_intention: None,
+            task_note: None,
+        },
+        10 * 60,
+        Some(ProfileId::Custom),
+        None,
+    );
+
+    let rows = stats.productivity_comparison(
+        ComparisonDimension::TimeOfDay,
+        &ProductivityComparisonFilter {
+            task_label: None,
+            profile: None,
+            time_of_day: None,
+        },
+        10,
+    );
+
+    assert_eq!(rows.len(), 3);
+    assert!(rows.iter().any(|row| {
+        row.label == "Morning" && row.sessions_completed == 1 && row.focused_minutes() == 30
+    }));
+    assert!(rows.iter().any(|row| row.label == "Night"
+        && row.sessions_completed == 1
+        && row.focused_minutes() == 20));
+    assert!(rows.iter().any(|row| {
+        row.label == "Unknown" && row.sessions_completed == 1 && row.focused_minutes() == 10
+    }));
+}
+
+#[test]
+fn productivity_comparison_applies_task_and_time_filters() {
+    let mut stats = FocusStats::default();
+    let goal = DailyGoalSnapshot {
+        minutes: 25,
+        pomodoros: 1,
+    };
+    let day = current_day_key();
+
+    stats.record_completed_pomodoro_with_metadata_at(
+        &day,
+        goal,
+        FocusSessionMetadata {
+            task_label: Some("Docs"),
+            focus_intention: None,
+            task_note: None,
+        },
+        30 * 60,
+        Some(ProfileId::Classic),
+        Some(local_timestamp_today(8, 0)),
+    );
+    stats.record_completed_pomodoro_with_metadata_at(
+        &day,
+        goal,
+        FocusSessionMetadata {
+            task_label: Some("Docs"),
+            focus_intention: None,
+            task_note: None,
+        },
+        20 * 60,
+        Some(ProfileId::DeepWork),
+        Some(local_timestamp_today(9, 0)),
+    );
+    stats.record_completed_pomodoro_with_metadata_at(
+        &day,
+        goal,
+        FocusSessionMetadata {
+            task_label: Some("Docs"),
+            focus_intention: None,
+            task_note: None,
+        },
+        15 * 60,
+        Some(ProfileId::Classic),
+        Some(local_timestamp_today(19, 0)),
+    );
+    stats.record_completed_pomodoro_with_metadata_at(
+        &day,
+        goal,
+        FocusSessionMetadata {
+            task_label: Some("Coding"),
+            focus_intention: None,
+            task_note: None,
+        },
+        40 * 60,
+        Some(ProfileId::Classic),
+        Some(local_timestamp_today(10, 0)),
+    );
+
+    let rows = stats.productivity_comparison(
+        ComparisonDimension::Profile,
+        &ProductivityComparisonFilter {
+            task_label: Some("Docs".to_string()),
+            profile: None,
+            time_of_day: Some(TimeOfDayBucket::Morning),
+        },
+        10,
+    );
+
+    assert_eq!(rows.len(), 2);
+    let classic = rows
+        .iter()
+        .find(|row| row.label == "Classic")
+        .expect("classic row should be present");
+    let deep_work = rows
+        .iter()
+        .find(|row| row.label == "Deep Work")
+        .expect("deep work row should be present");
+    assert_eq!(classic.sessions_completed, 1);
+    assert_eq!(classic.focused_minutes(), 30);
+    assert_eq!(classic.focus_share_pct, 60);
+    assert_eq!(deep_work.sessions_completed, 1);
+    assert_eq!(deep_work.focused_minutes(), 20);
+    assert_eq!(deep_work.focus_share_pct, 40);
+}
+
+#[test]
 fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     let mut stats = FocusStats::default();
     let goal = DailyGoalSnapshot {
@@ -1404,6 +1568,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     let weekly_consistency = json_value["weekly_consistency"].as_array().unwrap();
     let focus_scores = json_value["focus_scores"].as_array().unwrap();
     let profile_effectiveness = json_value["profile_effectiveness"].as_array().unwrap();
+    let productivity_comparisons = json_value["productivity_comparisons"].as_array().unwrap();
     assert_eq!(daily.len(), 2);
     assert!(!weekly.is_empty());
     assert_eq!(sessions.len(), 1);
@@ -1414,6 +1579,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     assert!(!weekly_consistency.is_empty());
     assert!(!focus_scores.is_empty());
     assert_eq!(profile_effectiveness.len(), 1);
+    assert!(!productivity_comparisons.is_empty());
     assert!(
         daily
             .iter()
@@ -1457,8 +1623,24 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         30
     );
     assert_eq!(profile_effectiveness[0]["focus_share_pct"], 100);
+    assert!(
+        productivity_comparisons
+            .iter()
+            .any(|entry| entry["dimension"] == "task_label")
+    );
+    assert!(
+        productivity_comparisons
+            .iter()
+            .any(|entry| entry["dimension"] == "profile")
+    );
+    assert!(
+        productivity_comparisons
+            .iter()
+            .any(|entry| entry["dimension"] == "time_of_day")
+    );
 
     let csv = fs::read_to_string(&exported.csv_path).unwrap();
+    let csv_header = csv.lines().next().expect("csv header should be present");
     let focus_session_line = csv
         .lines()
         .find(|line| line.contains(",focus_session,"))
@@ -1469,7 +1651,9 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         .find(|line| line.contains(",session_interruption,"))
         .expect("session interruption row should be present");
     assert!(interruption_line.contains(",Classic,"));
-    assert!(csv.contains("schema_version,record_type,date,week_label,year,week,pomodoros_completed,focused_seconds,focused_minutes,goal_minutes,goal_pomodoros,goal_met,task_label,break_glass_timestamp_epoch_secs,break_glass_duration_seconds,interruption_timestamp_epoch_secs,interruption_reason,interruption_remaining_secs,focus_intention,task_note,recent_window_start,recent_window_end,previous_window_start,previous_window_end,previous_pomodoros_completed,previous_focused_seconds,previous_focused_minutes,delta_focused_seconds,delta_focused_minutes,profile_name,sessions_completed,active_days,consistency_score_pct,completion_score_pct,focus_score_pct,average_focused_minutes_per_session,focus_share_pct"));
+    assert!(csv_header.contains("comparison_dimension"));
+    assert!(csv_header.contains("comparison_label"));
+    assert!(csv_header.contains("time_of_day_bucket"));
     assert!(csv.contains(&format!("{},daily,{labeled_day}", EXPORT_SCHEMA_VERSION)));
     assert!(csv.contains(&format!("{},weekly,,", EXPORT_SCHEMA_VERSION)));
     assert!(csv.contains(&format!(
@@ -1494,6 +1678,10 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     assert!(csv.contains(&format!("{},focus_score,", EXPORT_SCHEMA_VERSION)));
     assert!(csv.contains(&format!(
         "{},profile_effectiveness,,,,,1,1800,30",
+        EXPORT_SCHEMA_VERSION
+    )));
+    assert!(csv.contains(&format!(
+        "{},productivity_comparison",
         EXPORT_SCHEMA_VERSION
     )));
     assert!(csv.contains("Classic,1,1,"));

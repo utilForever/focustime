@@ -54,6 +54,25 @@ impl FocusStats {
         focused_seconds: u64,
         profile: Option<ProfileId>,
     ) {
+        self.record_completed_pomodoro_with_metadata_at(
+            day_key,
+            goal,
+            metadata,
+            focused_seconds,
+            profile,
+            Some(current_timestamp_epoch_secs()),
+        );
+    }
+
+    pub fn record_completed_pomodoro_with_metadata_at(
+        &mut self,
+        day_key: &str,
+        goal: DailyGoalSnapshot,
+        metadata: FocusSessionMetadata<'_>,
+        focused_seconds: u64,
+        profile: Option<ProfileId>,
+        completion_timestamp_epoch_secs: Option<u64>,
+    ) {
         self.session.pomodoros_completed = self.session.pomodoros_completed.saturating_add(1);
         let daily = self.daily.entry(day_key.to_string()).or_default();
         daily.pomodoros_completed = daily.pomodoros_completed.saturating_add(1);
@@ -79,6 +98,7 @@ impl FocusStats {
                 task_note,
                 focused_seconds,
                 profile,
+                completion_timestamp_epoch_secs,
             });
         }
     }
@@ -175,4 +195,8 @@ impl FocusStats {
         self.monthly_goal_snapshots.insert(key, goal);
         true
     }
+}
+
+fn current_timestamp_epoch_secs() -> u64 {
+    chrono::Local::now().timestamp().max(0) as u64
 }

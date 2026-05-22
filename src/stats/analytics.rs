@@ -1,13 +1,16 @@
 use crate::stats::{
-    BTreeMap, BTreeSet, DailyGoalSnapshot, Datelike, FocusRiskForecast, FocusRiskLevel,
-    FocusRiskSignal, FocusStats, GoalPeriod, GoalRiskForecast, HeatmapDayStats, MonthlyHeatmap,
-    MonthlyStats, ProfileBucket, ProfileEffectiveness, ProfileEffectivenessAccumulator,
-    ProfileTotals, StatsGrowthSection, StatsGrowthSummary, StatsRetentionConfig,
-    StatsRetentionPruneResult, StreakRiskForecast, WeeklyConsistency, WeeklyFocusScore,
-    WeeklyStats, average_two_percentages, consistency_score_from_active_days, daily_has_activity,
-    days_in_month, format_week_label, month_key_for_day, parse_week_label,
+    BTreeMap, BTreeSet, ComparisonDimension, DailyGoalSnapshot, Datelike, FocusRiskForecast,
+    FocusRiskLevel, FocusRiskSignal, FocusSessionRecord, FocusStats, GoalPeriod, GoalRiskForecast,
+    HeatmapDayStats, MonthlyHeatmap, MonthlyStats, ProductivityComparisonFilter,
+    ProductivityComparisonRow, ProfileBucket, ProfileEffectiveness,
+    ProfileEffectivenessAccumulator, ProfileTotals, StatsGrowthSection, StatsGrowthSummary,
+    StatsRetentionConfig, StatsRetentionPruneResult, StreakRiskForecast, TimeOfDayBucket,
+    WeeklyConsistency, WeeklyFocusScore, WeeklyStats, average_two_percentages,
+    canonical_task_label, consistency_score_from_active_days, daily_has_activity, days_in_month,
+    format_week_label, month_key_for_day, normalize_task_label, parse_week_label,
     percentage_round_nearest, profile_bucket_for, week_key_for_day, weekly_completion_score_pct,
 };
+use chrono::Timelike;
 
 impl FocusStats {
     pub fn weekly_for_day(&self, day: chrono::NaiveDate) -> WeeklyStats {
@@ -257,6 +260,114 @@ impl FocusStats {
                 .then_with(|| left.profile.cmp(&right.profile))
         });
         effectiveness
+    }
+
+    pub fn productivity_comparison(
+        &self,
+        dimension: ComparisonDimension,
+        filter: &ProductivityComparisonFilter,
+        limit: usize,
+    ) -> Vec<ProductivityComparisonRow> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let normalized_task_filter = filter
+            .task_label
+            .as_deref()
+            .and_then(normalize_task_label)
+            .map(|label| {
+                canonical_task_label(&self.task_labels, &label)
+                    .unwrap_or(label)
+                    .to_ascii_lowercase()
+            });
+        let mut grouped: BTreeMap<String, ProductivityComparisonRow> = BTreeMap::new();
+        let mut total_focused_seconds: u64 = 0;
+
+        for session in &self.focus_sessions {
+            let Some(task_label) = normalize_task_label(&session.task_label) else {
+                continue;
+            };
+            let task_label =
+                canonical_task_label(&self.task_labels, &task_label).unwrap_or(task_label);
+            let task_key = task_label.to_ascii_lowercase();
+            if normalized_task_filter
+                .as_ref()
+                .is_some_and(|expected| expected != &task_key)
+            {
+                continue;
+            }
+
+            let profile = profile_bucket_for(session.profile);
+            if filter.profile.is_some_and(|expected| expected != profile) {
+                continue;
+            }
+
+            let time_of_day = focus_session_time_of_day(session);
+            if filter
+                .time_of_day
+                .is_some_and(|expected| expected != time_of_day)
+            {
+                continue;
+            }
+
+            total_focused_seconds = total_focused_seconds.saturating_add(session.focused_seconds);
+            let (group_key, label, row_task_label, row_profile, row_time_of_day) = match dimension {
+                ComparisonDimension::TaskLabel => (
+                    task_key.clone(),
+                    task_label.clone(),
+                    Some(task_label),
+                    None,
+                    None,
+                ),
+                ComparisonDimension::Profile => (
+                    profile.id().to_string(),
+                    profile.label().to_string(),
+                    None,
+                    Some(profile),
+                    None,
+                ),
+                ComparisonDimension::TimeOfDay => (
+                    time_of_day.id().to_string(),
+                    time_of_day.label().to_string(),
+                    None,
+                    None,
+                    Some(time_of_day),
+                ),
+            };
+
+            let entry = grouped
+                .entry(group_key)
+                .or_insert_with(|| ProductivityComparisonRow {
+                    dimension,
+                    label,
+                    task_label: row_task_label,
+                    profile: row_profile,
+                    time_of_day: row_time_of_day,
+                    sessions_completed: 0,
+                    focused_seconds: 0,
+                    focus_share_pct: 0,
+                });
+            entry.sessions_completed = entry.sessions_completed.saturating_add(1);
+            entry.focused_seconds = entry
+                .focused_seconds
+                .saturating_add(session.focused_seconds);
+        }
+
+        let mut comparisons: Vec<ProductivityComparisonRow> = grouped.into_values().collect();
+        for entry in &mut comparisons {
+            entry.focus_share_pct =
+                percentage_round_nearest(entry.focused_seconds, total_focused_seconds);
+        }
+        comparisons.sort_by(|left, right| {
+            right
+                .focused_seconds
+                .cmp(&left.focused_seconds)
+                .then_with(|| right.sessions_completed.cmp(&left.sessions_completed))
+                .then_with(|| left.label.cmp(&right.label))
+        });
+        comparisons.truncate(limit);
+        comparisons
     }
 
     pub(super) fn weekly_consistency_stats(&self) -> Vec<WeeklyConsistency> {
@@ -582,6 +693,20 @@ impl FocusStats {
         let mut cloned = self.clone();
         cloned.apply_retention_policy(retention, reference_day)
     }
+}
+
+fn focus_session_time_of_day(session: &FocusSessionRecord) -> TimeOfDayBucket {
+    let Some(epoch_secs) = session.completion_timestamp_epoch_secs else {
+        return TimeOfDayBucket::Unknown;
+    };
+    let Ok(epoch) = i64::try_from(epoch_secs) else {
+        return TimeOfDayBucket::Unknown;
+    };
+    let Some(timestamp) = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0) else {
+        return TimeOfDayBucket::Unknown;
+    };
+    let local_time = timestamp.with_timezone(&chrono::Local);
+    TimeOfDayBucket::from_hour(local_time.hour())
 }
 
 #[derive(Debug, Clone, Copy)]
