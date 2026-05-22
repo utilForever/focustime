@@ -227,27 +227,71 @@ impl App {
             || self.shortcut_matches(ShortcutAction::BackStatsHistory, &key)
         {
             self.mode = AppMode::Timer;
-        } else if self.shortcut_matches(ShortcutAction::ExportStatsHistory, &key) {
+            return;
+        }
+
+        if self.shortcut_matches(ShortcutAction::ExportStatsHistory, &key) {
             self.export_stats_history();
-        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardSelectPrevious, &key) {
+            return;
+        }
+
+        if self.handle_key_stats_history_dashboard_shortcuts(&key) {
+            return;
+        }
+
+        if self.handle_key_stats_history_navigation_shortcuts(&key) {
+            return;
+        }
+
+        self.handle_key_stats_history_filter_shortcuts(&key);
+    }
+
+    fn handle_key_stats_history_dashboard_shortcuts(&mut self, key: &KeyEvent) -> bool {
+        if self.shortcut_matches(ShortcutAction::HistoryDashboardSelectPrevious, key) {
             self.cycle_history_dashboard_selected_card(false);
-        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardSelectNext, &key) {
+            return true;
+        }
+        if self.shortcut_matches(ShortcutAction::HistoryDashboardSelectNext, key) {
             self.cycle_history_dashboard_selected_card(true);
-        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardTogglePin, &key) {
+            return true;
+        }
+        if self.shortcut_matches(ShortcutAction::HistoryDashboardTogglePin, key) {
             self.toggle_history_dashboard_pin_for_selected_card();
-        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardMoveLeft, &key) {
+            return true;
+        }
+        if self.shortcut_matches(ShortcutAction::HistoryDashboardMoveLeft, key) {
             self.move_history_dashboard_selected_card(false);
-        } else if self.shortcut_matches(ShortcutAction::HistoryDashboardMoveRight, &key) {
+            return true;
+        }
+        if self.shortcut_matches(ShortcutAction::HistoryDashboardMoveRight, key) {
             self.move_history_dashboard_selected_card(true);
-        } else if self.navigation_matches(NavigationAction::MoveLeft, &key) {
+            return true;
+        }
+        false
+    }
+
+    fn handle_key_stats_history_navigation_shortcuts(&mut self, key: &KeyEvent) -> bool {
+        if self.navigation_matches(NavigationAction::MoveLeft, key) {
             self.cycle_history_comparison_dimension(false);
-        } else if self.navigation_matches(NavigationAction::MoveRight, &key) {
+            return true;
+        }
+        if self.navigation_matches(NavigationAction::MoveRight, key) {
             self.cycle_history_comparison_dimension(true);
-        } else if self.navigation_matches(NavigationAction::MoveUp, &key) {
+            return true;
+        }
+        if self.navigation_matches(NavigationAction::MoveUp, key) {
             self.cycle_history_task_filter(false);
-        } else if self.navigation_matches(NavigationAction::MoveDown, &key) {
+            return true;
+        }
+        if self.navigation_matches(NavigationAction::MoveDown, key) {
             self.cycle_history_task_filter(true);
-        } else if key.code == KeyCode::Char('[') {
+            return true;
+        }
+        false
+    }
+
+    fn handle_key_stats_history_filter_shortcuts(&mut self, key: &KeyEvent) {
+        if key.code == KeyCode::Char('[') {
             self.cycle_history_profile_filter(false);
         } else if key.code == KeyCode::Char(']') {
             self.cycle_history_profile_filter(true);
