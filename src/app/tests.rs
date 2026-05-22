@@ -4358,6 +4358,35 @@ fn history_view_toggles_from_timer_mode() {
 }
 
 #[test]
+fn history_view_cycles_comparison_dimensions_with_arrow_keys() {
+    let mut app = App::default();
+    app.handle_key(key(KeyCode::Char('h')));
+    assert_eq!(app.mode, AppMode::StatsHistory);
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::TaskLabel
+    );
+
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::Profile
+    );
+
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::TimeOfDay
+    );
+
+    app.handle_key(key(KeyCode::Left));
+    assert_eq!(
+        app.history_comparison_dimension(),
+        crate::stats::ComparisonDimension::Profile
+    );
+}
+
+#[test]
 fn custom_cancel_shortcut_controls_history_back_navigation() {
     let config = AppConfig {
         shortcuts: ShortcutConfig {

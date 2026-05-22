@@ -229,6 +229,22 @@ impl App {
             self.mode = AppMode::Timer;
         } else if self.shortcut_matches(ShortcutAction::ExportStatsHistory, &key) {
             self.export_stats_history();
+        } else if self.navigation_matches(NavigationAction::MoveLeft, &key) {
+            self.cycle_history_comparison_dimension(false);
+        } else if self.navigation_matches(NavigationAction::MoveRight, &key) {
+            self.cycle_history_comparison_dimension(true);
+        } else if self.navigation_matches(NavigationAction::MoveUp, &key) {
+            self.cycle_history_task_filter(false);
+        } else if self.navigation_matches(NavigationAction::MoveDown, &key) {
+            self.cycle_history_task_filter(true);
+        } else if key.code == KeyCode::Char('[') {
+            self.cycle_history_profile_filter(false);
+        } else if key.code == KeyCode::Char(']') {
+            self.cycle_history_profile_filter(true);
+        } else if key.code == KeyCode::Char(',') {
+            self.cycle_history_time_of_day_filter(false);
+        } else if key.code == KeyCode::Char('.') {
+            self.cycle_history_time_of_day_filter(true);
         }
     }
 

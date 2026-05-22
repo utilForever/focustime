@@ -691,7 +691,7 @@ fn history_view_renders_monthly_heatmap_profile_and_task_panels() {
     assert!(text.contains("Monthly Trend"));
     assert!(text.contains(&format!("Heatmap {month_label}")));
     assert!(text_lower.contains("profile effect"));
-    assert!(text.contains("Task Totals"));
+    assert!(text.contains("Comparison: Task"));
     assert!(text.contains("Task Trends"));
     assert!(text.contains("Break-glass Audit"));
     assert!(text_lower.contains("focus score"));
