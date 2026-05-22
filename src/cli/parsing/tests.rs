@@ -71,6 +71,13 @@ fn parse_history_kpi_card_id_accepts_known_card() {
 }
 
 #[test]
+fn parse_history_kpi_card_id_accepts_trimmed_known_card() {
+    let parsed = parse_history_kpi_card_id("  focus_score  ").unwrap();
+
+    assert_eq!(parsed, HistoryKpiCardId::FocusScore);
+}
+
+#[test]
 fn parse_history_kpi_card_id_rejects_unknown_card() {
     let error = parse_history_kpi_card_id("legacy-card").unwrap_err();
 

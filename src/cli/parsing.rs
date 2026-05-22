@@ -688,9 +688,10 @@ pub(super) fn parse_theme_preset(value: &str) -> Result<ThemePreset, String> {
 }
 
 pub(super) fn parse_history_kpi_card_id(value: &str) -> Result<HistoryKpiCardId, String> {
-    HistoryKpiCardId::from_id(value).ok_or_else(|| {
+    let normalized = value.trim();
+    HistoryKpiCardId::from_id(normalized).ok_or_else(|| {
         invalid_usage(&format!(
-            "Invalid history dashboard card `{value}`. Use one of: session_summary, focus_score, goal_streak, focus_risk, weekly_allocation, last_interruption, stats_growth, retention, comparison_filters."
+            "Invalid history dashboard card `{normalized}`. Use one of: session_summary, focus_score, goal_streak, focus_risk, weekly_allocation, last_interruption, stats_growth, retention, comparison_filters."
         ))
     })
 }
