@@ -21,13 +21,15 @@ use crate::wakatime::WakatimeRuntimeState;
 mod history;
 #[cfg(test)]
 use history::{
-    format_history_goal_streak_line, format_history_interruption_line, format_month_label,
-    format_task_goal_progress_summary,
+    format_history_goal_streak_line, format_history_interruption_line,
+    format_history_weekly_allocation_line, format_month_label, format_task_goal_progress_summary,
 };
 use history::{readable_goal_streak_text, render_stats_history};
 mod profile_manager;
 use profile_manager::render_profile_manager;
 mod session_planner;
+#[cfg(test)]
+use session_planner::planner_weekly_allocation_summary;
 use session_planner::render_session_planner;
 mod site_manager;
 use site_manager::render_site_manager;

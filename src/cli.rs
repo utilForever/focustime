@@ -644,6 +644,29 @@ struct TemporaryAllowlistStatusOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct WeeklyAllocationDayOutput {
+    date: String,
+    minutes_target: u64,
+    pomodoros_target: u32,
+    allocatable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct WeeklyAllocationOutput {
+    available: bool,
+    uses_schedule_weights: bool,
+    remaining_days_in_week: usize,
+    allocatable_days: usize,
+    completed_minutes: u64,
+    completed_pomodoros: u32,
+    remaining_minutes: u64,
+    remaining_pomodoros: u32,
+    today_minutes_target: u64,
+    today_pomodoros_target: u32,
+    days: Vec<WeeklyAllocationDayOutput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct StatusOutput {
     day: String,
     selected_profile: ProfileView,
@@ -662,6 +685,7 @@ struct StatusOutput {
     strict_mode: bool,
     goal: GoalOutput,
     weekly_goal: GoalOutput,
+    weekly_allocation: WeeklyAllocationOutput,
     monthly_goal: GoalOutput,
     selected_task_goal: Option<TaskGoalOutput>,
     session: SessionOutput,

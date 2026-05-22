@@ -68,6 +68,7 @@ mod site_manager;
 mod temporary_allowlist;
 mod timer_flow;
 mod weekday_rules;
+pub(crate) use history_goals::weekly_daily_goal_allocation_for_context;
 use shortcuts::ShortcutBindings;
 pub use shortcuts::{NavigationAction, ShortcutAction};
 
@@ -518,6 +519,44 @@ pub struct DailyGoalProgress {
 impl DailyGoalProgress {
     pub fn has_any_target(self) -> bool {
         self.minutes.is_configured() || self.pomodoros.is_configured()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WeeklyDailyAllocationDay {
+    pub day: NaiveDate,
+    pub minutes_target: u64,
+    pub pomodoros_target: u32,
+    pub allocatable: bool,
+    pub weight_minutes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WeeklyDailyGoalAllocation {
+    pub week_target: DailyGoalSnapshot,
+    pub completed_minutes: u64,
+    pub completed_pomodoros: u32,
+    pub remaining_minutes: u64,
+    pub remaining_pomodoros: u32,
+    pub remaining_days_in_week: usize,
+    pub allocatable_days: usize,
+    pub uses_schedule_weights: bool,
+    pub daily_targets: Vec<WeeklyDailyAllocationDay>,
+}
+
+impl WeeklyDailyGoalAllocation {
+    pub fn has_any_target(&self) -> bool {
+        self.week_target.has_any_target()
+    }
+
+    pub fn today_target(&self) -> DailyGoalSnapshot {
+        self.daily_targets
+            .first()
+            .map(|target| DailyGoalSnapshot {
+                minutes: target.minutes_target,
+                pomodoros: target.pomodoros_target,
+            })
+            .unwrap_or_default()
     }
 }
 

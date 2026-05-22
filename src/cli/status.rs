@@ -1,11 +1,12 @@
+use crate::app::weekly_daily_goal_allocation_for_context;
 use crate::cli::{
     AppConfig, BreakTemplateConfig, BreakTemplateView, CustomProfileConfig, DEFAULT_FOCUS_SECS,
     DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS,
     DailyGoalSnapshot, Datelike, FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput,
     NaiveDate, ProfileId, ProfileSpec, ProfileView, SessionOutput, StatsRetentionStatusOutput,
     StatusOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput, ThemePreset, ThemePresetView,
-    TimerPhase, TimerStatus, TodayOutput, carry_over_goal_target, current_day_key,
-    effective_blocked_sites_for_profile, session_recovery,
+    TimerPhase, TimerStatus, TodayOutput, WeeklyAllocationDayOutput, WeeklyAllocationOutput,
+    carry_over_goal_target, current_day_key, effective_blocked_sites_for_profile, session_recovery,
 };
 use crate::timer::TimerState;
 
@@ -62,6 +63,12 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let focus_score_pct = completion_score_pct.map(|completion| {
         (u16::from(consistency_score_pct) + u16::from(completion)).div_ceil(2) as u8
     });
+    let weekly_allocation = build_weekly_allocation_output(
+        day_date,
+        weekly_goal_snapshot,
+        week,
+        &selected_automation.recurring_schedule,
+    );
     let stats_growth = stats.growth_summary();
     let retention_windows = config.stats_retention.windows();
     let pending_prune = stats.retention_preview(config.stats_retention, day_date);
@@ -97,6 +104,7 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
                 .is_met_by_totals(week.focused_minutes(), week.pomodoros_completed),
             carry_over: config.goal_carry_over.weekly,
         },
+        weekly_allocation,
         monthly_goal: GoalOutput {
             configured: monthly_goal_snapshot.has_any_target(),
             minutes_target: monthly_goal_snapshot.minutes,
@@ -222,6 +230,39 @@ fn weekly_goal_completion_score_pct(
         (None, None) => None,
         (Some(score), None) | (None, Some(score)) => Some(score),
         (Some(left), Some(right)) => Some((u16::from(left) + u16::from(right)).div_ceil(2) as u8),
+    }
+}
+
+fn build_weekly_allocation_output(
+    day: NaiveDate,
+    weekly_goal_snapshot: DailyGoalSnapshot,
+    week: crate::stats::WeeklyStats,
+    schedule: &crate::config::RecurringScheduleConfig,
+) -> WeeklyAllocationOutput {
+    let allocation =
+        weekly_daily_goal_allocation_for_context(day, weekly_goal_snapshot, week, schedule);
+    let today_target = allocation.today_target();
+    WeeklyAllocationOutput {
+        available: allocation.has_any_target(),
+        uses_schedule_weights: allocation.uses_schedule_weights,
+        remaining_days_in_week: allocation.remaining_days_in_week,
+        allocatable_days: allocation.allocatable_days,
+        completed_minutes: allocation.completed_minutes,
+        completed_pomodoros: allocation.completed_pomodoros,
+        remaining_minutes: allocation.remaining_minutes,
+        remaining_pomodoros: allocation.remaining_pomodoros,
+        today_minutes_target: today_target.minutes,
+        today_pomodoros_target: today_target.pomodoros,
+        days: allocation
+            .daily_targets
+            .into_iter()
+            .map(|target| WeeklyAllocationDayOutput {
+                date: target.day.format("%Y-%m-%d").to_string(),
+                minutes_target: target.minutes_target,
+                pomodoros_target: target.pomodoros_target,
+                allocatable: target.allocatable,
+            })
+            .collect(),
     }
 }
 

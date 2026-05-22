@@ -385,6 +385,7 @@ pub(super) fn print_status_output(payload: &StatusOutput) {
     );
     print_status_goal_line("Daily goal", &payload.goal);
     print_status_goal_line("Weekly goal", &payload.weekly_goal);
+    print_status_weekly_allocation_line(&payload.weekly_allocation);
     print_status_goal_line("Monthly goal", &payload.monthly_goal);
     print_status_task_goal_line(payload.selected_task_goal.as_ref());
     println!(
@@ -423,6 +424,42 @@ pub(super) fn print_status_output(payload: &StatusOutput) {
     if let Some(error) = payload.live.recovery_error.as_deref() {
         println!("Live timer warning: {error}");
     }
+}
+
+fn print_status_weekly_allocation_line(allocation: &crate::cli::WeeklyAllocationOutput) {
+    if !allocation.available {
+        println!("Weekly allocation: off (weekly goal off)");
+        return;
+    }
+
+    let strategy = if allocation.uses_schedule_weights {
+        "schedule-weighted"
+    } else {
+        "equal-split fallback"
+    };
+    println!(
+        "Weekly allocation: today {} min, {} pomodoros | remaining {} min, {} pomodoros across {}/{} days ({strategy})",
+        allocation.today_minutes_target,
+        allocation.today_pomodoros_target,
+        allocation.remaining_minutes,
+        allocation.remaining_pomodoros,
+        allocation.allocatable_days,
+        allocation.remaining_days_in_week,
+    );
+
+    let day_breakdown = allocation
+        .days
+        .iter()
+        .map(|day| {
+            let marker = if day.allocatable { "" } else { "*" };
+            format!(
+                "{}={}m/{}p{}",
+                day.date, day.minutes_target, day.pomodoros_target, marker
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    println!("Weekly allocation days: {day_breakdown}");
 }
 
 fn print_status_goal_line(label: &str, goal: &GoalOutput) {

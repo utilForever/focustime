@@ -294,6 +294,35 @@ fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
 }
 
 #[test]
+fn weekly_allocation_lines_show_off_when_weekly_goal_is_disabled() {
+    let app = App::default();
+    assert_eq!(
+        format_history_weekly_allocation_line(&app),
+        "Weekly allocation: off"
+    );
+    assert_eq!(
+        planner_weekly_allocation_summary(&app),
+        "Weekly allocation: off"
+    );
+}
+
+#[test]
+fn weekly_allocation_lines_show_today_targets_when_weekly_goal_is_configured() {
+    let app = App::from_config_for_tests(AppConfig {
+        weekly_goal: crate::config::WeeklyGoalConfig {
+            minutes: 120,
+            pomodoros: 4,
+        },
+        ..AppConfig::default()
+    });
+    let history_line = format_history_weekly_allocation_line(&app);
+    let planner_line = planner_weekly_allocation_summary(&app);
+
+    assert!(history_line.contains("Weekly allocation: today"));
+    assert!(planner_line.contains("Weekly allocation: today"));
+}
+
+#[test]
 fn task_goal_progress_summary_formats_state_and_metrics() {
     let configured = crate::stats::TaskGoalProgress {
         task_label: "Docs".to_string(),
