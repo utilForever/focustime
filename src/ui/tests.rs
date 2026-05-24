@@ -205,7 +205,7 @@ fn history_focus_risk_line_shows_low_risk_when_goals_are_off() {
     let app = App::default();
     assert_eq!(
         format_history_focus_risk_line(&app),
-        "Risk: D low 0% · W low 0% · M low 0% · S low 0% · D status goal off"
+        "Risk: D low 0% · W low 0% · M low 0% · S low 0%"
     );
 }
 
