@@ -437,6 +437,7 @@ pub(super) fn format_history_focus_score_line(app: &App) -> String {
 
 pub(super) fn format_history_focus_risk_line(app: &App) -> String {
     let forecast = app.focus_risk_forecast();
+    let alert_active = forecast.alert_active();
     let daily_label = forecast.daily_goal.period.short_label();
     let weekly_label = forecast.weekly_goal.period.short_label();
     let monthly_label = forecast.monthly_goal.period.short_label();
@@ -457,14 +458,14 @@ pub(super) fn format_history_focus_risk_line(app: &App) -> String {
         highest_label = "S";
         highest_signal = forecast.streak.signals.first();
     }
-    let reason_suffix = highest_signal
-        .map(|signal| format!(" · {highest_label} {} {}", signal.label, signal.value))
-        .unwrap_or_default();
-    let alert_suffix = if forecast.alert_active() {
-        " · ALERT"
+    let reason_suffix = if alert_active {
+        highest_signal
+            .map(|signal| format!(" · {highest_label} {} {}", signal.label, signal.value))
+            .unwrap_or_default()
     } else {
-        ""
+        String::new()
     };
+    let alert_suffix = if alert_active { " · ALERT" } else { "" };
     format!(
         "Risk: {} {} {}% · {} {} {}% · {} {} {}% · S {} {}%{}{}",
         daily_label,

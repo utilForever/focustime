@@ -258,8 +258,47 @@ impl FocusRiskForecast {
     }
 
     pub fn alert_active(&self) -> bool {
-        self.highest_risk_level().triggers_alert()
+        let highest_level = self.highest_risk_level();
+        if highest_level.triggers_alert() && matches!(highest_level, FocusRiskLevel::High) {
+            return true;
+        }
+
+        let medium_count = [
+            self.daily_goal.risk_level,
+            self.weekly_goal.risk_level,
+            self.monthly_goal.risk_level,
+            self.streak.risk_level,
+        ]
+        .into_iter()
+        .filter(|level| matches!(level, FocusRiskLevel::Medium))
+        .count();
+        if medium_count >= 2 {
+            return true;
+        }
+
+        [
+            (self.daily_goal.risk_level, self.daily_goal.risk_score_pct),
+            (self.weekly_goal.risk_level, self.weekly_goal.risk_score_pct),
+            (
+                self.monthly_goal.risk_level,
+                self.monthly_goal.risk_score_pct,
+            ),
+            (self.streak.risk_level, self.streak.risk_score_pct),
+        ]
+        .into_iter()
+        .any(|(level, score)| matches!(level, FocusRiskLevel::Medium) && score >= 55)
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FocusRiskCalibrationMetrics {
+    pub sample_count: u32,
+    pub alert_count: u32,
+    pub true_positive_alerts: u32,
+    pub false_positive_alerts: u32,
+    pub precision_pct: u8,
+    pub missed_warning_count: u32,
+    pub missed_warning_rate_pct: u8,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

@@ -572,14 +572,11 @@ fn print_status_comparison_line(comparison: &StatusComparisonOutput) {
 }
 
 fn print_status_focus_risk_line(forecast: &crate::stats::FocusRiskForecast) {
+    let alert_active = forecast.alert_active();
     let daily_label = forecast.daily_goal.period.short_label();
     let weekly_label = forecast.weekly_goal.period.short_label();
     let monthly_label = forecast.monthly_goal.period.short_label();
-    let alert_suffix = if forecast.alert_active() {
-        " (alert)"
-    } else {
-        ""
-    };
+    let alert_suffix = if alert_active { " (alert)" } else { "" };
     println!(
         "Focus risk: {} {} {}% | {} {} {}% | {} {} {}% | Streak {} {}%{}",
         daily_label,
@@ -613,11 +610,13 @@ fn print_status_focus_risk_line(forecast: &crate::stats::FocusRiskForecast) {
         highest_label = "Streak";
         highest_signal = forecast.streak.signals.first();
     }
-    if let Some(signal) = highest_signal {
-        println!(
-            "Focus risk signal: {highest_label} {} ({})",
-            signal.label, signal.value
-        );
+    if alert_active {
+        if let Some(signal) = highest_signal {
+            println!(
+                "Focus risk signal: {highest_label} {} ({})",
+                signal.label, signal.value
+            );
+        }
     }
 }
 
