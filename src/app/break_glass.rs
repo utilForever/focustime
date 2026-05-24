@@ -126,7 +126,7 @@ impl App {
             task_label,
             self.break_glass_duration_secs,
         );
-        self.stats_dirty = true;
+        self.mark_stats_dirty();
         self.flush_stats_if_dirty(false);
     }
 

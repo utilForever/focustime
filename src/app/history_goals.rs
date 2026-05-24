@@ -51,7 +51,7 @@ impl App {
             context.remaining_secs,
             context.profile,
         );
-        self.stats_dirty = true;
+        self.mark_stats_dirty();
     }
 
     pub(super) fn open_stats_history(&mut self) {
@@ -86,7 +86,7 @@ impl App {
         } else {
             self.stats.record_completed_pomodoro(&day_key, goal);
         }
-        self.stats_dirty = true;
+        self.mark_stats_dirty();
     }
 
     pub(super) fn current_goal_snapshot(&self) -> DailyGoalSnapshot {
@@ -214,11 +214,12 @@ impl App {
             .stats
             .sync_monthly_goal_snapshot(day, self.current_month_goal_snapshot());
         if daily_changed || weekly_changed || monthly_changed {
-            self.stats_dirty = true;
+            self.mark_stats_dirty();
             self.flush_stats_if_dirty(false);
         }
     }
 
+    #[allow(dead_code)]
     pub fn recent_break_glass_overrides(&self, limit: usize) -> Vec<BreakGlassOverrideEvent> {
         self.stats.recent_break_glass_overrides(limit)
     }
@@ -228,6 +229,7 @@ impl App {
         self.stats.recent_session_interruptions(limit)
     }
 
+    #[allow(dead_code)]
     pub fn latest_session_interruption(&self) -> Option<SessionInterruptionEvent> {
         self.stats.latest_session_interruption()
     }

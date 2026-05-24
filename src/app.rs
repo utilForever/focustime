@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::{BTreeSet, HashMap, HashSet},
     time::{Duration, Instant},
 };
@@ -32,10 +33,11 @@ use crate::schedule::{
 use crate::stats::{
     BreakGlassOverrideEvent, ComparisonDimension, DailyGoalSnapshot, DailyStats,
     ExportedStatsFiles, FocusRiskForecast, FocusSessionMetadata, FocusStats, GoalStreak,
-    MonthlyHeatmap, MonthlyStats, ProfileBucket, ProfileEffectiveness, ProfileTotals,
-    SessionInterruptionEvent, SessionInterruptionReason, SessionStats, StatsGrowthSummary,
-    StatsRetentionPruneResult, TaskGoalProgress, TaskTotals, TaskTrend, TimeOfDayBucket,
-    WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target, current_day_key,
+    MonthlyHeatmap, MonthlyStats, ProductivityComparisonRow, ProfileBucket, ProfileEffectiveness,
+    ProfileTotals, SessionInterruptionEvent, SessionInterruptionReason, SessionStats,
+    StatsGrowthSummary, StatsRetentionPruneResult, TaskGoalProgress, TaskTotals, TaskTrend,
+    TimeOfDayBucket, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target,
+    current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::temporary_allowlist::{
@@ -55,6 +57,7 @@ mod break_glass;
 mod cli_api;
 mod feedback_diagnostics;
 mod history_comparison;
+mod history_dashboard_cache;
 mod history_goals;
 mod mode_keys;
 mod persistence;
@@ -561,6 +564,91 @@ impl WeeklyDailyGoalAllocation {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct HistoryDashboardViewData {
+    pub session_stats: SessionStats,
+    pub today_stats: DailyStats,
+    pub daily_goal_progress: DailyGoalProgress,
+    pub weekly_goal_progress: DailyGoalProgress,
+    pub monthly_goal_progress: DailyGoalProgress,
+    pub latest_weekly_focus_score: Option<WeeklyFocusScore>,
+    pub goal_streak: GoalStreak,
+    pub focus_risk_forecast: FocusRiskForecast,
+    pub weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
+    pub latest_session_interruption: Option<SessionInterruptionEvent>,
+    pub stats_growth_summary: StatsGrowthSummary,
+    pub stats_retention_config: StatsRetentionConfig,
+    pub stats_retention_preview: StatsRetentionPruneResult,
+    pub comparison_filter_summary: String,
+    pub comparison_rows: Vec<ProductivityComparisonRow>,
+    pub task_trends: Vec<TaskTrend>,
+    pub profile_effectiveness: Vec<ProfileEffectiveness>,
+    pub break_glass_overrides: Vec<BreakGlassOverrideEvent>,
+    pub monthly_stats: Vec<MonthlyStats>,
+    pub monthly_heatmap: MonthlyHeatmap,
+}
+
+#[derive(Debug, Clone)]
+struct HistoryDashboardStaticSnapshot {
+    session_stats: SessionStats,
+    today_stats: DailyStats,
+    daily_goal_progress: DailyGoalProgress,
+    weekly_goal_progress: DailyGoalProgress,
+    monthly_goal_progress: DailyGoalProgress,
+    latest_weekly_focus_score: Option<WeeklyFocusScore>,
+    goal_streak: GoalStreak,
+    focus_risk_forecast: FocusRiskForecast,
+    weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
+    latest_session_interruption: Option<SessionInterruptionEvent>,
+    stats_growth_summary: StatsGrowthSummary,
+    stats_retention_config: StatsRetentionConfig,
+    stats_retention_preview: StatsRetentionPruneResult,
+    task_trends: Vec<TaskTrend>,
+    profile_effectiveness: Vec<ProfileEffectiveness>,
+    break_glass_overrides: Vec<BreakGlassOverrideEvent>,
+    monthly_stats: Vec<MonthlyStats>,
+    monthly_heatmap: MonthlyHeatmap,
+}
+
+#[derive(Debug, Clone)]
+struct HistoryDashboardComparisonSnapshot {
+    comparison_filter_summary: String,
+    comparison_rows: Vec<ProductivityComparisonRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HistoryDashboardStaticSnapshotKey {
+    stats_revision: u64,
+    day_key: String,
+    retention: StatsRetentionConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HistoryDashboardComparisonSnapshotKey {
+    stats_revision: u64,
+    dimension: ComparisonDimension,
+    task_filter: Option<String>,
+    profile_filter: Option<ProfileBucket>,
+    time_of_day_filter: Option<TimeOfDayBucket>,
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HistoryDashboardCacheStats {
+    pub static_rebuilds: u64,
+    pub comparison_rebuilds: u64,
+}
+
+#[derive(Debug, Default, Clone)]
+struct HistoryDashboardCache {
+    static_key: Option<HistoryDashboardStaticSnapshotKey>,
+    static_snapshot: Option<HistoryDashboardStaticSnapshot>,
+    comparison_key: Option<HistoryDashboardComparisonSnapshotKey>,
+    comparison_snapshot: Option<HistoryDashboardComparisonSnapshot>,
+    #[cfg(test)]
+    cache_stats: HistoryDashboardCacheStats,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SetupCheckLevel {
     Ok,
@@ -731,6 +819,7 @@ pub struct App {
     history_dashboard_card_order: Vec<HistoryKpiCardId>,
     history_dashboard_pinned_cards: Vec<HistoryKpiCardId>,
     history_dashboard_selected_card: HistoryKpiCardId,
+    history_dashboard_cache: RefCell<HistoryDashboardCache>,
     pub phase_notification: Option<String>,
     pub wakatime: WakatimeTracker,
     pub selected_profile: ProfileId,
@@ -781,6 +870,7 @@ pub struct App {
     pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
     stats: FocusStats,
+    stats_revision: u64,
     stats_dirty: bool,
     stats_has_unsaved_elapsed: bool,
     shortcuts: ShortcutBindings,
@@ -951,6 +1041,7 @@ impl App {
             history_dashboard_card_order: history_dashboard.card_order,
             history_dashboard_pinned_cards: history_dashboard.pinned_cards,
             history_dashboard_selected_card,
+            history_dashboard_cache: RefCell::new(HistoryDashboardCache::default()),
             phase_notification: None,
             wakatime: WakatimeTracker::new_with_settings(
                 WakatimeHeartbeatMetadata {
@@ -1011,6 +1102,7 @@ impl App {
             pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
             stats,
+            stats_revision: 0,
             stats_dirty: retained.any_removed(),
             stats_has_unsaved_elapsed: false,
             shortcuts,
@@ -1232,10 +1324,12 @@ impl App {
         self.stats.recent_weekly_consistency(limit)
     }
 
+    #[allow(dead_code)]
     pub fn latest_weekly_focus_score(&self) -> Option<WeeklyFocusScore> {
         self.stats.latest_weekly_focus_score()
     }
 
+    #[allow(dead_code)]
     pub fn focus_risk_forecast(&self) -> FocusRiskForecast {
         let today = Local::now().date_naive();
         self.stats.focus_risk_forecast_for_day(
@@ -1246,22 +1340,27 @@ impl App {
         )
     }
 
+    #[allow(dead_code)]
     pub fn recent_monthly_stats(&self, limit: usize) -> Vec<MonthlyStats> {
         self.stats.recent_monthly(limit)
     }
 
+    #[allow(dead_code)]
     pub fn latest_monthly_heatmap(&self) -> MonthlyHeatmap {
         self.stats.latest_monthly_heatmap()
     }
 
+    #[allow(dead_code)]
     pub fn stats_growth_summary(&self) -> StatsGrowthSummary {
         self.stats.growth_summary()
     }
 
+    #[allow(dead_code)]
     pub fn stats_retention_config(&self) -> StatsRetentionConfig {
         self.stats_retention
     }
 
+    #[allow(dead_code)]
     pub fn stats_retention_preview(&self) -> StatsRetentionPruneResult {
         self.stats
             .retention_preview(self.stats_retention, Local::now().date_naive())
@@ -1272,6 +1371,7 @@ impl App {
         self.stats.profile_totals()
     }
 
+    #[allow(dead_code)]
     pub fn profile_effectiveness(&self) -> Vec<ProfileEffectiveness> {
         self.stats.profile_effectiveness()
     }
@@ -1286,6 +1386,7 @@ impl App {
         self.stats.task_goal_progress_for_label(label)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn recent_task_trends(&self, limit: usize) -> Vec<TaskTrend> {
         self.stats.recent_task_trends(limit)
     }

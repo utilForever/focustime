@@ -224,7 +224,7 @@ impl App {
         if session_minutes_before != session_minutes_after
             || today_minutes_before != today_minutes_after
         {
-            self.stats_dirty = true;
+            self.mark_stats_dirty();
         }
     }
 }
