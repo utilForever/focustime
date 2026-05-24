@@ -1887,6 +1887,50 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
 }
 
 #[test]
+fn history_kpi_focus_score_uses_reference_day_context_week() {
+    let mut stats = FocusStats::default();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap();
+    let later_week_day = day.checked_add_signed(chrono::Duration::days(14)).unwrap();
+    let goal = DailyGoalSnapshot {
+        minutes: 30,
+        pomodoros: 1,
+    };
+    let day_key = day.format("%Y-%m-%d").to_string();
+    let later_day_key = later_week_day.format("%Y-%m-%d").to_string();
+
+    stats.record_focus_elapsed(&day_key, 30 * 60, goal);
+    stats.record_completed_pomodoro(&day_key, goal);
+    stats.record_focus_elapsed(&later_day_key, 45 * 60, goal);
+    stats.record_completed_pomodoro(&later_day_key, goal);
+
+    let context = HistoryKpiExportContext {
+        reference_day: day,
+        weekly_goal: DailyGoalSnapshot {
+            minutes: 30,
+            pomodoros: 1,
+        },
+        ..HistoryKpiExportContext::default()
+    };
+
+    let export = stats.export_data_with_context(&context);
+    let json_value = serde_json::to_value(&export).unwrap();
+    let expected_week_label = format_week_label(day.iso_week().year(), day.iso_week().week());
+    let latest_week_label = format_week_label(
+        later_week_day.iso_week().year(),
+        later_week_day.iso_week().week(),
+    );
+
+    assert_eq!(
+        json_value["history_kpis"]["focus_score"]["week_label"],
+        expected_week_label
+    );
+    assert_ne!(
+        json_value["history_kpis"]["focus_score"]["week_label"],
+        latest_week_label
+    );
+}
+
+#[test]
 fn export_to_dir_returns_error_when_target_is_not_directory() {
     let stats = FocusStats::default();
     let export_root = unique_temp_dir("stats-export-error");

@@ -12,8 +12,9 @@ use crate::stats::{
     HistoryKpiWeeklyAllocation, HistoryKpiWeeklyAllocationDay, JSON_EXPORT_FILE_NAME, Path,
     ProductivityComparisonExportRow, ProductivityComparisonFilter, ProfileEffectivenessExportRow,
     SessionExportRow, SessionInterruptionExportRow, StatsExport, TaskTotalsExportRow,
-    TaskTrendExportRow, WeeklyConsistencyExportRow, WeeklyExportRow, format_week_label, fs, io,
-    write_atomic_bytes,
+    TaskTrendExportRow, WeeklyConsistencyExportRow, WeeklyExportRow, WeeklyFocusScore,
+    average_two_percentages, consistency_score_from_active_days, format_week_label, fs, io,
+    weekly_completion_score_pct, write_atomic_bytes,
 };
 
 impl FocusStats {
@@ -103,7 +104,7 @@ impl FocusStats {
             self.goal_streak_with_day_goal(day, daily_goal, today_stats, |target_day| {
                 self.effective_daily_goal_snapshot_for_day(target_day, context)
             });
-        let focus_score = self.latest_weekly_focus_score();
+        let focus_score = self.focus_score_for_day(day, context);
         let focus_risk =
             self.focus_risk_forecast_for_day(day, daily_goal, weekly_goal, monthly_goal);
         let (highest_signal_scope, highest_signal_label, highest_signal_value) =
@@ -492,6 +493,51 @@ impl FocusStats {
                 })
         });
         crate::stats::carry_over_goal_target(base, context.carry_over_monthly, previous)
+    }
+
+    fn focus_score_for_day(
+        &self,
+        day: NaiveDate,
+        context: &HistoryKpiExportContext,
+    ) -> Option<WeeklyFocusScore> {
+        let iso_week = day.iso_week();
+        let year = iso_week.year();
+        let week = iso_week.week();
+        let week_label = format_week_label(year, week);
+        let consistency = self
+            .weekly_consistency_stats()
+            .into_iter()
+            .find(|entry| entry.year == year && entry.week == week);
+        let active_days = consistency
+            .as_ref()
+            .map(|entry| entry.active_days)
+            .unwrap_or(0);
+        let consistency_score_pct = consistency
+            .as_ref()
+            .map(|entry| entry.consistency_score_pct)
+            .unwrap_or_else(|| consistency_score_from_active_days(active_days));
+        let totals = self.weekly_for_day(day);
+        let weekly_goal = self.effective_weekly_goal_snapshot_for_day(day, context);
+        let completion_score_pct = weekly_completion_score_pct(weekly_goal, totals);
+        let focus_score_pct = completion_score_pct
+            .map(|completion| average_two_percentages(consistency_score_pct, completion));
+
+        let has_activity = active_days > 0;
+        let has_goal_context =
+            weekly_goal.has_any_target() || self.weekly_goal_snapshot_for_day(day).is_some();
+        if !has_activity && !has_goal_context {
+            return None;
+        }
+
+        Some(WeeklyFocusScore {
+            year,
+            week,
+            week_label,
+            active_days,
+            consistency_score_pct,
+            completion_score_pct,
+            focus_score_pct,
+        })
     }
 }
 
