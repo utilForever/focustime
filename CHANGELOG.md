@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **KPI export parity across JSON and CSV (#329):** added machine-readable `history_kpis` export coverage for all History dashboard KPI cards, plus matching CSV `history_kpi` rows (`kpi_card_id`, `kpi_payload_json`) and schema version bump to `7`.
+
 ## [0.13.0] - 2026-05-22
 
 ### Added

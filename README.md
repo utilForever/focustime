@@ -820,8 +820,13 @@ attached. Focus-session rows
 persist and export first-class `focus_intention` and `task_note` fields; when
 dedicated metadata input is not provided, both fields default to the selected
 `task_label`. Interruption records include structured `reason` values and
-remaining-time metadata. Export files expose `schema_version` (currently `6`)
-so downstream consumers can handle versioned contracts explicitly.
+remaining-time metadata. Export files now also include a `history_kpis` JSON
+object covering all History dashboard KPI cards (`session_summary`,
+`focus_score`, `goal_streak`, `focus_risk`, `weekly_allocation`,
+`last_interruption`, `stats_growth`, `retention`, `comparison_filters`), with
+matching CSV `history_kpi` rows (`kpi_card_id` + `kpi_payload_json`) for
+JSON/CSV parity. Export files expose `schema_version` (currently `7`) so
+downstream consumers can handle versioned contracts explicitly.
 
 ## The way the system works
 
