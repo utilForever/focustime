@@ -197,9 +197,7 @@ impl FocusStats {
                 .checked_sub_signed(chrono::Duration::days(i64::from(offset)))
                 .unwrap_or(day);
             let day_key = candidate.format("%Y-%m-%d").to_string();
-            let Some(day_stats) = self.daily.get(&day_key).copied() else {
-                continue;
-            };
+            let day_stats = self.daily_for(&day_key);
             let candidate_daily_goal = day_stats.goal.unwrap_or(daily_goal);
             let candidate_weekly_goal = self
                 .weekly_goal_snapshot_for_day(candidate)

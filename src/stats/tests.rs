@@ -840,6 +840,31 @@ fn focus_risk_calibration_metrics_track_false_positives_without_end_period_outco
 }
 
 #[test]
+fn focus_risk_calibration_metrics_count_missing_daily_row_weekly_outcomes() {
+    let stats = FocusStats::default();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 12).unwrap();
+    assert_eq!(day.weekday().num_days_from_monday(), 6);
+
+    let metrics = stats.focus_risk_calibration_metrics_for_day(
+        day,
+        DailyGoalSnapshot::default(),
+        DailyGoalSnapshot {
+            minutes: 60,
+            pomodoros: 2,
+        },
+        DailyGoalSnapshot::default(),
+        1,
+    );
+
+    assert_eq!(metrics.sample_count, 1);
+    assert_eq!(metrics.false_positive_alerts, 0);
+    assert_eq!(
+        metrics.true_positive_alerts + metrics.missed_warning_count,
+        metrics.sample_count
+    );
+}
+
+#[test]
 fn focus_risk_forecast_marks_goals_off_when_targets_are_disabled() {
     let stats = FocusStats::default();
     let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap();
