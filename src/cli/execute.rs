@@ -1741,13 +1741,14 @@ fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
     let config = AppConfig::load().normalized();
     let stats = FocusStats::load_with_options(stats_load_options(&config))
         .map_err(|error| format!("Failed to load stats: {error}"))?;
+    let history_kpi_context = build_history_kpi_export_context(&config);
     let target_dir = match dir {
         Some(path) => path,
         None => env::current_dir()
             .map_err(|error| format!("Failed to determine current directory: {error}"))?,
     };
     let exported = stats
-        .export_to_dir(&target_dir)
+        .export_to_dir_with_context(&target_dir, &history_kpi_context)
         .map_err(|error| format!("Export failed: {error}"))?;
 
     let payload = ExportOutput {
@@ -1760,6 +1761,34 @@ fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
+}
+
+fn build_history_kpi_export_context(config: &AppConfig) -> crate::stats::HistoryKpiExportContext {
+    let selected_automation = config.profile_automation_for(config.selected_profile);
+    crate::stats::HistoryKpiExportContext {
+        reference_day: chrono::Local::now().date_naive(),
+        daily_goal: DailyGoalSnapshot {
+            minutes: config.daily_goal.minutes,
+            pomodoros: config.daily_goal.pomodoros,
+        },
+        weekly_goal: DailyGoalSnapshot {
+            minutes: config.weekly_goal.minutes,
+            pomodoros: config.weekly_goal.pomodoros,
+        },
+        monthly_goal: DailyGoalSnapshot {
+            minutes: config.monthly_goal.minutes,
+            pomodoros: config.monthly_goal.pomodoros,
+        },
+        carry_over_daily: config.goal_carry_over.daily,
+        carry_over_weekly: config.goal_carry_over.weekly,
+        carry_over_monthly: config.goal_carry_over.monthly,
+        recurring_schedule: selected_automation.recurring_schedule,
+        stats_retention: config.stats_retention,
+        comparison_dimension: crate::stats::ComparisonDimension::TaskLabel,
+        comparison_task_filter: None,
+        comparison_profile_filter: None,
+        comparison_time_of_day_filter: None,
+    }
 }
 
 fn execute_backup_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(), String> {

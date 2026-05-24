@@ -1702,6 +1702,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     let focus_scores = json_value["focus_scores"].as_array().unwrap();
     let profile_effectiveness = json_value["profile_effectiveness"].as_array().unwrap();
     let productivity_comparisons = json_value["productivity_comparisons"].as_array().unwrap();
+    let history_kpis = json_value["history_kpis"].as_object().unwrap();
     assert_eq!(daily.len(), 2);
     assert!(!weekly.is_empty());
     assert_eq!(sessions.len(), 1);
@@ -1713,6 +1714,22 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     assert!(!focus_scores.is_empty());
     assert_eq!(profile_effectiveness.len(), 1);
     assert!(!productivity_comparisons.is_empty());
+    for card_id in [
+        "session_summary",
+        "focus_score",
+        "goal_streak",
+        "focus_risk",
+        "weekly_allocation",
+        "last_interruption",
+        "stats_growth",
+        "retention",
+        "comparison_filters",
+    ] {
+        assert!(
+            history_kpis.contains_key(card_id),
+            "missing history_kpis entry for {card_id}"
+        );
+    }
     assert!(
         daily
             .iter()
@@ -1787,6 +1804,8 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     assert!(csv_header.contains("comparison_dimension"));
     assert!(csv_header.contains("comparison_label"));
     assert!(csv_header.contains("time_of_day_bucket"));
+    assert!(csv_header.contains("kpi_card_id"));
+    assert!(csv_header.contains("kpi_payload_json"));
     assert!(csv.contains(&format!("{},daily,{labeled_day}", EXPORT_SCHEMA_VERSION)));
     assert!(csv.contains(&format!("{},weekly,,", EXPORT_SCHEMA_VERSION)));
     assert!(csv.contains(&format!(
@@ -1817,9 +1836,98 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         "{},productivity_comparison",
         EXPORT_SCHEMA_VERSION
     )));
+    assert!(csv.contains(&format!("{},history_kpi", EXPORT_SCHEMA_VERSION)));
     assert!(csv.contains("Classic,1,1,"));
 
+    #[derive(serde::Deserialize)]
+    struct CsvKpiRow {
+        record_type: String,
+        kpi_card_id: Option<String>,
+        kpi_payload_json: Option<String>,
+    }
+
+    let mut csv_reader = csv::Reader::from_reader(csv.as_bytes());
+    let mut csv_kpi_payloads = std::collections::BTreeMap::new();
+    for row in csv_reader.deserialize::<CsvKpiRow>() {
+        let row = row.expect("history kpi row should deserialize");
+        if row.record_type != "history_kpi" {
+            continue;
+        }
+        let card_id = row
+            .kpi_card_id
+            .expect("history_kpi row should include kpi_card_id");
+        let payload = row
+            .kpi_payload_json
+            .expect("history_kpi row should include kpi_payload_json");
+        let parsed_payload: serde_json::Value =
+            serde_json::from_str(&payload).expect("kpi_payload_json should be valid JSON");
+        csv_kpi_payloads.insert(card_id, parsed_payload);
+    }
+
+    assert_eq!(csv_kpi_payloads.len(), 9);
+    for card_id in [
+        "session_summary",
+        "focus_score",
+        "goal_streak",
+        "focus_risk",
+        "weekly_allocation",
+        "last_interruption",
+        "stats_growth",
+        "retention",
+        "comparison_filters",
+    ] {
+        assert_eq!(
+            csv_kpi_payloads.get(card_id),
+            history_kpis.get(card_id),
+            "csv/json parity mismatch for {card_id}"
+        );
+    }
+
     fs::remove_dir_all(export_dir).unwrap();
+}
+
+#[test]
+fn history_kpi_focus_score_uses_reference_day_context_week() {
+    let mut stats = FocusStats::default();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap();
+    let later_week_day = day.checked_add_signed(chrono::Duration::days(14)).unwrap();
+    let goal = DailyGoalSnapshot {
+        minutes: 30,
+        pomodoros: 1,
+    };
+    let day_key = day.format("%Y-%m-%d").to_string();
+    let later_day_key = later_week_day.format("%Y-%m-%d").to_string();
+
+    stats.record_focus_elapsed(&day_key, 30 * 60, goal);
+    stats.record_completed_pomodoro(&day_key, goal);
+    stats.record_focus_elapsed(&later_day_key, 45 * 60, goal);
+    stats.record_completed_pomodoro(&later_day_key, goal);
+
+    let context = HistoryKpiExportContext {
+        reference_day: day,
+        weekly_goal: DailyGoalSnapshot {
+            minutes: 30,
+            pomodoros: 1,
+        },
+        ..HistoryKpiExportContext::default()
+    };
+
+    let export = stats.export_data_with_context(&context);
+    let json_value = serde_json::to_value(&export).unwrap();
+    let expected_week_label = format_week_label(day.iso_week().year(), day.iso_week().week());
+    let latest_week_label = format_week_label(
+        later_week_day.iso_week().year(),
+        later_week_day.iso_week().week(),
+    );
+
+    assert_eq!(
+        json_value["history_kpis"]["focus_score"]["week_label"],
+        expected_week_label
+    );
+    assert_ne!(
+        json_value["history_kpis"]["focus_score"]["week_label"],
+        latest_week_label
+    );
 }
 
 #[test]

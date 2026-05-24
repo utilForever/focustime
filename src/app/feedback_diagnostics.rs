@@ -21,10 +21,39 @@ impl App {
 
     pub(super) fn export_stats_to_dir(&mut self, dir: &std::path::Path) {
         self.history_feedback = None;
-        match self.stats.export_to_dir(dir) {
+        let context = self.history_kpi_export_context();
+        match self.stats.export_to_dir_with_context(dir, &context) {
             Ok(paths) => self.set_history_feedback_for_export(paths),
             Err(e) => self
                 .set_history_feedback(HistoryFeedbackLevel::Warning, format!("Export failed: {e}")),
+        }
+    }
+
+    fn history_kpi_export_context(&self) -> crate::stats::HistoryKpiExportContext {
+        let reference_day = chrono::Local::now().date_naive();
+        crate::stats::HistoryKpiExportContext {
+            reference_day,
+            daily_goal: crate::stats::DailyGoalSnapshot {
+                minutes: self.daily_goal.minutes,
+                pomodoros: self.daily_goal.pomodoros,
+            },
+            weekly_goal: crate::stats::DailyGoalSnapshot {
+                minutes: self.weekly_goal.minutes,
+                pomodoros: self.weekly_goal.pomodoros,
+            },
+            monthly_goal: crate::stats::DailyGoalSnapshot {
+                minutes: self.monthly_goal.minutes,
+                pomodoros: self.monthly_goal.pomodoros,
+            },
+            carry_over_daily: self.goal_carry_over.daily,
+            carry_over_weekly: self.goal_carry_over.weekly,
+            carry_over_monthly: self.goal_carry_over.monthly,
+            recurring_schedule: self.recurring_schedule.clone(),
+            stats_retention: self.stats_retention,
+            comparison_dimension: self.history_comparison_dimension,
+            comparison_task_filter: self.history_task_filter.clone(),
+            comparison_profile_filter: self.history_profile_filter,
+            comparison_time_of_day_filter: self.history_time_of_day_filter,
         }
     }
 
