@@ -829,7 +829,7 @@ impl App {
             task_label_state_labels(&self.task_label_favorites, &self.task_labels),
             task_label_state_labels(&self.task_label_archived, &self.task_labels),
         ) {
-            self.stats_dirty = true;
+            self.mark_stats_dirty();
             self.flush_stats_if_dirty(false);
         }
     }

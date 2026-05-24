@@ -613,7 +613,7 @@ impl App {
             .apply_retention_policy(self.stats_retention, Local::now().date_naive())
             .any_removed()
         {
-            self.stats_dirty = true;
+            self.mark_stats_dirty();
         }
         self.save_stats();
         if self.stats_error.is_none() {
