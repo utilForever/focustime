@@ -4561,6 +4561,23 @@ fn history_dashboard_stats_change_rebuilds_static_and_comparison_snapshots() {
 }
 
 #[test]
+fn history_dashboard_goal_config_change_rebuilds_static_snapshot() {
+    let mut app = App::default();
+    seed_large_history(&mut app, 180, 4);
+    app.handle_key(key(KeyCode::Char('h')));
+
+    let _ = app.history_dashboard_view_data();
+    let before = app.history_dashboard_cache_stats();
+
+    app.weekly_goal.minutes = app.weekly_goal.minutes.saturating_add(30);
+
+    let _ = app.history_dashboard_view_data();
+    let after = app.history_dashboard_cache_stats();
+    assert_eq!(after.static_rebuilds, before.static_rebuilds + 1);
+    assert_eq!(after.comparison_rebuilds, before.comparison_rebuilds);
+}
+
+#[test]
 fn history_dashboard_shortcuts_toggle_reorder_and_persist() {
     let mut app = App::from_config(AppConfig {
         history_dashboard: HistoryDashboardConfig {

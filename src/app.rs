@@ -621,6 +621,11 @@ struct HistoryDashboardStaticSnapshotKey {
     stats_revision: u64,
     day_key: String,
     retention: StatsRetentionConfig,
+    recurring_schedule: RecurringScheduleConfig,
+    daily_goal: DailyGoalConfig,
+    weekly_goal: WeeklyGoalConfig,
+    monthly_goal: MonthlyGoalConfig,
+    goal_carry_over: GoalCarryOverConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

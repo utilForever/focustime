@@ -91,6 +91,11 @@ impl App {
             stats_revision: self.stats_revision,
             day_key: crate::stats::current_day_key(),
             retention: self.stats_retention,
+            recurring_schedule: self.recurring_schedule.clone(),
+            daily_goal: self.daily_goal,
+            weekly_goal: self.weekly_goal,
+            monthly_goal: self.monthly_goal,
+            goal_carry_over: self.goal_carry_over,
         }
     }
 
