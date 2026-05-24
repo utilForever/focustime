@@ -197,16 +197,10 @@ impl FocusStats {
                 .checked_sub_signed(chrono::Duration::days(i64::from(offset)))
                 .unwrap_or(day);
             let day_key = candidate.format("%Y-%m-%d").to_string();
-            if !self.daily.contains_key(&day_key) {
+            let Some(day_stats) = self.daily.get(&day_key).copied() else {
                 continue;
-            }
-
-            let day_stats = self.daily_for(&day_key);
-            let candidate_daily_goal = self
-                .daily
-                .get(&day_key)
-                .and_then(|entry| entry.goal)
-                .unwrap_or(daily_goal);
+            };
+            let candidate_daily_goal = day_stats.goal.unwrap_or(daily_goal);
             let candidate_weekly_goal = self
                 .weekly_goal_snapshot_for_day(candidate)
                 .unwrap_or(weekly_goal);
@@ -220,51 +214,26 @@ impl FocusStats {
                 candidate_monthly_goal,
             );
 
-            let mut observed_outcome = false;
-            let mut observed_miss = false;
-
-            if candidate_daily_goal.has_any_target() {
-                observed_outcome = true;
-                observed_miss |= !candidate_daily_goal.is_met_by(day_stats);
-            }
-
-            if candidate.weekday().num_days_from_monday() == 6
-                && candidate_weekly_goal.has_any_target()
-            {
-                observed_outcome = true;
-                let weekly_stats = self.weekly_for_day(candidate);
-                observed_miss |= !candidate_weekly_goal.is_met_by_totals(
-                    weekly_stats.focused_minutes(),
-                    weekly_stats.pomodoros_completed,
-                );
-            }
-
-            if candidate.day() == days_in_month(candidate.year(), candidate.month())
-                && candidate_monthly_goal.has_any_target()
-            {
-                observed_outcome = true;
-                let monthly_stats = self.monthly_for_day(candidate);
-                observed_miss |= !candidate_monthly_goal.is_met_by_totals(
-                    monthly_stats.focused_minutes(),
-                    monthly_stats.pomodoros_completed,
-                );
-            }
-
-            if !observed_outcome {
+            let Some(observed_miss) = observed_goal_miss_for_candidate(
+                self,
+                candidate,
+                day_stats,
+                candidate_daily_goal,
+                candidate_weekly_goal,
+                candidate_monthly_goal,
+            ) else {
                 continue;
-            }
+            };
 
             sample_count = sample_count.saturating_add(1);
-            if forecast.alert_active() {
-                alert_count = alert_count.saturating_add(1);
-                if observed_miss {
-                    true_positive_alerts = true_positive_alerts.saturating_add(1);
-                } else {
-                    false_positive_alerts = false_positive_alerts.saturating_add(1);
-                }
-            } else if observed_miss {
-                missed_warning_count = missed_warning_count.saturating_add(1);
-            }
+            classify_calibration_signal(
+                forecast.alert_active(),
+                observed_miss,
+                &mut alert_count,
+                &mut true_positive_alerts,
+                &mut false_positive_alerts,
+                &mut missed_warning_count,
+            );
         }
 
         let precision_pct = if alert_count == 0 {
@@ -804,6 +773,65 @@ impl FocusStats {
     ) -> StatsRetentionPruneResult {
         let mut cloned = self.clone();
         cloned.apply_retention_policy(retention, reference_day)
+    }
+}
+
+fn observed_goal_miss_for_candidate(
+    stats: &FocusStats,
+    candidate: chrono::NaiveDate,
+    day_stats: crate::stats::DailyStats,
+    daily_goal: DailyGoalSnapshot,
+    weekly_goal: DailyGoalSnapshot,
+    monthly_goal: DailyGoalSnapshot,
+) -> Option<bool> {
+    let mut observed_outcome = false;
+    let mut observed_miss = false;
+
+    if daily_goal.has_any_target() {
+        observed_outcome = true;
+        observed_miss |= !daily_goal.is_met_by(day_stats);
+    }
+
+    if candidate.weekday().num_days_from_monday() == 6 && weekly_goal.has_any_target() {
+        observed_outcome = true;
+        let weekly_stats = stats.weekly_for_day(candidate);
+        observed_miss |= !weekly_goal.is_met_by_totals(
+            weekly_stats.focused_minutes(),
+            weekly_stats.pomodoros_completed,
+        );
+    }
+
+    if candidate.day() == days_in_month(candidate.year(), candidate.month())
+        && monthly_goal.has_any_target()
+    {
+        observed_outcome = true;
+        let monthly_stats = stats.monthly_for_day(candidate);
+        observed_miss |= !monthly_goal.is_met_by_totals(
+            monthly_stats.focused_minutes(),
+            monthly_stats.pomodoros_completed,
+        );
+    }
+
+    observed_outcome.then_some(observed_miss)
+}
+
+fn classify_calibration_signal(
+    alert_active: bool,
+    observed_miss: bool,
+    alert_count: &mut u32,
+    true_positive_alerts: &mut u32,
+    false_positive_alerts: &mut u32,
+    missed_warning_count: &mut u32,
+) {
+    if alert_active {
+        *alert_count = alert_count.saturating_add(1);
+        if observed_miss {
+            *true_positive_alerts = true_positive_alerts.saturating_add(1);
+        } else {
+            *false_positive_alerts = false_positive_alerts.saturating_add(1);
+        }
+    } else if observed_miss {
+        *missed_warning_count = missed_warning_count.saturating_add(1);
     }
 }
 
