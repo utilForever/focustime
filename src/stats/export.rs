@@ -1,16 +1,34 @@
+use chrono::{Datelike, Duration, NaiveDate};
+
+use crate::app::weekly_daily_goal_allocation_for_context;
+use crate::config::HistoryKpiCardId;
 use crate::stats::{
     BreakGlassOverrideExportRow, CSV_EXPORT_FILE_NAME, ComparisonDimension, CsvExportRow,
-    DailyExportRow, EXPORT_SCHEMA_VERSION, ExportedStatsFiles, FocusScoreExportRow, FocusStats,
-    JSON_EXPORT_FILE_NAME, Path, ProductivityComparisonExportRow, ProductivityComparisonFilter,
-    ProfileEffectivenessExportRow, SessionExportRow, SessionInterruptionExportRow, StatsExport,
-    TaskTotalsExportRow, TaskTrendExportRow, WeeklyConsistencyExportRow, WeeklyExportRow,
-    format_week_label, fs, io, write_atomic_bytes,
+    DailyExportRow, DailyGoalSnapshot, EXPORT_SCHEMA_VERSION, ExportedStatsFiles,
+    FocusRiskForecast, FocusScoreExportRow, FocusStats, HistoryKpiComparisonFilters,
+    HistoryKpiExport, HistoryKpiExportContext, HistoryKpiFocusRisk, HistoryKpiFocusScore,
+    HistoryKpiGoalPeriodProgress, HistoryKpiGoalStreak, HistoryKpiLastInterruption,
+    HistoryKpiRetention, HistoryKpiSessionSummary, HistoryKpiStatsGrowth,
+    HistoryKpiWeeklyAllocation, HistoryKpiWeeklyAllocationDay, JSON_EXPORT_FILE_NAME, Path,
+    ProductivityComparisonExportRow, ProductivityComparisonFilter, ProfileEffectivenessExportRow,
+    SessionExportRow, SessionInterruptionExportRow, StatsExport, TaskTotalsExportRow,
+    TaskTrendExportRow, WeeklyConsistencyExportRow, WeeklyExportRow, format_week_label, fs, io,
+    write_atomic_bytes,
 };
 
 impl FocusStats {
+    #[allow(dead_code)]
     pub fn export_to_dir(&self, dir: &Path) -> io::Result<ExportedStatsFiles> {
+        self.export_to_dir_with_context(dir, &HistoryKpiExportContext::default())
+    }
+
+    pub fn export_to_dir_with_context(
+        &self,
+        dir: &Path,
+        context: &HistoryKpiExportContext,
+    ) -> io::Result<ExportedStatsFiles> {
         fs::create_dir_all(dir)?;
-        let export = self.export_data();
+        let export = self.export_data_with_context(context);
         let json_path = dir.join(JSON_EXPORT_FILE_NAME);
         let csv_path = dir.join(CSV_EXPORT_FILE_NAME);
 
@@ -27,7 +45,15 @@ impl FocusStats {
         })
     }
 
+    #[allow(dead_code)]
     pub(super) fn export_data(&self) -> StatsExport {
+        self.export_data_with_context(&HistoryKpiExportContext::default())
+    }
+
+    pub(super) fn export_data_with_context(
+        &self,
+        context: &HistoryKpiExportContext,
+    ) -> StatsExport {
         StatsExport {
             schema_version: EXPORT_SCHEMA_VERSION,
             daily: self.export_daily_rows(),
@@ -41,6 +67,162 @@ impl FocusStats {
             focus_scores: self.export_focus_score_rows(),
             profile_effectiveness: self.export_profile_effectiveness_rows(),
             productivity_comparisons: self.export_productivity_comparison_rows(),
+            history_kpis: self.export_history_kpis(context),
+        }
+    }
+
+    fn export_history_kpis(&self, context: &HistoryKpiExportContext) -> HistoryKpiExport {
+        let day = context.reference_day;
+        let day_key = day.format("%Y-%m-%d").to_string();
+        let today_stats = self.daily_for(&day_key);
+        let session_stats = self.session();
+        let weekly_stats = self.weekly_for_day(day);
+        let monthly_stats = self.monthly_for_day(day);
+
+        let daily_goal = self.effective_daily_goal_snapshot_for_day(day, context);
+        let weekly_goal = self.effective_weekly_goal_snapshot_for_day(day, context);
+        let monthly_goal = self.effective_monthly_goal_snapshot_for_day(day, context);
+
+        let daily_progress = goal_period_progress(
+            today_stats.focused_minutes(),
+            today_stats.pomodoros_completed,
+            daily_goal,
+        );
+        let weekly_progress = goal_period_progress(
+            weekly_stats.focused_minutes(),
+            weekly_stats.pomodoros_completed,
+            weekly_goal,
+        );
+        let monthly_progress = goal_period_progress(
+            monthly_stats.focused_minutes(),
+            monthly_stats.pomodoros_completed,
+            monthly_goal,
+        );
+
+        let goal_streak =
+            self.goal_streak_with_day_goal(day, daily_goal, today_stats, |target_day| {
+                self.effective_daily_goal_snapshot_for_day(target_day, context)
+            });
+        let focus_score = self.latest_weekly_focus_score();
+        let focus_risk =
+            self.focus_risk_forecast_for_day(day, daily_goal, weekly_goal, monthly_goal);
+        let (highest_signal_scope, highest_signal_label, highest_signal_value) =
+            focus_risk_highest_signal(&focus_risk);
+
+        let weekly_allocation = weekly_daily_goal_allocation_for_context(
+            day,
+            weekly_goal,
+            weekly_stats,
+            &context.recurring_schedule,
+        );
+        let today_target = weekly_allocation.today_target();
+        let latest_interruption = self.latest_session_interruption();
+        let growth_summary = self.growth_summary();
+        let retention_preview = self.retention_preview(context.stats_retention, day);
+
+        HistoryKpiExport {
+            session_summary: HistoryKpiSessionSummary {
+                session_pomodoros_completed: session_stats.pomodoros_completed,
+                session_focused_minutes: session_stats.focused_minutes(),
+                today_pomodoros_completed: today_stats.pomodoros_completed,
+                today_focused_minutes: today_stats.focused_minutes(),
+            },
+            focus_score: HistoryKpiFocusScore {
+                week_label: focus_score.as_ref().map(|score| score.week_label.clone()),
+                active_days: focus_score.as_ref().map(|score| score.active_days),
+                consistency_score_pct: focus_score
+                    .as_ref()
+                    .map(|score| score.consistency_score_pct),
+                completion_score_pct: focus_score
+                    .as_ref()
+                    .and_then(|score| score.completion_score_pct),
+                focus_score_pct: focus_score.as_ref().and_then(|score| score.focus_score_pct),
+            },
+            goal_streak: HistoryKpiGoalStreak {
+                daily: daily_progress,
+                weekly: weekly_progress,
+                monthly: monthly_progress,
+                current_days: goal_streak.current,
+                best_days: goal_streak.best,
+            },
+            focus_risk: HistoryKpiFocusRisk {
+                alert_active: focus_risk.alert_active(),
+                highest_risk_level: focus_risk.highest_risk_level(),
+                highest_signal_scope,
+                highest_signal_label,
+                highest_signal_value,
+                daily_risk_level: focus_risk.daily_goal.risk_level,
+                daily_risk_score_pct: focus_risk.daily_goal.risk_score_pct,
+                weekly_risk_level: focus_risk.weekly_goal.risk_level,
+                weekly_risk_score_pct: focus_risk.weekly_goal.risk_score_pct,
+                monthly_risk_level: focus_risk.monthly_goal.risk_level,
+                monthly_risk_score_pct: focus_risk.monthly_goal.risk_score_pct,
+                streak_risk_level: focus_risk.streak.risk_level,
+                streak_risk_score_pct: focus_risk.streak.risk_score_pct,
+            },
+            weekly_allocation: HistoryKpiWeeklyAllocation {
+                week_target_minutes: weekly_allocation.week_target.minutes,
+                week_target_pomodoros: weekly_allocation.week_target.pomodoros,
+                completed_minutes: weekly_allocation.completed_minutes,
+                completed_pomodoros: weekly_allocation.completed_pomodoros,
+                remaining_minutes: weekly_allocation.remaining_minutes,
+                remaining_pomodoros: weekly_allocation.remaining_pomodoros,
+                remaining_days_in_week: weekly_allocation.remaining_days_in_week,
+                allocatable_days: weekly_allocation.allocatable_days,
+                uses_schedule_weights: weekly_allocation.uses_schedule_weights,
+                today_target_minutes: today_target.minutes,
+                today_target_pomodoros: today_target.pomodoros,
+                daily_targets: weekly_allocation
+                    .daily_targets
+                    .into_iter()
+                    .map(|entry| HistoryKpiWeeklyAllocationDay {
+                        day: entry.day.format("%Y-%m-%d").to_string(),
+                        minutes_target: entry.minutes_target,
+                        pomodoros_target: entry.pomodoros_target,
+                        allocatable: entry.allocatable,
+                        weight_minutes: entry.weight_minutes,
+                    })
+                    .collect(),
+            },
+            last_interruption: HistoryKpiLastInterruption {
+                timestamp_epoch_secs: latest_interruption
+                    .as_ref()
+                    .map(|event| event.timestamp_epoch_secs),
+                reason: latest_interruption.as_ref().map(|event| event.reason),
+                task_label: latest_interruption
+                    .as_ref()
+                    .and_then(|event| event.task_label.clone()),
+                focus_intention: latest_interruption
+                    .as_ref()
+                    .and_then(|event| event.focus_intention.clone()),
+                task_note: latest_interruption
+                    .as_ref()
+                    .and_then(|event| event.task_note.clone()),
+                remaining_secs: latest_interruption
+                    .as_ref()
+                    .map(|event| event.remaining_secs),
+                profile_name: latest_interruption
+                    .as_ref()
+                    .and_then(|event| event.profile.map(|profile| profile.label().to_string())),
+            },
+            stats_growth: HistoryKpiStatsGrowth {
+                total_record_count: growth_summary.total_record_count,
+                estimated_bytes: growth_summary.estimated_bytes,
+                sections: growth_summary.sections.clone(),
+                high_volume_sections: growth_summary.high_volume_sections.clone(),
+            },
+            retention: HistoryKpiRetention {
+                preset_id: context.stats_retention.preset.id().to_string(),
+                preview: retention_preview,
+                pending_prune: retention_preview.any_removed(),
+            },
+            comparison_filters: HistoryKpiComparisonFilters {
+                dimension: context.comparison_dimension,
+                task_filter: context.comparison_task_filter.clone(),
+                profile_filter: context.comparison_profile_filter,
+                time_of_day_filter: context.comparison_time_of_day_filter,
+                summary: comparison_filter_summary(context),
+            },
         }
     }
 
@@ -244,13 +426,80 @@ impl FocusStats {
         })
         .collect()
     }
+
+    fn effective_daily_goal_snapshot_for_day(
+        &self,
+        day: NaiveDate,
+        context: &HistoryKpiExportContext,
+    ) -> DailyGoalSnapshot {
+        let day_key = day.format("%Y-%m-%d").to_string();
+        let base = self
+            .daily_entry(&day_key)
+            .and_then(|stats| stats.goal)
+            .unwrap_or(context.daily_goal);
+        let previous = day.pred_opt().and_then(|previous_day| {
+            let previous_day_key = previous_day.format("%Y-%m-%d").to_string();
+            self.daily_entry(&previous_day_key).and_then(|stats| {
+                stats
+                    .goal
+                    .map(|goal| (goal, stats.focused_minutes(), stats.pomodoros_completed))
+            })
+        });
+        crate::stats::carry_over_goal_target(base, context.carry_over_daily, previous)
+    }
+
+    fn effective_weekly_goal_snapshot_for_day(
+        &self,
+        day: NaiveDate,
+        context: &HistoryKpiExportContext,
+    ) -> DailyGoalSnapshot {
+        let base = self
+            .weekly_goal_snapshot_for_day(day)
+            .unwrap_or(context.weekly_goal);
+        let previous = day
+            .checked_sub_signed(Duration::weeks(1))
+            .and_then(|previous_week_day| {
+                self.weekly_goal_snapshot_for_day(previous_week_day)
+                    .map(|previous_target| {
+                        let week = self.weekly_for_day(previous_week_day);
+                        (
+                            previous_target,
+                            week.focused_minutes(),
+                            week.pomodoros_completed,
+                        )
+                    })
+            });
+        crate::stats::carry_over_goal_target(base, context.carry_over_weekly, previous)
+    }
+
+    fn effective_monthly_goal_snapshot_for_day(
+        &self,
+        day: NaiveDate,
+        context: &HistoryKpiExportContext,
+    ) -> DailyGoalSnapshot {
+        let base = self
+            .monthly_goal_snapshot_for_day(day)
+            .unwrap_or(context.monthly_goal);
+        let previous = previous_month_reference_day(day).and_then(|previous_month_day| {
+            self.monthly_goal_snapshot_for_day(previous_month_day)
+                .map(|previous_target| {
+                    let month = self.monthly_for_day(previous_month_day);
+                    (
+                        previous_target,
+                        month.focused_minutes(),
+                        month.pomodoros_completed,
+                    )
+                })
+        });
+        crate::stats::carry_over_goal_target(base, context.carry_over_monthly, previous)
+    }
 }
 
 impl StatsExport {
     fn to_csv_bytes(&self) -> io::Result<Vec<u8>> {
         let mut writer = csv::Writer::from_writer(Vec::new());
 
-        for row in self.csv_rows() {
+        for row in self.csv_rows()? {
             writer
                 .serialize(row)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -304,10 +553,12 @@ impl StatsExport {
             comparison_dimension: None,
             comparison_label: None,
             time_of_day_bucket: None,
+            kpi_card_id: None,
+            kpi_payload_json: None,
         }
     }
 
-    fn csv_rows(&self) -> Vec<CsvExportRow> {
+    fn csv_rows(&self) -> io::Result<Vec<CsvExportRow>> {
         let mut rows = Vec::with_capacity(
             self.daily.len()
                 + self.weekly.len()
@@ -319,7 +570,8 @@ impl StatsExport {
                 + self.weekly_consistency.len()
                 + self.focus_scores.len()
                 + self.profile_effectiveness.len()
-                + self.productivity_comparisons.len(),
+                + self.productivity_comparisons.len()
+                + 9,
         );
 
         for daily in &self.daily {
@@ -475,6 +727,134 @@ impl StatsExport {
             });
         }
 
-        rows
+        rows.extend(self.history_kpi_csv_rows()?);
+        Ok(rows)
     }
+
+    fn history_kpi_csv_rows(&self) -> io::Result<Vec<CsvExportRow>> {
+        fn payload_json(value: &impl serde::Serialize) -> io::Result<String> {
+            serde_json::to_string(value)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+        }
+        Ok(vec![
+            CsvExportRow {
+                kpi_card_id: Some(HistoryKpiCardId::SessionSummary.id().to_string()),
+                kpi_payload_json: Some(payload_json(&self.history_kpis.session_summary)?),
+                ..Self::csv_row_defaults("history_kpi")
+            },
+            CsvExportRow {
+                kpi_card_id: Some(HistoryKpiCardId::FocusScore.id().to_string()),
+                kpi_payload_json: Some(payload_json(&self.history_kpis.focus_score)?),
+                ..Self::csv_row_defaults("history_kpi")
+            },
+            CsvExportRow {
+                kpi_card_id: Some(HistoryKpiCardId::GoalStreak.id().to_string()),
+                kpi_payload_json: Some(payload_json(&self.history_kpis.goal_streak)?),
+                ..Self::csv_row_defaults("history_kpi")
+            },
+            CsvExportRow {
+                kpi_card_id: Some(HistoryKpiCardId::FocusRisk.id().to_string()),
+                kpi_payload_json: Some(payload_json(&self.history_kpis.focus_risk)?),
+                ..Self::csv_row_defaults("history_kpi")
+            },
+            CsvExportRow {
+                kpi_card_id: Some(HistoryKpiCardId::WeeklyAllocation.id().to_string()),
+                kpi_payload_json: Some(payload_json(&self.history_kpis.weekly_allocation)?),
+                ..Self::csv_row_defaults("history_kpi")
+            },
+            CsvExportRow {
+                kpi_card_id: Some(HistoryKpiCardId::LastInterruption.id().to_string()),
+                kpi_payload_json: Some(payload_json(&self.history_kpis.last_interruption)?),
+                ..Self::csv_row_defaults("history_kpi")
+            },
+            CsvExportRow {
+                kpi_card_id: Some(HistoryKpiCardId::StatsGrowth.id().to_string()),
+                kpi_payload_json: Some(payload_json(&self.history_kpis.stats_growth)?),
+                ..Self::csv_row_defaults("history_kpi")
+            },
+            CsvExportRow {
+                kpi_card_id: Some(HistoryKpiCardId::Retention.id().to_string()),
+                kpi_payload_json: Some(payload_json(&self.history_kpis.retention)?),
+                ..Self::csv_row_defaults("history_kpi")
+            },
+            CsvExportRow {
+                kpi_card_id: Some(HistoryKpiCardId::ComparisonFilters.id().to_string()),
+                kpi_payload_json: Some(payload_json(&self.history_kpis.comparison_filters)?),
+                ..Self::csv_row_defaults("history_kpi")
+            },
+        ])
+    }
+}
+
+fn goal_period_progress(
+    focused_minutes_completed: u64,
+    pomodoros_completed: u32,
+    target: DailyGoalSnapshot,
+) -> HistoryKpiGoalPeriodProgress {
+    let target_configured = target.has_any_target();
+    let met = target.is_met_by_totals(focused_minutes_completed, pomodoros_completed);
+    HistoryKpiGoalPeriodProgress {
+        focused_minutes_completed,
+        focused_minutes_target: target.minutes,
+        pomodoros_completed,
+        pomodoros_target: target.pomodoros,
+        target_configured,
+        met,
+    }
+}
+
+fn previous_month_reference_day(day: NaiveDate) -> Option<NaiveDate> {
+    let first_of_month = day.with_day(1)?;
+    let previous_month_last_day = first_of_month.checked_sub_signed(Duration::days(1))?;
+    let reference_day = day.day().min(previous_month_last_day.day());
+    previous_month_last_day.with_day(reference_day)
+}
+
+fn comparison_filter_summary(context: &HistoryKpiExportContext) -> String {
+    let task = context
+        .comparison_task_filter
+        .as_deref()
+        .unwrap_or("all")
+        .to_string();
+    let profile = context
+        .comparison_profile_filter
+        .map(|value| value.label().to_string())
+        .unwrap_or_else(|| "All".to_string());
+    let time_of_day = context
+        .comparison_time_of_day_filter
+        .map(|value| value.label().to_string())
+        .unwrap_or_else(|| "All".to_string());
+    format!("Slices: task {task} · profile {profile} · time {time_of_day}")
+}
+
+fn focus_risk_highest_signal(
+    forecast: &FocusRiskForecast,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let mut highest_scope = "daily";
+    let mut highest_score = forecast.daily_goal.risk_score_pct;
+    let mut highest_signal = forecast.daily_goal.signals.first();
+    if forecast.weekly_goal.risk_score_pct > highest_score {
+        highest_scope = "weekly";
+        highest_score = forecast.weekly_goal.risk_score_pct;
+        highest_signal = forecast.weekly_goal.signals.first();
+    }
+    if forecast.monthly_goal.risk_score_pct > highest_score {
+        highest_scope = "monthly";
+        highest_score = forecast.monthly_goal.risk_score_pct;
+        highest_signal = forecast.monthly_goal.signals.first();
+    }
+    if forecast.streak.risk_score_pct > highest_score {
+        highest_scope = "streak";
+        highest_signal = forecast.streak.signals.first();
+    }
+
+    if !forecast.alert_active() {
+        return (None, None, None);
+    }
+
+    (
+        Some(highest_scope.to_string()),
+        highest_signal.map(|signal| signal.label.clone()),
+        highest_signal.map(|signal| signal.value.clone()),
+    )
 }

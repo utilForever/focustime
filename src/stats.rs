@@ -7,11 +7,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use chrono::Datelike;
+use chrono::{Datelike, NaiveDate};
 use serde::{Deserialize, Serialize};
 
-use crate::config::ProfileId;
-use crate::config::StatsRetentionConfig;
+use crate::config::{ProfileId, RecurringScheduleConfig, StatsRetentionConfig};
 use crate::task_labels::{canonical_task_label, normalize_task_label, task_label_index};
 
 mod helpers;
@@ -35,7 +34,7 @@ mod trends;
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
 const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
-const EXPORT_SCHEMA_VERSION: u32 = 6;
+const EXPORT_SCHEMA_VERSION: u32 = 7;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -358,6 +357,43 @@ impl DailyStats {
 pub struct ExportedStatsFiles {
     pub json_path: PathBuf,
     pub csv_path: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryKpiExportContext {
+    pub reference_day: NaiveDate,
+    pub daily_goal: DailyGoalSnapshot,
+    pub weekly_goal: DailyGoalSnapshot,
+    pub monthly_goal: DailyGoalSnapshot,
+    pub carry_over_daily: bool,
+    pub carry_over_weekly: bool,
+    pub carry_over_monthly: bool,
+    pub recurring_schedule: RecurringScheduleConfig,
+    pub stats_retention: StatsRetentionConfig,
+    pub comparison_dimension: ComparisonDimension,
+    pub comparison_task_filter: Option<String>,
+    pub comparison_profile_filter: Option<ProfileBucket>,
+    pub comparison_time_of_day_filter: Option<TimeOfDayBucket>,
+}
+
+impl Default for HistoryKpiExportContext {
+    fn default() -> Self {
+        Self {
+            reference_day: chrono::Local::now().date_naive(),
+            daily_goal: DailyGoalSnapshot::default(),
+            weekly_goal: DailyGoalSnapshot::default(),
+            monthly_goal: DailyGoalSnapshot::default(),
+            carry_over_daily: false,
+            carry_over_weekly: false,
+            carry_over_monthly: false,
+            recurring_schedule: RecurringScheduleConfig::default(),
+            stats_retention: StatsRetentionConfig::default(),
+            comparison_dimension: ComparisonDimension::TaskLabel,
+            comparison_task_filter: None,
+            comparison_profile_filter: None,
+            comparison_time_of_day_filter: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -725,6 +761,7 @@ struct StatsExport {
     focus_scores: Vec<FocusScoreExportRow>,
     profile_effectiveness: Vec<ProfileEffectivenessExportRow>,
     productivity_comparisons: Vec<ProductivityComparisonExportRow>,
+    history_kpis: HistoryKpiExport,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -849,6 +886,132 @@ struct ProductivityComparisonExportRow {
     focus_share_pct: u8,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiExport {
+    session_summary: HistoryKpiSessionSummary,
+    focus_score: HistoryKpiFocusScore,
+    goal_streak: HistoryKpiGoalStreak,
+    focus_risk: HistoryKpiFocusRisk,
+    weekly_allocation: HistoryKpiWeeklyAllocation,
+    last_interruption: HistoryKpiLastInterruption,
+    stats_growth: HistoryKpiStatsGrowth,
+    retention: HistoryKpiRetention,
+    comparison_filters: HistoryKpiComparisonFilters,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiSessionSummary {
+    session_pomodoros_completed: u32,
+    session_focused_minutes: u64,
+    today_pomodoros_completed: u32,
+    today_focused_minutes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiFocusScore {
+    week_label: Option<String>,
+    active_days: Option<u8>,
+    consistency_score_pct: Option<u8>,
+    completion_score_pct: Option<u8>,
+    focus_score_pct: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiGoalPeriodProgress {
+    focused_minutes_completed: u64,
+    focused_minutes_target: u64,
+    pomodoros_completed: u32,
+    pomodoros_target: u32,
+    target_configured: bool,
+    met: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiGoalStreak {
+    daily: HistoryKpiGoalPeriodProgress,
+    weekly: HistoryKpiGoalPeriodProgress,
+    monthly: HistoryKpiGoalPeriodProgress,
+    current_days: u32,
+    best_days: u32,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiFocusRisk {
+    alert_active: bool,
+    highest_risk_level: FocusRiskLevel,
+    highest_signal_scope: Option<String>,
+    highest_signal_label: Option<String>,
+    highest_signal_value: Option<String>,
+    daily_risk_level: FocusRiskLevel,
+    daily_risk_score_pct: u8,
+    weekly_risk_level: FocusRiskLevel,
+    weekly_risk_score_pct: u8,
+    monthly_risk_level: FocusRiskLevel,
+    monthly_risk_score_pct: u8,
+    streak_risk_level: FocusRiskLevel,
+    streak_risk_score_pct: u8,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiWeeklyAllocation {
+    week_target_minutes: u64,
+    week_target_pomodoros: u32,
+    completed_minutes: u64,
+    completed_pomodoros: u32,
+    remaining_minutes: u64,
+    remaining_pomodoros: u32,
+    remaining_days_in_week: usize,
+    allocatable_days: usize,
+    uses_schedule_weights: bool,
+    today_target_minutes: u64,
+    today_target_pomodoros: u32,
+    daily_targets: Vec<HistoryKpiWeeklyAllocationDay>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiWeeklyAllocationDay {
+    day: String,
+    minutes_target: u64,
+    pomodoros_target: u32,
+    allocatable: bool,
+    weight_minutes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiLastInterruption {
+    timestamp_epoch_secs: Option<u64>,
+    reason: Option<SessionInterruptionReason>,
+    task_label: Option<String>,
+    focus_intention: Option<String>,
+    task_note: Option<String>,
+    remaining_secs: Option<u64>,
+    profile_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiStatsGrowth {
+    total_record_count: usize,
+    estimated_bytes: u64,
+    sections: Vec<StatsGrowthSection>,
+    high_volume_sections: Vec<StatsGrowthSection>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiRetention {
+    preset_id: String,
+    preview: StatsRetentionPruneResult,
+    pending_prune: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct HistoryKpiComparisonFilters {
+    dimension: ComparisonDimension,
+    task_filter: Option<String>,
+    profile_filter: Option<ProfileBucket>,
+    time_of_day_filter: Option<TimeOfDayBucket>,
+    summary: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct CsvExportRow {
     schema_version: u32,
@@ -891,6 +1054,8 @@ struct CsvExportRow {
     comparison_dimension: Option<String>,
     comparison_label: Option<String>,
     time_of_day_bucket: Option<String>,
+    kpi_card_id: Option<String>,
+    kpi_payload_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
