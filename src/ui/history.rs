@@ -1,3 +1,4 @@
+use crate::app::HistoryDashboardViewData;
 use crate::config::HistoryKpiCardId;
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, HistoryFeedbackLevel,
@@ -29,6 +30,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
             Constraint::Length(3),                // hints
         ])
         .split(outer);
+    let history_data = app.history_dashboard_view_data();
 
     let overview_lines: Vec<Line> = dashboard_cards
         .into_iter()
@@ -47,7 +49,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
                     "{}{} {}",
                     if selected { ">" } else { " " },
                     if pinned { "*" } else { "-" },
-                    history_kpi_card_text(app, card)
+                    history_kpi_card_text(&history_data, card)
                 ),
                 style,
             )
@@ -81,9 +83,9 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         ])
         .split(content_layout[1]);
 
-    let comparison_items: Vec<ListItem> = app
-        .history_comparison_rows(6)
-        .into_iter()
+    let comparison_items: Vec<ListItem> = history_data
+        .comparison_rows
+        .iter()
         .map(|entry| {
             ListItem::new(format!(
                 "  {} · {}m · 🍅{} · {}%",
@@ -107,15 +109,15 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         "  No comparison rows for active slices.",
     );
 
-    let task_trend_items: Vec<ListItem> = app
-        .recent_task_trends(6)
-        .into_iter()
+    let task_trend_items: Vec<ListItem> = history_data
+        .task_trends
+        .iter()
         .map(|trend| {
             ListItem::new(format!(
                 "  {} · {}m ({})",
                 trend.task_label,
                 trend.recent_focused_minutes(),
-                format_task_trend_delta(&trend)
+                format_task_trend_delta(trend)
             ))
         })
         .collect();
@@ -128,9 +130,9 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         "  Not enough task history for trend yet.",
     );
 
-    let profile_items: Vec<ListItem> = app
-        .profile_effectiveness()
-        .into_iter()
+    let profile_items: Vec<ListItem> = history_data
+        .profile_effectiveness
+        .iter()
         .map(|entry| {
             ListItem::new(format!(
                 "  {:<9} {:>3}% {:>3}m/session",
@@ -149,11 +151,15 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         "  No profile effectiveness yet.",
     );
 
-    let override_items: Vec<ListItem> = app
-        .recent_break_glass_overrides(6)
-        .into_iter()
+    let override_items: Vec<ListItem> = history_data
+        .break_glass_overrides
+        .iter()
         .map(|event| {
-            let task_label = event.task_label.unwrap_or_else(|| "Unlabeled".to_string());
+            let task_label = event
+                .task_label
+                .as_deref()
+                .unwrap_or("Unlabeled")
+                .to_string();
             ListItem::new(format!(
                 "  {} {} · {} · {}",
                 event.date,
@@ -172,9 +178,9 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         "  No break-glass overrides yet.",
     );
 
-    let monthly_items: Vec<ListItem> = app
-        .recent_monthly_stats(4)
-        .into_iter()
+    let monthly_items: Vec<ListItem> = history_data
+        .monthly_stats
+        .iter()
         .map(|stats| {
             ListItem::new(format!(
                 "  {}   🍅{}   {}m",
@@ -193,7 +199,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         "  No monthly totals yet.",
     );
 
-    render_monthly_heatmap_panel(frame, right_sections[2], app);
+    render_monthly_heatmap_panel(frame, right_sections[2], app, &history_data.monthly_heatmap);
 
     if let Some(feedback) = app.history_feedback.as_ref() {
         let (prefix, color) = match feedback.level {
@@ -254,30 +260,33 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
     );
 }
 
-fn history_kpi_card_text(app: &App, card: HistoryKpiCardId) -> String {
+fn history_kpi_card_text(
+    history_data: &HistoryDashboardViewData,
+    card: HistoryKpiCardId,
+) -> String {
     match card {
-        HistoryKpiCardId::SessionSummary => {
-            let session_stats = app.session_stats();
-            let today_stats = app.today_stats();
-            format!(
-                "Session {} pomodoros · {}m | Today {} pomodoros · {}m",
-                session_stats.pomodoros_completed,
-                session_stats.focused_minutes(),
-                today_stats.pomodoros_completed,
-                today_stats.focused_minutes()
-            )
-        }
+        HistoryKpiCardId::SessionSummary => format!(
+            "Session {} pomodoros · {}m | Today {} pomodoros · {}m",
+            history_data.session_stats.pomodoros_completed,
+            history_data.session_stats.focused_minutes(),
+            history_data.today_stats.pomodoros_completed,
+            history_data.today_stats.focused_minutes()
+        ),
         HistoryKpiCardId::FocusScore => {
-            readable_focus_score_text(&format_history_focus_score_line(app))
+            readable_focus_score_text(&format_history_focus_score_line_from_data(history_data))
         }
         HistoryKpiCardId::GoalStreak => {
-            readable_goal_streak_text(&format_history_goal_streak_line(app))
+            readable_goal_streak_text(&format_history_goal_streak_line_from_data(history_data))
         }
-        HistoryKpiCardId::FocusRisk => format_history_focus_risk_line(app),
-        HistoryKpiCardId::WeeklyAllocation => format_history_weekly_allocation_line(app),
-        HistoryKpiCardId::LastInterruption => format_history_interruption_line(app),
+        HistoryKpiCardId::FocusRisk => format_history_focus_risk_line_from_data(history_data),
+        HistoryKpiCardId::WeeklyAllocation => {
+            format_history_weekly_allocation_line_from_data(history_data)
+        }
+        HistoryKpiCardId::LastInterruption => {
+            format_history_interruption_line_from_data(history_data)
+        }
         HistoryKpiCardId::StatsGrowth => {
-            let growth_summary = app.stats_growth_summary();
+            let growth_summary = &history_data.stats_growth_summary;
             format!(
                 "Stats growth: {} records · ~{} · {}",
                 growth_summary.total_record_count,
@@ -286,8 +295,8 @@ fn history_kpi_card_text(app: &App, card: HistoryKpiCardId) -> String {
             )
         }
         HistoryKpiCardId::Retention => {
-            let retention_preview = app.stats_retention_preview();
-            let retention = app.stats_retention_config();
+            let retention_preview = history_data.stats_retention_preview;
+            let retention = history_data.stats_retention_config;
             if retention_preview.any_removed() {
                 format!(
                     "Retention: {} · prunes {} old record(s) on next save",
@@ -298,7 +307,7 @@ fn history_kpi_card_text(app: &App, card: HistoryKpiCardId) -> String {
                 format!("Retention: {} · no pending prune", retention.preset.id())
             }
         }
-        HistoryKpiCardId::ComparisonFilters => app.history_comparison_filter_summary(),
+        HistoryKpiCardId::ComparisonFilters => history_data.comparison_filter_summary.clone(),
         HistoryKpiCardId::Unknown => "Unknown KPI card".to_string(),
     }
 }
@@ -347,8 +356,12 @@ fn render_history_panel(
     }
 }
 
-fn render_monthly_heatmap_panel(frame: &mut Frame, area: Rect, app: &App) {
-    let heatmap = app.latest_monthly_heatmap();
+fn render_monthly_heatmap_panel(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    heatmap: &crate::stats::MonthlyHeatmap,
+) {
     let title = format!(
         " Heatmap {} ",
         format_month_label(heatmap.year, heatmap.month)
@@ -363,7 +376,7 @@ fn render_monthly_heatmap_panel(frame: &mut Frame, area: Rect, app: &App) {
     for _ in 0..weekday {
         week_spans.push(Span::raw("   "));
     }
-    for day in heatmap.days {
+    for day in heatmap.days.iter().copied() {
         let (symbol, color) =
             heatmap_cell_symbol(app, day.focused_minutes(), heatmap.max_focused_minutes);
         week_spans.push(Span::styled(
@@ -397,11 +410,17 @@ fn render_monthly_heatmap_panel(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(widget, area);
 }
 
+#[allow(dead_code)]
 pub(super) fn format_history_goal_streak_line(app: &App) -> String {
-    let daily_goal_progress = app.today_goal_progress();
-    let weekly_goal_progress = app.current_week_goal_progress();
-    let monthly_goal_progress = app.current_month_goal_progress();
-    let streak = app.goal_streak();
+    let history_data = app.history_dashboard_view_data();
+    format_history_goal_streak_line_from_data(&history_data)
+}
+
+fn format_history_goal_streak_line_from_data(history_data: &HistoryDashboardViewData) -> String {
+    let daily_goal_progress = history_data.daily_goal_progress;
+    let weekly_goal_progress = history_data.weekly_goal_progress;
+    let monthly_goal_progress = history_data.monthly_goal_progress;
+    let streak = history_data.goal_streak;
     if daily_goal_progress.has_any_target()
         || weekly_goal_progress.has_any_target()
         || monthly_goal_progress.has_any_target()
@@ -419,8 +438,14 @@ pub(super) fn format_history_goal_streak_line(app: &App) -> String {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn format_history_focus_score_line(app: &App) -> String {
-    match app.latest_weekly_focus_score() {
+    let history_data = app.history_dashboard_view_data();
+    format_history_focus_score_line_from_data(&history_data)
+}
+
+fn format_history_focus_score_line_from_data(history_data: &HistoryDashboardViewData) -> String {
+    match history_data.latest_weekly_focus_score.as_ref() {
         Some(score) => match (score.focus_score_pct, score.completion_score_pct) {
             (Some(focus_score), Some(completion_score)) => format!(
                 "Focus score: {focus_score}% (consistency {}% · completion {completion_score}%)",
@@ -435,8 +460,14 @@ pub(super) fn format_history_focus_score_line(app: &App) -> String {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn format_history_focus_risk_line(app: &App) -> String {
-    let forecast = app.focus_risk_forecast();
+    let history_data = app.history_dashboard_view_data();
+    format_history_focus_risk_line_from_data(&history_data)
+}
+
+fn format_history_focus_risk_line_from_data(history_data: &HistoryDashboardViewData) -> String {
+    let forecast = &history_data.focus_risk_forecast;
     let alert_active = forecast.alert_active();
     let daily_label = forecast.daily_goal.period.short_label();
     let weekly_label = forecast.weekly_goal.period.short_label();
@@ -484,8 +515,16 @@ pub(super) fn format_history_focus_risk_line(app: &App) -> String {
     )
 }
 
+#[allow(dead_code)]
 pub(super) fn format_history_weekly_allocation_line(app: &App) -> String {
-    let allocation = app.weekly_daily_goal_allocation();
+    let history_data = app.history_dashboard_view_data();
+    format_history_weekly_allocation_line_from_data(&history_data)
+}
+
+fn format_history_weekly_allocation_line_from_data(
+    history_data: &HistoryDashboardViewData,
+) -> String {
+    let allocation = &history_data.weekly_daily_goal_allocation;
     if !allocation.has_any_target() {
         return "Weekly allocation: off".to_string();
     }
@@ -508,8 +547,14 @@ pub(super) fn format_history_weekly_allocation_line(app: &App) -> String {
     )
 }
 
+#[allow(dead_code)]
 pub(super) fn format_history_interruption_line(app: &App) -> String {
-    match app.latest_session_interruption() {
+    let history_data = app.history_dashboard_view_data();
+    format_history_interruption_line_from_data(&history_data)
+}
+
+fn format_history_interruption_line_from_data(history_data: &HistoryDashboardViewData) -> String {
+    match history_data.latest_session_interruption.clone() {
         Some(event) => format!(
             "Last interruption: {} · {} remaining · {}",
             event.reason.label(),

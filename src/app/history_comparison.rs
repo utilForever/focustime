@@ -30,6 +30,7 @@ impl App {
         self.history_comparison_dimension
     }
 
+    #[allow(dead_code)]
     pub fn history_comparison_rows(&self, limit: usize) -> Vec<ProductivityComparisonRow> {
         let filter = ProductivityComparisonFilter {
             task_label: self.history_task_filter.clone(),
