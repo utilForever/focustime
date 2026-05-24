@@ -44,6 +44,44 @@ fn weekday_token(day: Weekday) -> &'static str {
     }
 }
 
+fn seed_large_history(app: &mut App, day_count: i64, sessions_per_day: u32) {
+    let day_count = day_count.max(1);
+    let start = Local::now().date_naive() - ChronoDuration::days(day_count.saturating_sub(1));
+    let goal = DailyGoalSnapshot {
+        minutes: 25,
+        pomodoros: 1,
+    };
+    for day_offset in 0..day_count {
+        let day = start + ChronoDuration::days(day_offset);
+        let day_key = day.format("%Y-%m-%d").to_string();
+        for session_idx in 0..sessions_per_day.max(1) {
+            let profile = if (session_idx + u32::try_from(day_offset).unwrap_or(0)) % 2 == 0 {
+                Some(ProfileId::DeepWork)
+            } else {
+                Some(ProfileId::Classic)
+            };
+            let task_label = if session_idx % 2 == 0 {
+                Some("Project A")
+            } else {
+                Some("Project B")
+            };
+            app.stats.record_completed_pomodoro_with_task(
+                &day_key,
+                goal,
+                task_label,
+                25 * 60,
+                profile,
+            );
+        }
+    }
+    app.task_labels = vec![
+        "Project A".to_string(),
+        "Project B".to_string(),
+        "Project C".to_string(),
+    ];
+    app.mark_stats_dirty();
+}
+
 fn snapshot_for_tests(
     phase: TimerPhase,
     status: TimerStatus,
@@ -4461,6 +4499,65 @@ fn history_view_comparison_filters_cycle_with_wrap_and_stale_task_selection() {
         app.history_time_of_day_filter,
         Some(crate::stats::TimeOfDayBucket::Unknown)
     );
+}
+
+#[test]
+fn history_dashboard_view_data_reuses_cache_across_repeated_reads() {
+    let mut app = App::default();
+    seed_large_history(&mut app, 180, 4);
+    app.handle_key(key(KeyCode::Char('h')));
+
+    let _ = app.history_dashboard_view_data();
+    let _ = app.history_dashboard_view_data();
+    let cache_stats = app.history_dashboard_cache_stats();
+    assert_eq!(cache_stats.static_rebuilds, 1);
+    assert_eq!(cache_stats.comparison_rebuilds, 1);
+}
+
+#[test]
+fn history_dashboard_filter_changes_rebuild_only_comparison_snapshot() {
+    let mut app = App::default();
+    seed_large_history(&mut app, 180, 4);
+    app.handle_key(key(KeyCode::Char('h')));
+
+    let _ = app.history_dashboard_view_data();
+    let before = app.history_dashboard_cache_stats();
+
+    app.handle_key(key(KeyCode::Down));
+    let _ = app.history_dashboard_view_data();
+    let after = app.history_dashboard_cache_stats();
+
+    assert_eq!(after.static_rebuilds, before.static_rebuilds);
+    assert_eq!(after.comparison_rebuilds, before.comparison_rebuilds + 1);
+}
+
+#[test]
+fn history_dashboard_stats_change_rebuilds_static_and_comparison_snapshots() {
+    let mut app = App::default();
+    seed_large_history(&mut app, 180, 4);
+    app.handle_key(key(KeyCode::Char('h')));
+
+    let _ = app.history_dashboard_view_data();
+    let before = app.history_dashboard_cache_stats();
+
+    let goal = DailyGoalSnapshot {
+        minutes: 25,
+        pomodoros: 1,
+    };
+    let day_key = current_day_key();
+    app.stats.record_completed_pomodoro_with_task(
+        &day_key,
+        goal,
+        Some("Project C"),
+        30 * 60,
+        Some(ProfileId::DeepWork),
+    );
+    app.mark_stats_dirty();
+
+    let _ = app.history_dashboard_view_data();
+    let after = app.history_dashboard_cache_stats();
+    assert_eq!(after.static_rebuilds, before.static_rebuilds + 1);
+    assert_eq!(after.comparison_rebuilds, before.comparison_rebuilds + 1);
 }
 
 #[test]
