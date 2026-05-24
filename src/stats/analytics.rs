@@ -1,11 +1,11 @@
 use crate::stats::{
-    BTreeMap, BTreeSet, ComparisonDimension, DailyGoalSnapshot, Datelike, FocusRiskForecast,
-    FocusRiskLevel, FocusRiskSignal, FocusSessionRecord, FocusStats, GoalPeriod, GoalRiskForecast,
-    HeatmapDayStats, MonthlyHeatmap, MonthlyStats, ProductivityComparisonFilter,
-    ProductivityComparisonRow, ProfileBucket, ProfileEffectiveness,
-    ProfileEffectivenessAccumulator, ProfileTotals, StatsGrowthSection, StatsGrowthSummary,
-    StatsRetentionConfig, StatsRetentionPruneResult, StreakRiskForecast, TimeOfDayBucket,
-    WeeklyConsistency, WeeklyFocusScore, WeeklyStats, average_two_percentages,
+    BTreeMap, BTreeSet, ComparisonDimension, DailyGoalSnapshot, Datelike,
+    FocusRiskCalibrationMetrics, FocusRiskForecast, FocusRiskLevel, FocusRiskSignal,
+    FocusSessionRecord, FocusStats, GoalPeriod, GoalRiskForecast, HeatmapDayStats, MonthlyHeatmap,
+    MonthlyStats, ProductivityComparisonFilter, ProductivityComparisonRow, ProfileBucket,
+    ProfileEffectiveness, ProfileEffectivenessAccumulator, ProfileTotals, StatsGrowthSection,
+    StatsGrowthSummary, StatsRetentionConfig, StatsRetentionPruneResult, StreakRiskForecast,
+    TimeOfDayBucket, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, average_two_percentages,
     canonical_task_label, consistency_score_from_active_days, daily_has_activity, days_in_month,
     format_week_label, month_key_for_day, normalize_task_label, parse_week_label,
     percentage_round_nearest, profile_bucket_for, week_key_for_day, weekly_completion_score_pct,
@@ -174,6 +174,118 @@ impl FocusStats {
             weekly_goal: weekly_goal_forecast,
             monthly_goal: monthly_goal_forecast,
             streak: streak_forecast,
+        }
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn focus_risk_calibration_metrics_for_day(
+        &self,
+        day: chrono::NaiveDate,
+        daily_goal: DailyGoalSnapshot,
+        weekly_goal: DailyGoalSnapshot,
+        monthly_goal: DailyGoalSnapshot,
+        window_days: u16,
+    ) -> FocusRiskCalibrationMetrics {
+        let mut sample_count = 0_u32;
+        let mut alert_count = 0_u32;
+        let mut true_positive_alerts = 0_u32;
+        let mut false_positive_alerts = 0_u32;
+        let mut missed_warning_count = 0_u32;
+
+        for offset in 0..window_days.max(1) {
+            let candidate = day
+                .checked_sub_signed(chrono::Duration::days(i64::from(offset)))
+                .unwrap_or(day);
+            let day_key = candidate.format("%Y-%m-%d").to_string();
+            if !self.daily.contains_key(&day_key) {
+                continue;
+            }
+
+            let day_stats = self.daily_for(&day_key);
+            let candidate_daily_goal = self
+                .daily
+                .get(&day_key)
+                .and_then(|entry| entry.goal)
+                .unwrap_or(daily_goal);
+            let candidate_weekly_goal = self
+                .weekly_goal_snapshot_for_day(candidate)
+                .unwrap_or(weekly_goal);
+            let candidate_monthly_goal = self
+                .monthly_goal_snapshot_for_day(candidate)
+                .unwrap_or(monthly_goal);
+            let forecast = self.focus_risk_forecast_for_day(
+                candidate,
+                candidate_daily_goal,
+                candidate_weekly_goal,
+                candidate_monthly_goal,
+            );
+
+            let mut observed_outcome = false;
+            let mut observed_miss = false;
+
+            if candidate_daily_goal.has_any_target() {
+                observed_outcome = true;
+                observed_miss |= !candidate_daily_goal.is_met_by(day_stats);
+            }
+
+            if candidate.weekday().num_days_from_monday() == 6
+                && candidate_weekly_goal.has_any_target()
+            {
+                observed_outcome = true;
+                let weekly_stats = self.weekly_for_day(candidate);
+                observed_miss |= !candidate_weekly_goal.is_met_by_totals(
+                    weekly_stats.focused_minutes(),
+                    weekly_stats.pomodoros_completed,
+                );
+            }
+
+            if candidate.day() == days_in_month(candidate.year(), candidate.month())
+                && candidate_monthly_goal.has_any_target()
+            {
+                observed_outcome = true;
+                let monthly_stats = self.monthly_for_day(candidate);
+                observed_miss |= !candidate_monthly_goal.is_met_by_totals(
+                    monthly_stats.focused_minutes(),
+                    monthly_stats.pomodoros_completed,
+                );
+            }
+
+            if !observed_outcome {
+                continue;
+            }
+
+            sample_count = sample_count.saturating_add(1);
+            if forecast.alert_active() {
+                alert_count = alert_count.saturating_add(1);
+                if observed_miss {
+                    true_positive_alerts = true_positive_alerts.saturating_add(1);
+                } else {
+                    false_positive_alerts = false_positive_alerts.saturating_add(1);
+                }
+            } else if observed_miss {
+                missed_warning_count = missed_warning_count.saturating_add(1);
+            }
+        }
+
+        let precision_pct = if alert_count == 0 {
+            0
+        } else {
+            percentage_round_nearest(u64::from(true_positive_alerts), u64::from(alert_count))
+        };
+        let missed_warning_rate_pct = if sample_count == 0 {
+            0
+        } else {
+            percentage_round_nearest(u64::from(missed_warning_count), u64::from(sample_count))
+        };
+
+        FocusRiskCalibrationMetrics {
+            sample_count,
+            alert_count,
+            true_positive_alerts,
+            false_positive_alerts,
+            precision_pct,
+            missed_warning_count,
+            missed_warning_rate_pct,
         }
     }
 
@@ -774,6 +886,10 @@ fn goal_risk_forecast(
     remaining_days: u32,
     cadence: CadenceWindow,
 ) -> GoalRiskForecast {
+    const GOAL_WEIGHT_COMPLETION_GAP: u16 = 45;
+    const GOAL_WEIGHT_CONSISTENCY_GAP: u16 = 35;
+    const GOAL_WEIGHT_PACE_GAP: u16 = 20;
+
     if !goal.has_any_target() {
         return GoalRiskForecast {
             period,
@@ -801,7 +917,11 @@ fn goal_risk_forecast(
     let risk_score_pct = if met {
         0
     } else {
-        weighted_pct(&[(completion_gap, 55), (consistency_gap, 20), (pace_gap, 25)])
+        weighted_pct(&[
+            (completion_gap, GOAL_WEIGHT_COMPLETION_GAP),
+            (consistency_gap, GOAL_WEIGHT_CONSISTENCY_GAP),
+            (pace_gap, GOAL_WEIGHT_PACE_GAP),
+        ])
     };
     let risk_level = FocusRiskLevel::from_score(risk_score_pct);
 
@@ -847,6 +967,14 @@ fn streak_risk_forecast(
     cadence: CadenceWindow,
     streak: crate::stats::GoalStreak,
 ) -> StreakRiskForecast {
+    const STREAK_WEIGHT_TODAY_PRESSURE: u16 = 25;
+    const STREAK_WEIGHT_RELIABILITY_GAP: u16 = 50;
+    const STREAK_WEIGHT_CONSISTENCY_GAP: u16 = 25;
+    const STREAK_TODAY_PRESSURE_MET: u8 = 15;
+    const STREAK_TODAY_PRESSURE_UNMET: u8 = 70;
+    const STREAK_ALERT_BONUS_MEDIUM_STREAK: u8 = 4;
+    const STREAK_ALERT_BONUS_LONG_STREAK: u8 = 8;
+
     if !daily_goal.has_any_target() {
         return StreakRiskForecast {
             configured: false,
@@ -863,18 +991,26 @@ fn streak_risk_forecast(
     let today_goal_met = daily_goal.is_met_by(today_stats);
     let reliability_pct = rolling_goal_reliability_pct(stats, day, daily_goal, 7);
     let consistency_pct = cadence.consistency_pct();
-    let today_pressure = if today_goal_met { 20 } else { 90 };
+    let today_pressure = if today_goal_met {
+        STREAK_TODAY_PRESSURE_MET
+    } else {
+        STREAK_TODAY_PRESSURE_UNMET
+    };
     let reliability_gap = 100_u8.saturating_sub(reliability_pct);
     let consistency_gap = 100_u8.saturating_sub(consistency_pct);
     let mut risk_score_pct = weighted_pct(&[
-        (today_pressure, 45),
-        (reliability_gap, 35),
-        (consistency_gap, 20),
+        (today_pressure, STREAK_WEIGHT_TODAY_PRESSURE),
+        (reliability_gap, STREAK_WEIGHT_RELIABILITY_GAP),
+        (consistency_gap, STREAK_WEIGHT_CONSISTENCY_GAP),
     ]);
     risk_score_pct = if streak.current >= 7 {
-        risk_score_pct.saturating_add(10).min(100)
+        risk_score_pct
+            .saturating_add(STREAK_ALERT_BONUS_LONG_STREAK)
+            .min(100)
     } else if streak.current >= 3 {
-        risk_score_pct.saturating_add(5).min(100)
+        risk_score_pct
+            .saturating_add(STREAK_ALERT_BONUS_MEDIUM_STREAK)
+            .min(100)
     } else {
         risk_score_pct
     };

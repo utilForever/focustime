@@ -718,6 +718,45 @@ fn focus_risk_forecast_flags_high_risk_for_unmet_goals_and_streak() {
 }
 
 #[test]
+fn focus_risk_forecast_avoids_alert_for_borderline_daily_slip() {
+    let mut stats = FocusStats::default();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap();
+    let daily_goal = DailyGoalSnapshot {
+        minutes: 30,
+        pomodoros: 1,
+    };
+    for offset in 0..7 {
+        let candidate = day
+            .checked_sub_signed(chrono::Duration::days(i64::from(offset)))
+            .unwrap();
+        let day_key = candidate.format("%Y-%m-%d").to_string();
+        let (focused_minutes, pomodoros_completed) = if offset == 0 {
+            (20_u64, 1_u32)
+        } else {
+            (30_u64, 1_u32)
+        };
+        stats.insert_daily_for_tests(
+            &day_key,
+            DailyStats {
+                pomodoros_completed,
+                focused_seconds: focused_minutes * 60,
+                goal: Some(daily_goal),
+            },
+        );
+    }
+
+    let forecast = stats.focus_risk_forecast_for_day(
+        day,
+        daily_goal,
+        DailyGoalSnapshot::default(),
+        DailyGoalSnapshot::default(),
+    );
+
+    assert!(!forecast.alert_active());
+    assert_ne!(forecast.highest_risk_level(), FocusRiskLevel::High);
+}
+
+#[test]
 fn focus_risk_forecast_stays_low_when_goals_are_met() {
     let mut stats = FocusStats::default();
     let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap();
@@ -752,6 +791,52 @@ fn focus_risk_forecast_stays_low_when_goals_are_met() {
     assert_eq!(forecast.monthly_goal.risk_score_pct, 0);
     assert_eq!(forecast.daily_goal.risk_level, FocusRiskLevel::Low);
     assert!(!forecast.alert_active());
+}
+
+#[test]
+fn focus_risk_calibration_metrics_track_false_positives_without_end_period_outcomes() {
+    let mut stats = FocusStats::default();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).unwrap();
+    let daily_goal = DailyGoalSnapshot {
+        minutes: 30,
+        pomodoros: 1,
+    };
+    for offset in 0..3 {
+        let candidate = day
+            .checked_sub_signed(chrono::Duration::days(i64::from(offset)))
+            .unwrap();
+        let day_key = candidate.format("%Y-%m-%d").to_string();
+        stats.insert_daily_for_tests(
+            &day_key,
+            DailyStats {
+                pomodoros_completed: 1,
+                focused_seconds: 30_u64 * 60,
+                goal: Some(daily_goal),
+            },
+        );
+    }
+
+    let metrics = stats.focus_risk_calibration_metrics_for_day(
+        day,
+        daily_goal,
+        DailyGoalSnapshot {
+            minutes: 500,
+            pomodoros: 20,
+        },
+        DailyGoalSnapshot {
+            minutes: 2000,
+            pomodoros: 80,
+        },
+        3,
+    );
+
+    assert_eq!(metrics.sample_count, 3);
+    assert!(metrics.alert_count > 0);
+    assert_eq!(metrics.true_positive_alerts, 0);
+    assert_eq!(metrics.false_positive_alerts, metrics.alert_count);
+    assert_eq!(metrics.precision_pct, 0);
+    assert_eq!(metrics.missed_warning_count, 0);
+    assert_eq!(metrics.missed_warning_rate_pct, 0);
 }
 
 #[test]
