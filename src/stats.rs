@@ -17,11 +17,12 @@ mod helpers;
 #[cfg(test)]
 use helpers::create_unique_temp_path;
 use helpers::{
-    average_two_percentages, best_goal_streak, consistency_score_from_active_days,
-    current_goal_streak, daily_has_activity, days_in_month, format_week_label, month_key_for_day,
-    normalize_session_metadata_text, normalize_task_goal_targets, normalize_task_planner_state,
-    parse_week_label, percentage_round_nearest, planner_state_labels_for_keys, profile_bucket_for,
-    week_key_for_day, weekly_completion_score_pct, write_atomic_bytes,
+    average_two_percentages, backfilled_time_of_day_bucket, best_goal_streak,
+    consistency_score_from_active_days, current_goal_streak, daily_has_activity, days_in_month,
+    format_week_label, month_key_for_day, normalize_session_metadata_text,
+    normalize_task_goal_targets, normalize_task_planner_state, parse_week_label,
+    percentage_round_nearest, planner_state_labels_for_keys, profile_bucket_for, week_key_for_day,
+    weekly_completion_score_pct, write_atomic_bytes,
 };
 mod analytics;
 mod export;

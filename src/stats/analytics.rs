@@ -6,11 +6,11 @@ use crate::stats::{
     ProfileEffectiveness, ProfileEffectivenessAccumulator, ProfileTotals, StatsGrowthSection,
     StatsGrowthSummary, StatsRetentionConfig, StatsRetentionPruneResult, StreakRiskForecast,
     TimeOfDayBucket, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, average_two_percentages,
-    canonical_task_label, consistency_score_from_active_days, daily_has_activity, days_in_month,
-    format_week_label, month_key_for_day, normalize_task_label, parse_week_label,
-    percentage_round_nearest, profile_bucket_for, week_key_for_day, weekly_completion_score_pct,
+    backfilled_time_of_day_bucket, canonical_task_label, consistency_score_from_active_days,
+    daily_has_activity, days_in_month, format_week_label, month_key_for_day, normalize_task_label,
+    parse_week_label, percentage_round_nearest, profile_bucket_for, week_key_for_day,
+    weekly_completion_score_pct,
 };
-use chrono::Timelike;
 
 impl FocusStats {
     pub fn weekly_for_day(&self, day: chrono::NaiveDate) -> WeeklyStats {
@@ -834,19 +834,10 @@ fn classify_calibration_signal(
 }
 
 fn focus_session_time_of_day(session: &FocusSessionRecord) -> TimeOfDayBucket {
-    if let Some(bucket) = session.completion_time_of_day_bucket {
-        return bucket;
-    }
-    let Some(epoch_secs) = session.completion_timestamp_epoch_secs else {
-        return TimeOfDayBucket::Unknown;
-    };
-    let Ok(epoch) = i64::try_from(epoch_secs) else {
-        return TimeOfDayBucket::Unknown;
-    };
-    let Some(timestamp) = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0) else {
-        return TimeOfDayBucket::Unknown;
-    };
-    TimeOfDayBucket::from_hour(timestamp.hour())
+    backfilled_time_of_day_bucket(
+        session.completion_time_of_day_bucket,
+        session.completion_timestamp_epoch_secs,
+    )
 }
 
 #[derive(Debug, Clone, Copy)]
