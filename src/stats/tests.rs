@@ -1106,6 +1106,57 @@ fn legacy_focus_sessions_keep_empty_metadata() {
 }
 
 #[test]
+fn legacy_focus_sessions_backfill_unknown_time_of_day_bucket() {
+    let legacy_toml = r#"
+            [[focus_sessions]]
+            date = "2026-04-09"
+            task_label = "Project A"
+            focused_seconds = 1500
+        "#;
+    let restored = FocusStats::try_from_toml(legacy_toml).unwrap();
+    let persisted = restored.to_persisted();
+
+    assert_eq!(persisted.focus_sessions.len(), 1);
+    assert_eq!(
+        persisted.focus_sessions[0].completion_time_of_day_bucket,
+        Some(TimeOfDayBucket::Unknown)
+    );
+}
+
+#[test]
+fn legacy_focus_sessions_backfill_time_of_day_bucket_from_timestamp() {
+    let day = current_day_key();
+    let completion_timestamp_epoch_secs = local_timestamp_today(9, 0);
+    let persisted_toml = format!(
+        r#"
+            [[focus_sessions]]
+            date = "{day}"
+            task_label = "Project A"
+            focused_seconds = 1800
+            completion_timestamp_epoch_secs = {completion_timestamp_epoch_secs}
+        "#
+    );
+    let restored = FocusStats::try_from_toml(&persisted_toml).unwrap();
+    let persisted = restored.to_persisted();
+
+    assert_eq!(persisted.focus_sessions.len(), 1);
+    assert_eq!(
+        persisted.focus_sessions[0].completion_time_of_day_bucket,
+        Some(TimeOfDayBucket::Morning)
+    );
+
+    let rows = restored.productivity_comparison(
+        ComparisonDimension::TimeOfDay,
+        &ProductivityComparisonFilter::default(),
+        10,
+    );
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].label, "Morning");
+    assert_eq!(rows[0].sessions_completed, 1);
+    assert_eq!(rows[0].focused_minutes(), 30);
+}
+
+#[test]
 fn persisted_focus_session_uses_stored_time_of_day_bucket() {
     let persisted_toml = r#"
             [[focus_sessions]]
