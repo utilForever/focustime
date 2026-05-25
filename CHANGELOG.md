@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-05-25
+
 ### Added
 
-- **KPI export parity across JSON and CSV (#329):** added machine-readable `history_kpis` export coverage for all History dashboard KPI cards, plus matching CSV `history_kpi` rows (`kpi_card_id`, `kpi_payload_json`) and schema version bump to `7`.
+- **KPI export parity across JSON and CSV (#365):** added machine-readable `history_kpis` export coverage for all History dashboard KPI cards, plus matching CSV `history_kpi` rows (`kpi_card_id`, `kpi_payload_json`) and schema version bump to `7`.
+
+### Changed
+
+- **Dashboard performance improvements on large histories (#364):** added revision-based history dashboard snapshots and snapshot-driven rendering to reduce repeated analytics recomputation during History interactions.
+- **Dependency update for JSON handling (#361):** bumped `serde_json` from `1.0.149` to `1.0.150`.
+
+### Fixed
+
+- **Focus-risk forecasting false-positive calibration (#363):** retuned risk weighting and alert gating to reduce noisy borderline warnings while preserving meaningful high-risk signals.
+- **Legacy analytics time-of-day backfill compatibility (#366):** normalized legacy session time-of-day fields during load/grouping so mixed historical datasets remain stable across comparison and export workflows.
 
 ## [0.13.0] - 2026-05-22
 
@@ -323,7 +335,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/utilForever/focustime/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/utilForever/focustime/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/utilForever/focustime/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/utilForever/focustime/compare/v0.11.1...v0.12.0
