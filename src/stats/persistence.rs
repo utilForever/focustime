@@ -4,9 +4,10 @@ use std::path::PathBuf;
 use crate::stats::fs;
 use crate::stats::{
     BreakGlassOverrideEvent, FocusSessionRecord, FocusStats, PersistedStats, STATS_FILE_NAME,
-    SessionInterruptionEvent, SessionStats, StatsLoadOptions, StatsSaveOptions, io,
-    normalize_session_metadata_text, normalize_task_goal_targets, normalize_task_label,
-    normalize_task_planner_state, planner_state_labels_for_keys, write_atomic_bytes,
+    SessionInterruptionEvent, SessionStats, StatsLoadOptions, StatsSaveOptions,
+    backfilled_time_of_day_bucket, io, normalize_session_metadata_text,
+    normalize_task_goal_targets, normalize_task_label, normalize_task_planner_state,
+    planner_state_labels_for_keys, write_atomic_bytes,
 };
 
 impl FocusStats {
@@ -84,7 +85,10 @@ impl FocusStats {
                     focused_seconds: session.focused_seconds,
                     profile: session.profile,
                     completion_timestamp_epoch_secs: session.completion_timestamp_epoch_secs,
-                    completion_time_of_day_bucket: session.completion_time_of_day_bucket,
+                    completion_time_of_day_bucket: Some(backfilled_time_of_day_bucket(
+                        session.completion_time_of_day_bucket,
+                        session.completion_timestamp_epoch_secs,
+                    )),
                 });
             }
         }
