@@ -1,8 +1,9 @@
 use crate::stats::{
     BTreeMap, BTreeSet, DailyGoalSnapshot, DailyStats, Datelike, OpenOptions, Ordering, Path,
-    PathBuf, ProfileBucket, ProfileId, SystemTime, TEMP_FILE_COUNTER, UNIX_EPOCH, WeeklyStats,
-    Write, canonical_task_label, fs, io, normalize_task_label,
+    PathBuf, ProfileBucket, ProfileId, SystemTime, TEMP_FILE_COUNTER, TimeOfDayBucket, UNIX_EPOCH,
+    WeeklyStats, Write, canonical_task_label, fs, io, normalize_task_label,
 };
+use chrono::Timelike;
 
 pub(super) fn normalize_task_planner_state(
     labels: Vec<String>,
@@ -174,6 +175,22 @@ pub(super) fn profile_bucket_for(profile: Option<ProfileId>) -> ProfileBucket {
         Some(ProfileId::Custom) => ProfileBucket::Custom,
         None => ProfileBucket::Unknown,
     }
+}
+
+pub(super) fn backfilled_time_of_day_bucket(
+    bucket: Option<TimeOfDayBucket>,
+    completion_timestamp_epoch_secs: Option<u64>,
+) -> TimeOfDayBucket {
+    bucket
+        .or_else(|| {
+            completion_timestamp_epoch_secs.and_then(|epoch_secs| {
+                let epoch = i64::try_from(epoch_secs).ok()?;
+                let timestamp = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0)?;
+                let local_time = timestamp.with_timezone(&chrono::Local);
+                Some(TimeOfDayBucket::from_hour(local_time.hour()))
+            })
+        })
+        .unwrap_or(TimeOfDayBucket::Unknown)
 }
 
 pub(super) fn daily_has_activity(stats: DailyStats) -> bool {
