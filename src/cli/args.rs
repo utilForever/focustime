@@ -1,11 +1,12 @@
 use crate::cli::{
     KeyValueParser, OsString, OutputMode, ParsedToken, PathBuf, ValueArgParser, invalid_usage,
     parse_automation_triggers_value, parse_compare_by_value, parse_compare_limit_value,
-    parse_compare_profile_value, parse_compare_time_of_day_value, parse_goal_carry_value,
-    parse_goal_value, parse_history_dashboard_order_value, parse_history_kpi_card_id,
-    parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
-    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_watch_interval_secs,
-    parse_weekday_rules_value, parse_weekly_goal_value, require_nonempty_key_value,
+    parse_compare_profile_value, parse_compare_time_of_day_value, parse_daemon_port,
+    parse_goal_carry_value, parse_goal_value, parse_history_dashboard_order_value,
+    parse_history_kpi_card_id, parse_monthly_goal_value, parse_profile_id, parse_schedule_value,
+    parse_site_edit_value, parse_strict_value, parse_task_goal_value, parse_theme_preset,
+    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 
 pub(super) fn infer_output_mode_from_os_args(args: &[OsString]) -> OutputMode {
@@ -57,7 +58,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 45] = [
+    let parsers: [(&str, ValueArgParser); 46] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -78,6 +79,7 @@ fn classify_value_arg(
             classify_automation_triggers_set_arg,
         ),
         ("--watch", classify_watch_arg),
+        ("--daemon-port", classify_daemon_port_arg),
         ("--compare-by", classify_compare_by_arg),
         ("--compare-task", classify_compare_task_arg),
         ("--compare-profile", classify_compare_profile_arg),
@@ -166,6 +168,9 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--stop" => Some(ParsedToken::Stop),
         "--next" => Some(ParsedToken::Next),
         "--status" => Some(ParsedToken::Status),
+        "--daemon-start" => Some(ParsedToken::DaemonStart),
+        "--daemon-status" => Some(ParsedToken::DaemonStatus),
+        "--daemon-stop" => Some(ParsedToken::DaemonStop),
         "--schedule" => Some(ParsedToken::Schedule),
         "--weekday-rules" => Some(ParsedToken::WeekdayRules),
         "--automation-triggers" => Some(ParsedToken::AutomationTriggers),
@@ -310,6 +315,21 @@ fn classify_watch_arg(args: &[String], index: usize) -> Result<(ParsedToken, usi
         ));
     }
     Ok((ParsedToken::Watch(None), 1))
+}
+
+fn classify_daemon_port_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    if let Some(next) = args.get(index + 1)
+        && !next.starts_with('-')
+    {
+        let value = require_nonempty_key_value(
+            next,
+            "`--daemon-port` requires a port between 1 and 65535.",
+        )?;
+        return Ok((ParsedToken::DaemonPort(parse_daemon_port(value)?), 2));
+    }
+    Err(invalid_usage(
+        "`--daemon-port` requires a value. Use `--daemon-port=PORT`.",
+    ))
 }
 
 fn classify_compare_by_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
@@ -893,7 +913,7 @@ fn classify_automation_triggers_set_arg(
 }
 
 pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 45] = [
+    let parsers: [KeyValueParser; 46] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -911,6 +931,7 @@ pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, S
         parse_weekday_rules_set_key_value_arg,
         parse_automation_triggers_set_key_value_arg,
         parse_watch_key_value_arg,
+        parse_daemon_port_key_value_arg,
         parse_compare_by_key_value_arg,
         parse_compare_task_key_value_arg,
         parse_compare_profile_key_value_arg,
@@ -1150,6 +1171,17 @@ fn parse_watch_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
         return Ok(Some(ParsedToken::Watch(Some(parse_watch_interval_secs(
             value,
         )?))));
+    }
+    Ok(None)
+}
+
+fn parse_daemon_port_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix("--daemon-port=") {
+        let value = require_nonempty_key_value(
+            value,
+            "`--daemon-port=` requires a port between 1 and 65535.",
+        )?;
+        return Ok(Some(ParsedToken::DaemonPort(parse_daemon_port(value)?)));
     }
     Ok(None)
 }
