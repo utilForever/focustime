@@ -11,6 +11,7 @@ stable while splitting implementation details by responsibility.
 flowchart LR
     M["main.rs<br/>entrypoint + terminal lifecycle"]
     CLI["cli.rs + cli/*<br/>CLI contract/parsing/execution/output"]
+    DAE["daemon.rs<br/>loopback local API + daemon lifecycle"]
     APP["app.rs + app/*<br/>runtime orchestration + state transitions"]
     UI["ui.rs + ui/*<br/>screen rendering"]
     ST["stats.rs + stats/*<br/>persistence/analytics/export"]
@@ -26,6 +27,8 @@ flowchart LR
     API["WakaTime API"]
 
     M --> CLI
+    CLI --> DAE
+    DAE --> APP
     M --> APP
     M --> UI
     APP --> CFG
@@ -52,7 +55,8 @@ flowchart LR
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | `main.rs`                       | Composition root, CLI vs TUI dispatch, terminal setup/teardown, frame/tick loop                                                                                                                                                                        | `cli`, `app`, `ui`, `crossterm`, `ratatui`                                     |
 | `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`)   | `timer`, `blocker`, `wakatime`, `notifications`, `schedule`, `stats`, `config` |
-| `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless `--start`, schedule delay/break-glass workflow controls, and backup/restore data-file workflows for canonical-path persistence | `app`, `config`, `stats`, `blocker`                                            |
+| `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless timer controls, daemon lifecycle commands, schedule delay/break-glass workflow controls, and backup/restore workflows          | `app`, `daemon`, `config`, `stats`, `blocker`                                  |
+| `daemon.rs`                     | Headless daemon runtime with loopback-only versioned local API, bearer-token auth, daemon metadata persistence, and graceful lifecycle/status/stop orchestration                                                                                       | `app`, `cli`, filesystem, `ureq`, `tiny_http`                                  |
 | `stats.rs` + `stats/*`          | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers, including canonical-path persistence and legacy read-time compatibility handling during deprecation windows                                                 | `app`, `task_labels`, filesystem                                               |
 | `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                     | `app`, `timer`, `wakatime`                                                     |
 | `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including feature-flag compatibility defaults, runtime knob settings, and task-label-aware WakaTime metadata mapping rules                                                   | `app`, `cli`, filesystem/env                                                   |
@@ -103,6 +107,8 @@ sequenceDiagram
    `App::on_tick()` and applies phase-driven side effects.
 4. `App` keeps blocking, notifications, scheduling, and WakaTime in sync with
    timer state; side effects are isolated in dedicated modules.
+5. Daemon mode reuses the same `App` tick/update behavior in a headless loop,
+   then serves loopback-authenticated `/v1/*` API endpoints for automation.
 
 ## Visibility rules
 

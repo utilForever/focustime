@@ -91,6 +91,12 @@ cargo run -- --resume
 cargo run -- --stop
 cargo run -- --next --json
 
+# Run a headless daemon with local API access
+cargo run -- --daemon-start
+cargo run -- --daemon-start --daemon-port=43123 --json
+cargo run -- --daemon-status --json
+cargo run -- --daemon-stop --json
+
 # Select task label (creates label if it does not exist yet)
 cargo run -- --task "Write docs"
 cargo run -- --task=Write-docs --json
@@ -230,6 +236,12 @@ cargo run -- --restore=./reports --json
 cargo run -- --export
 cargo run -- --export=./reports --json
 ```
+
+### Local daemon API
+
+- Daemon mode binds to loopback (`127.0.0.1`) and stores daemon connection metadata in `daemon-state.toml` under the same app-data directory used by `config.toml`.
+- Control endpoints require `Authorization: Bearer <token>`, where `<token>` is the per-start random token persisted in daemon metadata.
+- API routes are versioned under `/v1/*`, including health (`/v1/health`), timer status (`/v1/status`), timer controls (`/v1/timer/*`), session metadata (`/v1/session/*`), workflow controls (`/v1/workflow/*`), and daemon shutdown (`/v1/daemon/stop`).
 
 Backup/restore behavior:
 
