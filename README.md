@@ -267,6 +267,25 @@ Encrypted sync behavior:
 - `--sync-restore` verifies bundle integrity before replacing local files and rejects conflicting local changes since the last encrypted snapshot.
 - Use `--sync-passphrase` (or `FOCUSTIME_SYNC_PASSPHRASE`) with encrypted sync commands; passphrases are runtime-only and never persisted.
 
+### Integration framework foundation
+
+`focustime` now routes external-tool hooks through a typed integration runtime
+with explicit lifecycle events and capability boundaries. The initial loading
+model is config-driven activation of built-in integrations.
+
+Current built-in integration IDs:
+
+- `wakatime`
+
+Config example (`config.toml`):
+
+```toml
+[feature_flags.integrations]
+enabled = ["wakatime"]
+```
+
+Set `enabled = []` to disable all built-in integrations.
+
 ### Legacy compatibility deprecation milestones
 
 `focustime --diagnostics` and the TUI Setup Diagnostics screen report targeted

@@ -18,6 +18,7 @@ flowchart LR
     CFG["config.rs + config/paths.rs<br/>config model + path resolution"]
     TM["timer.rs<br/>Pomodoro state machine"]
     BL["blocker.rs<br/>multi-backend blocking (hosts + command fallback)"]
+    IG["integration.rs<br/>integration runtime + lifecycle dispatch"]
     WK["wakatime.rs<br/>heartbeat tracking"]
     NT["notifications.rs<br/>phase notifications"]
     SCH["schedule.rs<br/>window compilation/selection"]
@@ -35,7 +36,8 @@ flowchart LR
     APP --> CFG
     APP --> TM
     APP --> BL
-    APP --> WK
+    APP --> IG
+    IG --> WK
     APP --> NT
     APP --> SCH
     APP --> CAL
@@ -57,7 +59,7 @@ flowchart LR
 | Module                          | Responsibility                                                                                                                                                                                                                                                                                  | Main collaborators                                                                         |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `main.rs`                       | Composition root, CLI vs TUI dispatch, terminal setup/teardown, frame/tick loop                                                                                                                                                                                                                 | `cli`, `app`, `ui`, `crossterm`, `ratatui`                                                 |
-| `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`)                                            | `timer`, `blocker`, `wakatime`, `notifications`, `schedule`, `calendar`, `stats`, `config` |
+| `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`)                                            | `timer`, `blocker`, `integration`, `notifications`, `schedule`, `calendar`, `stats`, `config` |
 | `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless timer controls, daemon lifecycle commands, schedule delay/break-glass workflow controls, plain backup/restore, encrypted sync workflows, and calendar ICS cache refresh | `app`, `daemon`, `config`, `stats`, `sync`, `calendar`, `blocker`                          |
 | `daemon.rs`                     | Headless daemon runtime with loopback-only versioned local API, bearer-token auth, daemon metadata persistence, and graceful lifecycle/status/stop orchestration                                                                                                                                | `app`, `cli`, filesystem, `ureq`, `tiny_http`                                              |
 | `stats.rs` + `stats/*`          | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers, including canonical-path persistence and legacy read-time compatibility handling during deprecation windows                                                                                          | `app`, `task_labels`, filesystem                                                           |
@@ -65,6 +67,7 @@ flowchart LR
 | `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including feature-flag compatibility defaults, runtime knob settings, and task-label-aware WakaTime metadata mapping rules                                                                                            | `app`, `cli`, filesystem/env                                                               |
 | `timer.rs`                      | Pomodoro timer domain model and phase transitions                                                                                                                                                                                                                                               | `app`, `ui`                                                                                |
 | `blocker.rs`                    | Blocking backend orchestration (hosts + command), deterministic fallback selection, preview generation, and backend diagnostics                                                                                                                                                                 | `app`, `cli`, OS/filesystem                                                                |
+| `integration.rs`                | Plugin/integration framework foundation: typed lifecycle hooks, capability boundaries, config-driven loading of built-in integrations, and runtime dispatch/error surfaces                                                                                                                      | `app`, `config`, `wakatime`                                                                |
 | `schedule.rs`                   | Recurring/one-time schedule compile and conflict/occurrence logic                                                                                                                                                                                                                               | `app`, `cli`, `config`                                                                     |
 | `calendar.rs`                   | Calendar ICS fetch/parse/recurrence expansion, timezone normalization, busy-window cache persistence, and overlap helpers for schedule surfaces                                                                                                                                                 | `app`, `cli`, HTTP (`ureq`), `config`, filesystem                                          |
 | `session_recovery.rs`           | Runtime recovery snapshot read/write, transient runtime artifact reconciliation, and startup warning notices for dropped invalid fragments                                                                                                                                                      | `app`, `cli`, filesystem                                                                   |
@@ -79,6 +82,7 @@ flowchart LR
 sequenceDiagram
     participant Main as main loop
     participant App as App
+    participant Integrations as IntegrationRuntime
     participant Timer as TimerState
     participant Blocker as SiteBlocker
     participant Waka as WakatimeTracker
@@ -87,7 +91,8 @@ sequenceDiagram
 
     loop every frame
         Main->>App: poll_wakatime_status()
-        App->>Waka: poll_events()
+        App->>Integrations: dispatch(Poll)
+        Integrations->>Waka: poll_events()
         Main->>UI: render(frame, &app)
         Main->>App: handle_key/handle_paste (if input)
         Main->>App: on_tick() (when 1s elapsed)
@@ -98,7 +103,8 @@ sequenceDiagram
         end
         Main->>App: on_wakatime_elapsed(elapsed_secs)
         alt Focus + Running
-            App->>Waka: tick_elapsed(elapsed_secs)
+            App->>Integrations: dispatch(FocusElapsed)
+            Integrations->>Waka: tick_elapsed(elapsed_secs)
         end
         App-->>UI: expose sending/queued/replaying/retrying/error state
     end
@@ -110,7 +116,7 @@ sequenceDiagram
    processes keyboard/paste input through `App` key handlers.
 3. A 100ms cadence accumulates elapsed time; each elapsed second advances
    `App::on_tick()` and applies phase-driven side effects.
-4. `App` keeps blocking, notifications, scheduling (including calendar busy/overlap overlays), and WakaTime in sync with
+4. `App` keeps blocking, notifications, scheduling (including calendar busy/overlap overlays), and integration lifecycle dispatch in sync with
    timer state; side effects are isolated in dedicated modules.
 5. Daemon mode reuses the same `App` tick/update behavior in a headless loop,
    then serves loopback-authenticated `/v1/*` API endpoints for automation.
