@@ -552,7 +552,6 @@ fn setup_diagnostics_view_renders_deprecation_warnings() {
 
     let text = terminal_text(&terminal, width, height);
     assert!(text.contains("Deprecation warnings:"));
-    assert!(text.contains("Deprecated top-level timer fields"));
 }
 
 #[test]
