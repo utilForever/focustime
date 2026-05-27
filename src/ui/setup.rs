@@ -30,7 +30,7 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             Constraint::Length(2),                                      // blocking permissions
             Constraint::Length(2),                                      // hosts write capability
             Constraint::Length(2),                                      // wakatime config status
-            Constraint::Length(1),                                      // encrypted sync status
+            Constraint::Length(2),                                      // encrypted sync status
             Constraint::Length(DEPRECATION_WARNING_PANEL_LINES as u16), // deprecation warnings
             Constraint::Length(1),                                      // preview summary
             Constraint::Min(0),                                         // preview section
