@@ -543,9 +543,7 @@ fn setup_diagnostics_view_wraps_long_sync_status_messages() {
     app.mode = AppMode::SetupDiagnostics;
     app.setup_diagnostics.sync_status = SetupCheck {
         level: SetupCheckLevel::Warning,
-        message:
-            "encrypted sync status requires passphrase for cross-device restore"
-                .to_string(),
+        message: "encrypted sync status requires passphrase for cross-device restore".to_string(),
     };
 
     terminal
