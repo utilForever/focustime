@@ -881,7 +881,7 @@ pub struct App {
     history_dashboard_selected_card: HistoryKpiCardId,
     history_dashboard_cache: RefCell<HistoryDashboardCache>,
     pub phase_notification: Option<String>,
-    pub integrations: IntegrationRuntime,
+    integrations: IntegrationRuntime,
     pub selected_profile: ProfileId,
     selected_theme_preset: ThemePreset,
     feature_flags: FeatureFlagsConfig,
@@ -1276,16 +1276,16 @@ impl App {
     pub(crate) fn wakatime_heartbeat_metadata_for_tests(&self) -> WakatimeHeartbeatMetadata {
         self.integrations
             .wakatime_tracker_for_tests()
-            .map(WakatimeTracker::heartbeat_metadata_for_tests)
-            .unwrap_or_default()
+            .expect("missing WakaTime tracker in test setup")
+            .heartbeat_metadata_for_tests()
     }
 
     #[cfg(test)]
     pub(crate) fn wakatime_runtime_options_for_tests(&self) -> WakatimeRuntimeOptions {
         self.integrations
             .wakatime_tracker_for_tests()
-            .map(WakatimeTracker::runtime_options_for_tests)
-            .unwrap_or_default()
+            .expect("missing WakaTime tracker in test setup")
+            .runtime_options_for_tests()
     }
 
     fn active_calendar_busy_window(&self, now: DateTime<Local>) -> Option<&CalendarBusyWindow> {
