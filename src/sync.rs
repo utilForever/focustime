@@ -447,10 +447,11 @@ fn validate_bundle_schema(bundle: &SyncBundleDisk) -> Result<(), String> {
             bundle.cipher.algorithm
         ));
     }
-    if bundle.key_derivation.iterations == 0 {
-        return Err(
-            "Encrypted sync restore failed: invalid key-derivation iteration count.".to_string(),
-        );
+    if bundle.key_derivation.iterations != KEY_DERIVATION_ITERATIONS {
+        return Err(format!(
+            "Encrypted sync restore failed: unsupported key-derivation iteration count {}.",
+            bundle.key_derivation.iterations
+        ));
     }
     Ok(())
 }
@@ -893,6 +894,22 @@ mod tests {
             stats_hash_sha256: "stats".to_string(),
             ciphertext_base64: "ciphertext".to_string(),
         }
+    }
+
+    #[test]
+    fn validate_bundle_schema_rejects_zero_kdf_iterations() {
+        let mut bundle = sample_bundle(None);
+        bundle.key_derivation.iterations = 0;
+        let error = validate_bundle_schema(&bundle).expect_err("zero iterations should fail");
+        assert!(error.contains("unsupported key-derivation iteration count 0"));
+    }
+
+    #[test]
+    fn validate_bundle_schema_rejects_unexpected_kdf_iterations() {
+        let mut bundle = sample_bundle(None);
+        bundle.key_derivation.iterations = KEY_DERIVATION_ITERATIONS + 1;
+        let error = validate_bundle_schema(&bundle).expect_err("unexpected iterations should fail");
+        assert!(error.contains("unsupported key-derivation iteration count"));
     }
 
     #[test]
