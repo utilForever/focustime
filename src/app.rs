@@ -12,16 +12,18 @@ use crate::blocker::{
     BlockingPreviewAction, BulkAddResult, CommandBlockingBackend, EditSiteResult,
     HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
 };
+use crate::calendar::{CalendarBusyWindow, active_window_at as active_calendar_window_at};
 use crate::config::{
     AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
     BlockingBackendPolicyConfig, BlocklistCategoryConfig, BlocklistProfileConfig,
-    BreakTemplateConfig, CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig,
-    FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig, HistoryKpiCardId,
-    MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
-    ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
-    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeekdayProfileRuleConfig,
-    WeeklyGoalConfig, validate_automation_trigger_rules,
+    BreakTemplateConfig, CalendarSyncConfig, CommandBlockingBackendConfig, CustomProfileConfig,
+    DailyGoalConfig, FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig,
+    HistoryKpiCardId, MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig,
+    ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
+    SessionTemplateConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
+    WakatimeRuntimeConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    validate_automation_trigger_rules,
 };
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
@@ -364,6 +366,31 @@ fn blocking_backend_config_for_persistence(
     BlockingBackendConfig {
         policy: blocking_backend_policy_to_config(policy),
         command: command_backend_to_config(command_backend),
+    }
+}
+
+#[cfg(test)]
+fn load_calendar_busy_windows(
+    calendar_sync: &CalendarSyncConfig,
+) -> (Vec<CalendarBusyWindow>, Option<String>) {
+    let _ = crate::calendar::load_cached_windows(Local::now(), calendar_sync.lookahead_days);
+    (Vec::new(), None)
+}
+
+#[cfg(not(test))]
+fn load_calendar_busy_windows(
+    calendar_sync: &CalendarSyncConfig,
+) -> (Vec<CalendarBusyWindow>, Option<String>) {
+    if !calendar_sync.enabled {
+        return (Vec::new(), None);
+    }
+
+    match crate::calendar::load_cached_windows(Local::now(), calendar_sync.lookahead_days) {
+        Ok(windows) => (windows, None),
+        Err(error) => (
+            Vec::new(),
+            Some(format!("calendar sync cache unavailable: {error}")),
+        ),
     }
 }
 
@@ -869,6 +896,8 @@ pub struct App {
     auto_start: AutoStartConfig,
     recurring_schedule: RecurringScheduleConfig,
     schedule_runtime: ScheduleRuntimeConfig,
+    calendar_sync: CalendarSyncConfig,
+    calendar_busy_windows: Vec<CalendarBusyWindow>,
     recurring_windows: Vec<RecurringWindow>,
     recurring_exception_dates: HashSet<NaiveDate>,
     one_time_windows: Vec<OneTimeWindow>,
@@ -940,6 +969,9 @@ impl App {
         let one_time_windows = compile_one_time_windows(&recurring_schedule.one_time_windows);
         let strict_mode = selected_automation.strict_mode;
         let schedule_runtime = config.schedule_runtime;
+        let calendar_sync = config.calendar_sync.clone();
+        let (calendar_busy_windows, calendar_sync_error) =
+            load_calendar_busy_windows(&calendar_sync);
         let break_glass_duration_secs = config.break_glass_duration_secs;
         let daily_goal = config.daily_goal;
         let weekly_goal = config.weekly_goal;
@@ -971,12 +1003,17 @@ impl App {
         if automation_trigger_config_error.is_some() {
             automation_triggers.clear();
         }
-        let initial_config_error = match (shortcut_config_error, automation_trigger_config_error) {
-            (Some(shortcut), Some(trigger)) => Some(format!("{shortcut} {trigger}")),
-            (Some(shortcut), None) => Some(shortcut),
-            (None, Some(trigger)) => Some(trigger),
-            (None, None) => None,
-        };
+        let initial_config_error = [
+            shortcut_config_error,
+            automation_trigger_config_error,
+            calendar_sync_error,
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" ");
+        let initial_config_error =
+            (!initial_config_error.trim().is_empty()).then_some(initial_config_error);
         let active_break_template = resolve_active_break_template(
             &break_templates,
             &config.selected_break_template,
@@ -1101,6 +1138,8 @@ impl App {
             auto_start,
             recurring_schedule,
             schedule_runtime,
+            calendar_sync,
+            calendar_busy_windows,
             recurring_windows,
             recurring_exception_dates,
             one_time_windows,
@@ -1179,6 +1218,26 @@ impl App {
 
     pub fn selected_theme_preset(&self) -> ThemePreset {
         self.selected_theme_preset
+    }
+
+    fn active_calendar_busy_window(&self, now: DateTime<Local>) -> Option<&CalendarBusyWindow> {
+        active_calendar_window_at(&self.calendar_busy_windows, now)
+    }
+
+    fn calendar_overlap_for_occurrence(
+        &self,
+        occurrence: &WindowOccurrence,
+    ) -> Option<&CalendarBusyWindow> {
+        crate::calendar::first_overlap(
+            &self.calendar_busy_windows,
+            occurrence.start,
+            occurrence.end,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_calendar_busy_windows_for_tests(&mut self, windows: Vec<CalendarBusyWindow>) {
+        self.calendar_busy_windows = windows;
     }
 
     pub fn current_task_label(&self) -> Option<&str> {

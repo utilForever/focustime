@@ -21,6 +21,7 @@ csv = "1"
 toml = "1.1"
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono-tz = "0.10"
 getrandom = "0.3"
 tiny_http = "0.12"
 aes-gcm = "0.10"

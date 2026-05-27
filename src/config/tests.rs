@@ -207,6 +207,7 @@ fn round_trip_full_config() {
             time_step_minutes: 20,
             delay_secs: 15 * 60,
         },
+        calendar_sync: CalendarSyncConfig::default(),
         profile_automation: Some(ProfileAutomationSettingsConfig {
             classic: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig {
@@ -1279,6 +1280,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
         schedule_runtime: ScheduleRuntimeConfig::default(),
+        calendar_sync: CalendarSyncConfig::default(),
         profile_automation: None,
         strict_mode: false,
         break_glass_duration_secs: default_break_glass_duration_secs(),

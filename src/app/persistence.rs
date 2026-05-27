@@ -549,6 +549,7 @@ impl App {
             auto_start: self.auto_start,
             recurring_schedule: self.recurring_schedule.clone(),
             schedule_runtime: self.schedule_runtime,
+            calendar_sync: self.calendar_sync.clone(),
             profile_automation: Some(profile_automation),
             strict_mode: self.strict_mode,
             break_glass_duration_secs: self.break_glass_duration_secs,
