@@ -2107,7 +2107,10 @@ fn redact_url_like_token(token: &str) -> String {
     let Some((scheme, remainder)) = without_query.split_once("://") else {
         return without_query.to_string();
     };
-    let host = remainder.split('/').next().unwrap_or(remainder);
+    let authority = remainder.split('/').next().unwrap_or(remainder);
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, stripped)| stripped);
     if remainder.contains('/') {
         format!("{scheme}://{host}/<redacted>")
     } else {
@@ -2574,6 +2577,20 @@ mod tests {
         assert_eq!(
             redacted,
             "Calendar sync source `work` request failed: https://example.com"
+        );
+    }
+
+    #[test]
+    fn redact_calendar_sync_error_redacts_url_userinfo() {
+        let error =
+            "Calendar sync source `work` request failed: https://user:pass@example.com/feed.ics"
+                .to_string();
+
+        let redacted = redact_calendar_sync_error(error);
+
+        assert_eq!(
+            redacted,
+            "Calendar sync source `work` request failed: https://example.com/<redacted>"
         );
     }
 }
