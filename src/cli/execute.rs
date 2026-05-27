@@ -2100,11 +2100,19 @@ fn is_url_like_token(token: &str) -> bool {
 }
 
 fn redact_url_like_token(token: &str) -> String {
-    let without_query = token.split_once('?').map_or(token, |(base, _)| base);
-    without_query
-        .split_once('#')
-        .map_or(without_query, |(base, _)| base)
-        .to_string()
+    let without_fragment = token.split_once('#').map_or(token, |(base, _)| base);
+    let without_query = without_fragment
+        .split_once('?')
+        .map_or(without_fragment, |(base, _)| base);
+    let Some((scheme, remainder)) = without_query.split_once("://") else {
+        return without_query.to_string();
+    };
+    let host = remainder.split('/').next().unwrap_or(remainder);
+    if remainder.contains('/') {
+        format!("{scheme}://{host}/<redacted>")
+    } else {
+        format!("{scheme}://{host}")
+    }
 }
 
 fn is_wrapper_punctuation(ch: char) -> bool {
@@ -2532,7 +2540,7 @@ mod tests {
     }
 
     #[test]
-    fn redact_calendar_sync_error_removes_query_and_fragment_from_urls() {
+    fn redact_calendar_sync_error_redacts_private_url_path_query_and_fragment() {
         let error = "Calendar sync source `work` request failed: https://example.com/feed.ics?token=abc123#frag"
             .to_string();
 
@@ -2540,7 +2548,7 @@ mod tests {
 
         assert_eq!(
             redacted,
-            "Calendar sync source `work` request failed: https://example.com/feed.ics"
+            "Calendar sync source `work` request failed: https://example.com/<redacted>"
         );
     }
 
@@ -2553,6 +2561,19 @@ mod tests {
         assert_eq!(
             redacted,
             "Calendar sync source `work` parse failed: value?still-visible"
+        );
+    }
+
+    #[test]
+    fn redact_calendar_sync_error_preserves_host_only_urls() {
+        let error = "Calendar sync source `work` request failed: https://example.com?token=abc123"
+            .to_string();
+
+        let redacted = redact_calendar_sync_error(error);
+
+        assert_eq!(
+            redacted,
+            "Calendar sync source `work` request failed: https://example.com"
         );
     }
 }
