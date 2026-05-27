@@ -564,7 +564,7 @@ impl App {
             },
             wakatime: self.wakatime_metadata.clone(),
             wakatime_runtime: self.wakatime_runtime.clone(),
-            feature_flags: self.feature_flags,
+            feature_flags: self.feature_flags.clone(),
             shortcuts: self.shortcuts.to_config(),
         }
     }

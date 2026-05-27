@@ -25,6 +25,7 @@ use crate::config::{
     WakatimeRuntimeConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
     validate_automation_trigger_rules,
 };
+use crate::integration::{IntegrationLifecycleEvent, IntegrationRuntime};
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
     OneTimeWindow, RecurringWindow, WindowOccurrence, active_occurrence,
@@ -51,7 +52,8 @@ use crate::timer::{
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
 };
 use crate::wakatime::{
-    WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, WakatimeTracker,
+    WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, WakatimeRuntimeState,
+    WakatimeTracker,
 };
 
 mod automation_triggers;
@@ -729,7 +731,11 @@ pub struct SetupDiagnostics {
 }
 
 impl SetupDiagnostics {
-    fn collect(blocker: &SiteBlocker, deprecation_warnings: Vec<String>) -> Self {
+    fn collect(
+        blocker: &SiteBlocker,
+        deprecation_warnings: Vec<String>,
+        wakatime_integration_enabled: bool,
+    ) -> Self {
         let hosts_diagnostics = blocker.hosts_file_diagnostics();
         let backend_status = blocker.backend_status();
         let blocking_permissions = blocking_permissions_check(&hosts_diagnostics);
@@ -748,15 +754,19 @@ impl SetupDiagnostics {
             backend_status.last_error.as_deref(),
         );
         let command_backend = command_backend_check(blocker);
-        let wakatime_diagnostics = WakatimeTracker::config_diagnostics();
-        let wakatime_config = match wakatime_diagnostics.status {
-            WakatimeConfigStatus::Configured => SetupCheck::ok(wakatime_diagnostics.detail),
-            WakatimeConfigStatus::MissingConfigFile
-            | WakatimeConfigStatus::MissingApiKey
-            | WakatimeConfigStatus::UnreadableConfig
-            | WakatimeConfigStatus::HomeDirectoryUnavailable => {
-                SetupCheck::warning(wakatime_diagnostics.detail)
+        let wakatime_config = if wakatime_integration_enabled {
+            let wakatime_diagnostics = WakatimeTracker::config_diagnostics();
+            match wakatime_diagnostics.status {
+                WakatimeConfigStatus::Configured => SetupCheck::ok(wakatime_diagnostics.detail),
+                WakatimeConfigStatus::MissingConfigFile
+                | WakatimeConfigStatus::MissingApiKey
+                | WakatimeConfigStatus::UnreadableConfig
+                | WakatimeConfigStatus::HomeDirectoryUnavailable => {
+                    SetupCheck::warning(wakatime_diagnostics.detail)
+                }
             }
+        } else {
+            SetupCheck::ok("Disabled by integration framework configuration.".to_string())
         };
         let sync_diagnostics = crate::sync::diagnostics();
         let sync_status = if sync_diagnostics.warning {
@@ -871,7 +881,7 @@ pub struct App {
     history_dashboard_selected_card: HistoryKpiCardId,
     history_dashboard_cache: RefCell<HistoryDashboardCache>,
     pub phase_notification: Option<String>,
-    pub wakatime: WakatimeTracker,
+    pub integrations: IntegrationRuntime,
     pub selected_profile: ProfileId,
     selected_theme_preset: ThemePreset,
     feature_flags: FeatureFlagsConfig,
@@ -953,7 +963,7 @@ impl App {
         let config = config.normalized();
         let selected_profile = config.selected_profile;
         let selected_theme_preset = config.selected_theme_preset;
-        let feature_flags = config.feature_flags;
+        let feature_flags = config.feature_flags.clone();
         let setup_deprecation_warnings = setup_deprecation_warnings(&config_deprecation_warnings);
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
@@ -981,6 +991,18 @@ impl App {
         let history_dashboard = config.history_dashboard;
         let wakatime_metadata = config.wakatime;
         let wakatime_runtime = config.wakatime_runtime;
+        let (integrations, integration_load_warnings) = IntegrationRuntime::load(
+            &feature_flags.integrations.enabled,
+            WakatimeHeartbeatMetadata {
+                project: wakatime_metadata.project.clone(),
+                language: wakatime_metadata.language.clone(),
+            },
+            WakatimeRuntimeOptions {
+                retry_backoff_secs: wakatime_runtime.retry_backoff_secs.clone(),
+                queue_capacity: wakatime_runtime.queue_capacity,
+                queue_retry_delay_secs: wakatime_runtime.queue_retry_delay_secs,
+            },
+        );
         let blocklist_profiles = config.blocklist_profiles.clone();
         let active_blocklist_profile =
             blocklist_profile_index(&blocklist_profiles, &config.selected_blocklist_profile);
@@ -1003,10 +1025,17 @@ impl App {
         if automation_trigger_config_error.is_some() {
             automation_triggers.clear();
         }
+        let integration_config_error = (!integration_load_warnings.is_empty()).then(|| {
+            format!(
+                "integration config adjusted: {}",
+                integration_load_warnings.join("; ")
+            )
+        });
         let initial_config_error = [
             shortcut_config_error,
             automation_trigger_config_error,
             calendar_sync_error,
+            integration_config_error,
         ]
         .into_iter()
         .flatten()
@@ -1044,8 +1073,11 @@ impl App {
             blocking_backend_policy_for_config(config.blocking_backend.policy),
             command_backend_for_config(&config.blocking_backend.command),
         );
-        let setup_diagnostics =
-            SetupDiagnostics::collect(&blocker, setup_deprecation_warnings.clone());
+        let setup_diagnostics = SetupDiagnostics::collect(
+            &blocker,
+            setup_deprecation_warnings.clone(),
+            feature_flags.integrations.is_enabled("wakatime"),
+        );
         let history_dashboard_selected_card = history_dashboard
             .card_order
             .first()
@@ -1103,17 +1135,7 @@ impl App {
             history_dashboard_selected_card,
             history_dashboard_cache: RefCell::new(HistoryDashboardCache::default()),
             phase_notification: None,
-            wakatime: WakatimeTracker::new_with_settings(
-                WakatimeHeartbeatMetadata {
-                    project: wakatime_metadata.project.clone(),
-                    language: wakatime_metadata.language.clone(),
-                },
-                WakatimeRuntimeOptions {
-                    retry_backoff_secs: wakatime_runtime.retry_backoff_secs.clone(),
-                    queue_capacity: wakatime_runtime.queue_capacity,
-                    queue_retry_delay_secs: wakatime_runtime.queue_retry_delay_secs,
-                },
-            ),
+            integrations,
             selected_profile,
             selected_theme_preset,
             feature_flags,
@@ -1194,7 +1216,12 @@ impl App {
     /// suspend/resume cannot trigger multiple rapid heartbeats.
     pub fn on_wakatime_elapsed(&mut self, elapsed_secs: u64) {
         if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running {
-            self.wakatime.tick_elapsed(elapsed_secs);
+            if let Err(error) = self
+                .integrations
+                .dispatch_lifecycle_event(IntegrationLifecycleEvent::FocusElapsed { elapsed_secs })
+            {
+                self.config_error = Some(error);
+            }
         }
     }
 
@@ -1204,7 +1231,12 @@ impl App {
         let now = Local::now();
         self.current_frame_now = now;
         self.sync_today_goal_snapshot();
-        self.wakatime.poll_events();
+        if let Err(error) = self
+            .integrations
+            .dispatch_lifecycle_event(IntegrationLifecycleEvent::Poll)
+        {
+            self.config_error = Some(error);
+        }
         self.sync_temporary_allowlist_entries(now);
         self.sync_break_glass_override();
         self.sync_weekday_profile_rules(now);
@@ -1218,6 +1250,42 @@ impl App {
 
     pub fn selected_theme_preset(&self) -> ThemePreset {
         self.selected_theme_preset
+    }
+
+    pub fn wakatime_runtime_state(&self) -> WakatimeRuntimeState {
+        self.integrations.wakatime_runtime_state()
+    }
+
+    pub fn wakatime_last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
+        self.integrations
+            .wakatime_last_successful_heartbeat_epoch_secs()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replace_wakatime_tracker_for_tests(&mut self, tracker: WakatimeTracker) {
+        self.integrations
+            .replace_wakatime_tracker_for_tests(tracker);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn wakatime_tracker_mut_for_tests(&mut self) -> Option<&mut WakatimeTracker> {
+        self.integrations.wakatime_tracker_mut_for_tests()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn wakatime_heartbeat_metadata_for_tests(&self) -> WakatimeHeartbeatMetadata {
+        self.integrations
+            .wakatime_tracker_for_tests()
+            .map(WakatimeTracker::heartbeat_metadata_for_tests)
+            .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn wakatime_runtime_options_for_tests(&self) -> WakatimeRuntimeOptions {
+        self.integrations
+            .wakatime_tracker_for_tests()
+            .map(WakatimeTracker::runtime_options_for_tests)
+            .unwrap_or_default()
     }
 
     fn active_calendar_busy_window(&self, now: DateTime<Local>) -> Option<&CalendarBusyWindow> {

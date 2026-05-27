@@ -452,7 +452,7 @@ fn timer_stats_line(app: &App) -> (String, Style) {
 }
 
 pub(super) fn wakatime_status_line(app: &App) -> (String, Color) {
-    let runtime_state = app.wakatime.runtime_state();
+    let runtime_state = app.wakatime_runtime_state();
     let (status_text, status_color) = match &runtime_state {
         WakatimeRuntimeState::NotConfigured => (
             "⏱  WakaTime: not configured".to_string(),
@@ -506,7 +506,7 @@ pub(super) fn wakatime_status_line(app: &App) -> (String, Color) {
 }
 
 fn wakatime_last_success_text(app: &App) -> String {
-    match app.wakatime.last_successful_heartbeat_epoch_secs() {
+    match app.wakatime_last_successful_heartbeat_epoch_secs() {
         Some(epoch_secs) => format!(
             "last success {}",
             format_wakatime_heartbeat_timestamp(epoch_secs)
