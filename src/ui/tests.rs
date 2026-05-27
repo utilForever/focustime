@@ -1090,7 +1090,7 @@ fn month_label_uses_zero_padded_iso_format() {
 #[test]
 fn wakatime_status_line_shows_not_yet_sent_when_no_success_exists() {
     let mut app = App::default();
-    app.wakatime = WakatimeTracker::new_configured_for_tests();
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
 
     let (text, color) = wakatime_status_line(&app);
 
@@ -1101,9 +1101,12 @@ fn wakatime_status_line_shows_not_yet_sent_when_no_success_exists() {
 #[test]
 fn wakatime_status_line_shows_last_success_time_after_success_event() {
     let mut app = App::default();
-    app.wakatime = WakatimeTracker::new_configured_for_tests();
-    app.wakatime.push_sent_event_for_tests();
-    app.wakatime.poll_events();
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
+    let tracker = app
+        .wakatime_tracker_mut_for_tests()
+        .expect("wakatime tracker should be available");
+    tracker.push_sent_event_for_tests();
+    tracker.poll_events();
 
     let (text, color) = wakatime_status_line(&app);
 
@@ -1115,8 +1118,10 @@ fn wakatime_status_line_shows_last_success_time_after_success_event() {
 #[test]
 fn wakatime_status_line_shows_offline_queue_backlog() {
     let mut app = App::default();
-    app.wakatime = WakatimeTracker::new_configured_for_tests();
-    app.wakatime.set_pending_heartbeats_for_tests(3);
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
+    app.wakatime_tracker_mut_for_tests()
+        .expect("wakatime tracker should be available")
+        .set_pending_heartbeats_for_tests(3);
 
     let (text, color) = wakatime_status_line(&app);
 
@@ -1130,8 +1135,10 @@ fn wakatime_status_line_shows_offline_queue_backlog() {
 #[test]
 fn wakatime_status_line_shows_replaying_queue_backlog() {
     let mut app = App::default();
-    app.wakatime = WakatimeTracker::new_configured_for_tests();
-    app.wakatime.set_replaying_heartbeats_for_tests(2);
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
+    app.wakatime_tracker_mut_for_tests()
+        .expect("wakatime tracker should be available")
+        .set_replaying_heartbeats_for_tests(2);
 
     let (text, color) = wakatime_status_line(&app);
 
@@ -1145,10 +1152,12 @@ fn wakatime_status_line_shows_replaying_queue_backlog() {
 #[test]
 fn wakatime_status_line_shows_retrying_state() {
     let mut app = App::default();
-    app.wakatime = WakatimeTracker::new_configured_for_tests();
-    app.wakatime
-        .push_retrying_event_for_tests(2, 4, 5, "HTTP 503");
-    app.wakatime.poll_events();
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
+    let tracker = app
+        .wakatime_tracker_mut_for_tests()
+        .expect("wakatime tracker should be available");
+    tracker.push_retrying_event_for_tests(2, 4, 5, "HTTP 503");
+    tracker.poll_events();
 
     let (text, color) = wakatime_status_line(&app);
 
@@ -1162,9 +1171,12 @@ fn wakatime_status_line_shows_retrying_state() {
 #[test]
 fn wakatime_status_line_shows_error_state() {
     let mut app = App::default();
-    app.wakatime = WakatimeTracker::new_configured_for_tests();
-    app.wakatime.push_failed_event_for_tests("HTTP 500");
-    app.wakatime.poll_events();
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
+    let tracker = app
+        .wakatime_tracker_mut_for_tests()
+        .expect("wakatime tracker should be available");
+    tracker.push_failed_event_for_tests("HTTP 500");
+    tracker.poll_events();
 
     let (text, color) = wakatime_status_line(&app);
 
@@ -1178,7 +1190,7 @@ fn wakatime_status_line_shows_error_state() {
 #[test]
 fn wakatime_status_line_for_not_configured_omits_last_success_suffix() {
     let mut app = App::default();
-    app.wakatime = WakatimeTracker::new_unconfigured_for_tests();
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_unconfigured_for_tests());
 
     let (text, color) = wakatime_status_line(&app);
 

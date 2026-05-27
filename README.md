@@ -267,6 +267,25 @@ Encrypted sync behavior:
 - `--sync-restore` verifies bundle integrity before replacing local files and rejects conflicting local changes since the last encrypted snapshot.
 - Use `--sync-passphrase` (or `FOCUSTIME_SYNC_PASSPHRASE`) with encrypted sync commands; passphrases are runtime-only and never persisted.
 
+### Integration framework foundation
+
+`focustime` now routes external-tool hooks through a typed integration runtime
+with explicit lifecycle events and capability boundaries. The initial loading
+model is config-driven activation of built-in integrations.
+
+Current built-in integration IDs:
+
+- `wakatime`
+
+Config example (`config.toml`):
+
+```toml
+[feature_flags.integrations]
+enabled = ["wakatime"]
+```
+
+Set `enabled = []` to disable all built-in integrations.
+
 ### Legacy compatibility deprecation milestones
 
 `focustime --diagnostics` and the TUI Setup Diagnostics screen report targeted
@@ -894,7 +913,7 @@ with focused submodules (updated in #240):
 - `src/stats.rs` + `src/stats/*.rs`: stats persistence, analytics, trends, recording, planner state, and exports.
 - `src/ui.rs` + `src/ui/*.rs`: Ratatui rendering split by screen (timer, session planner, site manager, profile manager, history, setup diagnostics).
 - `src/config.rs` + `src/config/paths.rs`: config schema/normalization and environment-aware path resolution.
-- Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/calendar.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, `src/wakatime.rs`, and `src/notifications.rs`.
+- Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/calendar.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, `src/integration.rs`, `src/wakatime.rs`, and `src/notifications.rs`.
 
 WakaTime tracking is optional and activates only when an API key is configured
 (read from `~/.wakatime.cfg`).
@@ -907,8 +926,9 @@ Runtime flow (high-level):
 4. Timer ticks advance every elapsed second while running.
 5. Phase-completion notifications are dispatched asynchronously.
 6. Blocking is applied during focus phases and removed outside focus.
-7. WakaTime tracking stays in sync with focus-running state and applies async
-   heartbeat outcomes without blocking timer flow.
+7. WakaTime tracking is managed via `IntegrationRuntime` (`App ->
+   IntegrationRuntime -> WakaTime`) and applies async heartbeat outcomes without
+   blocking timer flow.
 
 ### WakaTime reliability behavior
 

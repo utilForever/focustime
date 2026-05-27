@@ -3,6 +3,7 @@ use crate::app::{
     HistoryFeedback, HistoryFeedbackLevel, PhaseNotifier, PlannerFeedback, PlannerFeedbackLevel,
     SetupDiagnostics, SiteFeedback, SiteFeedbackLevel,
 };
+use crate::integration::IntegrationLifecycleEvent;
 
 impl App {
     pub(super) fn export_stats_history(&mut self) {
@@ -59,10 +60,10 @@ impl App {
 
     pub(super) fn sync_wakatime_tracking_for_state(&mut self) {
         let focus_running = self.focus_running_for_current_state();
-        if focus_running && !self.wakatime.is_tracking() {
-            self.wakatime.on_focus_start();
-        } else if !focus_running && self.wakatime.is_tracking() {
-            self.wakatime.on_focus_stop();
+        if let Err(error) = self.integrations.dispatch_lifecycle_event(
+            IntegrationLifecycleEvent::FocusStateChanged { focus_running },
+        ) {
+            self.config_error = Some(error);
         }
     }
 
@@ -136,7 +137,11 @@ impl App {
     pub(super) fn refresh_setup_diagnostics(&mut self) {
         let deprecation_warnings =
             crate::app::setup_deprecation_warnings(&self.config_deprecation_warnings);
-        self.setup_diagnostics = SetupDiagnostics::collect(&self.blocker, deprecation_warnings);
+        self.setup_diagnostics = SetupDiagnostics::collect(
+            &self.blocker,
+            deprecation_warnings,
+            self.feature_flags.integrations.is_enabled("wakatime"),
+        );
         self.refresh_blocking_preview();
     }
 

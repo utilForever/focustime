@@ -565,8 +565,8 @@ impl App {
         let (project, language) = self
             .wakatime_metadata
             .resolved_project_language_for_task_label(self.current_task_label());
-        self.wakatime
-            .set_heartbeat_metadata(WakatimeHeartbeatMetadata { project, language });
+        self.integrations
+            .set_wakatime_metadata(WakatimeHeartbeatMetadata { project, language });
     }
 
     pub(super) fn clamp_break_template_selection(&mut self) {

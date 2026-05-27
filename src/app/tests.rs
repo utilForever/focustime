@@ -215,7 +215,7 @@ fn app_from_config_applies_wakatime_runtime_knobs() {
     });
 
     assert_eq!(
-        app.wakatime.runtime_options_for_tests(),
+        app.wakatime_runtime_options_for_tests(),
         crate::wakatime::WakatimeRuntimeOptions {
             retry_backoff_secs: vec![2, 4, 8],
             queue_capacity: 512,
@@ -1075,7 +1075,7 @@ fn editing_wakatime_metadata_fields_updates_and_persists_settings() {
         }
     );
     assert_eq!(
-        app.wakatime.heartbeat_metadata_for_tests(),
+        app.wakatime_heartbeat_metadata_for_tests(),
         WakatimeHeartbeatMetadata {
             project: "Team Focus".to_string(),
             language: "Deep Work".to_string(),
@@ -1109,7 +1109,7 @@ fn editing_wakatime_metadata_blank_values_fall_back_to_defaults() {
     assert_eq!(app.wakatime_metadata, defaults);
     assert_eq!(app.persisted_config().wakatime, defaults);
     assert_eq!(
-        app.wakatime.heartbeat_metadata_for_tests(),
+        app.wakatime_heartbeat_metadata_for_tests(),
         WakatimeHeartbeatMetadata::default()
     );
 }
@@ -1133,7 +1133,7 @@ fn selecting_task_label_applies_wakatime_mapping_override() {
     app.select_task_label_for_cli("Docs").unwrap();
 
     assert_eq!(
-        app.wakatime.heartbeat_metadata_for_tests(),
+        app.wakatime_heartbeat_metadata_for_tests(),
         WakatimeHeartbeatMetadata {
             project: "Documentation".to_string(),
             language: "Markdown".to_string(),
@@ -1160,7 +1160,7 @@ fn selecting_unmapped_task_label_uses_global_wakatime_metadata() {
     app.select_task_label_for_cli("Planning").unwrap();
 
     assert_eq!(
-        app.wakatime.heartbeat_metadata_for_tests(),
+        app.wakatime_heartbeat_metadata_for_tests(),
         WakatimeHeartbeatMetadata {
             project: "Global Project".to_string(),
             language: "Global Language".to_string(),
@@ -1187,7 +1187,7 @@ fn selecting_task_label_uses_partial_wakatime_mapping_fallback() {
     app.select_task_label_for_cli("Docs").unwrap();
 
     assert_eq!(
-        app.wakatime.heartbeat_metadata_for_tests(),
+        app.wakatime_heartbeat_metadata_for_tests(),
         WakatimeHeartbeatMetadata {
             project: "Documentation".to_string(),
             language: "Global Language".to_string(),
@@ -1214,7 +1214,7 @@ fn selecting_task_label_matches_wakatime_mapping_case_insensitively() {
     app.select_task_label_for_cli("deep work").unwrap();
 
     assert_eq!(
-        app.wakatime.heartbeat_metadata_for_tests(),
+        app.wakatime_heartbeat_metadata_for_tests(),
         WakatimeHeartbeatMetadata {
             project: "Global Project".to_string(),
             language: "Rust".to_string(),
@@ -2147,7 +2147,7 @@ fn cancelling_profile_edit_restores_wakatime_metadata() {
         }
     );
     assert_eq!(
-        app.wakatime.heartbeat_metadata_for_tests(),
+        app.wakatime_heartbeat_metadata_for_tests(),
         WakatimeHeartbeatMetadata {
             project: "Team Focus".to_string(),
             language: "Deep Work".to_string(),
@@ -4883,13 +4883,15 @@ fn q_quits_during_wakatime_metadata_edit() {
 #[test]
 fn poll_wakatime_status_applies_async_failure_event() {
     let mut app = App::default();
-    app.wakatime = WakatimeTracker::new_configured_for_tests();
-    app.wakatime.push_failed_event_for_tests("HTTP 503");
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
+    app.wakatime_tracker_mut_for_tests()
+        .expect("wakatime tracker should be available")
+        .push_failed_event_for_tests("HTTP 503");
 
     app.poll_wakatime_status();
 
     assert_eq!(
-        app.wakatime.runtime_state(),
+        app.wakatime_runtime_state(),
         crate::wakatime::WakatimeRuntimeState::Error("HTTP 503".to_string())
     );
 }
@@ -4897,17 +4899,19 @@ fn poll_wakatime_status_applies_async_failure_event() {
 #[test]
 fn poll_wakatime_status_transitions_queued_backlog_to_replaying() {
     let mut app = App::default();
-    app.wakatime = WakatimeTracker::new_configured_for_tests();
-    app.wakatime.set_pending_heartbeats_for_tests(2);
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
+    app.wakatime_tracker_mut_for_tests()
+        .expect("wakatime tracker should be available")
+        .set_pending_heartbeats_for_tests(2);
     assert!(matches!(
-        app.wakatime.runtime_state(),
+        app.wakatime_runtime_state(),
         crate::wakatime::WakatimeRuntimeState::Queued { pending: 2 }
     ));
 
     app.poll_wakatime_status();
 
     assert!(matches!(
-        app.wakatime.runtime_state(),
+        app.wakatime_runtime_state(),
         crate::wakatime::WakatimeRuntimeState::Replaying { pending: 2 }
     ));
 }
