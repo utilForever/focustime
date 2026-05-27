@@ -378,24 +378,24 @@ fn expand_event(
     let end_date = range_end.date_naive();
     while date <= end_date {
         if !recurrence_occurs_on_date(recurrence, event.start.date_naive(), date) {
-            date = date.succ_opt().unwrap_or(date);
-            if date == end_date {
+            let Some(next) = date.succ_opt() else {
                 break;
-            }
+            };
+            date = next;
             continue;
         }
         let Some(start) = local_datetime_on_date_with_time(date, event.start) else {
-            date = date.succ_opt().unwrap_or(date);
-            if date == end_date {
+            let Some(next) = date.succ_opt() else {
                 break;
-            }
+            };
+            date = next;
             continue;
         };
         if start < event.start {
-            date = date.succ_opt().unwrap_or(date);
-            if date == end_date {
+            let Some(next) = date.succ_opt() else {
                 break;
-            }
+            };
+            date = next;
             continue;
         }
         if recurrence.until.is_some_and(|until| start > until) {
@@ -842,6 +842,35 @@ mod tests {
             local_datetime_from_epoch(window.start_epoch_secs)
                 .is_some_and(|dt| dt.weekday() == expected_weekday)
         }));
+    }
+
+    #[test]
+    fn parse_ics_includes_weekly_occurrence_on_range_end_date() {
+        let start_day = Local::now().date_naive();
+        let Some(next_day) = start_day.succ_opt() else {
+            panic!("expected next day");
+        };
+        let start = local_datetime(start_day, 10, 0);
+        let end = local_datetime(start_day, 11, 0);
+        let next_day_token = weekday_to_token(next_day.weekday());
+        let ics = format!(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:{}\r\nDTEND:{}\r\nRRULE:FREQ=WEEKLY;INTERVAL=1;COUNT=1;BYDAY={}\r\nSUMMARY:Range End Weekly\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+            start.format("%Y%m%dT%H%M%S"),
+            end.format("%Y%m%dT%H%M%S"),
+            next_day_token
+        );
+
+        let windows = parse_ics_busy_windows(
+            &source(),
+            &ics,
+            start - Duration::hours(1),
+            start + Duration::days(1) + Duration::hours(2),
+        )
+        .expect("ICS parse should succeed");
+
+        let expected_start = local_datetime(next_day, 10, 0);
+        assert_eq!(windows.len(), 1);
+        assert_eq!(windows[0].start_epoch_secs, expected_start.timestamp());
     }
 
     #[test]
