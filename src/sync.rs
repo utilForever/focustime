@@ -608,10 +608,10 @@ fn detect_conflict(
     let Some(expected_stats_hash) = state.last_local_stats_hash_sha256.as_deref() else {
         return false;
     };
-    if current_config_hash == Some(expected_config_hash)
-        && current_stats_hash == Some(expected_stats_hash)
-    {
-        return false;
+    let local_matches_tracked_snapshot = current_config_hash == Some(expected_config_hash)
+        && current_stats_hash == Some(expected_stats_hash);
+    if !local_matches_tracked_snapshot {
+        return true;
     }
     bundle.base_snapshot_id.as_deref() != Some(last_snapshot_id)
 }
@@ -925,10 +925,10 @@ mod tests {
     }
 
     #[test]
-    fn conflict_detection_is_false_when_lineage_matches() {
+    fn conflict_detection_is_true_when_local_diverged_even_if_lineage_matches() {
         let state = sample_state();
         let bundle = sample_bundle(Some("snap-current"));
-        assert!(!detect_conflict(
+        assert!(detect_conflict(
             &state,
             &bundle,
             Some("cfg-modified"),
