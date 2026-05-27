@@ -2039,19 +2039,79 @@ fn execute_sync_restore_command(
 fn execute_calendar_sync_command(output: OutputMode) -> Result<(), String> {
     let config = AppConfig::load().normalized();
     let result = crate::calendar::sync_from_config(&config.calendar_sync, chrono::Local::now())?;
+    let errors = result
+        .source_errors
+        .into_iter()
+        .map(redact_calendar_sync_error)
+        .collect::<Vec<_>>();
     let payload = CalendarSyncCommandOutput {
         action: "calendar-sync",
         synced_at_epoch_secs: result.synced_at_epoch_secs,
         source_count: result.source_count,
         windows_count: result.windows.len(),
-        error_count: result.source_errors.len(),
-        errors: result.source_errors,
+        error_count: errors.len(),
+        errors,
     };
     match output {
         OutputMode::Text => print_calendar_sync_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
+}
+
+fn redact_calendar_sync_error(message: String) -> String {
+    message
+        .split_whitespace()
+        .map(redact_calendar_sync_token)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn redact_calendar_sync_token(token: &str) -> String {
+    let core_start = token
+        .char_indices()
+        .find(|(_, ch)| !is_wrapper_punctuation(*ch))
+        .map_or(0, |(index, _)| index);
+    let core_end = token
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| !is_wrapper_punctuation(*ch))
+        .map_or(token.len(), |(index, ch)| index + ch.len_utf8());
+    if core_end <= core_start {
+        return token.to_string();
+    }
+    let prefix = &token[..core_start];
+    let core = &token[core_start..core_end];
+    let suffix = &token[core_end..];
+    let redacted_core = if is_url_like_token(core) {
+        redact_url_like_token(core)
+    } else {
+        core.to_string()
+    };
+    format!("{prefix}{redacted_core}{suffix}")
+}
+
+fn is_url_like_token(token: &str) -> bool {
+    token.contains("://")
+        || token.starts_with("webcal://")
+        || token.starts_with("webcals://")
+        || token.starts_with("http://")
+        || token.starts_with("https://")
+}
+
+fn redact_url_like_token(token: &str) -> String {
+    let without_query = token.split_once('?').map_or(token, |(base, _)| base);
+    without_query
+        .split_once('#')
+        .map_or(without_query, |(base, _)| base)
+        .to_string()
+}
+
+fn is_wrapper_punctuation(ch: char) -> bool {
+    matches!(
+        ch,
+        '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | ',' | ';'
+    )
 }
 
 fn resolve_sync_passphrase(passphrase: Option<String>) -> Result<String, String> {
@@ -2468,6 +2528,31 @@ mod tests {
                 days: vec!["mon".to_string()],
                 at: "09:00".to_string(),
             }
+        );
+    }
+
+    #[test]
+    fn redact_calendar_sync_error_removes_query_and_fragment_from_urls() {
+        let error = "Calendar sync source `work` request failed: https://example.com/feed.ics?token=abc123#frag"
+            .to_string();
+
+        let redacted = redact_calendar_sync_error(error);
+
+        assert_eq!(
+            redacted,
+            "Calendar sync source `work` request failed: https://example.com/feed.ics"
+        );
+    }
+
+    #[test]
+    fn redact_calendar_sync_error_preserves_non_url_tokens() {
+        let error = "Calendar sync source `work` parse failed: value?still-visible".to_string();
+
+        let redacted = redact_calendar_sync_error(error);
+
+        assert_eq!(
+            redacted,
+            "Calendar sync source `work` parse failed: value?still-visible"
         );
     }
 }
