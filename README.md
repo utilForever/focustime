@@ -199,6 +199,10 @@ cargo run -- --schedule-delay
 cargo run -- --schedule --json
 cargo run -- --weekday-rules --json
 
+# Refresh calendar busy-window cache from configured ICS feeds
+cargo run -- --calendar-sync
+cargo run -- --calendar-sync --json
+
 # Break-glass workflow controls from CLI (first call arms, second confirms)
 cargo run -- --break-glass-trigger
 cargo run -- --break-glass-trigger --json
@@ -447,7 +451,7 @@ quick session note.
 Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
-CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`,
+CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`, `--calendar-sync`,
 `--weekday-rules*`, `--session-template*`, `--history-dashboard*`,
 `--break-glass-trigger`, and `--break-glass-cancel` for non-interactive
 inspection and in-session workflow control.
@@ -572,6 +576,23 @@ end = "16:00"
 time_step_minutes = 15
 delay_secs = 600
 
+[calendar_sync]
+enabled = true
+refresh_secs = 1800
+lookahead_days = 14
+
+[[calendar_sync.sources]]
+name = "Google Work"
+provider = "google" # ics | google | outlook (all use ICS feed URLs)
+url = "https://calendar.google.com/calendar/ical/example/private-abc123/basic.ics"
+enabled = true
+
+[[calendar_sync.sources]]
+name = "Outlook Team"
+provider = "outlook"
+url = "https://outlook.office365.com/owa/calendar/example@contoso.com/private-xyz456/calendar.ics"
+enabled = true
+
 [daily_goal]
 minutes = 120
 pomodoros = 4
@@ -628,6 +649,12 @@ duplicate task labels are configured, the first valid mapping is used.
 schedule runtime defaults (`time_step_minutes = 15`, `delay_secs = 600`).
 `time_step_minutes` is clamped to `1..60`; `delay_secs` is clamped to
 `60..43200`.
+
+`[calendar_sync]` is optional. When omitted, calendar sync defaults to disabled
+with `refresh_secs = 1800`, `lookahead_days = 14`, and no sources. Runtime
+normalization clamps `refresh_secs` to `300..86400` and `lookahead_days` to
+`1..90`, trims source names/URLs, auto-fills blank source names
+(`calendar-source-N`), and removes duplicate provider+URL sources.
 
 `[wakatime_runtime]` is optional. When omitted, focustime keeps existing
 WakaTime runtime defaults (`retry_backoff_secs = [2, 5, 10]`,
@@ -732,6 +759,8 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - `weekday_profile_rules[]` can bind weekday (`day`) to a profile (`profile`), blocklist profile (`blocklist_profile`), and optional session template (`session_template`)
 - weekday profile rules apply at startup and day boundaries; they do not continuously re-assert during the same day
 - the timer session overview shows the current/next scheduled window
+- when calendar sync cache is available, schedule text adds `calendar busy` for active calendar events and a `calendar overlap` warning for upcoming schedule collisions
+- `--calendar-sync` refreshes the cache from configured ICS feeds (including Google/Outlook ICS feed URLs)
 
 You can configure notification and auto-start settings directly from the TUI:
 
@@ -865,7 +894,7 @@ with focused submodules (updated in #240):
 - `src/stats.rs` + `src/stats/*.rs`: stats persistence, analytics, trends, recording, planner state, and exports.
 - `src/ui.rs` + `src/ui/*.rs`: Ratatui rendering split by screen (timer, session planner, site manager, profile manager, history, setup diagnostics).
 - `src/config.rs` + `src/config/paths.rs`: config schema/normalization and environment-aware path resolution.
-- Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, `src/wakatime.rs`, and `src/notifications.rs`.
+- Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/calendar.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, `src/wakatime.rs`, and `src/notifications.rs`.
 
 WakaTime tracking is optional and activates only when an API key is configured
 (read from `~/.wakatime.cfg`).
