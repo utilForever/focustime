@@ -359,65 +359,57 @@ fn expand_event(
         return;
     }
 
-    if event.recurrence.is_none() {
-        if event.end > range_start && event.start < range_end {
-            windows.push(CalendarBusyWindow {
-                source_name: source.name.clone(),
-                provider: source.provider,
-                summary: event.summary.clone(),
-                start_epoch_secs: event.start.timestamp(),
-                end_epoch_secs: event.end.timestamp(),
-            });
-        }
+    if let Some(recurrence) = event.recurrence.as_ref() {
+        expand_recurring_event(
+            event,
+            recurrence,
+            duration,
+            range_start,
+            range_end,
+            windows,
+            source,
+        );
         return;
     }
 
-    let recurrence = event.recurrence.as_ref().expect("checked above");
+    push_window_if_in_range(
+        event,
+        source,
+        event.start,
+        event.end,
+        range_start,
+        range_end,
+        windows,
+    );
+}
+
+fn expand_recurring_event(
+    event: &ParsedEvent,
+    recurrence: &RecurrenceRule,
+    duration: Duration,
+    range_start: DateTime<Local>,
+    range_end: DateTime<Local>,
+    windows: &mut Vec<CalendarBusyWindow>,
+    source: &CalendarSourceConfig,
+) {
     let mut generated_count = 0u32;
     let mut date = event.start.date_naive();
     let end_date = range_end.date_naive();
     while date <= end_date {
-        if !recurrence_occurs_on_date(recurrence, event.start.date_naive(), date) {
-            let Some(next) = date.succ_opt() else {
+        if let Some(start) = recurrence_start_for_date(event, recurrence, date) {
+            if recurrence.until.is_some_and(|until| start > until) {
                 break;
-            };
-            date = next;
-            continue;
-        }
-        let Some(start) = local_datetime_on_date_with_time(date, event.start) else {
-            let Some(next) = date.succ_opt() else {
+            }
+            generated_count = generated_count.saturating_add(1);
+            if recurrence
+                .count
+                .is_some_and(|count| generated_count > count)
+            {
                 break;
-            };
-            date = next;
-            continue;
-        };
-        if start < event.start {
-            let Some(next) = date.succ_opt() else {
-                break;
-            };
-            date = next;
-            continue;
-        }
-        if recurrence.until.is_some_and(|until| start > until) {
-            break;
-        }
-        generated_count = generated_count.saturating_add(1);
-        if recurrence
-            .count
-            .is_some_and(|count| generated_count > count)
-        {
-            break;
-        }
-        if !event.exdate_starts.contains(&start.timestamp()) {
-            let end = start + duration;
-            if end > range_start && start < range_end {
-                windows.push(CalendarBusyWindow {
-                    source_name: source.name.clone(),
-                    provider: source.provider,
-                    summary: event.summary.clone(),
-                    start_epoch_secs: start.timestamp(),
-                    end_epoch_secs: end.timestamp(),
-                });
+            }
+            if !event.exdate_starts.contains(&start.timestamp()) {
+                let end = start + duration;
+                push_window_if_in_range(event, source, start, end, range_start, range_end, windows);
             }
         }
         let Some(next) = date.succ_opt() else {
@@ -425,6 +417,39 @@ fn expand_event(
         };
         date = next;
     }
+}
+
+fn recurrence_start_for_date(
+    event: &ParsedEvent,
+    recurrence: &RecurrenceRule,
+    date: NaiveDate,
+) -> Option<DateTime<Local>> {
+    if !recurrence_occurs_on_date(recurrence, event.start.date_naive(), date) {
+        return None;
+    }
+    let start = local_datetime_on_date_with_time(date, event.start)?;
+    (start >= event.start).then_some(start)
+}
+
+fn push_window_if_in_range(
+    event: &ParsedEvent,
+    source: &CalendarSourceConfig,
+    start: DateTime<Local>,
+    end: DateTime<Local>,
+    range_start: DateTime<Local>,
+    range_end: DateTime<Local>,
+    windows: &mut Vec<CalendarBusyWindow>,
+) {
+    if end <= range_start || start >= range_end {
+        return;
+    }
+    windows.push(CalendarBusyWindow {
+        source_name: source.name.clone(),
+        provider: source.provider,
+        summary: event.summary.clone(),
+        start_epoch_secs: start.timestamp(),
+        end_epoch_secs: end.timestamp(),
+    });
 }
 
 fn recurrence_occurs_on_date(
