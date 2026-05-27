@@ -7,6 +7,7 @@ mod notifications;
 mod schedule;
 mod session_recovery;
 mod stats;
+mod sync;
 mod task_labels;
 mod temporary_allowlist;
 mod timer;

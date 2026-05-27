@@ -692,6 +692,12 @@ pub struct SetupDiagnostics {
     pub hosts_write_capability: SetupCheck,
     pub command_backend: SetupCheck,
     pub wakatime_config: SetupCheck,
+    pub sync_status: SetupCheck,
+    pub sync_device_id: Option<String>,
+    pub sync_last_snapshot_id: Option<String>,
+    pub sync_last_success_epoch_secs: Option<i64>,
+    pub sync_last_error: Option<String>,
+    pub sync_last_error_epoch_secs: Option<i64>,
     pub deprecation_warnings: Vec<String>,
 }
 
@@ -725,6 +731,12 @@ impl SetupDiagnostics {
                 SetupCheck::warning(wakatime_diagnostics.detail)
             }
         };
+        let sync_diagnostics = crate::sync::diagnostics();
+        let sync_status = if sync_diagnostics.warning {
+            SetupCheck::warning(sync_diagnostics.message.clone())
+        } else {
+            SetupCheck::ok(sync_diagnostics.message.clone())
+        };
         Self {
             hosts_file_path,
             backend_policy,
@@ -734,6 +746,12 @@ impl SetupDiagnostics {
             hosts_write_capability,
             command_backend,
             wakatime_config,
+            sync_status,
+            sync_device_id: sync_diagnostics.device_id,
+            sync_last_snapshot_id: sync_diagnostics.last_snapshot_id,
+            sync_last_success_epoch_secs: sync_diagnostics.last_success_epoch_secs,
+            sync_last_error: sync_diagnostics.last_error,
+            sync_last_error_epoch_secs: sync_diagnostics.last_error_epoch_secs,
             deprecation_warnings,
         }
     }
