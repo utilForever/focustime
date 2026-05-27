@@ -1748,7 +1748,10 @@ fn calendar_sync_normalization_deduplicates_sources_and_autonames_blanks() {
     assert!(normalized.sources[0].enabled);
 
     assert_eq!(normalized.sources[1].name, "calendar-source-2");
-    assert_eq!(normalized.sources[1].provider, CalendarProviderConfig::Google);
+    assert_eq!(
+        normalized.sources[1].provider,
+        CalendarProviderConfig::Google
+    );
     assert_eq!(normalized.sources[1].url, "https://example.com/a.ics");
     assert!(normalized.sources[1].enabled);
 }
