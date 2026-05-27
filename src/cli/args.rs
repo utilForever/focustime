@@ -181,6 +181,7 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--break-glass-trigger" => Some(ParsedToken::BreakGlassTrigger),
         "--break-glass-cancel" => Some(ParsedToken::BreakGlassCancel),
         "--diagnostics" => Some(ParsedToken::Diagnostics),
+        "--calendar-sync" => Some(ParsedToken::CalendarSync),
         "--blocking-preview" => Some(ParsedToken::BlockingPreview),
         "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
         "--blocklist-category-delete" => Some(ParsedToken::BlocklistCategoryDelete),

@@ -17,17 +17,18 @@ use crate::cli::{
     AppConfig, AutomationTriggerRuleConfig, AutomationTriggersCommandOutput, BackupOutput,
     BlocklistCategoryCommandKind, BlocklistCategoryCommandOutput, BlocklistCategorySummaryOutput,
     BlocklistProfileCommandKind, BlocklistProfileCommandOutput, BlocklistProfileConfig,
-    BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, BreakGlassCommandOutput, CliCommand,
-    CommandKind, DaemonConnectionOutput, DaemonStartCommandOutput, DaemonStatusCommandOutput,
-    DaemonStopCommandOutput, DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput,
-    FocusStats, GoalCarryCommandOutput, GoalCommandOutput, HistoryDashboardCardOutput,
-    HistoryDashboardCommandKind, HistoryDashboardCommandOutput, HistoryKpiCardId,
-    InvalidSiteEntryOutput, InvalidSiteInput, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId,
-    ProfileOutput, ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
-    ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SessionTemplateCommandKind,
-    SessionTemplateCommandOutput, SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker,
-    SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
-    SiteListTarget, StatusComparisonOptions, StatusOutput, StrictCommandOutput, SyncBackupOutput,
+    BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, BreakGlassCommandOutput,
+    CalendarSyncCommandOutput, CliCommand, CommandKind, DaemonConnectionOutput,
+    DaemonStartCommandOutput, DaemonStatusCommandOutput, DaemonStopCommandOutput, DailyGoalConfig,
+    DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats, GoalCarryCommandOutput,
+    GoalCommandOutput, HistoryDashboardCardOutput, HistoryDashboardCommandKind,
+    HistoryDashboardCommandOutput, HistoryKpiCardId, InvalidSiteEntryOutput, InvalidSiteInput,
+    MonthlyGoalConfig, OutputMode, PathBuf, ProfileId, ProfileOutput, ProfileView,
+    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput,
+    SessionMetadataCommandOutput, SessionTemplateCommandKind, SessionTemplateCommandOutput,
+    SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker, SiteDeleteCommandOutput,
+    SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput, SiteListTarget,
+    StatusComparisonOptions, StatusOutput, StrictCommandOutput, SyncBackupOutput,
     SyncRestoreOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
     TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset,
     TimerCommandOutput, TimerStateOutput, WeekdayProfileRuleConfig, WeekdayRulesCommandOutput,
@@ -38,19 +39,19 @@ use crate::cli::{
     print_automation_triggers_command_output, print_backup_output,
     print_blocking_preview_command_output, print_blocklist_category_command_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_daemon_start_command_output, print_daemon_status_command_output,
-    print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
-    print_goal_carry_command_output, print_goal_command_output,
-    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
-    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
-    print_session_metadata_command_output, print_session_template_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_sync_backup_output, print_sync_restore_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
-    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
-    timer_status_id,
+    print_calendar_sync_command_output, print_daemon_start_command_output,
+    print_daemon_status_command_output, print_daemon_stop_command_output,
+    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
+    print_goal_command_output, print_history_dashboard_command_output, print_json,
+    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
+    print_schedule_delay_command_output, print_session_metadata_command_output,
+    print_session_template_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_sync_backup_output, print_sync_restore_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_weekday_rules_command_output, profile_id, profile_view, selected_break_template_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -120,6 +121,7 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::SyncRestore { dir, passphrase } => {
             execute_sync_restore_command(dir, passphrase, cli_command.output)
         }
+        CommandKind::CalendarSync => execute_calendar_sync_command(cli_command.output),
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
@@ -2029,6 +2031,24 @@ fn execute_sync_restore_command(
     };
     match output {
         OutputMode::Text => print_sync_restore_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_calendar_sync_command(output: OutputMode) -> Result<(), String> {
+    let config = AppConfig::load().normalized();
+    let result = crate::calendar::sync_from_config(&config.calendar_sync, chrono::Local::now())?;
+    let payload = CalendarSyncCommandOutput {
+        action: "calendar-sync",
+        synced_at_epoch_secs: result.synced_at_epoch_secs,
+        source_count: result.source_count,
+        windows_count: result.windows.len(),
+        error_count: result.source_errors.len(),
+        errors: result.source_errors,
+    };
+    match output {
+        OutputMode::Text => print_calendar_sync_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
