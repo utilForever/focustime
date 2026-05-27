@@ -2294,3 +2294,30 @@ fn effective_blocked_sites_exact_allowlist_does_not_cancel_wildcard_block() {
         vec!["*.api.example.com".to_string()]
     );
 }
+
+#[test]
+fn feature_flags_default_enables_wakatime_integration() {
+    let flags = FeatureFlagsConfig::default();
+    assert!(flags.integrations.is_enabled("wakatime"));
+    assert_eq!(flags.integrations.enabled, vec!["wakatime".to_string()]);
+}
+
+#[test]
+fn feature_flags_normalization_deduplicates_and_trims_integration_names() {
+    let normalized = FeatureFlagsConfig {
+        integrations: IntegrationFeatureFlagsConfig {
+            enabled: vec![
+                "WakaTime".to_string(),
+                "  wakatime ".to_string(),
+                "custom".to_string(),
+                "".to_string(),
+            ],
+        },
+    }
+    .normalized();
+
+    assert_eq!(
+        normalized.integrations.enabled,
+        vec!["wakatime".to_string(), "custom".to_string()]
+    );
+}

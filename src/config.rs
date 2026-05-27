@@ -181,12 +181,52 @@ impl AppConfigDisk {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct FeatureFlagsConfig {}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct FeatureFlagsConfig {
+    #[serde(default)]
+    pub integrations: IntegrationFeatureFlagsConfig,
+}
 
 impl FeatureFlagsConfig {
     pub fn normalized(&self) -> Self {
-        *self
+        Self {
+            integrations: self.integrations.normalized(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct IntegrationFeatureFlagsConfig {
+    #[serde(default = "default_enabled_integrations")]
+    pub enabled: Vec<String>,
+}
+
+impl IntegrationFeatureFlagsConfig {
+    pub fn normalized(&self) -> Self {
+        let mut enabled = Vec::new();
+        for integration in &self.enabled {
+            let trimmed = integration.trim().to_ascii_lowercase();
+            if trimmed.is_empty() || enabled.contains(&trimmed) {
+                continue;
+            }
+            enabled.push(trimmed);
+        }
+        Self { enabled }
+    }
+
+    pub fn is_enabled(&self, integration: &str) -> bool {
+        let normalized = integration.trim().to_ascii_lowercase();
+        self.enabled
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(&normalized))
+    }
+}
+
+impl Default for IntegrationFeatureFlagsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_enabled_integrations(),
+        }
     }
 }
 
@@ -2144,6 +2184,10 @@ fn default_long_break_interval() -> u32 {
 }
 fn default_legacy_config_schema_version() -> u32 {
     LEGACY_CONFIG_SCHEMA_VERSION
+}
+
+fn default_enabled_integrations() -> Vec<String> {
+    vec!["wakatime".to_string()]
 }
 
 impl Default for AppConfig {

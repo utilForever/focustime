@@ -4,6 +4,7 @@ mod calendar;
 mod cli;
 mod config;
 mod daemon;
+mod integration;
 mod notifications;
 mod schedule;
 mod session_recovery;
