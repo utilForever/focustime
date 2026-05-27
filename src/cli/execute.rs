@@ -11,14 +11,16 @@ use std::{
 
 use crate::app::App;
 use crate::config::validate_automation_trigger_rules;
+use crate::daemon;
 
 use crate::cli::{
     AppConfig, AutomationTriggerRuleConfig, AutomationTriggersCommandOutput, BackupOutput,
     BlocklistCategoryCommandKind, BlocklistCategoryCommandOutput, BlocklistCategorySummaryOutput,
     BlocklistProfileCommandKind, BlocklistProfileCommandOutput, BlocklistProfileConfig,
     BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, BreakGlassCommandOutput, CliCommand,
-    CommandKind, DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats,
-    GoalCarryCommandOutput, GoalCommandOutput, HistoryDashboardCardOutput,
+    CommandKind, DaemonConnectionOutput, DaemonStartCommandOutput, DaemonStatusCommandOutput,
+    DaemonStopCommandOutput, DailyGoalConfig, DailyGoalSnapshot, EditSiteResult, ExportOutput,
+    FocusStats, GoalCarryCommandOutput, GoalCommandOutput, HistoryDashboardCardOutput,
     HistoryDashboardCommandKind, HistoryDashboardCommandOutput, HistoryKpiCardId,
     InvalidSiteEntryOutput, InvalidSiteInput, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId,
     ProfileOutput, ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
@@ -36,17 +38,18 @@ use crate::cli::{
     print_automation_triggers_command_output, print_backup_output,
     print_blocking_preview_command_output, print_blocklist_category_command_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
-    print_goal_command_output, print_history_dashboard_command_output, print_json,
-    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
-    print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_session_template_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
-    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
-    timer_status_id,
+    print_daemon_start_command_output, print_daemon_status_command_output,
+    print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
+    print_goal_carry_command_output, print_goal_command_output,
+    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
+    print_session_metadata_command_output, print_session_template_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_weekday_rules_command_output, profile_id, profile_view, selected_break_template_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -63,6 +66,9 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::Resume => execute_resume_command(cli_command.output),
         CommandKind::Stop => execute_stop_command(cli_command.output),
         CommandKind::Next => execute_next_command(cli_command.output),
+        CommandKind::DaemonStart { port } => execute_daemon_start_command(port, cli_command.output),
+        CommandKind::DaemonStatus => execute_daemon_status_command(cli_command.output),
+        CommandKind::DaemonStop => execute_daemon_stop_command(cli_command.output),
         CommandKind::Task { label } => execute_task_command(label, cli_command.output),
         CommandKind::TaskGoal { label, goal } => {
             execute_task_goal_command(label, goal, cli_command.output)
@@ -156,6 +162,62 @@ fn execute_next_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
     app.next_phase_for_cli()?;
     emit_timer_command_output("next", &app, output)
+}
+
+fn execute_daemon_start_command(port: Option<u16>, output: OutputMode) -> Result<(), String> {
+    if daemon::is_daemon_child_process() {
+        return daemon::run_foreground(port);
+    }
+
+    let started = daemon::start_background(port)?;
+    let payload = DaemonStartCommandOutput {
+        action: "daemon-start",
+        already_running: started.already_running,
+        daemon: daemon_connection_output(&started.info),
+    };
+    match output {
+        OutputMode::Text => print_daemon_start_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_daemon_status_command(output: OutputMode) -> Result<(), String> {
+    let status = daemon::status()?;
+    let payload = DaemonStatusCommandOutput {
+        action: "daemon-status",
+        running: status.running,
+        daemon: status.info.as_ref().map(daemon_connection_output),
+    };
+    match output {
+        OutputMode::Text => print_daemon_status_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_daemon_stop_command(output: OutputMode) -> Result<(), String> {
+    let stopped = daemon::stop()?;
+    let payload = DaemonStopCommandOutput {
+        action: "daemon-stop",
+        was_running: stopped.was_running,
+        stopped: stopped.stopped,
+        daemon: stopped.info.as_ref().map(daemon_connection_output),
+    };
+    match output {
+        OutputMode::Text => print_daemon_stop_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn daemon_connection_output(connection: &daemon::DaemonConnectionInfo) -> DaemonConnectionOutput {
+    DaemonConnectionOutput {
+        pid: connection.pid,
+        host: connection.host.clone(),
+        port: connection.port,
+        started_at_epoch_secs: connection.started_at_epoch_secs,
+    }
 }
 
 fn execute_task_command(label: String, output: OutputMode) -> Result<(), String> {

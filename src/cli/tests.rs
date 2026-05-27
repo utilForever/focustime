@@ -95,6 +95,54 @@ fn parse_status_watch_with_space_interval() {
 }
 
 #[test]
+fn parse_daemon_start_defaults_to_ephemeral_port() {
+    let parsed = parse(&["--daemon-start"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::DaemonStart { port: None },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_daemon_start_accepts_daemon_port_with_space_syntax() {
+    let parsed = parse(&["--daemon-start", "--daemon-port", "43123"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::DaemonStart { port: Some(43123) },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_daemon_status_supports_json_mode() {
+    let parsed = parse(&["--daemon-status", "--json"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::DaemonStatus,
+            output: OutputMode::Json
+        })
+    );
+}
+
+#[test]
+fn parse_daemon_stop_defaults_to_text_mode() {
+    let parsed = parse(&["--daemon-stop"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::DaemonStop,
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
 fn parse_status_accepts_comparison_options() {
     let parsed = parse(&[
         "--status",
@@ -1829,6 +1877,23 @@ fn parse_rejects_watch_without_status() {
 fn parse_rejects_watch_with_non_status_command() {
     let error = parse(&["--export", "--watch"]).unwrap_err();
     assert!(error.contains("`--watch` is only valid with `--status`"));
+}
+
+#[test]
+fn parse_rejects_daemon_port_without_daemon_start() {
+    let error = parse(&["--daemon-port=41000"]).unwrap_err();
+    assert!(error.contains("`--daemon-port` is only valid with `--daemon-start`"));
+}
+
+#[test]
+fn parse_rejects_duplicate_daemon_port_flags() {
+    let error = parse(&[
+        "--daemon-start",
+        "--daemon-port=41000",
+        "--daemon-port=42000",
+    ])
+    .unwrap_err();
+    assert!(error.contains("`--daemon-port` can only be specified once"));
 }
 
 #[test]

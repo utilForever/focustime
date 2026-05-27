@@ -40,6 +40,10 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::FocusIntention(_)
             | ParsedToken::TaskNote(_)
             | ParsedToken::Status
+            | ParsedToken::DaemonStart
+            | ParsedToken::DaemonStatus
+            | ParsedToken::DaemonStop
+            | ParsedToken::DaemonPort(_)
             | ParsedToken::Watch(_)
             | ParsedToken::CompareBy(_)
             | ParsedToken::CompareTask(_)
@@ -128,6 +132,16 @@ pub(super) fn parse_primary_command(
                 set_primary_command(&mut primary, PrimaryCommand::TaskNote(value.clone()))?
             }
             ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
+            ParsedToken::DaemonStart => {
+                set_primary_command(&mut primary, PrimaryCommand::DaemonStart)?
+            }
+            ParsedToken::DaemonStatus => {
+                set_primary_command(&mut primary, PrimaryCommand::DaemonStatus)?
+            }
+            ParsedToken::DaemonStop => {
+                set_primary_command(&mut primary, PrimaryCommand::DaemonStop)?
+            }
+            ParsedToken::DaemonPort(_) => {}
             ParsedToken::Watch(_) => {}
             ParsedToken::CompareBy(_)
             | ParsedToken::CompareTask(_)
@@ -310,6 +324,7 @@ pub(super) fn finalize_cli_action(
     show_help: bool,
     output: OutputMode,
     primary: Option<PrimaryCommand>,
+    daemon_port: Option<u16>,
     watch_interval_secs: Option<u64>,
     comparison: StatusComparisonOptions,
     has_comparison_options: bool,
@@ -326,6 +341,11 @@ pub(super) fn finalize_cli_action(
             "`--compare-*` options are only valid with `--status`.",
         ));
     }
+    if daemon_port.is_some() && !matches!(primary, Some(PrimaryCommand::DaemonStart)) {
+        return Err(invalid_usage(
+            "`--daemon-port` is only valid with `--daemon-start`.",
+        ));
+    }
 
     match primary {
         None => {
@@ -338,6 +358,18 @@ pub(super) fn finalize_cli_action(
         }
         Some(PrimaryCommand::Start) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Start,
+            output,
+        })),
+        Some(PrimaryCommand::DaemonStart) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::DaemonStart { port: daemon_port },
+            output,
+        })),
+        Some(PrimaryCommand::DaemonStatus) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::DaemonStatus,
+            output,
+        })),
+        Some(PrimaryCommand::DaemonStop) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::DaemonStop,
             output,
         })),
         Some(PrimaryCommand::Profile(profile)) => Ok(CliAction::RunCommand(CliCommand {
@@ -1038,6 +1070,9 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::TaskGoal { .. } => "--task-goal",
         PrimaryCommand::FocusIntention(_) => "--focus-intention",
         PrimaryCommand::TaskNote(_) => "--task-note",
+        PrimaryCommand::DaemonStart => "--daemon-start",
+        PrimaryCommand::DaemonStatus => "--daemon-status",
+        PrimaryCommand::DaemonStop => "--daemon-stop",
         PrimaryCommand::Profile(_) => "--profile",
         PrimaryCommand::Theme(_) => "--theme",
         PrimaryCommand::Goal(_) => "--goal",
@@ -1106,6 +1141,19 @@ pub(super) fn parse_watch_interval_option(tokens: &[ParsedToken]) -> Result<Opti
         }
     }
     Ok(interval)
+}
+
+pub(super) fn parse_daemon_port_option(tokens: &[ParsedToken]) -> Result<Option<u16>, String> {
+    let mut port: Option<u16> = None;
+    for token in tokens {
+        if let ParsedToken::DaemonPort(value) = token {
+            if port.is_some() {
+                return Err(invalid_usage("`--daemon-port` can only be specified once."));
+            }
+            port = Some(*value);
+        }
+    }
+    Ok(port)
 }
 
 #[derive(Default)]
@@ -1262,6 +1310,19 @@ pub(super) fn parse_watch_interval_secs(value: &str) -> Result<u64, String> {
         ));
     }
     Ok(secs)
+}
+
+pub(super) fn parse_daemon_port(value: &str) -> Result<u16, String> {
+    let trimmed = value.trim();
+    let port = trimmed
+        .parse::<u16>()
+        .map_err(|_| invalid_usage("`--daemon-port` requires a port between 1 and 65535."))?;
+    if port == 0 {
+        return Err(invalid_usage(
+            "`--daemon-port` requires a port between 1 and 65535.",
+        ));
+    }
+    Ok(port)
 }
 
 pub(super) fn require_nonempty_key_value<'a>(

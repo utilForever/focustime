@@ -2,6 +2,7 @@ mod app;
 mod blocker;
 mod cli;
 mod config;
+mod daemon;
 mod notifications;
 mod schedule;
 mod session_recovery;

@@ -1,7 +1,8 @@
 use crate::cli::{
     AutomationTriggersCommandOutput, BackupOutput, BlockingPreviewAction,
     BlockingPreviewCommandOutput, BlocklistCategoryCommandOutput, BlocklistProfileCommandOutput,
-    BlocklistProfileConfig, BreakGlassCommandOutput, DiagnosticsCommandOutput, ExportOutput,
+    BlocklistProfileConfig, BreakGlassCommandOutput, DaemonStartCommandOutput,
+    DaemonStatusCommandOutput, DaemonStopCommandOutput, DiagnosticsCommandOutput, ExportOutput,
     FocusScoreOutput, GoalCarryCommandOutput, GoalCommandOutput, GoalOutput,
     HistoryDashboardCommandOutput, ProfileOutput, RecurringScheduleConfig, RestoreOutput,
     ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput, Serialize,
@@ -324,6 +325,47 @@ pub(super) fn print_session_metadata_command_output(payload: &SessionMetadataCom
         payload.task_note.as_deref().unwrap_or("none")
     );
     print_timer_state_output(&payload.timer);
+}
+
+pub(super) fn print_daemon_start_command_output(payload: &DaemonStartCommandOutput) {
+    if payload.already_running {
+        println!("Daemon already running.");
+    } else {
+        println!("Daemon started.");
+    }
+    println!("PID: {}", payload.daemon.pid);
+    println!("Address: {}:{}", payload.daemon.host, payload.daemon.port);
+    println!(
+        "Started at epoch seconds: {}",
+        payload.daemon.started_at_epoch_secs
+    );
+}
+
+pub(super) fn print_daemon_status_command_output(payload: &DaemonStatusCommandOutput) {
+    println!("Daemon running: {}", payload.running);
+    if let Some(daemon) = &payload.daemon {
+        println!("PID: {}", daemon.pid);
+        println!("Address: {}:{}", daemon.host, daemon.port);
+        println!("Started at epoch seconds: {}", daemon.started_at_epoch_secs);
+    } else {
+        println!("Daemon metadata: unavailable");
+    }
+}
+
+pub(super) fn print_daemon_stop_command_output(payload: &DaemonStopCommandOutput) {
+    if !payload.was_running {
+        println!("No running daemon found.");
+        return;
+    }
+    if payload.stopped {
+        println!("Daemon stopped.");
+    } else {
+        println!("Stop signal sent, but daemon shutdown was not confirmed.");
+    }
+    if let Some(daemon) = &payload.daemon {
+        println!("PID: {}", daemon.pid);
+        println!("Address: {}:{}", daemon.host, daemon.port);
+    }
 }
 
 pub(super) fn print_status_output(payload: &StatusOutput) {

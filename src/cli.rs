@@ -49,25 +49,28 @@ use output::{
     flush_stdout, print_automation_triggers_command_output, print_backup_output,
     print_blocking_preview_command_output, print_blocklist_category_command_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
-    print_goal_command_output, print_history_dashboard_command_output, print_json,
-    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
-    print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_session_template_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
+    print_daemon_start_command_output, print_daemon_status_command_output,
+    print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
+    print_goal_carry_command_output, print_goal_command_output,
+    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
+    print_session_metadata_command_output, print_session_template_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_weekday_rules_command_output,
 };
 use parsing::{
     finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_compare_by_value,
     parse_compare_limit_value, parse_compare_profile_value, parse_compare_time_of_day_value,
-    parse_global_tokens, parse_goal_carry_value, parse_goal_value,
-    parse_history_dashboard_order_value, parse_history_kpi_card_id, parse_monthly_goal_value,
-    parse_primary_command, parse_profile_id, parse_schedule_value, parse_site_edit_value,
-    parse_status_comparison_options, parse_strict_value, parse_task_goal_value, parse_theme_preset,
-    parse_watch_interval_option, parse_watch_interval_secs, parse_weekday_rules_value,
-    parse_weekly_goal_value, require_nonempty_key_value,
+    parse_daemon_port, parse_daemon_port_option, parse_global_tokens, parse_goal_carry_value,
+    parse_goal_value, parse_history_dashboard_order_value, parse_history_kpi_card_id,
+    parse_monthly_goal_value, parse_primary_command, parse_profile_id, parse_schedule_value,
+    parse_site_edit_value, parse_status_comparison_options, parse_strict_value,
+    parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
+    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 #[cfg(test)]
 use status::build_status_output;
@@ -142,6 +145,9 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --allowlist-site-edit=OLD=NEW [--json]
   focustime --blocklist-site-delete=HOSTNAME [--json]
   focustime --allowlist-site-delete=HOSTNAME [--json]
+  focustime --daemon-start [--daemon-port=PORT] [--json]
+  focustime --daemon-status [--json]
+  focustime --daemon-stop [--json]
   focustime --diagnostics [--json]
   focustime --blocking-preview [--json]
   focustime --status [--watch[=SECONDS]] [--compare-by=task|profile|time-of-day] [--compare-task=LABEL|all] [--compare-profile=classic|deep-work|custom|unknown|all] [--compare-time=morning|afternoon|evening|night|unknown|all] [--compare-limit=N] [--json]
@@ -203,6 +209,10 @@ Options:
   --allowlist-site-edit       Replace allowlist hostname in active category using OLD=NEW
   --blocklist-site-delete     Delete blocklist hostname in active category within active profile
   --allowlist-site-delete     Delete allowlist hostname in active category within active profile
+  --daemon-start  Start local daemon mode in the background (loopback API + token auth)
+  --daemon-status Show local daemon mode status
+  --daemon-stop   Stop a running local daemon
+  --daemon-port   Override daemon API listen port (daemon start only; default random loopback port)
   --diagnostics   Show setup diagnostics checks
   --blocking-preview  Preview backend-selected blocking changes without writing
   --status        Print status summary (includes live timer/session fields and latest interruption)
@@ -373,6 +383,11 @@ pub enum CommandKind {
     AllowlistSiteAddTemporary {
         input: String,
     },
+    DaemonStart {
+        port: Option<u16>,
+    },
+    DaemonStatus,
+    DaemonStop,
     SessionTemplate {
         command: SessionTemplateCommandKind,
     },
@@ -408,6 +423,9 @@ enum PrimaryCommand {
     },
     FocusIntention(Option<String>),
     TaskNote(Option<String>),
+    DaemonStart,
+    DaemonStatus,
+    DaemonStop,
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
@@ -477,6 +495,10 @@ enum ParsedToken {
     FocusIntention(Option<String>),
     TaskNote(Option<String>),
     Status,
+    DaemonStart,
+    DaemonStatus,
+    DaemonStop,
+    DaemonPort(u16),
     Watch(Option<u64>),
     CompareBy(ComparisonDimension),
     CompareTask(Option<String>),
@@ -806,6 +828,36 @@ struct RestoreOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct DaemonConnectionOutput {
+    pid: u32,
+    host: String,
+    port: u16,
+    started_at_epoch_secs: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct DaemonStartCommandOutput {
+    action: &'static str,
+    already_running: bool,
+    daemon: DaemonConnectionOutput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct DaemonStatusCommandOutput {
+    action: &'static str,
+    running: bool,
+    daemon: Option<DaemonConnectionOutput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct DaemonStopCommandOutput {
+    action: &'static str,
+    was_running: bool,
+    stopped: bool,
+    daemon: Option<DaemonConnectionOutput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct TimerStateOutput {
     phase: &'static str,
     status: &'static str,
@@ -1116,6 +1168,8 @@ where
     let (show_help, output) =
         parse_global_tokens(&tokens).map_err(|message| usage_error(output_hint, message))?;
     let primary = parse_primary_command(&tokens).map_err(|message| usage_error(output, message))?;
+    let daemon_port =
+        parse_daemon_port_option(&tokens).map_err(|message| usage_error(output, message))?;
     let watch_interval_secs =
         parse_watch_interval_option(&tokens).map_err(|message| usage_error(output, message))?;
     let (comparison, has_comparison_options) =
@@ -1124,6 +1178,7 @@ where
         show_help,
         output,
         primary,
+        daemon_port,
         watch_interval_secs,
         comparison,
         has_comparison_options,
