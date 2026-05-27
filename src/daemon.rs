@@ -24,7 +24,9 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(6);
 const READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const LOOP_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(2);
+#[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+#[cfg(target_os = "windows")]
 const DETACHED_PROCESS: u32 = 0x0000_0008;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
