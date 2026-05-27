@@ -24,6 +24,7 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(6);
 const READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const LOOP_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(2);
+const HEALTH_RETRY_ATTEMPTS: usize = 3;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 #[cfg(target_os = "windows")]
@@ -116,18 +117,15 @@ pub fn status() -> Result<DaemonStatusResult, String> {
         });
     };
 
-    match ping_health(&state) {
+    match ping_health_with_retry(&state) {
         Ok(()) => Ok(DaemonStatusResult {
             running: true,
             info: Some(state.as_connection_info()),
         }),
-        Err(_) => {
-            clear_state_file()?;
-            Ok(DaemonStatusResult {
-                running: false,
-                info: Some(state.as_connection_info()),
-            })
-        }
+        Err(_) => Ok(DaemonStatusResult {
+            running: false,
+            info: Some(state.as_connection_info()),
+        }),
     }
 }
 
@@ -141,10 +139,9 @@ pub fn stop() -> Result<DaemonStopResult, String> {
     };
     let info = state.as_connection_info();
 
-    if ping_health(&state).is_err() {
-        clear_state_file()?;
+    if ping_health_with_retry(&state).is_err() {
         return Ok(DaemonStopResult {
-            was_running: false,
+            was_running: true,
             stopped: false,
             info: Some(info),
         });
@@ -176,7 +173,7 @@ pub fn stop() -> Result<DaemonStopResult, String> {
 
 pub fn run_foreground(port: Option<u16>) -> Result<(), String> {
     if let Some(existing_state) = load_state_file()? {
-        if ping_health(&existing_state).is_ok() {
+        if ping_health_with_retry(&existing_state).is_ok() {
             return Err(format!(
                 "Daemon is already running on {}:{}.",
                 existing_state.host, existing_state.port
@@ -283,6 +280,22 @@ fn ping_health(state: &DaemonStateDisk) -> Result<(), String> {
         .call()
         .map(|_| ())
         .map_err(|error| format!("Daemon health request failed: {error}"))
+}
+
+fn ping_health_with_retry(state: &DaemonStateDisk) -> Result<(), String> {
+    let mut last_error: Option<String> = None;
+    for attempt in 0..HEALTH_RETRY_ATTEMPTS {
+        match ping_health(state) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last_error = Some(error);
+                if attempt + 1 < HEALTH_RETRY_ATTEMPTS {
+                    thread::sleep(READY_POLL_INTERVAL);
+                }
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| "Daemon health request failed.".to_string()))
 }
 
 fn request_stop(state: &DaemonStateDisk) -> Result<(), String> {
