@@ -123,12 +123,6 @@ impl IntegrationRuntime {
                 .capabilities
                 .contains(&required_capability)
             {
-                errors.push(format!(
-                    "integration `{}` does not declare required capability `{:?}` for hook `{:?}`",
-                    loaded.descriptor.id.config_name(),
-                    required_capability,
-                    event
-                ));
                 continue;
             }
             if let Err(error) = loaded.plugin.on_lifecycle_event(&event) {
