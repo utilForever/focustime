@@ -1003,6 +1003,18 @@ fn parse_sync_restore_with_equals_accepts_directory_and_passphrase() {
 }
 
 #[test]
+fn parse_calendar_sync_supports_json_mode() {
+    let parsed = parse(&["--calendar-sync", "--json"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::CalendarSync,
+            output: OutputMode::Json
+        })
+    );
+}
+
+#[test]
 fn parse_export_with_equals_accepts_directory() {
     let parsed = parse(&["--export=reports"]).unwrap();
     assert_eq!(

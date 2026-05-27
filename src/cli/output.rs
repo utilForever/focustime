@@ -1,17 +1,18 @@
 use crate::cli::{
     AutomationTriggersCommandOutput, BackupOutput, BlockingPreviewAction,
     BlockingPreviewCommandOutput, BlocklistCategoryCommandOutput, BlocklistProfileCommandOutput,
-    BlocklistProfileConfig, BreakGlassCommandOutput, DaemonStartCommandOutput,
-    DaemonStatusCommandOutput, DaemonStopCommandOutput, DiagnosticsCommandOutput, ExportOutput,
-    FocusScoreOutput, GoalCarryCommandOutput, GoalCommandOutput, GoalOutput,
-    HistoryDashboardCommandOutput, ProfileOutput, RecurringScheduleConfig, RestoreOutput,
-    ScheduleCommandOutput, ScheduleDelayCommandOutput, ScheduleInspectionOutput, Serialize,
-    SessionMetadataCommandOutput, SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel,
-    SetupCheckOutput, SetupDiagnostics, SiteAddCommandOutput, SiteDeleteCommandOutput,
-    SiteEditCommandOutput, SiteListCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput,
-    StatusComparisonOutput, StatusOutput, StrictCommandOutput, SyncBackupOutput, SyncRestoreOutput,
-    TaskGoalCommandOutput, TaskGoalOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput,
-    TimerStateOutput, WeekdayRulesCommandOutput, Write, format_schedule_conflict,
+    BlocklistProfileConfig, BreakGlassCommandOutput, CalendarSyncCommandOutput,
+    DaemonStartCommandOutput, DaemonStatusCommandOutput, DaemonStopCommandOutput,
+    DiagnosticsCommandOutput, ExportOutput, FocusScoreOutput, GoalCarryCommandOutput,
+    GoalCommandOutput, GoalOutput, HistoryDashboardCommandOutput, ProfileOutput,
+    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput,
+    ScheduleInspectionOutput, Serialize, SessionMetadataCommandOutput,
+    SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
+    SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
+    StatsGrowthSummary, StatsRetentionStatusOutput, StatusComparisonOutput, StatusOutput,
+    StrictCommandOutput, SyncBackupOutput, SyncRestoreOutput, TaskGoalCommandOutput,
+    TaskGoalOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, TimerStateOutput,
+    WeekdayRulesCommandOutput, Write, format_schedule_conflict,
     inspect_schedule_conflicts_from_config, io,
 };
 use chrono::{Local, TimeZone};
@@ -832,6 +833,19 @@ pub(super) fn print_sync_restore_output(payload: &SyncRestoreOutput) {
     println!("Source device ID: {}", payload.source_device_id);
     println!("Config: {}", payload.config_restored_path.display());
     println!("Stats: {}", payload.stats_restored_path.display());
+}
+
+pub(super) fn print_calendar_sync_command_output(payload: &CalendarSyncCommandOutput) {
+    println!("Calendar sync refreshed.");
+    println!("Sources: {}", payload.source_count);
+    println!("Busy windows: {}", payload.windows_count);
+    println!("Source errors: {}", payload.error_count);
+    if !payload.errors.is_empty() {
+        println!("Errors:");
+        for error in &payload.errors {
+            println!("  - {error}");
+        }
+    }
 }
 
 pub(super) fn print_goal_command_output(label: &str, payload: &GoalCommandOutput) {

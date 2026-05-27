@@ -207,6 +207,7 @@ fn round_trip_full_config() {
             time_step_minutes: 20,
             delay_secs: 15 * 60,
         },
+        calendar_sync: CalendarSyncConfig::default(),
         profile_automation: Some(ProfileAutomationSettingsConfig {
             classic: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig {
@@ -1279,6 +1280,7 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
         schedule_runtime: ScheduleRuntimeConfig::default(),
+        calendar_sync: CalendarSyncConfig::default(),
         profile_automation: None,
         strict_mode: false,
         break_glass_duration_secs: default_break_glass_duration_secs(),
@@ -1679,6 +1681,79 @@ project = "Ignored"
             language: None,
         }]
     );
+}
+
+#[test]
+fn calendar_sync_normalization_clamps_runtime_bounds() {
+    let min_bounded = CalendarSyncConfig {
+        enabled: true,
+        refresh_secs: 0,
+        lookahead_days: 0,
+        sources: Vec::new(),
+    }
+    .normalized();
+    assert_eq!(min_bounded.refresh_secs, 300);
+    assert_eq!(min_bounded.lookahead_days, 1);
+
+    let max_bounded = CalendarSyncConfig {
+        enabled: true,
+        refresh_secs: u64::MAX,
+        lookahead_days: u16::MAX,
+        sources: Vec::new(),
+    }
+    .normalized();
+    assert_eq!(max_bounded.refresh_secs, 86_400);
+    assert_eq!(max_bounded.lookahead_days, 90);
+}
+
+#[test]
+fn calendar_sync_normalization_deduplicates_sources_and_autonames_blanks() {
+    let normalized = CalendarSyncConfig {
+        enabled: true,
+        refresh_secs: 1800,
+        lookahead_days: 14,
+        sources: vec![
+            CalendarSourceConfig {
+                name: "   ".to_string(),
+                provider: CalendarProviderConfig::Ics,
+                url: " https://example.com/A.ics ".to_string(),
+                enabled: true,
+            },
+            CalendarSourceConfig {
+                name: "Work".to_string(),
+                provider: CalendarProviderConfig::Ics,
+                url: "https://example.com/a.ics".to_string(),
+                enabled: false,
+            },
+            CalendarSourceConfig {
+                name: "".to_string(),
+                provider: CalendarProviderConfig::Google,
+                url: "https://example.com/a.ics".to_string(),
+                enabled: true,
+            },
+            CalendarSourceConfig {
+                name: "Ignored".to_string(),
+                provider: CalendarProviderConfig::Outlook,
+                url: "   ".to_string(),
+                enabled: true,
+            },
+        ],
+    }
+    .normalized();
+
+    assert_eq!(normalized.sources.len(), 2);
+    assert_eq!(normalized.sources[0].name, "calendar-source-1");
+    assert_eq!(normalized.sources[0].provider, CalendarProviderConfig::Ics);
+    assert_eq!(normalized.sources[0].url, "https://example.com/A.ics");
+    assert!(normalized.sources[0].enabled);
+
+    assert_eq!(normalized.sources[1].name, "calendar-source-2");
+    assert_eq!(
+        normalized.sources[1].provider,
+        CalendarProviderConfig::Google
+    );
+    assert_eq!(normalized.sources[1].url, "https://example.com/a.ics");
+    assert!(normalized.sources[1].enabled);
 }
 
 #[test]

@@ -69,6 +69,7 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::BreakGlassTrigger
             | ParsedToken::BreakGlassCancel
             | ParsedToken::Diagnostics
+            | ParsedToken::CalendarSync
             | ParsedToken::BlockingPreview
             | ParsedToken::Backup(_)
             | ParsedToken::Restore(_)
@@ -206,6 +207,9 @@ pub(super) fn parse_primary_command(
             }
             ParsedToken::Diagnostics => {
                 set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
+            }
+            ParsedToken::CalendarSync => {
+                set_primary_command(&mut primary, PrimaryCommand::CalendarSync)?
             }
             ParsedToken::BlockingPreview => {
                 set_primary_command(&mut primary, PrimaryCommand::BlockingPreview)?
@@ -537,6 +541,10 @@ pub(super) fn finalize_cli_action(
                 dir,
                 passphrase: sync_passphrase.clone(),
             },
+            output,
+        })),
+        Some(PrimaryCommand::CalendarSync) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::CalendarSync,
             output,
         })),
         Some(PrimaryCommand::Export(dir)) => Ok(CliAction::RunCommand(CliCommand {
@@ -1128,6 +1136,7 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::BreakGlassTrigger => "--break-glass-trigger",
         PrimaryCommand::BreakGlassCancel => "--break-glass-cancel",
         PrimaryCommand::Diagnostics => "--diagnostics",
+        PrimaryCommand::CalendarSync => "--calendar-sync",
         PrimaryCommand::BlockingPreview => "--blocking-preview",
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Backup(_) => "--backup",

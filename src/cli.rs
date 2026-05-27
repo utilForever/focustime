@@ -49,17 +49,18 @@ use output::{
     flush_stdout, print_automation_triggers_command_output, print_backup_output,
     print_blocking_preview_command_output, print_blocklist_category_command_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_daemon_start_command_output, print_daemon_status_command_output,
-    print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
-    print_goal_carry_command_output, print_goal_command_output,
-    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
-    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
-    print_session_metadata_command_output, print_session_template_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_sync_backup_output, print_sync_restore_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
+    print_calendar_sync_command_output, print_daemon_start_command_output,
+    print_daemon_status_command_output, print_daemon_stop_command_output,
+    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
+    print_goal_command_output, print_history_dashboard_command_output, print_json,
+    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
+    print_schedule_delay_command_output, print_session_metadata_command_output,
+    print_session_template_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_sync_backup_output, print_sync_restore_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_weekday_rules_command_output,
 };
 use parsing::{
     finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_compare_by_value,
@@ -155,6 +156,7 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --restore[=DIR] [--json]
   focustime --sync-backup[=DIR] [--sync-passphrase=PASSPHRASE] [--json]
   focustime --sync-restore[=DIR] [--sync-passphrase=PASSPHRASE] [--json]
+  focustime --calendar-sync [--json]
   focustime --export[=DIR] [--json]
 
 Options:
@@ -229,6 +231,7 @@ Options:
   --sync-backup   Create encrypted cross-device sync snapshot in current directory or DIR
   --sync-restore  Restore from encrypted sync snapshot in current directory or DIR
   --sync-passphrase  Passphrase for encrypted sync commands (or use FOCUSTIME_SYNC_PASSPHRASE)
+  --calendar-sync  Refresh calendar busy-window cache from configured ICS feeds
   --export        Export stats to current directory or DIR
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
@@ -380,6 +383,7 @@ pub enum CommandKind {
         dir: Option<PathBuf>,
         passphrase: Option<String>,
     },
+    CalendarSync,
     Export {
         dir: Option<PathBuf>,
     },
@@ -464,6 +468,7 @@ enum PrimaryCommand {
     Restore(Option<PathBuf>),
     SyncBackup(Option<PathBuf>),
     SyncRestore(Option<PathBuf>),
+    CalendarSync,
     Export(Option<PathBuf>),
     BlocklistProfile(Option<String>),
     BlocklistProfileCreate(String),
@@ -545,6 +550,7 @@ enum ParsedToken {
     SyncBackup(Option<PathBuf>),
     SyncRestore(Option<PathBuf>),
     SyncPassphrase(String),
+    CalendarSync,
     Export(Option<PathBuf>),
     BlocklistProfile(Option<String>),
     BlocklistProfileCreate(String),
@@ -868,6 +874,16 @@ struct SyncRestoreOutput {
     stats_restored_path: PathBuf,
     config_hash_sha256: String,
     stats_hash_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct CalendarSyncCommandOutput {
+    action: &'static str,
+    synced_at_epoch_secs: i64,
+    source_count: usize,
+    windows_count: usize,
+    error_count: usize,
+    errors: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
