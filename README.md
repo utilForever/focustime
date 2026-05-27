@@ -232,6 +232,14 @@ cargo run -- --backup=./reports --json
 cargo run -- --restore
 cargo run -- --restore=./reports --json
 
+# Create encrypted cross-device sync snapshot (writes focustime-sync.toml)
+cargo run -- --sync-backup --sync-passphrase=secret
+cargo run -- --sync-backup=./reports --sync-passphrase=secret --json
+
+# Restore from encrypted cross-device sync snapshot
+cargo run -- --sync-restore --sync-passphrase=secret
+cargo run -- --sync-restore=./reports --sync-passphrase=secret --json
+
 # Export stats to current directory or a target directory
 cargo run -- --export
 cargo run -- --export=./reports --json
@@ -248,6 +256,12 @@ Backup/restore behavior:
 - `--backup` creates the target directory if needed, then copies `config.toml` and `stats.toml` into it.
 - `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
 - Runtime persistence is canonical-path only; if only legacy `stats.toml` exists, copy it to the canonical stats path (the backup/restore commands can help).
+
+Encrypted sync behavior:
+
+- `--sync-backup` writes an encrypted `focustime-sync.toml` bundle that includes config/stats payload hashes and snapshot lineage metadata.
+- `--sync-restore` verifies bundle integrity before replacing local files and rejects conflicting local changes since the last encrypted snapshot.
+- Use `--sync-passphrase` (or `FOCUSTIME_SYNC_PASSPHRASE`) with encrypted sync commands; passphrases are runtime-only and never persisted.
 
 ### Legacy compatibility deprecation milestones
 

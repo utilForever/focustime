@@ -72,6 +72,9 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::BlockingPreview
             | ParsedToken::Backup(_)
             | ParsedToken::Restore(_)
+            | ParsedToken::SyncBackup(_)
+            | ParsedToken::SyncRestore(_)
+            | ParsedToken::SyncPassphrase(_)
             | ParsedToken::Export(_)
             | ParsedToken::BlocklistProfile(_)
             | ParsedToken::BlocklistProfileCreate(_)
@@ -213,6 +216,13 @@ pub(super) fn parse_primary_command(
             ParsedToken::Restore(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Restore(dir.clone()))?
             }
+            ParsedToken::SyncBackup(dir) => {
+                set_primary_command(&mut primary, PrimaryCommand::SyncBackup(dir.clone()))?
+            }
+            ParsedToken::SyncRestore(dir) => {
+                set_primary_command(&mut primary, PrimaryCommand::SyncRestore(dir.clone()))?
+            }
+            ParsedToken::SyncPassphrase(_) => {}
             ParsedToken::Export(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
             }
@@ -320,11 +330,13 @@ pub(super) fn parse_primary_command(
     Ok(primary)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn finalize_cli_action(
     show_help: bool,
     output: OutputMode,
     primary: Option<PrimaryCommand>,
     daemon_port: Option<u16>,
+    sync_passphrase: Option<String>,
     watch_interval_secs: Option<u64>,
     comparison: StatusComparisonOptions,
     has_comparison_options: bool,
@@ -344,6 +356,16 @@ pub(super) fn finalize_cli_action(
     if daemon_port.is_some() && !matches!(primary, Some(PrimaryCommand::DaemonStart)) {
         return Err(invalid_usage(
             "`--daemon-port` is only valid with `--daemon-start`.",
+        ));
+    }
+    if sync_passphrase.is_some()
+        && !matches!(
+            primary,
+            Some(PrimaryCommand::SyncBackup(_) | PrimaryCommand::SyncRestore(_))
+        )
+    {
+        return Err(invalid_usage(
+            "`--sync-passphrase` is only valid with `--sync-backup` or `--sync-restore`.",
         ));
     }
 
@@ -501,6 +523,20 @@ pub(super) fn finalize_cli_action(
         })),
         Some(PrimaryCommand::Restore(dir)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Restore { dir },
+            output,
+        })),
+        Some(PrimaryCommand::SyncBackup(dir)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::SyncBackup {
+                dir,
+                passphrase: sync_passphrase.clone(),
+            },
+            output,
+        })),
+        Some(PrimaryCommand::SyncRestore(dir)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::SyncRestore {
+                dir,
+                passphrase: sync_passphrase.clone(),
+            },
             output,
         })),
         Some(PrimaryCommand::Export(dir)) => Ok(CliAction::RunCommand(CliCommand {
@@ -1096,6 +1132,8 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Backup(_) => "--backup",
         PrimaryCommand::Restore(_) => "--restore",
+        PrimaryCommand::SyncBackup(_) => "--sync-backup",
+        PrimaryCommand::SyncRestore(_) => "--sync-restore",
         PrimaryCommand::Export(_) => "--export",
         PrimaryCommand::BlocklistProfile(_) => "--blocklist-profile",
         PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
@@ -1154,6 +1192,23 @@ pub(super) fn parse_daemon_port_option(tokens: &[ParsedToken]) -> Result<Option<
         }
     }
     Ok(port)
+}
+
+pub(super) fn parse_sync_passphrase_option(
+    tokens: &[ParsedToken],
+) -> Result<Option<String>, String> {
+    let mut passphrase: Option<String> = None;
+    for token in tokens {
+        if let ParsedToken::SyncPassphrase(value) = token {
+            if passphrase.is_some() {
+                return Err(invalid_usage(
+                    "`--sync-passphrase` can only be specified once.",
+                ));
+            }
+            passphrase = Some(value.clone());
+        }
+    }
+    Ok(passphrase)
 }
 
 #[derive(Default)]
