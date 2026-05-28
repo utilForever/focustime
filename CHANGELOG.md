@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-05-28
+
+### Added
+
+- **Local API and daemon mode (#370):** added headless daemon runtime with loopback-only authenticated `/v1/*` API endpoints and CLI lifecycle commands for start/status/stop automation.
+- **Encrypted sync and backup across devices (#371):** added encrypted sync backup/restore workflows (`--sync-backup`/`--sync-restore`) with setup diagnostics visibility and restore safety checks.
+- **Calendar sync (ICS plus Google/Outlook) (#372):** added calendar feed sync/cache integration and CLI refresh support (`--calendar-sync`) for schedule busy-window awareness.
+- **Plugin/integration framework foundation (#373):** introduced integration runtime lifecycle dispatch/capability boundaries and routed WakaTime tracking through the integration runtime.
+
+### Changed
+
+- **Dependency updates for runtime/security crates (#374, #375):** bumped `pbkdf2` from `0.12.2` to `0.13.0` and `getrandom` from `0.3.4` to `0.4.2`.
+- **CI toolchain maintenance (#369):** bumped `crate-ci/typos` GitHub Action from `1.46.2` to `1.46.3`.
+
+### Fixed
+
+- **Calendar-sync reliability and redaction hardening (#372):** fixed recurrence range-end handling and improved redaction of sensitive calendar source details in sync errors/CLI output.
+- **Daemon and sync resilience hardening (#370, #371):** improved daemon health-check behavior and blocked unsafe sync restore paths (for example, local hash drift/policy mismatches) to avoid inconsistent state.
+- **Integration runtime compatibility safeguards (#373):** skipped integrations without required hook capability and hardened integration-facing test accessors to reduce runtime fragility.
+
 ## [0.13.1] - 2026-05-25
 
 ### Added
@@ -335,7 +355,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/utilForever/focustime/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/utilForever/focustime/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/utilForever/focustime/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/utilForever/focustime/compare/v0.12.0...v0.12.1
