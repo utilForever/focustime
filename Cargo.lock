@@ -574,7 +574,7 @@ dependencies = [
  "chrono-tz",
  "crossterm",
  "csv",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "pbkdf2",
  "ratatui",
  "serde",
