@@ -32,7 +32,7 @@ jobs:
       - name: Run cargo audit
         uses: actions-rust-lang/audit@v1
       - name: Run typos check
-        uses: crate-ci/typos@v1.46.3
+        uses: crate-ci/typos@v1.47.0
 
   build_binaries:
     name: 📦 Build (${{ matrix.asset_suffix }})
