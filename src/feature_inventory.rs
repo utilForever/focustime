@@ -575,6 +575,8 @@ pub fn export_feature_inventory_report(
 }
 
 pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
+    let model = &report.scoring_model;
+    let tie_break = &model.tie_break_model;
     let mut markdown = String::new();
 
     markdown.push_str("# Feature Inventory Report\n\n");
@@ -586,24 +588,24 @@ pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
     ));
     markdown.push_str(&format!(
         "- Keep: value >= {} and (value - maintenance_cost) >= {:.2}\n",
-        KEEP_MIN_VALUE, KEEP_MIN_DELTA
+        model.keep_min_value, model.keep_min_delta
     ));
     markdown.push_str(&format!(
         "- Remove: (value - maintenance_cost) <= {:.2}\n",
-        REMOVE_MAX_DELTA
+        model.remove_max_delta
     ));
     markdown.push_str("- Merge: all remaining cases\n");
     markdown.push_str(&format!(
         "- Tie-break activation: only when delta equals keep/remove threshold within ±{:.4}\n",
-        TIE_BREAK_BOUNDARY_EPSILON
+        tie_break.boundary_epsilon
     ));
     markdown.push_str(&format!(
         "- Keep tie-break (delta == {:.2}): keep when any of safety/migration_risk/user_disruption >= {}\n",
-        KEEP_MIN_DELTA, TIE_BREAK_KEEP_SIGNAL_MIN
+        model.keep_min_delta, tie_break.keep_signal_min
     ));
     markdown.push_str(&format!(
         "- Remove tie-break (delta == {:.2}): remove when safety/migration_risk/user_disruption are all <= {}\n",
-        REMOVE_MAX_DELTA, TIE_BREAK_REMOVE_SIGNAL_MAX
+        model.remove_max_delta, tie_break.remove_signal_max
     ));
     markdown.push_str("- Tie-break dimensions: safety = failure_impact, migration_risk = complexity, user_disruption = support_burden\n\n");
 
