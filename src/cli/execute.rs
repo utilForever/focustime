@@ -69,7 +69,9 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
     if let Some(surface_id) = command_usage_surface_id(&cli_command.kind)
         && !command_usage_records_via_app(&cli_command.kind)
     {
-        record_command_usage_direct(surface_id)?;
+        if let Err(error) = record_command_usage_direct(surface_id) {
+            eprintln!("Warning: failed to record command usage signal for `{surface_id}`: {error}");
+        }
     }
 
     match cli_command.kind {
