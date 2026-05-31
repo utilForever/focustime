@@ -3,10 +3,10 @@ use crate::cli::{
     BlockingPreviewCommandOutput, BlocklistCategoryCommandOutput, BlocklistProfileCommandOutput,
     BlocklistProfileConfig, BreakGlassCommandOutput, CalendarSyncCommandOutput,
     DaemonStartCommandOutput, DaemonStatusCommandOutput, DaemonStopCommandOutput,
-    DiagnosticsCommandOutput, ExportOutput, FocusScoreOutput, GoalCarryCommandOutput,
-    GoalCommandOutput, GoalOutput, HistoryDashboardCommandOutput, ProfileOutput,
-    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput,
-    ScheduleInspectionOutput, Serialize, SessionMetadataCommandOutput,
+    DiagnosticsCommandOutput, ExportOutput, FeatureInventoryOutput, FocusScoreOutput,
+    GoalCarryCommandOutput, GoalCommandOutput, GoalOutput, HistoryDashboardCommandOutput,
+    ProfileOutput, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
+    ScheduleDelayCommandOutput, ScheduleInspectionOutput, Serialize, SessionMetadataCommandOutput,
     SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
     SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
     StatsGrowthSummary, StatsRetentionStatusOutput, StatusComparisonOutput, StatusOutput,
@@ -789,6 +789,19 @@ pub(super) fn print_export_output(payload: &ExportOutput) {
     println!("Exported stats to {}", payload.export_dir.display());
     println!("JSON: {}", payload.json_path.display());
     println!("CSV: {}", payload.csv_path.display());
+}
+
+pub(super) fn print_feature_inventory_output(payload: &FeatureInventoryOutput) {
+    println!(
+        "Exported feature inventory report to {}",
+        payload.export_dir.display()
+    );
+    println!("JSON: {}", payload.json_path.display());
+    println!("Markdown: {}", payload.markdown_path.display());
+    println!(
+        "Features: {} (keep {}, merge {}, remove {})",
+        payload.total_features, payload.keep_count, payload.merge_count, payload.remove_count
+    );
 }
 
 pub(super) fn print_backup_output(payload: &BackupOutput) {

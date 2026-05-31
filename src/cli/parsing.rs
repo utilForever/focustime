@@ -77,6 +77,7 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::SyncRestore(_)
             | ParsedToken::SyncPassphrase(_)
             | ParsedToken::Export(_)
+            | ParsedToken::FeatureInventory(_)
             | ParsedToken::BlocklistProfile(_)
             | ParsedToken::BlocklistProfileCreate(_)
             | ParsedToken::BlocklistProfileRename(_)
@@ -229,6 +230,9 @@ pub(super) fn parse_primary_command(
             ParsedToken::SyncPassphrase(_) => {}
             ParsedToken::Export(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
+            }
+            ParsedToken::FeatureInventory(dir) => {
+                set_primary_command(&mut primary, PrimaryCommand::FeatureInventory(dir.clone()))?
             }
             ParsedToken::BlocklistProfile(profile) => set_primary_command(
                 &mut primary,
@@ -549,6 +553,10 @@ pub(super) fn finalize_cli_action(
         })),
         Some(PrimaryCommand::Export(dir)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Export { dir },
+            output,
+        })),
+        Some(PrimaryCommand::FeatureInventory(dir)) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::FeatureInventory { dir },
             output,
         })),
         Some(PrimaryCommand::BlocklistProfile(profile)) => Ok(CliAction::RunCommand(CliCommand {
@@ -1144,6 +1152,7 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::SyncBackup(_) => "--sync-backup",
         PrimaryCommand::SyncRestore(_) => "--sync-restore",
         PrimaryCommand::Export(_) => "--export",
+        PrimaryCommand::FeatureInventory(_) => "--feature-inventory",
         PrimaryCommand::BlocklistProfile(_) => "--blocklist-profile",
         PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
         PrimaryCommand::BlocklistProfileRename(_) => "--blocklist-profile-rename",

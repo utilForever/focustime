@@ -12,6 +12,7 @@ use std::{
 use crate::app::App;
 use crate::config::validate_automation_trigger_rules;
 use crate::daemon;
+use crate::feature_inventory::{build_feature_inventory_report, export_feature_inventory_report};
 
 use crate::cli::{
     AppConfig, AutomationTriggerRuleConfig, AutomationTriggersCommandOutput, BackupOutput,
@@ -20,15 +21,15 @@ use crate::cli::{
     BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, BreakGlassCommandOutput,
     CalendarSyncCommandOutput, CliCommand, CommandKind, DaemonConnectionOutput,
     DaemonStartCommandOutput, DaemonStatusCommandOutput, DaemonStopCommandOutput, DailyGoalConfig,
-    DailyGoalSnapshot, EditSiteResult, ExportOutput, FocusStats, GoalCarryCommandOutput,
-    GoalCommandOutput, HistoryDashboardCardOutput, HistoryDashboardCommandKind,
-    HistoryDashboardCommandOutput, HistoryKpiCardId, InvalidSiteEntryOutput, InvalidSiteInput,
-    MonthlyGoalConfig, OutputMode, PathBuf, ProfileId, ProfileOutput, ProfileView,
-    RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput, ScheduleDelayCommandOutput,
-    SessionMetadataCommandOutput, SessionTemplateCommandKind, SessionTemplateCommandOutput,
-    SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker, SiteDeleteCommandOutput,
-    SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput, SiteListTarget,
-    StatusComparisonOptions, StatusOutput, StrictCommandOutput, SyncBackupOutput,
+    DailyGoalSnapshot, EditSiteResult, ExportOutput, FeatureInventoryOutput, FocusStats,
+    GoalCarryCommandOutput, GoalCommandOutput, HistoryDashboardCardOutput,
+    HistoryDashboardCommandKind, HistoryDashboardCommandOutput, HistoryKpiCardId,
+    InvalidSiteEntryOutput, InvalidSiteInput, MonthlyGoalConfig, OutputMode, PathBuf, ProfileId,
+    ProfileOutput, ProfileView, RecurringScheduleConfig, RestoreOutput, ScheduleCommandOutput,
+    ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SessionTemplateCommandKind,
+    SessionTemplateCommandOutput, SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker,
+    SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
+    SiteListTarget, StatusComparisonOptions, StatusOutput, StrictCommandOutput, SyncBackupOutput,
     SyncRestoreOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
     TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset,
     TimerCommandOutput, TimerStateOutput, WeekdayProfileRuleConfig, WeekdayRulesCommandOutput,
@@ -41,17 +42,18 @@ use crate::cli::{
     print_blocklist_profile_command_output, print_break_glass_command_output,
     print_calendar_sync_command_output, print_daemon_start_command_output,
     print_daemon_status_command_output, print_daemon_stop_command_output,
-    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
-    print_goal_command_output, print_history_dashboard_command_output, print_json,
-    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
-    print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_session_template_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_sync_backup_output, print_sync_restore_output, print_task_goal_command_output,
-    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
-    print_weekday_rules_command_output, profile_id, profile_view, selected_break_template_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    print_diagnostics_command_output, print_export_output, print_feature_inventory_output,
+    print_goal_carry_command_output, print_goal_command_output,
+    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
+    print_session_metadata_command_output, print_session_template_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_sync_backup_output, print_sync_restore_output,
+    print_task_goal_command_output, print_temporary_site_add_command_output,
+    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
+    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
+    timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -123,6 +125,9 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         }
         CommandKind::CalendarSync => execute_calendar_sync_command(cli_command.output),
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
+        CommandKind::FeatureInventory { dir } => {
+            execute_feature_inventory_command(dir, cli_command.output)
+        }
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
         }
@@ -1830,6 +1835,36 @@ fn execute_export_command(dir: Option<PathBuf>, output: OutputMode) -> Result<()
     };
     match output {
         OutputMode::Text => print_export_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_feature_inventory_command(
+    dir: Option<PathBuf>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let target_dir = match dir {
+        Some(path) => path,
+        None => env::current_dir()
+            .map_err(|error| format!("Failed to determine current directory: {error}"))?,
+    };
+
+    let report = build_feature_inventory_report();
+    let exported = export_feature_inventory_report(&target_dir, &report)
+        .map_err(|error| format!("Feature inventory export failed: {error}"))?;
+
+    let payload = FeatureInventoryOutput {
+        export_dir: target_dir,
+        json_path: exported.json_path,
+        markdown_path: exported.markdown_path,
+        total_features: report.summary.total_features,
+        keep_count: report.summary.keep_count,
+        merge_count: report.summary.merge_count,
+        remove_count: report.summary.remove_count,
+    };
+    match output {
+        OutputMode::Text => print_feature_inventory_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

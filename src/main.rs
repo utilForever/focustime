@@ -4,6 +4,7 @@ mod calendar;
 mod cli;
 mod config;
 mod daemon;
+mod feature_inventory;
 mod integration;
 mod notifications;
 mod schedule;
