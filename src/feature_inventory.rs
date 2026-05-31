@@ -764,7 +764,10 @@ mod tests {
         let generated = render_markdown_report(&report);
         let committed = include_str!("../FEATURE_INVENTORY.md");
 
-        assert_eq!(generated, committed);
+        assert_eq!(
+            normalize_line_endings(&generated),
+            normalize_line_endings(committed)
+        );
     }
 
     fn collect_usage_option_flags() -> HashSet<String> {
@@ -781,5 +784,9 @@ mod tests {
                 Some(normalized.to_string())
             })
             .collect::<HashSet<_>>()
+    }
+
+    fn normalize_line_endings(value: &str) -> String {
+        value.replace("\r\n", "\n")
     }
 }
