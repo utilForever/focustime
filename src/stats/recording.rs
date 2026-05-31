@@ -1,5 +1,5 @@
 use crate::stats::{
-    BreakGlassOverrideEvent, DailyGoalSnapshot, FocusSessionMetadata, FocusSessionRecord,
+    BTreeMap, BreakGlassOverrideEvent, DailyGoalSnapshot, FocusSessionMetadata, FocusSessionRecord,
     FocusStats, ProfileId, SessionInterruptionEvent, SessionInterruptionReason, TimeOfDayBucket,
     month_key_for_day, normalize_session_metadata_text, normalize_task_label, task_label_index,
     week_key_for_day,
@@ -200,6 +200,14 @@ impl FocusStats {
         self.monthly_goal_snapshots.insert(key, goal);
         true
     }
+
+    pub fn record_command_usage(&mut self, surface_id: &str) -> bool {
+        record_usage_count(&mut self.command_usage_counts, surface_id)
+    }
+
+    pub fn record_screen_usage(&mut self, surface_id: &str) -> bool {
+        record_usage_count(&mut self.screen_usage_counts, surface_id)
+    }
 }
 
 fn current_timestamp_epoch_secs() -> u64 {
@@ -211,4 +219,14 @@ fn completion_time_of_day_bucket(epoch_secs: Option<u64>) -> Option<TimeOfDayBuc
     let timestamp = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0)?;
     let local_time = timestamp.with_timezone(&chrono::Local);
     Some(TimeOfDayBucket::from_hour(local_time.hour()))
+}
+
+fn record_usage_count(counts: &mut BTreeMap<String, u64>, surface_id: &str) -> bool {
+    let key = surface_id.trim().to_ascii_lowercase();
+    if key.is_empty() {
+        return false;
+    }
+    let entry = counts.entry(key).or_insert(0);
+    *entry = entry.saturating_add(1);
+    true
 }

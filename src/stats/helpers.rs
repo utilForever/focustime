@@ -116,6 +116,22 @@ pub(super) fn normalize_task_goal_targets(
     normalized
 }
 
+pub(super) fn normalize_usage_counts(input: BTreeMap<String, u64>) -> BTreeMap<String, u64> {
+    let mut normalized = BTreeMap::new();
+    for (surface, count) in input {
+        if count == 0 {
+            continue;
+        }
+        let key = surface.trim().to_ascii_lowercase();
+        if key.is_empty() {
+            continue;
+        }
+        let entry = normalized.entry(key).or_insert(0_u64);
+        *entry = entry.saturating_add(count);
+    }
+    normalized
+}
+
 pub(super) fn normalize_session_metadata_text(input: &str) -> Option<String> {
     let trimmed = input.trim();
     (!trimmed.is_empty()).then(|| trimmed.to_string())

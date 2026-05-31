@@ -109,6 +109,45 @@ fn recording_updates_session_and_daily_totals() {
 }
 
 #[test]
+fn usage_signal_recording_normalizes_and_accumulates_counts() {
+    let mut stats = FocusStats::default();
+    assert!(stats.record_command_usage("  STATUS  "));
+    assert!(stats.record_command_usage("status"));
+    assert!(stats.record_screen_usage(" Site-Manager "));
+
+    assert_eq!(stats.command_usage_counts.get("status"), Some(&2));
+    assert_eq!(stats.screen_usage_counts.get("site-manager"), Some(&1));
+}
+
+#[test]
+fn usage_signal_summary_reports_top_and_rare_entries() {
+    let mut stats = FocusStats::default();
+    stats.record_command_usage("status");
+    stats.record_command_usage("status");
+    stats.record_command_usage("status");
+    stats.record_command_usage("backup");
+    stats.record_command_usage("backup");
+    stats.record_command_usage("profile");
+    stats.record_screen_usage("timer");
+    stats.record_screen_usage("timer");
+    stats.record_screen_usage("site-manager");
+
+    let summary = stats.usage_signal_summary(2);
+    assert_eq!(summary.commands.total_events, 6);
+    assert_eq!(summary.commands.unique_surfaces, 3);
+    assert_eq!(summary.commands.top[0].surface, "status");
+    assert_eq!(summary.commands.top[0].count, 3);
+    assert_eq!(summary.commands.top[0].share_pct, 50);
+    assert_eq!(summary.commands.rare[0].surface, "profile");
+    assert_eq!(summary.commands.rare[0].count, 1);
+    assert_eq!(summary.commands.rare[0].share_pct, 17);
+    assert_eq!(summary.screens.total_events, 3);
+    assert_eq!(summary.screens.unique_surfaces, 2);
+    assert_eq!(summary.screens.top[0].surface, "timer");
+    assert_eq!(summary.screens.rare[0].surface, "site-manager");
+}
+
+#[test]
 fn task_planner_state_normalizes_and_deduplicates_labels() {
     let mut stats = FocusStats::default();
     let changed = stats.update_task_planner_state(
