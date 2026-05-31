@@ -9,13 +9,16 @@ use serde::Serialize;
 pub const FEATURE_INVENTORY_JSON_FILE_NAME: &str = "FEATURE_INVENTORY.json";
 pub const FEATURE_INVENTORY_MARKDOWN_FILE_NAME: &str = "FEATURE_INVENTORY.md";
 
-const SCHEMA_VERSION: u8 = 1;
+const SCHEMA_VERSION: u8 = 2;
 const COMPLEXITY_WEIGHT: f64 = 0.40;
 const SUPPORT_BURDEN_WEIGHT: f64 = 0.35;
 const FAILURE_IMPACT_WEIGHT: f64 = 0.25;
 const KEEP_MIN_VALUE: u8 = 4;
 const KEEP_MIN_DELTA: f64 = 0.50;
 const REMOVE_MAX_DELTA: f64 = -1.50;
+const TIE_BREAK_BOUNDARY_EPSILON: f64 = 0.0001;
+const TIE_BREAK_KEEP_SIGNAL_MIN: u8 = 4;
+const TIE_BREAK_REMOVE_SIGNAL_MAX: u8 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
@@ -87,6 +90,22 @@ pub struct FeatureScoringModel {
     pub keep_min_value: u8,
     pub keep_min_delta: f64,
     pub remove_max_delta: f64,
+    pub tie_break_model: TieBreakModel,
+    pub release_phase_mapping: Vec<RecommendationReleasePhase>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TieBreakModel {
+    pub boundary_epsilon: f64,
+    pub keep_signal_min: u8,
+    pub remove_signal_max: u8,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RecommendationReleasePhase {
+    pub recommendation: FeatureRecommendation,
+    pub phase: &'static str,
+    pub objective: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -138,6 +157,13 @@ struct FeatureSeed {
     complexity: u8,
     support_burden: u8,
     failure_impact: u8,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TieBreakSignals {
+    safety: u8,
+    migration_risk: u8,
+    user_disruption: u8,
 }
 
 const FEATURE_SEEDS: &[FeatureSeed] = &[
@@ -512,6 +538,12 @@ pub fn build_feature_inventory_report() -> FeatureInventoryReport {
             keep_min_value: KEEP_MIN_VALUE,
             keep_min_delta: KEEP_MIN_DELTA,
             remove_max_delta: REMOVE_MAX_DELTA,
+            tie_break_model: TieBreakModel {
+                boundary_epsilon: TIE_BREAK_BOUNDARY_EPSILON,
+                keep_signal_min: TIE_BREAK_KEEP_SIGNAL_MIN,
+                remove_signal_max: TIE_BREAK_REMOVE_SIGNAL_MAX,
+            },
+            release_phase_mapping: build_release_phase_mapping(),
         },
         summary,
         features,
@@ -543,6 +575,8 @@ pub fn export_feature_inventory_report(
 }
 
 pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
+    let model = &report.scoring_model;
+    let tie_break = &model.tie_break_model;
     let mut markdown = String::new();
 
     markdown.push_str("# Feature Inventory Report\n\n");
@@ -554,13 +588,26 @@ pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
     ));
     markdown.push_str(&format!(
         "- Keep: value >= {} and (value - maintenance_cost) >= {:.2}\n",
-        KEEP_MIN_VALUE, KEEP_MIN_DELTA
+        model.keep_min_value, model.keep_min_delta
     ));
     markdown.push_str(&format!(
         "- Remove: (value - maintenance_cost) <= {:.2}\n",
-        REMOVE_MAX_DELTA
+        model.remove_max_delta
     ));
-    markdown.push_str("- Merge: all remaining cases\n\n");
+    markdown.push_str("- Merge: all remaining cases\n");
+    markdown.push_str(&format!(
+        "- Tie-break activation: only when delta equals keep/remove threshold within ±{:.4}\n",
+        tie_break.boundary_epsilon
+    ));
+    markdown.push_str(&format!(
+        "- Keep tie-break (delta == {:.2}): keep when any of safety/migration_risk/user_disruption >= {}\n",
+        model.keep_min_delta, tie_break.keep_signal_min
+    ));
+    markdown.push_str(&format!(
+        "- Remove tie-break (delta == {:.2}): remove when safety/migration_risk/user_disruption are all <= {}\n",
+        model.remove_max_delta, tie_break.remove_signal_max
+    ));
+    markdown.push_str("- Tie-break dimensions: safety = failure_impact, migration_risk = complexity, user_disruption = support_burden\n\n");
 
     markdown.push_str("## Summary\n\n");
     markdown.push_str(&format!(
@@ -575,6 +622,17 @@ pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
         markdown.push_str(&format!(
             "  - {}: {}\n",
             summary.surface, summary.feature_count
+        ));
+    }
+    markdown.push('\n');
+
+    markdown.push_str("## Release phase mapping (v0.14.x)\n\n");
+    for mapping in &report.scoring_model.release_phase_mapping {
+        markdown.push_str(&format!(
+            "- {}: {} — {}\n",
+            mapping.recommendation.as_str(),
+            mapping.phase,
+            mapping.objective
         ));
     }
     markdown.push('\n');
@@ -613,7 +671,11 @@ fn build_feature_entry(seed: &FeatureSeed) -> FeatureInventoryEntry {
             + f64::from(seed.failure_impact) * FAILURE_IMPACT_WEIGHT,
     );
     let ratio = round_to_two_decimals(f64::from(seed.value) / maintenance_cost);
-    let recommendation = classify_recommendation(seed.value, maintenance_cost);
+    let recommendation = classify_recommendation(
+        seed.value,
+        maintenance_cost,
+        tie_break_signals_from_seed(seed),
+    );
 
     FeatureInventoryEntry {
         feature_id: seed.feature_id.to_string(),
@@ -650,10 +712,11 @@ fn build_summary(features: &[FeatureInventoryEntry]) -> FeatureInventorySummary 
         }
     }
 
-    let covered_cli_flags = covered_cli_flags()
+    let mut covered_cli_flags = covered_cli_flags()
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>();
+    covered_cli_flags.sort();
 
     FeatureInventorySummary {
         total_features: features.len(),
@@ -671,15 +734,71 @@ fn build_summary(features: &[FeatureInventoryEntry]) -> FeatureInventorySummary 
     }
 }
 
-fn classify_recommendation(value: u8, maintenance_cost: f64) -> FeatureRecommendation {
+fn tie_break_signals_from_seed(seed: &FeatureSeed) -> TieBreakSignals {
+    TieBreakSignals {
+        safety: seed.failure_impact,
+        migration_risk: seed.complexity,
+        user_disruption: seed.support_burden,
+    }
+}
+
+fn build_release_phase_mapping() -> Vec<RecommendationReleasePhase> {
+    vec![
+        RecommendationReleasePhase {
+            recommendation: FeatureRecommendation::Keep,
+            phase: "Phase 1: Stabilize",
+            objective: "Preserve and harden high-confidence capabilities throughout v0.14.x.",
+        },
+        RecommendationReleasePhase {
+            recommendation: FeatureRecommendation::Merge,
+            phase: "Phase 2: Consolidate",
+            objective: "Combine overlapping workflows behind unified UX/API surfaces in v0.14.x.",
+        },
+        RecommendationReleasePhase {
+            recommendation: FeatureRecommendation::Remove,
+            phase: "Phase 3: Retire",
+            objective: "Plan sunset with migration guidance and minimal disruption by late v0.14.x.",
+        },
+    ]
+}
+
+fn classify_recommendation(
+    value: u8,
+    maintenance_cost: f64,
+    tie_break_signals: TieBreakSignals,
+) -> FeatureRecommendation {
     let delta = f64::from(value) - maintenance_cost;
-    if value >= KEEP_MIN_VALUE && delta >= KEEP_MIN_DELTA {
+    let is_keep = value >= KEEP_MIN_VALUE
+        && (delta > KEEP_MIN_DELTA
+            || (approximately_equal(delta, KEEP_MIN_DELTA)
+                && keep_boundary_tie_break_prefers_keep(tie_break_signals)));
+    let is_remove = delta < REMOVE_MAX_DELTA
+        || (approximately_equal(delta, REMOVE_MAX_DELTA)
+            && remove_boundary_tie_break_prefers_remove(tie_break_signals));
+
+    if is_keep {
         FeatureRecommendation::Keep
-    } else if delta <= REMOVE_MAX_DELTA {
+    } else if is_remove {
         FeatureRecommendation::Remove
     } else {
         FeatureRecommendation::Merge
     }
+}
+
+fn approximately_equal(left: f64, right: f64) -> bool {
+    (left - right).abs() <= TIE_BREAK_BOUNDARY_EPSILON
+}
+
+fn keep_boundary_tie_break_prefers_keep(signals: TieBreakSignals) -> bool {
+    signals.safety >= TIE_BREAK_KEEP_SIGNAL_MIN
+        || signals.migration_risk >= TIE_BREAK_KEEP_SIGNAL_MIN
+        || signals.user_disruption >= TIE_BREAK_KEEP_SIGNAL_MIN
+}
+
+fn remove_boundary_tie_break_prefers_remove(signals: TieBreakSignals) -> bool {
+    signals.safety <= TIE_BREAK_REMOVE_SIGNAL_MAX
+        && signals.migration_risk <= TIE_BREAK_REMOVE_SIGNAL_MAX
+        && signals.user_disruption <= TIE_BREAK_REMOVE_SIGNAL_MAX
 }
 
 fn round_to_two_decimals(value: f64) -> f64 {
@@ -696,6 +815,11 @@ fn covered_cli_flags() -> HashSet<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn schema_version_tracks_rubric_contract() {
+        assert_eq!(SCHEMA_VERSION, 2);
+    }
 
     #[test]
     fn inventory_covers_required_surfaces() {
@@ -759,10 +883,123 @@ mod tests {
     }
 
     #[test]
+    fn release_phase_mapping_covers_all_recommendations() {
+        let report = build_feature_inventory_report();
+        let mapped = report
+            .scoring_model
+            .release_phase_mapping
+            .iter()
+            .map(|mapping| mapping.recommendation)
+            .collect::<HashSet<_>>();
+
+        for recommendation in [
+            FeatureRecommendation::Keep,
+            FeatureRecommendation::Merge,
+            FeatureRecommendation::Remove,
+        ] {
+            assert!(
+                mapped.contains(&recommendation),
+                "missing release phase mapping for recommendation: {}",
+                recommendation.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn rubric_sample_candidates_are_deterministic() {
+        let samples = [
+            (
+                "core-workflow-boundary-keep",
+                4,
+                3.50,
+                TieBreakSignals {
+                    safety: 4,
+                    migration_risk: 3,
+                    user_disruption: 2,
+                },
+                FeatureRecommendation::Keep,
+            ),
+            (
+                "incremental-merge",
+                3,
+                3.20,
+                TieBreakSignals {
+                    safety: 3,
+                    migration_risk: 3,
+                    user_disruption: 3,
+                },
+                FeatureRecommendation::Merge,
+            ),
+            (
+                "low-signal-boundary-remove",
+                2,
+                3.50,
+                TieBreakSignals {
+                    safety: 2,
+                    migration_risk: 2,
+                    user_disruption: 2,
+                },
+                FeatureRecommendation::Remove,
+            ),
+        ];
+
+        for (sample_id, value, maintenance_cost, signals, expected) in samples {
+            let recommendation = classify_recommendation(value, maintenance_cost, signals);
+            assert_eq!(
+                recommendation, expected,
+                "unexpected rubric outcome for sample candidate `{sample_id}`"
+            );
+        }
+    }
+
+    #[test]
+    fn keep_boundary_defaults_to_merge_without_tie_break_signal() {
+        let recommendation = classify_recommendation(
+            4,
+            3.50,
+            TieBreakSignals {
+                safety: 3,
+                migration_risk: 3,
+                user_disruption: 3,
+            },
+        );
+
+        assert_eq!(recommendation, FeatureRecommendation::Merge);
+    }
+
+    #[test]
+    fn remove_boundary_defaults_to_merge_when_signal_exceeds_threshold() {
+        let recommendation = classify_recommendation(
+            2,
+            3.50,
+            TieBreakSignals {
+                safety: 2,
+                migration_risk: 4,
+                user_disruption: 2,
+            },
+        );
+
+        assert_eq!(recommendation, FeatureRecommendation::Merge);
+    }
+
+    #[test]
     fn committed_markdown_report_matches_generator() {
         let report = build_feature_inventory_report();
         let generated = render_markdown_report(&report);
         let committed = include_str!("../FEATURE_INVENTORY.md");
+
+        assert_eq!(
+            normalize_line_endings(&generated),
+            normalize_line_endings(committed)
+        );
+    }
+
+    #[test]
+    fn committed_json_report_matches_generator() {
+        let report = build_feature_inventory_report();
+        let generated = serde_json::to_string_pretty(&report)
+            .expect("feature inventory JSON serialization failed");
+        let committed = include_str!("../FEATURE_INVENTORY.json");
 
         assert_eq!(
             normalize_line_endings(&generated),

@@ -7,6 +7,10 @@
 - Keep: value >= 4 and (value - maintenance_cost) >= 0.50
 - Remove: (value - maintenance_cost) <= -1.50
 - Merge: all remaining cases
+- Tie-break activation: only when delta equals keep/remove threshold within ±0.0001
+- Keep tie-break (delta == 0.50): keep when any of safety/migration_risk/user_disruption >= 4
+- Remove tie-break (delta == -1.50): remove when safety/migration_risk/user_disruption are all <= 2
+- Tie-break dimensions: safety = failure_impact, migration_risk = complexity, user_disruption = support_burden
 
 ## Summary
 
@@ -20,6 +24,12 @@
   - Blocker: 5
   - Stats: 6
   - Integration: 5
+
+## Release phase mapping (v0.14.x)
+
+- keep: Phase 1: Stabilize — Preserve and harden high-confidence capabilities throughout v0.14.x.
+- merge: Phase 2: Consolidate — Combine overlapping workflows behind unified UX/API surfaces in v0.14.x.
+- remove: Phase 3: Retire — Plan sunset with migration guidance and minimal disruption by late v0.14.x.
 
 ## Feature inventory
 
