@@ -627,6 +627,33 @@ fn backup_and_restore_json_round_trip_config_and_stats_files() {
 }
 
 #[test]
+fn feature_inventory_json_exports_scored_report_artifacts() {
+    let env = TestEnv::new("feature-inventory-json");
+    let report_dir = env.root.join("reports");
+    let inventory_arg = format!("--feature-inventory={}", report_dir.display());
+
+    let output = env.run(&[inventory_arg.as_str(), "--json"]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(stderr_text(&output).trim().is_empty());
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert!(payload.get("export_dir").is_some());
+    assert!(payload.get("json_path").is_some());
+    assert!(payload.get("markdown_path").is_some());
+    assert!(
+        payload["total_features"]
+            .as_u64()
+            .is_some_and(|value| value > 0)
+    );
+    assert!(payload.get("keep_count").is_some());
+    assert!(payload.get("merge_count").is_some());
+    assert!(payload.get("remove_count").is_some());
+
+    assert!(report_dir.join("FEATURE_INVENTORY.json").is_file());
+    assert!(report_dir.join("FEATURE_INVENTORY.md").is_file());
+}
+
+#[test]
 fn sync_backup_and_restore_json_round_trip_config_and_stats_files() {
     let source_env = TestEnv::new("sync-backup-source");
     let target_env = TestEnv::new("sync-restore-target");
