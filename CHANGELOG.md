@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-05-31
+
+### Added
+
+- **Feature inventory with value and maintenance scoring (#401):** added the feature-inventory command/report workflow with value/maintenance scoring, JSON output support, and CLI contract coverage.
+- **Keep/Merge/Remove decision rubric (#402):** added deterministic rubric scoring and generated rubric inventory artifacts for decision recommendations.
+- **Usage signal collection for command and screen frequency (#403):** added usage-signal capture in app/CLI flows and usage-signal summary support in stats surfaces.
+
+### Changed
+
+- **CI toolchain maintenance (#379):** bumped `crate-ci/typos` from `1.46.3` to `1.47.0`.
+
+### Fixed
+
+- **Feature-inventory markdown stability (#401, #402):** hardened feature-inventory/rubric markdown rendering parity by normalizing line endings and escaping markdown formula content.
+
 ## [0.14.0] - 2026-05-28
 
 ### Added
@@ -355,7 +371,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/utilForever/focustime/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/utilForever/focustime/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/utilForever/focustime/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/utilForever/focustime/compare/v0.12.1...v0.13.0
