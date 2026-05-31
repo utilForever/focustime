@@ -4,6 +4,12 @@ use crate::app::{
 };
 
 impl App {
+    pub fn record_command_usage_for_cli(&mut self, surface_id: &str) {
+        if self.stats.record_command_usage(surface_id) {
+            self.mark_stats_dirty();
+        }
+    }
+
     pub fn start_focus_for_cli(&mut self) -> Result<(), String> {
         if self.timer.phase != TimerPhase::Focus || self.timer.status != TimerStatus::Idle {
             return Err("Cannot start focus: timer is not idle in focus phase.".to_string());

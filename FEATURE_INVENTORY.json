@@ -33,9 +33,9 @@
     ]
   },
   "summary": {
-    "total_features": 27,
+    "total_features": 28,
     "keep_count": 13,
-    "merge_count": 13,
+    "merge_count": 14,
     "remove_count": 1,
     "by_surface": [
       {
@@ -52,7 +52,7 @@
       },
       {
         "surface": "stats",
-        "feature_count": 6
+        "feature_count": 7
       },
       {
         "surface": "integration",
@@ -131,6 +131,7 @@
       "--task-goal",
       "--task-note",
       "--theme",
+      "--usage-signals",
       "--watch",
       "--weekday-rules",
       "--weekday-rules-set"
@@ -531,6 +532,22 @@
       "maintenance_cost": 3.65,
       "value_to_maintenance_ratio": 1.37,
       "recommendation": "keep"
+    },
+    {
+      "feature_id": "usage-signal-inspection",
+      "name": "Usage signal inspection",
+      "surface": "stats",
+      "description": "Review command and screen frequency summaries to guide feature cleanup decisions.",
+      "cli_flags": [
+        "--usage-signals"
+      ],
+      "value": 3,
+      "complexity": 2,
+      "support_burden": 2,
+      "failure_impact": 2,
+      "maintenance_cost": 2.0,
+      "value_to_maintenance_ratio": 1.5,
+      "recommendation": "merge"
     },
     {
       "feature_id": "calendar-busy-window-sync",

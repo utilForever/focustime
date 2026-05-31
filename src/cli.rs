@@ -22,7 +22,8 @@ use crate::session_recovery;
 use crate::stats::{
     ComparisonDimension, DailyGoalSnapshot, FocusRiskForecast, FocusStats,
     ProductivityComparisonRow, ProfileBucket, SessionInterruptionEvent, StatsGrowthSummary,
-    StatsRetentionPruneResult, TimeOfDayBucket, carry_over_goal_target, current_day_key,
+    StatsRetentionPruneResult, TimeOfDayBucket, UsageSignalsSummary, carry_over_goal_target,
+    current_day_key,
 };
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -60,7 +61,8 @@ use output::{
     print_site_edit_command_output, print_site_list_command_output, print_status_output,
     print_strict_command_output, print_sync_backup_output, print_sync_restore_output,
     print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
+    print_theme_command_output, print_timer_state_output, print_usage_signals_command_output,
+    print_weekday_rules_command_output,
 };
 use parsing::{
     finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_compare_by_value,
@@ -151,6 +153,7 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --daemon-stop [--json]
   focustime --diagnostics [--json]
   focustime --blocking-preview [--json]
+  focustime --usage-signals [--json]
   focustime --status [--watch[=SECONDS]] [--compare-by=task|profile|time-of-day] [--compare-task=LABEL|all] [--compare-profile=classic|deep-work|custom|unknown|all] [--compare-time=morning|afternoon|evening|night|unknown|all] [--compare-limit=N] [--json]
   focustime --backup[=DIR] [--json]
   focustime --restore[=DIR] [--json]
@@ -220,6 +223,7 @@ Options:
   --daemon-port   Override daemon API listen port (daemon start only; default random loopback port)
   --diagnostics   Show setup diagnostics checks
   --blocking-preview  Preview backend-selected blocking changes without writing
+  --usage-signals  Show local command/screen usage summary (top + rare surfaces)
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
   --compare-by    Status comparison dimension: task | profile | time-of-day
@@ -367,6 +371,7 @@ pub enum CommandKind {
     BreakGlassCancel,
     Diagnostics,
     BlockingPreview,
+    UsageSignals,
     Status {
         watch_interval_secs: Option<u64>,
         comparison: StatusComparisonOptions,
@@ -468,6 +473,7 @@ enum PrimaryCommand {
     BreakGlassCancel,
     Diagnostics,
     BlockingPreview,
+    UsageSignals,
     Status,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
@@ -551,6 +557,7 @@ enum ParsedToken {
     BreakGlassCancel,
     Diagnostics,
     BlockingPreview,
+    UsageSignals,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
     SyncBackup(Option<PathBuf>),
@@ -1154,6 +1161,12 @@ struct HistoryDashboardCommandOutput {
     card_order: Vec<&'static str>,
     pinned_cards: Vec<&'static str>,
     cards: Vec<HistoryDashboardCardOutput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct UsageSignalsCommandOutput {
+    action: &'static str,
+    summary: UsageSignalsSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

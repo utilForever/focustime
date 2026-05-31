@@ -50,6 +50,30 @@ fn parse_status_supports_json_mode() {
 }
 
 #[test]
+fn parse_usage_signals_supports_text_mode() {
+    let parsed = parse(&["--usage-signals"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::UsageSignals,
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_usage_signals_supports_json_mode() {
+    let parsed = parse(&["--usage-signals", "--json"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::UsageSignals,
+            output: OutputMode::Json
+        })
+    );
+}
+
+#[test]
 fn parse_status_watch_without_interval_uses_default_cadence() {
     let parsed = parse(&["--status", "--watch"]).unwrap();
     assert_eq!(

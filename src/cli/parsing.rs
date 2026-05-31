@@ -71,6 +71,7 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Diagnostics
             | ParsedToken::CalendarSync
             | ParsedToken::BlockingPreview
+            | ParsedToken::UsageSignals
             | ParsedToken::Backup(_)
             | ParsedToken::Restore(_)
             | ParsedToken::SyncBackup(_)
@@ -214,6 +215,9 @@ pub(super) fn parse_primary_command(
             }
             ParsedToken::BlockingPreview => {
                 set_primary_command(&mut primary, PrimaryCommand::BlockingPreview)?
+            }
+            ParsedToken::UsageSignals => {
+                set_primary_command(&mut primary, PrimaryCommand::UsageSignals)?
             }
             ParsedToken::Backup(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Backup(dir.clone()))?
@@ -484,6 +488,10 @@ pub(super) fn finalize_cli_action(
         })),
         Some(PrimaryCommand::BlockingPreview) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::BlockingPreview,
+            output,
+        })),
+        Some(PrimaryCommand::UsageSignals) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::UsageSignals,
             output,
         })),
         Some(PrimaryCommand::Pause) => Ok(CliAction::RunCommand(CliCommand {
@@ -1146,6 +1154,7 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::CalendarSync => "--calendar-sync",
         PrimaryCommand::BlockingPreview => "--blocking-preview",
+        PrimaryCommand::UsageSignals => "--usage-signals",
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Backup(_) => "--backup",
         PrimaryCommand::Restore(_) => "--restore",

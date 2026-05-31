@@ -14,15 +14,15 @@
 
 ## Summary
 
-- Total features: 27
+- Total features: 28
 - Keep: 13
-- Merge: 13
+- Merge: 14
 - Remove: 1
 - Surface coverage:
   - Timer: 6
   - Schedule: 5
   - Blocker: 5
-  - Stats: 6
+  - Stats: 7
   - Integration: 5
 
 ## Release phase mapping (v0.14.x)
@@ -57,6 +57,7 @@
 | `stats-export-artifacts` | Stats | 4 | 2.65 | 1.51 | keep | --export |
 | `status-comparison-slicing` | Stats | 3 | 3.35 | 0.90 | merge | --compare-by, --compare-task, --compare-profile, --compare-time, --compare-limit |
 | `status-snapshot-and-streaming` | Stats | 5 | 3.65 | 1.37 | keep | --status, --watch |
+| `usage-signal-inspection` | Stats | 3 | 2.00 | 1.50 | merge | --usage-signals |
 | `calendar-busy-window-sync` | Integration | 3 | 3.75 | 0.80 | merge | --calendar-sync |
 | `daemon-api-lifecycle` | Integration | 3 | 4.25 | 0.71 | merge | --daemon-start, --daemon-status, --daemon-stop, --daemon-port |
 | `encrypted-sync-bundles` | Integration | 2 | 5.00 | 0.40 | remove | --sync-backup, --sync-restore, --sync-passphrase |

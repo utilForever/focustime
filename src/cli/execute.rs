@@ -32,18 +32,18 @@ use crate::cli::{
     SiteListTarget, StatusComparisonOptions, StatusOutput, StrictCommandOutput, SyncBackupOutput,
     SyncRestoreOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
     TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset,
-    TimerCommandOutput, TimerStateOutput, WeekdayProfileRuleConfig, WeekdayRulesCommandOutput,
-    WeeklyGoalConfig, available_break_template_views, available_theme_preset_views,
-    build_blocking_preview_command_output, build_diagnostics_command_output,
-    build_schedule_inspection_output, build_status_output_with_comparison, build_task_goal_output,
-    display_input_value, effective_blocked_sites_for_profile, flush_stdout,
-    print_automation_triggers_command_output, print_backup_output,
-    print_blocking_preview_command_output, print_blocklist_category_command_output,
-    print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_calendar_sync_command_output, print_daemon_start_command_output,
-    print_daemon_status_command_output, print_daemon_stop_command_output,
-    print_diagnostics_command_output, print_export_output, print_feature_inventory_output,
-    print_goal_carry_command_output, print_goal_command_output,
+    TimerCommandOutput, TimerStateOutput, UsageSignalsCommandOutput, WeekdayProfileRuleConfig,
+    WeekdayRulesCommandOutput, WeeklyGoalConfig, available_break_template_views,
+    available_theme_preset_views, build_blocking_preview_command_output,
+    build_diagnostics_command_output, build_schedule_inspection_output,
+    build_status_output_with_comparison, build_task_goal_output, display_input_value,
+    effective_blocked_sites_for_profile, flush_stdout, print_automation_triggers_command_output,
+    print_backup_output, print_blocking_preview_command_output,
+    print_blocklist_category_command_output, print_blocklist_profile_command_output,
+    print_break_glass_command_output, print_calendar_sync_command_output,
+    print_daemon_start_command_output, print_daemon_status_command_output,
+    print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
+    print_feature_inventory_output, print_goal_carry_command_output, print_goal_command_output,
     print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
     print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
     print_session_metadata_command_output, print_session_template_command_output,
@@ -51,20 +51,27 @@ use crate::cli::{
     print_site_edit_command_output, print_site_list_command_output, print_status_output,
     print_strict_command_output, print_sync_backup_output, print_sync_restore_output,
     print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_weekday_rules_command_output,
-    profile_id, profile_view, selected_break_template_view, theme_preset_view, timer_phase_id,
-    timer_status_id,
+    print_theme_command_output, print_timer_state_output, print_usage_signals_command_output,
+    print_weekday_rules_command_output, profile_id, profile_view, selected_break_template_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
 const STATS_FILE_NAME: &str = "stats.toml";
 const WATCH_INTERRUPT_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const SYNC_PASSPHRASE_ENV: &str = "FOCUSTIME_SYNC_PASSPHRASE";
+const USAGE_SIGNAL_SUMMARY_LIMIT: usize = 5;
 
 static WATCH_INTERRUPTED: AtomicBool = AtomicBool::new(false);
 static WATCH_INTERRUPT_HANDLER: OnceLock<Result<(), String>> = OnceLock::new();
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
+    if let Some(surface_id) = command_usage_surface_id(&cli_command.kind)
+        && !command_usage_records_via_app(&cli_command.kind)
+    {
+        record_command_usage_direct(surface_id)?;
+    }
+
     match cli_command.kind {
         CommandKind::Start => execute_start_command(cli_command.output),
         CommandKind::Pause => execute_pause_command(cli_command.output),
@@ -111,6 +118,7 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::BreakGlassCancel => execute_break_glass_cancel_command(cli_command.output),
         CommandKind::Diagnostics => execute_diagnostics_command(cli_command.output),
         CommandKind::BlockingPreview => execute_blocking_preview_command(cli_command.output),
+        CommandKind::UsageSignals => execute_usage_signals_command(cli_command.output),
         CommandKind::Status {
             watch_interval_secs,
             comparison,
@@ -149,32 +157,119 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
     }
 }
 
+fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
+    match command {
+        CommandKind::Start => Some("start"),
+        CommandKind::Pause => Some("pause"),
+        CommandKind::Resume => Some("resume"),
+        CommandKind::Stop => Some("stop"),
+        CommandKind::Next => Some("next"),
+        CommandKind::Task { .. } => Some("task"),
+        CommandKind::TaskGoal { .. } => Some("task-goal"),
+        CommandKind::FocusIntention { .. } => Some("focus-intention"),
+        CommandKind::TaskNote { .. } => Some("task-note"),
+        CommandKind::Profile { .. } => Some("profile"),
+        CommandKind::Theme { .. } => Some("theme"),
+        CommandKind::Goal { .. } => Some("goal"),
+        CommandKind::GoalWeekly { .. } => Some("goal-weekly"),
+        CommandKind::GoalMonthly { .. } => Some("goal-monthly"),
+        CommandKind::GoalCarry { .. } => Some("goal-carry"),
+        CommandKind::GoalCarryWeekly { .. } => Some("goal-carry-weekly"),
+        CommandKind::GoalCarryMonthly { .. } => Some("goal-carry-monthly"),
+        CommandKind::Strict { .. } => Some("strict"),
+        CommandKind::Schedule { .. } => Some("schedule"),
+        CommandKind::WeekdayRules { .. } => Some("weekday-rules"),
+        CommandKind::AutomationTriggers { .. } => Some("automation-triggers"),
+        CommandKind::ScheduleDelay => Some("schedule-delay"),
+        CommandKind::BreakGlassTrigger => Some("break-glass-trigger"),
+        CommandKind::BreakGlassCancel => Some("break-glass-cancel"),
+        CommandKind::Diagnostics => Some("diagnostics"),
+        CommandKind::BlockingPreview => Some("blocking-preview"),
+        CommandKind::Status { .. } => Some("status"),
+        CommandKind::Backup { .. } => Some("backup"),
+        CommandKind::Restore { .. } => Some("restore"),
+        CommandKind::SyncBackup { .. } => Some("sync-backup"),
+        CommandKind::SyncRestore { .. } => Some("sync-restore"),
+        CommandKind::CalendarSync => Some("calendar-sync"),
+        CommandKind::Export { .. } => Some("export"),
+        CommandKind::FeatureInventory { .. } => Some("feature-inventory"),
+        CommandKind::BlocklistProfile { .. } => Some("blocklist-profile"),
+        CommandKind::BlocklistCategory { .. } => Some("blocklist-category"),
+        CommandKind::BlocklistSites { .. } => Some("blocklist-sites"),
+        CommandKind::AllowlistSiteAddTemporary { .. } => Some("allowlist-site-add-temporary"),
+        CommandKind::DaemonStart { .. } => Some("daemon-start"),
+        CommandKind::DaemonStatus => Some("daemon-status"),
+        CommandKind::DaemonStop => Some("daemon-stop"),
+        CommandKind::SessionTemplate { .. } => Some("session-template"),
+        CommandKind::HistoryDashboard { .. } => Some("history-dashboard"),
+        CommandKind::UsageSignals => None,
+    }
+}
+
+fn command_usage_records_via_app(command: &CommandKind) -> bool {
+    matches!(
+        command,
+        CommandKind::Start
+            | CommandKind::Pause
+            | CommandKind::Resume
+            | CommandKind::Stop
+            | CommandKind::Next
+            | CommandKind::Task { .. }
+            | CommandKind::FocusIntention { .. }
+            | CommandKind::TaskNote { .. }
+            | CommandKind::AllowlistSiteAddTemporary { .. }
+            | CommandKind::SessionTemplate { .. }
+            | CommandKind::ScheduleDelay
+            | CommandKind::BreakGlassTrigger
+            | CommandKind::BreakGlassCancel
+            | CommandKind::Diagnostics
+            | CommandKind::BlockingPreview
+    )
+}
+
+fn record_command_usage_direct(surface_id: &str) -> Result<(), String> {
+    let config = AppConfig::load().normalized();
+    let mut stats = FocusStats::load_with_options(stats_load_options(&config))
+        .map_err(|error| format!("Failed to load stats: {error}"))?;
+    if !stats.record_command_usage(surface_id) {
+        return Ok(());
+    }
+    stats
+        .save_with_options(stats_save_options(&config))
+        .map_err(|error| format!("Failed to save usage signals: {error}"))
+}
+
 fn execute_start_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("start");
     app.start_focus_for_cli()?;
     emit_timer_command_output("start", &app, output)
 }
 
 fn execute_pause_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("pause");
     app.pause_for_cli()?;
     emit_timer_command_output("pause", &app, output)
 }
 
 fn execute_resume_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("resume");
     app.resume_for_cli()?;
     emit_timer_command_output("resume", &app, output)
 }
 
 fn execute_stop_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("stop");
     app.stop_for_cli()?;
     emit_timer_command_output("stop", &app, output)
 }
 
 fn execute_next_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("next");
     app.next_phase_for_cli()?;
     emit_timer_command_output("next", &app, output)
 }
@@ -237,6 +332,7 @@ fn daemon_connection_output(connection: &daemon::DaemonConnectionInfo) -> Daemon
 
 fn execute_task_command(label: String, output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("task");
     let created = app.select_task_label_for_cli(&label)?;
     let selected_task_label = app
         .selected_task_label_for_cli()
@@ -325,6 +421,7 @@ fn execute_focus_intention_command(
     output: OutputMode,
 ) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("focus-intention");
     let mut updated = false;
     if let Some(value) = value {
         app.set_focus_intention_for_cli(&value)?;
@@ -335,6 +432,7 @@ fn execute_focus_intention_command(
 
 fn execute_task_note_command(value: Option<String>, output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("task-note");
     let mut updated = false;
     if let Some(value) = value {
         app.set_task_note_for_cli(&value)?;
@@ -439,6 +537,7 @@ fn execute_allowlist_site_add_temporary_command(
     output: OutputMode,
 ) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("allowlist-site-add-temporary");
     let (added, refreshed) = app.add_temporary_allowlist_for_cli(&input)?;
     let payload = TemporarySiteAddCommandOutput {
         action: "allowlist-site-add-temporary",
@@ -468,6 +567,7 @@ fn execute_session_template_command(
     output: OutputMode,
 ) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("session-template");
     let (action, updated) = match command {
         SessionTemplateCommandKind::Select { name } => (
             "session-template",
@@ -1615,24 +1715,28 @@ fn validate_and_normalize_automation_triggers(
 
 fn execute_schedule_delay_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("schedule-delay");
     let delayed_until = app.schedule_delay_for_cli()?;
     emit_schedule_delay_command_output("schedule-delay", delayed_until, &app, output)
 }
 
 fn execute_break_glass_trigger_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("break-glass-trigger");
     app.trigger_break_glass_for_cli()?;
     emit_break_glass_command_output("break-glass-trigger", &app, output)
 }
 
 fn execute_break_glass_cancel_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
+    app.record_command_usage_for_cli("break-glass-cancel");
     app.cancel_break_glass_for_cli()?;
     emit_break_glass_command_output("break-glass-cancel", &app, output)
 }
 
 fn execute_diagnostics_command(output: OutputMode) -> Result<(), String> {
-    let app = App::new();
+    let mut app = App::new();
+    app.record_command_usage_for_cli("diagnostics");
     let payload = build_diagnostics_command_output(&app.setup_diagnostics);
 
     match output {
@@ -1643,12 +1747,28 @@ fn execute_diagnostics_command(output: OutputMode) -> Result<(), String> {
 }
 
 fn execute_blocking_preview_command(output: OutputMode) -> Result<(), String> {
-    let app = App::new();
+    let mut app = App::new();
+    app.record_command_usage_for_cli("blocking-preview");
     let preview = app.blocking_preview_for_cli()?;
     let payload = build_blocking_preview_command_output(&preview);
 
     match output {
         OutputMode::Text => print_blocking_preview_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_usage_signals_command(output: OutputMode) -> Result<(), String> {
+    let config = AppConfig::load().normalized();
+    let stats = FocusStats::load_with_options(stats_load_options(&config))
+        .map_err(|error| format!("Failed to load stats: {error}"))?;
+    let payload = UsageSignalsCommandOutput {
+        action: "usage-signals",
+        summary: stats.usage_signal_summary(USAGE_SIGNAL_SUMMARY_LIMIT),
+    };
+    match output {
+        OutputMode::Text => print_usage_signals_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
@@ -2475,6 +2595,38 @@ mod tests {
             .get_or_init(|| Mutex::new(()))
             .lock()
             .expect("watch test guard should lock")
+    }
+
+    #[test]
+    fn command_usage_surface_id_maps_expected_surfaces() {
+        assert_eq!(command_usage_surface_id(&CommandKind::Start), Some("start"));
+        assert_eq!(
+            command_usage_surface_id(&CommandKind::Task {
+                label: "docs".to_string()
+            }),
+            Some("task")
+        );
+        assert_eq!(
+            command_usage_surface_id(&CommandKind::Status {
+                watch_interval_secs: None,
+                comparison: StatusComparisonOptions::default(),
+            }),
+            Some("status")
+        );
+        assert_eq!(command_usage_surface_id(&CommandKind::UsageSignals), None);
+    }
+
+    #[test]
+    fn command_usage_records_via_app_matches_expected_commands() {
+        assert!(command_usage_records_via_app(&CommandKind::Start));
+        assert!(command_usage_records_via_app(&CommandKind::Diagnostics));
+        assert!(!command_usage_records_via_app(&CommandKind::Backup {
+            dir: None
+        }));
+        assert!(!command_usage_records_via_app(&CommandKind::Status {
+            watch_interval_secs: None,
+            comparison: StatusComparisonOptions::default(),
+        }));
     }
 
     #[test]
