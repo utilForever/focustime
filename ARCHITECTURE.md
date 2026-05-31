@@ -15,6 +15,7 @@ flowchart LR
     APP["app.rs + app/*<br/>runtime orchestration + state transitions"]
     UI["ui.rs + ui/*<br/>screen rendering"]
     ST["stats.rs + stats/*<br/>persistence/analytics/export"]
+    FI["feature_inventory.rs<br/>feature scoring/report export"]
     CFG["config.rs + config/paths.rs<br/>config model + path resolution"]
     TM["timer.rs<br/>Pomodoro state machine"]
     BL["blocker.rs<br/>multi-backend blocking (hosts + command fallback)"]
@@ -48,6 +49,7 @@ flowchart LR
     CLI --> CFG
     CLI --> CAL
     CLI --> ST
+    CLI --> FI
     UI --> APP
     BL --> OS
     NT --> OS
@@ -63,6 +65,7 @@ flowchart LR
 | `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless timer controls, daemon lifecycle commands, schedule delay/break-glass workflow controls, plain backup/restore, encrypted sync workflows, and calendar ICS cache refresh | `app`, `daemon`, `config`, `stats`, `sync`, `calendar`, `blocker`                             |
 | `daemon.rs`                     | Headless daemon runtime with loopback-only versioned local API, bearer-token auth, daemon metadata persistence, and graceful lifecycle/status/stop orchestration                                                                                                                                | `app`, `cli`, filesystem, `ureq`, `tiny_http`                                                 |
 | `stats.rs` + `stats/*`          | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers, including canonical-path persistence and legacy read-time compatibility handling during deprecation windows                                                                                          | `app`, `task_labels`, filesystem                                                              |
+| `feature_inventory.rs`          | Deterministic feature inventory catalog with value/maintenance scoring and JSON/Markdown report generation for keep/merge/remove roadmap decisions                                                                                                                                              | `cli`, filesystem                                                                             |
 | `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                                                              | `app`, `timer`, `integration`                                                                 |
 | `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including feature-flag compatibility defaults, runtime knob settings, and task-label-aware WakaTime metadata mapping rules                                                                                            | `app`, `cli`, filesystem/env                                                                  |
 | `timer.rs`                      | Pomodoro timer domain model and phase transitions                                                                                                                                                                                                                                               | `app`, `ui`                                                                                   |

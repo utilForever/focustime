@@ -1,0 +1,597 @@
+{
+  "schema_version": 1,
+  "scoring_model": {
+    "score_min": 1,
+    "score_max": 5,
+    "complexity_weight": 0.4,
+    "support_burden_weight": 0.35,
+    "failure_impact_weight": 0.25,
+    "keep_min_value": 4,
+    "keep_min_delta": 0.5,
+    "remove_max_delta": -1.5
+  },
+  "summary": {
+    "total_features": 27,
+    "keep_count": 13,
+    "merge_count": 13,
+    "remove_count": 1,
+    "by_surface": [
+      {
+        "surface": "timer",
+        "feature_count": 6
+      },
+      {
+        "surface": "schedule",
+        "feature_count": 5
+      },
+      {
+        "surface": "blocker",
+        "feature_count": 5
+      },
+      {
+        "surface": "stats",
+        "feature_count": 6
+      },
+      {
+        "surface": "integration",
+        "feature_count": 5
+      }
+    ],
+    "covered_cli_flags": [
+      "--blocklist-profile-rename",
+      "--goal-monthly",
+      "--automation-triggers-set",
+      "--allowlist-site-edit",
+      "--goal-carry",
+      "--allowlist-site-add",
+      "--pause",
+      "--session-template-delete",
+      "--feature-inventory",
+      "--sync-passphrase",
+      "--sync-restore",
+      "--blocklist-category",
+      "--schedule-set",
+      "--start",
+      "--session-template-rename",
+      "--schedule-delay",
+      "--calendar-sync",
+      "--task-goal",
+      "--next",
+      "--resume",
+      "--blocklist-category-rename",
+      "--backup",
+      "--daemon-status",
+      "--goal-weekly",
+      "--diagnostics",
+      "--stop",
+      "--watch",
+      "--session-template",
+      "--task-note",
+      "--history-dashboard",
+      "--blocklist-site-add",
+      "--allowlist-site-add-temporary",
+      "--blocklist-category-delete",
+      "--daemon-stop",
+      "--status",
+      "--allowlist-site-delete",
+      "--history-dashboard-order",
+      "--sync-backup",
+      "--allowlist-sites",
+      "--weekday-rules-set",
+      "--daemon-port",
+      "--automation-triggers",
+      "--goal",
+      "--compare-task",
+      "--blocklist-site-edit",
+      "--export",
+      "--blocklist-profile-create",
+      "--focus-intention",
+      "--history-dashboard-pin",
+      "--blocklist-sites",
+      "--break-glass-trigger",
+      "--break-glass-cancel",
+      "--strict",
+      "--theme",
+      "--schedule",
+      "--blocklist-site-delete",
+      "--history-dashboard-unpin",
+      "--daemon-start",
+      "--session-template-apply",
+      "--session-template-create",
+      "--goal-carry-monthly",
+      "--profile",
+      "--compare-by",
+      "--compare-time",
+      "--compare-limit",
+      "--restore",
+      "--blocklist-profile",
+      "--task",
+      "--blocklist-category-create",
+      "--blocking-preview",
+      "--compare-profile",
+      "--goal-carry-weekly",
+      "--weekday-rules",
+      "--blocklist-profile-delete"
+    ]
+  },
+  "features": [
+    {
+      "feature_id": "goal-management",
+      "name": "Goal management",
+      "surface": "timer",
+      "description": "Set and inspect daily, weekly, and monthly focus goals with carry-over options.",
+      "cli_flags": [
+        "--goal",
+        "--goal-weekly",
+        "--goal-monthly",
+        "--goal-carry",
+        "--goal-carry-weekly",
+        "--goal-carry-monthly"
+      ],
+      "value": 4,
+      "complexity": 3,
+      "support_burden": 3,
+      "failure_impact": 3,
+      "maintenance_cost": 3.0,
+      "value_to_maintenance_ratio": 1.33,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "profile-and-theme-controls",
+      "name": "Profile and theme controls",
+      "surface": "timer",
+      "description": "Switch duration profiles and UI theme presets for personal workflow tuning.",
+      "cli_flags": [
+        "--profile",
+        "--theme"
+      ],
+      "value": 4,
+      "complexity": 3,
+      "support_burden": 3,
+      "failure_impact": 2,
+      "maintenance_cost": 2.75,
+      "value_to_maintenance_ratio": 1.45,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "session-template-workflows",
+      "name": "Session template workflows",
+      "surface": "timer",
+      "description": "Capture and apply session templates that bundle task, profile, schedule, and blocklist defaults.",
+      "cli_flags": [
+        "--session-template",
+        "--session-template-apply",
+        "--session-template-create",
+        "--session-template-rename",
+        "--session-template-delete"
+      ],
+      "value": 4,
+      "complexity": 4,
+      "support_burden": 4,
+      "failure_impact": 3,
+      "maintenance_cost": 3.75,
+      "value_to_maintenance_ratio": 1.07,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "strict-mode-enforcement",
+      "name": "Strict mode enforcement",
+      "surface": "timer",
+      "description": "Lock timer behavior to reduce drift and prevent accidental workflow bypasses.",
+      "cli_flags": [
+        "--strict"
+      ],
+      "value": 3,
+      "complexity": 3,
+      "support_burden": 3,
+      "failure_impact": 4,
+      "maintenance_cost": 3.25,
+      "value_to_maintenance_ratio": 0.92,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "task-context-and-notes",
+      "name": "Task context and notes",
+      "surface": "timer",
+      "description": "Attach task labels, goals, intentions, and notes to active focus sessions.",
+      "cli_flags": [
+        "--task",
+        "--task-goal",
+        "--focus-intention",
+        "--task-note"
+      ],
+      "value": 5,
+      "complexity": 3,
+      "support_burden": 3,
+      "failure_impact": 3,
+      "maintenance_cost": 3.0,
+      "value_to_maintenance_ratio": 1.67,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "timer-lifecycle-controls",
+      "name": "Timer lifecycle controls",
+      "surface": "timer",
+      "description": "Start, pause, resume, stop, and skip timer phases from CLI and TUI workflows.",
+      "cli_flags": [
+        "--start",
+        "--pause",
+        "--resume",
+        "--stop",
+        "--next"
+      ],
+      "value": 5,
+      "complexity": 3,
+      "support_burden": 2,
+      "failure_impact": 4,
+      "maintenance_cost": 2.9,
+      "value_to_maintenance_ratio": 1.72,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "automation-trigger-rules",
+      "name": "Automation trigger rules",
+      "surface": "schedule",
+      "description": "Configure trigger conditions that launch automation around focus sessions.",
+      "cli_flags": [
+        "--automation-triggers",
+        "--automation-triggers-set"
+      ],
+      "value": 3,
+      "complexity": 4,
+      "support_burden": 4,
+      "failure_impact": 4,
+      "maintenance_cost": 4.0,
+      "value_to_maintenance_ratio": 0.75,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "break-glass-workflow",
+      "name": "Break-glass workflow",
+      "surface": "schedule",
+      "description": "Temporarily suspend enforcement and explicitly cancel active break-glass windows.",
+      "cli_flags": [
+        "--break-glass-trigger",
+        "--break-glass-cancel"
+      ],
+      "value": 4,
+      "complexity": 3,
+      "support_burden": 2,
+      "failure_impact": 5,
+      "maintenance_cost": 3.15,
+      "value_to_maintenance_ratio": 1.27,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "schedule-definition-and-inspection",
+      "name": "Schedule definition and inspection",
+      "surface": "schedule",
+      "description": "Review and set recurring schedules used to drive automatic focus windows.",
+      "cli_flags": [
+        "--schedule",
+        "--schedule-set"
+      ],
+      "value": 5,
+      "complexity": 4,
+      "support_burden": 3,
+      "failure_impact": 4,
+      "maintenance_cost": 3.65,
+      "value_to_maintenance_ratio": 1.37,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "schedule-delay-controls",
+      "name": "Schedule delay controls",
+      "surface": "schedule",
+      "description": "Delay upcoming schedule windows to handle ad-hoc interruptions.",
+      "cli_flags": [
+        "--schedule-delay"
+      ],
+      "value": 3,
+      "complexity": 2,
+      "support_burden": 2,
+      "failure_impact": 3,
+      "maintenance_cost": 2.25,
+      "value_to_maintenance_ratio": 1.33,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "weekday-profile-rules",
+      "name": "Weekday profile rules",
+      "surface": "schedule",
+      "description": "Map weekdays to profile selection rules for context-sensitive defaults.",
+      "cli_flags": [
+        "--weekday-rules",
+        "--weekday-rules-set"
+      ],
+      "value": 4,
+      "complexity": 4,
+      "support_burden": 4,
+      "failure_impact": 3,
+      "maintenance_cost": 3.75,
+      "value_to_maintenance_ratio": 1.07,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "blocking-preview-diagnostics",
+      "name": "Blocking preview diagnostics",
+      "surface": "blocker",
+      "description": "Preview effective blocker resolution and inspect command/backend actions.",
+      "cli_flags": [
+        "--blocking-preview"
+      ],
+      "value": 3,
+      "complexity": 2,
+      "support_burden": 2,
+      "failure_impact": 3,
+      "maintenance_cost": 2.25,
+      "value_to_maintenance_ratio": 1.33,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "blocklist-category-management",
+      "name": "Blocklist category management",
+      "surface": "blocker",
+      "description": "Manage blocker categories nested under each blocklist profile.",
+      "cli_flags": [
+        "--blocklist-category",
+        "--blocklist-category-create",
+        "--blocklist-category-rename",
+        "--blocklist-category-delete"
+      ],
+      "value": 3,
+      "complexity": 3,
+      "support_burden": 3,
+      "failure_impact": 3,
+      "maintenance_cost": 3.0,
+      "value_to_maintenance_ratio": 1.0,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "blocklist-profile-management",
+      "name": "Blocklist profile management",
+      "surface": "blocker",
+      "description": "Create, rename, select, and delete blocker profiles per workflow context.",
+      "cli_flags": [
+        "--blocklist-profile",
+        "--blocklist-profile-create",
+        "--blocklist-profile-rename",
+        "--blocklist-profile-delete"
+      ],
+      "value": 4,
+      "complexity": 3,
+      "support_burden": 3,
+      "failure_impact": 4,
+      "maintenance_cost": 3.25,
+      "value_to_maintenance_ratio": 1.23,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "site-rule-management",
+      "name": "Site rule management",
+      "surface": "blocker",
+      "description": "List, add, edit, and delete blocklist and allowlist host rules.",
+      "cli_flags": [
+        "--blocklist-sites",
+        "--allowlist-sites",
+        "--blocklist-site-add",
+        "--allowlist-site-add",
+        "--blocklist-site-edit",
+        "--allowlist-site-edit",
+        "--blocklist-site-delete",
+        "--allowlist-site-delete"
+      ],
+      "value": 5,
+      "complexity": 4,
+      "support_burden": 4,
+      "failure_impact": 4,
+      "maintenance_cost": 4.0,
+      "value_to_maintenance_ratio": 1.25,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "temporary-allowlist-overrides",
+      "name": "Temporary allowlist overrides",
+      "surface": "blocker",
+      "description": "Grant temporary unblock windows for selected hosts without removing baseline rules.",
+      "cli_flags": [
+        "--allowlist-site-add-temporary"
+      ],
+      "value": 3,
+      "complexity": 3,
+      "support_burden": 4,
+      "failure_impact": 4,
+      "maintenance_cost": 3.6,
+      "value_to_maintenance_ratio": 0.83,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "backup-and-restore-workflows",
+      "name": "Backup and restore workflows",
+      "surface": "stats",
+      "description": "Create and recover local backup bundles containing configuration and session history.",
+      "cli_flags": [
+        "--backup",
+        "--restore"
+      ],
+      "value": 4,
+      "complexity": 4,
+      "support_burden": 4,
+      "failure_impact": 5,
+      "maintenance_cost": 4.25,
+      "value_to_maintenance_ratio": 0.94,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "feature-inventory-reporting",
+      "name": "Feature inventory reporting",
+      "surface": "stats",
+      "description": "Generate scored feature inventory artifacts for keep, merge, and remove roadmap reviews.",
+      "cli_flags": [
+        "--feature-inventory"
+      ],
+      "value": 4,
+      "complexity": 2,
+      "support_burden": 2,
+      "failure_impact": 2,
+      "maintenance_cost": 2.0,
+      "value_to_maintenance_ratio": 2.0,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "history-dashboard-curation",
+      "name": "History dashboard curation",
+      "surface": "stats",
+      "description": "Pin, unpin, and reorder history dashboard KPI cards to fit user priorities.",
+      "cli_flags": [
+        "--history-dashboard",
+        "--history-dashboard-pin",
+        "--history-dashboard-unpin",
+        "--history-dashboard-order"
+      ],
+      "value": 4,
+      "complexity": 3,
+      "support_burden": 3,
+      "failure_impact": 2,
+      "maintenance_cost": 2.75,
+      "value_to_maintenance_ratio": 1.45,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "stats-export-artifacts",
+      "name": "Stats export artifacts",
+      "surface": "stats",
+      "description": "Export machine-readable and spreadsheet-friendly focus history artifacts.",
+      "cli_flags": [
+        "--export"
+      ],
+      "value": 4,
+      "complexity": 3,
+      "support_burden": 2,
+      "failure_impact": 3,
+      "maintenance_cost": 2.65,
+      "value_to_maintenance_ratio": 1.51,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "status-comparison-slicing",
+      "name": "Status comparison slicing",
+      "surface": "stats",
+      "description": "Compare status analytics across task, profile, and time-of-day dimensions.",
+      "cli_flags": [
+        "--compare-by",
+        "--compare-task",
+        "--compare-profile",
+        "--compare-time",
+        "--compare-limit"
+      ],
+      "value": 3,
+      "complexity": 3,
+      "support_burden": 4,
+      "failure_impact": 3,
+      "maintenance_cost": 3.35,
+      "value_to_maintenance_ratio": 0.9,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "status-snapshot-and-streaming",
+      "name": "Status snapshot and streaming",
+      "surface": "stats",
+      "description": "Inspect current timer state and optional watch mode for live status updates.",
+      "cli_flags": [
+        "--status",
+        "--watch"
+      ],
+      "value": 5,
+      "complexity": 4,
+      "support_burden": 3,
+      "failure_impact": 4,
+      "maintenance_cost": 3.65,
+      "value_to_maintenance_ratio": 1.37,
+      "recommendation": "keep"
+    },
+    {
+      "feature_id": "calendar-busy-window-sync",
+      "name": "Calendar busy window sync",
+      "surface": "integration",
+      "description": "Sync active focus sessions into calendar busy windows to reduce interruptions.",
+      "cli_flags": [
+        "--calendar-sync"
+      ],
+      "value": 3,
+      "complexity": 4,
+      "support_burden": 4,
+      "failure_impact": 3,
+      "maintenance_cost": 3.75,
+      "value_to_maintenance_ratio": 0.8,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "daemon-api-lifecycle",
+      "name": "Daemon API lifecycle",
+      "surface": "integration",
+      "description": "Run and manage daemon mode for automation and external tooling integration.",
+      "cli_flags": [
+        "--daemon-start",
+        "--daemon-status",
+        "--daemon-stop",
+        "--daemon-port"
+      ],
+      "value": 3,
+      "complexity": 4,
+      "support_burden": 4,
+      "failure_impact": 5,
+      "maintenance_cost": 4.25,
+      "value_to_maintenance_ratio": 0.71,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "encrypted-sync-bundles",
+      "name": "Encrypted sync bundles",
+      "surface": "integration",
+      "description": "Create encrypted backup bundles and restore them with passphrase protection.",
+      "cli_flags": [
+        "--sync-backup",
+        "--sync-restore",
+        "--sync-passphrase"
+      ],
+      "value": 2,
+      "complexity": 5,
+      "support_burden": 5,
+      "failure_impact": 5,
+      "maintenance_cost": 5.0,
+      "value_to_maintenance_ratio": 0.4,
+      "recommendation": "remove"
+    },
+    {
+      "feature_id": "setup-diagnostics-and-health-signals",
+      "name": "Setup diagnostics and health signals",
+      "surface": "integration",
+      "description": "Provide system diagnostics and setup checks for blocker, notifications, and integrations.",
+      "cli_flags": [
+        "--diagnostics"
+      ],
+      "value": 3,
+      "complexity": 3,
+      "support_burden": 3,
+      "failure_impact": 2,
+      "maintenance_cost": 2.75,
+      "value_to_maintenance_ratio": 1.09,
+      "recommendation": "merge"
+    },
+    {
+      "feature_id": "wakatime-heartbeat-pipeline",
+      "name": "WakaTime heartbeat pipeline",
+      "surface": "integration",
+      "description": "Publish coding heartbeats to WakaTime using active timer metadata.",
+      "cli_flags": [],
+      "value": 4,
+      "complexity": 3,
+      "support_burden": 3,
+      "failure_impact": 3,
+      "maintenance_cost": 3.0,
+      "value_to_maintenance_ratio": 1.33,
+      "recommendation": "keep"
+    }
+  ]
+}

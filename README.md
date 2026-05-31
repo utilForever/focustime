@@ -247,6 +247,10 @@ cargo run -- --sync-restore=./reports --sync-passphrase=secret --json
 # Export stats to current directory or a target directory
 cargo run -- --export
 cargo run -- --export=./reports --json
+
+# Export feature inventory scoring report to current directory or a target directory
+cargo run -- --feature-inventory
+cargo run -- --feature-inventory=./reports --json
 ```
 
 ### Local daemon API
@@ -472,7 +476,7 @@ and interruption/completed-session history export fields.
 
 CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`, `--calendar-sync`,
 `--weekday-rules*`, `--session-template*`, `--history-dashboard*`,
-`--break-glass-trigger`, and `--break-glass-cancel` for non-interactive
+`--feature-inventory`, `--break-glass-trigger`, and `--break-glass-cancel` for non-interactive
 inspection and in-session workflow control.
 
 Blocklist rules support exact hosts and wildcard subdomain rules. `*.example.com`
@@ -910,6 +914,7 @@ with focused submodules (updated in #240):
 - `src/main.rs`: composition root, CLI/TUI dispatch, terminal lifecycle, and event loop.
 - `src/app.rs` + `src/app/*.rs`: runtime state/orchestration split by domain (timer flow, planner, profiles, site manager, schedule, persistence, diagnostics, CLI API).
 - `src/cli.rs` + `src/cli/*.rs`: CLI args/parsing/execution/status/output pipeline.
+- `src/feature_inventory.rs`: deterministic feature inventory catalog, scoring model, and report export helpers.
 - `src/stats.rs` + `src/stats/*.rs`: stats persistence, analytics, trends, recording, planner state, and exports.
 - `src/ui.rs` + `src/ui/*.rs`: Ratatui rendering split by screen (timer, session planner, site manager, profile manager, history, setup diagnostics).
 - `src/config.rs` + `src/config/paths.rs`: config schema/normalization and environment-aware path resolution.
