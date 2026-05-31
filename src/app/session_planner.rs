@@ -47,7 +47,7 @@ impl App {
 
     fn handle_session_planner_navigation_key(&mut self, key: &KeyEvent) -> bool {
         if self.navigation_matches(NavigationAction::Cancel, key) {
-            self.mode = AppMode::Timer;
+            self.set_mode(AppMode::Timer);
             return true;
         }
         if self.handle_session_planner_move_up(key) {
@@ -155,7 +155,7 @@ impl App {
         if !self.shortcut_matches(ShortcutAction::BackSessionPlanner, key) {
             return false;
         }
-        self.mode = AppMode::Timer;
+        self.set_mode(AppMode::Timer);
         true
     }
 
@@ -835,7 +835,7 @@ impl App {
     }
 
     pub(super) fn open_session_planner(&mut self) {
-        self.mode = AppMode::SessionPlanner;
+        self.set_mode(AppMode::SessionPlanner);
         self.planner_feedback = None;
         self.planner_input.clear();
         self.planner_input_active = false;

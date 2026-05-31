@@ -4802,6 +4802,69 @@ fn diagnostics_view_toggles_from_timer_mode() {
 }
 
 #[test]
+fn record_current_screen_usage_tracks_initial_timer_surface() {
+    let mut app = App::default();
+    app.record_current_screen_usage();
+    let summary = app.stats.usage_signal_summary(6);
+    assert_eq!(summary.screens.total_events, 1);
+    assert_eq!(summary.screens.unique_surfaces, 1);
+    assert_eq!(summary.screens.top[0].surface, "timer");
+    assert_eq!(summary.screens.top[0].count, 1);
+}
+
+#[test]
+fn screen_mode_transitions_record_usage_counts() {
+    let mut app = App::default();
+    app.record_current_screen_usage();
+    app.open_site_manager();
+    app.open_stats_history();
+    app.open_profile_manager();
+    app.open_session_planner();
+    app.open_setup_diagnostics();
+    app.handle_key(key(KeyCode::Esc));
+    let summary = app.stats.usage_signal_summary(6);
+    assert_eq!(summary.screens.total_events, 7);
+    assert_eq!(summary.screens.unique_surfaces, 6);
+    assert_eq!(summary.screens.top[0].surface, "timer");
+    assert_eq!(summary.screens.top[0].count, 2);
+    assert!(
+        summary
+            .screens
+            .top
+            .iter()
+            .any(|entry| entry.surface == "site-manager")
+    );
+    assert!(
+        summary
+            .screens
+            .top
+            .iter()
+            .any(|entry| entry.surface == "stats-history")
+    );
+    assert!(
+        summary
+            .screens
+            .top
+            .iter()
+            .any(|entry| entry.surface == "profile-manager")
+    );
+    assert!(
+        summary
+            .screens
+            .top
+            .iter()
+            .any(|entry| entry.surface == "session-planner")
+    );
+    assert!(
+        summary
+            .screens
+            .top
+            .iter()
+            .any(|entry| entry.surface == "setup-diagnostics")
+    );
+}
+
+#[test]
 fn pending_strict_reset_confirmation_clears_when_opening_setup_diagnostics() {
     let config = AppConfig {
         strict_mode: true,

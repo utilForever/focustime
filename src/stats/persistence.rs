@@ -7,7 +7,7 @@ use crate::stats::{
     SessionInterruptionEvent, SessionStats, StatsLoadOptions, StatsSaveOptions,
     backfilled_time_of_day_bucket, io, normalize_session_metadata_text,
     normalize_task_goal_targets, normalize_task_label, normalize_task_planner_state,
-    planner_state_labels_for_keys, write_atomic_bytes,
+    normalize_usage_counts, planner_state_labels_for_keys, write_atomic_bytes,
 };
 
 impl FocusStats {
@@ -70,6 +70,8 @@ impl FocusStats {
                 persisted.task_label_archived,
             );
         let task_goal_targets = normalize_task_goal_targets(persisted.task_goal_targets);
+        let command_usage_counts = normalize_usage_counts(persisted.command_usage_counts);
+        let screen_usage_counts = normalize_usage_counts(persisted.screen_usage_counts);
         let mut focus_sessions = Vec::new();
         for session in persisted.focus_sessions {
             if let Some(task_label) = normalize_task_label(&session.task_label) {
@@ -138,6 +140,8 @@ impl FocusStats {
             session_interruptions,
             break_glass_overrides,
             task_goal_targets,
+            command_usage_counts,
+            screen_usage_counts,
         }
     }
 
@@ -160,6 +164,8 @@ impl FocusStats {
             session_interruptions: self.session_interruptions.clone(),
             break_glass_overrides: self.break_glass_overrides.clone(),
             task_goal_targets: self.task_goal_targets.clone(),
+            command_usage_counts: self.command_usage_counts.clone(),
+            screen_usage_counts: self.screen_usage_counts.clone(),
         }
     }
 

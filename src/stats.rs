@@ -20,9 +20,9 @@ use helpers::{
     average_two_percentages, backfilled_time_of_day_bucket, best_goal_streak,
     consistency_score_from_active_days, current_goal_streak, daily_has_activity, days_in_month,
     format_week_label, month_key_for_day, normalize_session_metadata_text,
-    normalize_task_goal_targets, normalize_task_planner_state, parse_week_label,
-    percentage_round_nearest, planner_state_labels_for_keys, profile_bucket_for, week_key_for_day,
-    weekly_completion_score_pct, write_atomic_bytes,
+    normalize_task_goal_targets, normalize_task_planner_state, normalize_usage_counts,
+    parse_week_label, percentage_round_nearest, planner_state_labels_for_keys, profile_bucket_for,
+    week_key_for_day, weekly_completion_score_pct, write_atomic_bytes,
 };
 mod analytics;
 mod export;
@@ -435,6 +435,27 @@ impl StatsRetentionPruneResult {
     pub fn any_removed(self) -> bool {
         self.total_removed() > 0
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UsageSignalEntry {
+    pub surface: String,
+    pub count: u64,
+    pub share_pct: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UsageSignalSummary {
+    pub total_events: u64,
+    pub unique_surfaces: usize,
+    pub top: Vec<UsageSignalEntry>,
+    pub rare: Vec<UsageSignalEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UsageSignalsSummary {
+    pub commands: UsageSignalSummary,
+    pub screens: UsageSignalSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1083,6 +1104,10 @@ struct PersistedStats {
     break_glass_overrides: Vec<BreakGlassOverrideEvent>,
     #[serde(default)]
     task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
+    #[serde(default)]
+    command_usage_counts: BTreeMap<String, u64>,
+    #[serde(default)]
+    screen_usage_counts: BTreeMap<String, u64>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1099,6 +1124,8 @@ pub struct FocusStats {
     session_interruptions: Vec<SessionInterruptionEvent>,
     break_glass_overrides: Vec<BreakGlassOverrideEvent>,
     task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
+    command_usage_counts: BTreeMap<String, u64>,
+    screen_usage_counts: BTreeMap<String, u64>,
 }
 
 pub fn current_day_key() -> String {

@@ -1890,7 +1890,25 @@ impl App {
     fn open_setup_diagnostics(&mut self) {
         self.pending_timer_action = None;
         self.refresh_setup_diagnostics();
-        self.mode = AppMode::SetupDiagnostics;
+        self.set_mode(AppMode::SetupDiagnostics);
+    }
+
+    pub(crate) fn record_current_screen_usage(&mut self) {
+        self.record_screen_usage_for_mode(self.mode);
+    }
+
+    pub(super) fn set_mode(&mut self, mode: AppMode) {
+        self.mode = mode;
+        self.record_screen_usage_for_mode(mode);
+    }
+
+    fn record_screen_usage_for_mode(&mut self, mode: AppMode) {
+        if self
+            .stats
+            .record_screen_usage(mode.screen_usage_surface_id())
+        {
+            self.mark_stats_dirty();
+        }
     }
 
     fn should_block_for_current_state(&self) -> bool {
@@ -1918,6 +1936,19 @@ impl App {
                 self.auto_start.break_to_focus
             }
             _ => false,
+        }
+    }
+}
+
+impl AppMode {
+    fn screen_usage_surface_id(self) -> &'static str {
+        match self {
+            Self::Timer => "timer",
+            Self::SiteManager => "site-manager",
+            Self::ProfileManager => "profile-manager",
+            Self::SessionPlanner => "session-planner",
+            Self::StatsHistory => "stats-history",
+            Self::SetupDiagnostics => "setup-diagnostics",
         }
     }
 }

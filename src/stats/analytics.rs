@@ -5,11 +5,11 @@ use crate::stats::{
     MonthlyStats, ProductivityComparisonFilter, ProductivityComparisonRow, ProfileBucket,
     ProfileEffectiveness, ProfileEffectivenessAccumulator, ProfileTotals, StatsGrowthSection,
     StatsGrowthSummary, StatsRetentionConfig, StatsRetentionPruneResult, StreakRiskForecast,
-    TimeOfDayBucket, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, average_two_percentages,
-    backfilled_time_of_day_bucket, canonical_task_label, consistency_score_from_active_days,
-    daily_has_activity, days_in_month, format_week_label, month_key_for_day, normalize_task_label,
-    parse_week_label, percentage_round_nearest, profile_bucket_for, week_key_for_day,
-    weekly_completion_score_pct,
+    TimeOfDayBucket, UsageSignalEntry, UsageSignalSummary, UsageSignalsSummary, WeeklyConsistency,
+    WeeklyFocusScore, WeeklyStats, average_two_percentages, backfilled_time_of_day_bucket,
+    canonical_task_label, consistency_score_from_active_days, daily_has_activity, days_in_month,
+    format_week_label, month_key_for_day, normalize_task_label, parse_week_label,
+    percentage_round_nearest, profile_bucket_for, week_key_for_day, weekly_completion_score_pct,
 };
 
 impl FocusStats {
@@ -674,6 +674,16 @@ impl FocusStats {
                 self.task_goal_targets.len(),
                 &self.task_goal_targets,
             ),
+            stats_growth_section(
+                "command_usage_counts",
+                self.command_usage_counts.len(),
+                &self.command_usage_counts,
+            ),
+            stats_growth_section(
+                "screen_usage_counts",
+                self.screen_usage_counts.len(),
+                &self.screen_usage_counts,
+            ),
         ];
         sections.sort_by(|left, right| left.name.cmp(&right.name));
         let total_record_count = sections.iter().fold(0_usize, |total, section| {
@@ -771,6 +781,14 @@ impl FocusStats {
     ) -> StatsRetentionPruneResult {
         let mut cloned = self.clone();
         cloned.apply_retention_policy(retention, reference_day)
+    }
+
+    pub fn usage_signal_summary(&self, limit: usize) -> UsageSignalsSummary {
+        let limit = limit.max(1);
+        UsageSignalsSummary {
+            commands: usage_signal_summary_for_counts(&self.command_usage_counts, limit),
+            screens: usage_signal_summary_for_counts(&self.screen_usage_counts, limit),
+        }
     }
 }
 
@@ -1193,6 +1211,43 @@ fn div_ceil_u64(value: u64, divisor: u64) -> u64 {
         return value;
     }
     value.div_ceil(divisor)
+}
+
+fn usage_signal_summary_for_counts(
+    counts: &BTreeMap<String, u64>,
+    limit: usize,
+) -> UsageSignalSummary {
+    let total_events = counts
+        .values()
+        .copied()
+        .fold(0_u64, |total, value| total.saturating_add(value));
+    let unique_surfaces = counts.len();
+    let mut entries: Vec<(String, u64)> = counts.iter().map(|(k, v)| (k.clone(), *v)).collect();
+
+    let mut top_entries = entries.clone();
+    top_entries.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+    top_entries.truncate(limit);
+
+    entries.sort_by(|left, right| left.1.cmp(&right.1).then_with(|| left.0.cmp(&right.0)));
+    entries.truncate(limit);
+
+    UsageSignalSummary {
+        total_events,
+        unique_surfaces,
+        top: usage_signal_rows(top_entries, total_events),
+        rare: usage_signal_rows(entries, total_events),
+    }
+}
+
+fn usage_signal_rows(entries: Vec<(String, u64)>, total_events: u64) -> Vec<UsageSignalEntry> {
+    entries
+        .into_iter()
+        .map(|(surface, count)| UsageSignalEntry {
+            surface,
+            count,
+            share_pct: percentage_round_nearest(count, total_events),
+        })
+        .collect()
 }
 
 fn stats_growth_section(

@@ -120,7 +120,9 @@ fn main() -> io::Result<()> {
     }
 
     let mut guard = TerminalGuard::new()?;
-    run_app(&mut guard.terminal, App::new())
+    let mut app = App::new();
+    app.record_current_screen_usage();
+    run_app(&mut guard.terminal, app)
 }
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) -> io::Result<()> {

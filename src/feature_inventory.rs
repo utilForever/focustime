@@ -420,6 +420,17 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         failure_impact: 2,
     },
     FeatureSeed {
+        feature_id: "usage-signal-inspection",
+        name: "Usage signal inspection",
+        surface: FeatureSurface::Stats,
+        description: "Review command and screen frequency summaries to guide feature cleanup decisions.",
+        cli_flags: &["--usage-signals"],
+        value: 3,
+        complexity: 2,
+        support_burden: 2,
+        failure_impact: 2,
+    },
+    FeatureSeed {
         feature_id: "stats-export-artifacts",
         name: "Stats export artifacts",
         surface: FeatureSurface::Stats,

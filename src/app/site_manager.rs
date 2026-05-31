@@ -125,7 +125,7 @@ impl App {
                 true
             }
             _ if self.navigation_matches(NavigationAction::Cancel, key) => {
-                self.mode = AppMode::Timer;
+                self.set_mode(AppMode::Timer);
                 true
             }
             _ => false,
@@ -165,7 +165,7 @@ impl App {
         };
 
         match action {
-            ShortcutAction::BackSiteManager => self.mode = AppMode::Timer,
+            ShortcutAction::BackSiteManager => self.set_mode(AppMode::Timer),
             ShortcutAction::ToggleSiteListMode => self.toggle_site_list_mode(),
             ShortcutAction::SiteAdd => self.start_site_input(SiteInputMode::Add),
             ShortcutAction::SiteEdit => self.start_site_input(SiteInputMode::Edit),
@@ -883,7 +883,7 @@ impl App {
 
     pub(super) fn open_site_manager(&mut self) {
         self.pending_timer_action = None;
-        self.mode = AppMode::SiteManager;
+        self.set_mode(AppMode::SiteManager);
         self.site_list_mode = SiteListMode::Blocklist;
         self.cancel_site_input();
         self.cancel_blocklist_profile_input();
