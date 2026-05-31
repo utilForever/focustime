@@ -3,7 +3,7 @@
 ## Scoring model
 
 - Score range: 1 (low) to 5 (high)
-- Maintenance cost formula: complexity * 0.40 + support_burden * 0.35 + failure_impact * 0.25
+- Maintenance cost formula: `complexity * 0.40 + support_burden * 0.35 + failure_impact * 0.25`
 - Keep: value >= 4 and (value - maintenance_cost) >= 0.50
 - Remove: (value - maintenance_cost) <= -1.50
 - Merge: all remaining cases

@@ -549,7 +549,7 @@ pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
     markdown.push_str("## Scoring model\n\n");
     markdown.push_str("- Score range: 1 (low) to 5 (high)\n");
     markdown.push_str(&format!(
-        "- Maintenance cost formula: complexity * {:.2} + support_burden * {:.2} + failure_impact * {:.2}\n",
+        "- Maintenance cost formula: `complexity * {:.2} + support_burden * {:.2} + failure_impact * {:.2}`\n",
         COMPLEXITY_WEIGHT, SUPPORT_BURDEN_WEIGHT, FAILURE_IMPACT_WEIGHT
     ));
     markdown.push_str(&format!(
