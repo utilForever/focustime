@@ -226,7 +226,7 @@ impl App {
         if self.navigation_matches(NavigationAction::Cancel, &key)
             || self.shortcut_matches(ShortcutAction::BackStatsHistory, &key)
         {
-            self.mode = AppMode::Timer;
+            self.set_mode(AppMode::Timer);
             return;
         }
 
@@ -310,7 +310,7 @@ impl App {
         if self.navigation_matches(NavigationAction::Cancel, &key)
             || self.shortcut_matches(ShortcutAction::BackSetupDiagnostics, &key)
         {
-            self.mode = AppMode::Timer;
+            self.set_mode(AppMode::Timer);
         } else if self.shortcut_matches(ShortcutAction::RefreshSetupDiagnostics, &key) {
             self.refresh_setup_diagnostics();
         }

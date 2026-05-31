@@ -57,7 +57,7 @@ impl App {
     pub(super) fn open_stats_history(&mut self) {
         self.pending_timer_action = None;
         self.history_feedback = None;
-        self.mode = AppMode::StatsHistory;
+        self.set_mode(AppMode::StatsHistory);
     }
 
     pub(super) fn record_completed_focus_session(&mut self, focused_seconds: u64) {

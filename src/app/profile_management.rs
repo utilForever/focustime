@@ -121,7 +121,7 @@ impl App {
     }
 
     pub(super) fn open_profile_manager(&mut self) {
-        self.mode = AppMode::ProfileManager;
+        self.set_mode(AppMode::ProfileManager);
         self.profile_edit_active = false;
         self.profile_edit_field = 0;
         self.profile_edit_schedule_window = 0;
@@ -139,7 +139,7 @@ impl App {
     }
 
     pub(super) fn exit_profile_manager(&mut self) {
-        self.mode = AppMode::Timer;
+        self.set_mode(AppMode::Timer);
         self.profile_edit_automation_triggers.clear();
         self.profile_edit_snapshot = None;
     }
