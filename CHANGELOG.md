@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-06-01
+
+### Changed
+
+- **Timer profile and option consolidation (#406):** merged overlapping timer-option surfaces into a unified profile-oriented flow and aligned timer guidance/docs with the simplified options model.
+- **Unified schedule/session focus-start flow (#407):** consolidated overlapping schedule and session start paths so focus entry behavior is handled consistently across shared runtime paths.
+- **Configuration simplified into three presets (#408):** migrated config, CLI, and stats profile handling to the basic/standard/advanced preset model to reduce overlap and simplify profile selection.
+
+### Fixed
+
+- **Preset migration compatibility merge (#408):** fixed config v2 migration behavior so legacy automation keys are merged during migration instead of being dropped.
+- **Preset ID export compatibility (#408):** fixed stats export/schema alignment for preset identifier changes so exported analytics remain consistent with the new preset model.
+
 ## [0.14.1] - 2026-05-31
 
 ### Added
@@ -371,7 +384,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.2...HEAD
+[0.14.2]: https://github.com/utilForever/focustime/compare/v0.14.1...v0.14.2
 [0.14.1]: https://github.com/utilForever/focustime/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/utilForever/focustime/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/utilForever/focustime/compare/v0.13.0...v0.13.1
