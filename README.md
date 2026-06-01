@@ -115,7 +115,7 @@ cargo run -- --task-note="Capture blockers for retro" --json
 
 # Show or set the active profile
 cargo run -- --profile
-cargo run -- --profile deep-work
+cargo run -- --profile standard
 cargo run -- --profile --json
 
 # Show or set the active theme preset
@@ -194,7 +194,7 @@ cargo run -- --allowlist-site-delete reddit.com
 cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"16:00"}]}'
 cargo run -- --weekday-rules
-cargo run -- --weekday-rules-set='[{"day":"mon","profile":"deep-work","blocklist_profile":"Work","session_template":"Deep Flow"}]'
+cargo run -- --weekday-rules-set='[{"day":"mon","profile":"standard","blocklist_profile":"Work","session_template":"Deep Flow"}]'
 cargo run -- --schedule-delay
 cargo run -- --schedule --json
 cargo run -- --weekday-rules --json
@@ -298,7 +298,7 @@ deprecation warnings when legacy compatibility fields are detected.
 | Legacy field/path                                                                    | Canonical replacement                                                                                                                             | Removal milestone |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval` | `[custom_profile]`                                                                                                                                | v0.12.0           |
-| Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`         | `[profile_automation.<profile>.notifications]`, `[profile_automation.<profile>.auto_start]`, and per-profile `strict_mode` / `recurring_schedule` | v0.12.0           |
+| Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`         | `[profile_automation.<preset>.notifications]`, `[profile_automation.<preset>.auto_start]`, and per-preset `strict_mode` / `recurring_schedule` | v0.12.0           |
 | Top-level `blocked_sites` (without canonical profiles)                               | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                                                           | v0.12.0           |
 
 Milestone policy:
@@ -412,22 +412,22 @@ backspace = "backspace"
 Navigation/edit tokens accept either a single character or a named key:
 `enter`, `esc`, `up`, `down`, `left`, `right`, `delete`, `backspace`, `space`.
 
-## Pomodoro profiles
+## Pomodoro presets
 
-`focustime` now supports selectable Pomodoro profiles:
+`focustime` now supports selectable Pomodoro presets:
 
-- **Classic** (25/5/15, long break every 4 focus sessions)
-- **Deep Work** (50/10/30, long break every 3 focus sessions)
-- **Custom** (editable in-app)
+- **Basic** (25/5/15, long break every 4 focus sessions)
+- **Standard** (50/10/30, long break every 3 focus sessions)
+- **Advanced** (editable in-app)
 
 Open profile manager from timer view with **`p`**.
 
-- `↑/↓` (default `navigate_up`/`navigate_down`): move between profiles
-- `Enter` (default `confirm`): apply selected profile
+- `↑/↓` (default `navigate_up`/`navigate_down`): move between presets
+- `Enter` (default `confirm`): apply selected preset
 - `e`: open profile/settings editor
 - In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values (including **Theme preset**), `Type/Backspace` edits WakaTime project/language, `Enter` saves (all defaults are configurable via navigation/edit shortcut fields)
 
-Profile selection, theme preset selection, custom durations, and profile-scoped
+Preset selection, theme preset selection, custom durations, and preset-scoped
 automation settings are persisted in `config.toml`.
 
 ## Session planner
@@ -485,8 +485,8 @@ matches `docs.example.com` and `api.example.com`, but does **not** match
 ### Example config
 
 ```toml
-schema_version = 1
-selected_profile = "custom"
+schema_version = 2
+selected_profile = "advanced"
 selected_session_template = "Deep Flow"
 selected_theme_preset = "classic"
 selected_blocklist_profile = "Work"
@@ -544,7 +544,7 @@ allowlist_sites = []
 [[session_templates]]
 name = "Deep Flow"
 task_label = "Docs"
-profile = "deep-work"
+profile = "standard"
 blocklist_profile = "Work"
 
 [[session_templates.schedule.windows]]
@@ -558,25 +558,25 @@ short_break_secs = 360
 long_break_secs = 900
 long_break_interval = 3
 
-[profile_automation.custom]
+[profile_automation.advanced]
 # Strict mode for the selected profile.
 strict_mode = false
 
-[profile_automation.custom.notifications]
+[profile_automation.advanced.notifications]
 enabled = true
 sound = false
 
-[profile_automation.custom.auto_start]
+[profile_automation.advanced.auto_start]
 focus_to_break = false
 break_to_focus = false
 
-[profile_automation.custom.recurring_schedule]
+[profile_automation.advanced.recurring_schedule]
 exception_dates = ["2026-12-25", "2027-01-01"]
-[[profile_automation.custom.recurring_schedule.windows]]
+[[profile_automation.advanced.recurring_schedule.windows]]
 days = ["mon", "tue", "wed", "thu", "fri"]
 start = "09:00"
 end = "11:00"
-[[profile_automation.custom.recurring_schedule.one_time_windows]]
+[[profile_automation.advanced.recurring_schedule.one_time_windows]]
 date = "2026-05-02"
 start = "14:00"
 end = "16:00"
@@ -747,19 +747,19 @@ Notifications are delivered best-effort:
 
 - terminal notice in the timer view
 - desktop notification via platform-specific delivery (`winrt-toast-reborn` toast on Windows with a `msg` fallback, `osascript` on macOS, `notify-send` on Linux)
-- optional sound alert using platform audio capabilities when `profile_automation.<profile>.notifications.sound = true`
+- optional sound alert using platform audio capabilities when `profile_automation.<preset>.notifications.sound = true`
 
 Natural, non-catchup phase transitions can also auto-start the next timer with safe defaults (`Off`):
 
-- `profile_automation.<profile>.auto_start.focus_to_break` starts break timers automatically after focus completion on non-catchup ticks
-- `profile_automation.<profile>.auto_start.break_to_focus` starts focus timers automatically after break completion on non-catchup ticks
+- `profile_automation.<preset>.auto_start.focus_to_break` starts break timers automatically after focus completion on non-catchup ticks
+- `profile_automation.<preset>.auto_start.break_to_focus` starts focus timers automatically after break completion on non-catchup ticks
 
 Recurring schedule windows can also trigger focus behavior at wall-clock times:
 
-- `profile_automation.<profile>.recurring_schedule.windows[].days` accepts day tokens (`mon`..`sun`, case-insensitive)
-- `profile_automation.<profile>.recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
-- `profile_automation.<profile>.recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
-- `profile_automation.<profile>.recurring_schedule.one_time_windows[]` accepts one-time date windows with `date` (`YYYY-MM-DD`) plus `start`/`end` (`HH:MM`)
+- `profile_automation.<preset>.recurring_schedule.windows[].days` accepts day tokens (`mon`..`sun`, case-insensitive)
+- `profile_automation.<preset>.recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
+- `profile_automation.<preset>.recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
+- `profile_automation.<preset>.recurring_schedule.one_time_windows[]` accepts one-time date windows with `date` (`YYYY-MM-DD`) plus `start`/`end` (`HH:MM`)
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
 - while a schedule window is active and focus is not already running, press `z` to delay the scheduled start (configurable via `[schedule_runtime].delay_secs`, default `10m`, clamped `60..43200` seconds)
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
