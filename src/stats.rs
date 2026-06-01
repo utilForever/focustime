@@ -35,7 +35,7 @@ mod trends;
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
 const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
-const EXPORT_SCHEMA_VERSION: u32 = 7;
+const EXPORT_SCHEMA_VERSION: u32 = 8;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
