@@ -425,11 +425,10 @@ Open profile manager from timer view with **`p`**.
 - `↑/↓` (default `navigate_up`/`navigate_down`): move between profiles
 - `Enter` (default `confirm`): apply selected profile
 - `e`: open profile/settings editor
-- `[` / `]`: cycle the active break template for fast short/long break switching
 - In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values (including **Theme preset**), `Type/Backspace` edits WakaTime project/language, `Enter` saves (all defaults are configurable via navigation/edit shortcut fields)
 
-Profile selection, break template selection, theme preset selection, custom durations,
-and profile-scoped automation settings are persisted in `config.toml`.
+Profile selection, theme preset selection, custom durations, and profile-scoped
+automation settings are persisted in `config.toml`.
 
 ## Session planner
 
@@ -488,7 +487,6 @@ matches `docs.example.com` and `api.example.com`, but does **not** match
 ```toml
 schema_version = 1
 selected_profile = "custom"
-selected_break_template = "Classic"
 selected_session_template = "Deep Flow"
 selected_theme_preset = "classic"
 selected_blocklist_profile = "Work"
@@ -519,18 +517,6 @@ quit = "q"
 [history_dashboard]
 card_order = ["session_summary", "focus_score", "goal_streak", "focus_risk", "weekly_allocation", "last_interruption", "stats_growth", "retention", "comparison_filters"]
 pinned_cards = ["session_summary", "focus_score"]
-
-[[break_templates]]
-name = "Classic"
-short_break_secs = 300
-long_break_secs = 900
-long_break_interval = 4
-
-[[break_templates]]
-name = "Deep Work"
-short_break_secs = 600
-long_break_secs = 1800
-long_break_interval = 3
 
 [[blocklist_profiles]]
 name = "Work"

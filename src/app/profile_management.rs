@@ -1,6 +1,6 @@
 use crate::app::{
-    App, AppMode, BreakTemplateConfig, KeyEvent, Local, NavigationAction,
-    PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX,
+    App, AppMode, KeyEvent, Local, NavigationAction, PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX,
     PROFILE_EDIT_AUTOMATION_TRIGGER_BLOCKLIST_INDEX,
     PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX,
     PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_PROFILE_INDEX,
@@ -29,11 +29,9 @@ use crate::app::{
 };
 use crate::config::validate_automation_trigger_rules;
 
-const PROFILE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 4] = [
+const PROFILE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 2] = [
     ShortcutAction::BackProfileManager,
     ShortcutAction::ProfileEdit,
-    ShortcutAction::SelectPreviousBreakTemplate,
-    ShortcutAction::SelectNextBreakTemplate,
 ];
 
 impl App {
@@ -135,7 +133,6 @@ impl App {
         self.profile_selection_index = profile_index(self.selected_profile);
         self.clamp_profile_selection();
         self.clamp_profile_edit_schedule_selection();
-        self.clamp_break_template_selection();
     }
 
     pub(super) fn exit_profile_manager(&mut self) {
@@ -226,8 +223,6 @@ impl App {
         match action {
             ShortcutAction::BackProfileManager => self.exit_profile_manager(),
             ShortcutAction::ProfileEdit => self.begin_profile_edit(),
-            ShortcutAction::SelectPreviousBreakTemplate => self.select_previous_break_template(),
-            ShortcutAction::SelectNextBreakTemplate => self.select_next_break_template(),
             _ => {}
         }
     }
@@ -325,7 +320,6 @@ impl App {
             .as_ref()
             .is_some_and(|snapshot| snapshot.goal_carry_over != self.goal_carry_over);
         self.custom_profile = self.custom_profile.normalized();
-        self.sync_active_break_template_to_custom_profile();
         self.recurring_schedule = normalized_schedule;
         self.wakatime_metadata = self.wakatime_metadata.normalized();
         if automation_triggers_changed
@@ -567,81 +561,5 @@ impl App {
             .resolved_project_language_for_task_label(self.current_task_label());
         self.integrations
             .set_wakatime_metadata(WakatimeHeartbeatMetadata { project, language });
-    }
-
-    pub(super) fn clamp_break_template_selection(&mut self) {
-        if self.break_templates.is_empty() {
-            self.break_templates.push(BreakTemplateConfig::default());
-            return;
-        }
-        if let Some(active_break_template) = self.active_break_template {
-            self.active_break_template =
-                Some(active_break_template.min(self.break_templates.len().saturating_sub(1)));
-        }
-    }
-
-    pub(super) fn select_previous_break_template(&mut self) {
-        self.clamp_break_template_selection();
-        if self.break_templates.is_empty() {
-            return;
-        }
-        let last = self.break_templates.len().saturating_sub(1);
-        let next = match self.active_break_template {
-            None | Some(0) => last,
-            Some(current) => current.min(last).saturating_sub(1),
-        };
-        self.switch_break_template(next);
-    }
-
-    pub(super) fn select_next_break_template(&mut self) {
-        self.clamp_break_template_selection();
-        if self.break_templates.is_empty() {
-            return;
-        }
-        let last = self.break_templates.len().saturating_sub(1);
-        let next = match self.active_break_template {
-            None => 0,
-            Some(current) => (current.min(last) + 1) % self.break_templates.len(),
-        };
-        self.switch_break_template(next);
-    }
-
-    fn switch_break_template(&mut self, next_index: usize) {
-        if next_index >= self.break_templates.len()
-            || self.active_break_template == Some(next_index)
-        {
-            return;
-        }
-
-        let previous_index = self.active_break_template;
-        let previous_custom_profile = self.custom_profile.clone();
-        let Some(template) = self.break_templates.get(next_index).cloned() else {
-            return;
-        };
-        self.active_break_template = Some(next_index);
-        let template = template.normalized();
-        self.custom_profile.short_break_secs = template.short_break_secs;
-        self.custom_profile.long_break_secs = template.long_break_secs;
-        self.custom_profile.long_break_interval = template.long_break_interval;
-        self.custom_profile = self.custom_profile.normalized();
-        let custom_profile_changed = self.custom_profile != previous_custom_profile;
-
-        if self.selected_profile == ProfileId::Custom && custom_profile_changed {
-            let original_profile_automation = self.profile_automation.clone();
-            if !self.apply_profile(ProfileId::Custom) {
-                self.profile_automation = original_profile_automation;
-                self.active_break_template = previous_index;
-                self.custom_profile = previous_custom_profile;
-                return;
-            }
-        } else {
-            self.save_config();
-        }
-
-        self.phase_notification = Some(format!(
-            "Break template selected: {} ({})",
-            self.active_break_template_name(),
-            self.active_break_template_summary()
-        ));
     }
 }

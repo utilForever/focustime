@@ -21,7 +21,7 @@ pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(2), // current profile + break template
+            Constraint::Length(2), // current profile summary
             Constraint::Length(6), // profile list
             Constraint::Length(editor_height),
             Constraint::Min(0),    // spacer
@@ -31,10 +31,9 @@ pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
         .split(outer);
 
     let current = Paragraph::new(format!(
-        "Current profile: {} · Break template: {} ({})",
+        "Current profile: {} ({})",
         app.selected_profile_name(),
-        app.active_break_template_name(),
-        app.active_break_template_summary()
+        app.profile_summary(app.selected_profile)
     ))
     .style(
         Style::default()
@@ -227,11 +226,7 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
                     app.shortcut_hint(ShortcutAction::ProfileEdit)
                 )
             }),
-            Line::from(format!(
-                "Templates: '{}' previous  '{}' next break template",
-                app.shortcut_label(ShortcutAction::SelectPreviousBreakTemplate),
-                app.shortcut_label(ShortcutAction::SelectNextBreakTemplate),
-            )),
+            Line::from("Tip: edit the Custom profile timer fields for personalized break cadence."),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
                     "View: [{}/{}] Back  [{}] Quit (Locked)",

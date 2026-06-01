@@ -27,12 +27,10 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.long_break_interval, 4);
     assert_eq!(cfg.selected_profile, ProfileId::Custom);
     assert!(cfg.custom_profile.is_none());
-    assert_eq!(cfg.selected_break_template, "Classic");
     assert!(cfg.session_templates.is_empty());
     assert!(cfg.selected_session_template.is_empty());
     assert!(cfg.automation_triggers.is_empty());
     assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
-    assert_eq!(cfg.break_templates.len(), 2);
     assert!(cfg.blocked_sites.is_empty());
     assert_eq!(cfg.selected_blocklist_profile, "Default");
     assert!(cfg.blocklist_profiles.is_empty());
@@ -128,21 +126,6 @@ fn round_trip_full_config() {
             long_break_secs: 12 * 60,
             long_break_interval: 5,
         }),
-        break_templates: vec![
-            BreakTemplateConfig {
-                name: "Quick".to_string(),
-                short_break_secs: 3 * 60,
-                long_break_secs: 10 * 60,
-                long_break_interval: 4,
-            },
-            BreakTemplateConfig {
-                name: "Recovery".to_string(),
-                short_break_secs: 8 * 60,
-                long_break_secs: 20 * 60,
-                long_break_interval: 3,
-            },
-        ],
-        selected_break_template: "Recovery".to_string(),
         session_templates: vec![SessionTemplateConfig {
             name: "Morning deep work".to_string(),
             task_label: "Docs".to_string(),
@@ -350,11 +333,6 @@ fn round_trip_full_config() {
     assert_eq!(parsed.blocking_backend, original.blocking_backend);
     assert_eq!(parsed.selected_profile, original.selected_profile);
     assert_eq!(parsed.custom_profile, original.custom_profile);
-    assert_eq!(parsed.break_templates, original.break_templates);
-    assert_eq!(
-        parsed.selected_break_template,
-        original.selected_break_template
-    );
     assert_eq!(parsed.session_templates, original.session_templates);
     assert_eq!(
         parsed.selected_session_template,
@@ -397,11 +375,9 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.long_break_interval, 4);
     assert_eq!(cfg.selected_profile, ProfileId::Custom);
     assert!(cfg.custom_profile.is_none());
-    assert_eq!(cfg.selected_break_template, "");
     assert!(cfg.session_templates.is_empty());
     assert_eq!(cfg.selected_session_template, "");
     assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
-    assert_eq!(cfg.break_templates.len(), 2);
     assert!(cfg.blocked_sites.is_empty());
     assert!(cfg.blocklist_profiles.is_empty());
     assert_eq!(cfg.selected_blocklist_profile, "Default");
@@ -422,6 +398,43 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
     assert_eq!(cfg.shortcuts, ShortcutConfig::default());
+}
+
+#[test]
+fn legacy_break_template_fields_are_ignored_and_not_reserialized() {
+    let legacy = r#"
+selected_profile = "custom"
+selected_break_template = "Deep Work"
+
+[custom_profile]
+focus_secs = 1800
+short_break_secs = 420
+long_break_secs = 900
+long_break_interval = 3
+
+[[break_templates]]
+name = "Classic"
+short_break_secs = 300
+long_break_secs = 900
+long_break_interval = 4
+
+[[break_templates]]
+name = "Deep Work"
+short_break_secs = 600
+long_break_secs = 1800
+long_break_interval = 3
+"#;
+    let cfg: AppConfig = toml::from_str(legacy).unwrap();
+    let normalized = cfg.normalize();
+    let custom = normalized.effective_custom_profile();
+    assert_eq!(custom.focus_secs, 1800);
+    assert_eq!(custom.short_break_secs, 420);
+    assert_eq!(custom.long_break_secs, 900);
+    assert_eq!(custom.long_break_interval, 3);
+
+    let serialized = toml::to_string_pretty(&normalized).unwrap();
+    assert!(!serialized.contains("selected_break_template"));
+    assert!(!serialized.contains("[[break_templates]]"));
 }
 
 #[test]
@@ -493,58 +506,6 @@ fn normalize_clamps_zero_break_glass_duration_to_default() {
         cfg.break_glass_duration_secs,
         default_break_glass_duration_secs()
     );
-}
-
-#[test]
-fn normalize_break_templates_preserves_empty_selection() {
-    let cfg = AppConfig {
-        break_templates: Vec::new(),
-        selected_break_template: String::new(),
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.break_templates.len(), 2);
-    assert_eq!(cfg.selected_break_template, "");
-}
-
-#[test]
-fn normalize_break_templates_deduplicates_names_and_clamps_values() {
-    let cfg = AppConfig {
-        break_templates: vec![
-            BreakTemplateConfig {
-                name: "Recovery".to_string(),
-                short_break_secs: 0,
-                long_break_secs: 0,
-                long_break_interval: 0,
-            },
-            BreakTemplateConfig {
-                name: "recovery".to_string(),
-                short_break_secs: 2 * 60,
-                long_break_secs: 12 * 60,
-                long_break_interval: 2,
-            },
-        ],
-        selected_break_template: "missing".to_string(),
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.break_templates[0].name, "Recovery");
-    assert_eq!(
-        cfg.break_templates[0].short_break_secs,
-        default_short_break_secs()
-    );
-    assert_eq!(
-        cfg.break_templates[0].long_break_secs,
-        default_long_break_secs()
-    );
-    assert_eq!(
-        cfg.break_templates[0].long_break_interval,
-        default_long_break_interval()
-    );
-    assert_eq!(cfg.break_templates[1].name, "recovery (2)");
-    assert_eq!(cfg.selected_break_template, "Recovery");
 }
 
 #[test]
@@ -668,40 +629,6 @@ delete = "DEL"
     assert_eq!(normalized.shortcuts.confirm, "enter");
     assert_eq!(normalized.shortcuts.cancel, "esc");
     assert_eq!(normalized.shortcuts.delete, "delete");
-}
-
-#[test]
-fn normalize_selected_break_template_uses_template_matching_custom_values() {
-    let cfg = AppConfig {
-        selected_break_template: "Classic".to_string(),
-        custom_profile: Some(CustomProfileConfig {
-            focus_secs: default_focus_secs(),
-            short_break_secs: 10 * 60,
-            long_break_secs: 30 * 60,
-            long_break_interval: 3,
-        }),
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.selected_break_template, "Deep Work");
-}
-
-#[test]
-fn normalize_selected_break_template_clears_unknown_when_no_template_matches_custom_values() {
-    let cfg = AppConfig {
-        selected_break_template: "Classic".to_string(),
-        custom_profile: Some(CustomProfileConfig {
-            focus_secs: default_focus_secs(),
-            short_break_secs: 7 * 60,
-            long_break_secs: 21 * 60,
-            long_break_interval: 5,
-        }),
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.selected_break_template, "");
 }
 
 #[test]
@@ -1269,8 +1196,6 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
             long_break_secs: 16 * 60,
             long_break_interval: 2,
         }),
-        break_templates: default_break_templates(),
-        selected_break_template: default_break_template_name(),
         session_templates: Vec::new(),
         selected_session_template: String::new(),
         automation_triggers: Vec::new(),
@@ -1327,8 +1252,6 @@ fn load_returns_default_when_config_file_is_corrupt() {
     );
     assert_eq!(cfg.selected_profile, ProfileId::Custom);
     assert!(cfg.custom_profile.is_none());
-    assert_eq!(cfg.selected_break_template, "Classic");
-    assert_eq!(cfg.break_templates.len(), 2);
     assert!(cfg.blocked_sites.is_empty());
     assert_eq!(cfg.selected_blocklist_profile, "Default");
     assert!(cfg.blocklist_profiles.is_empty());

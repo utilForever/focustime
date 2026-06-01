@@ -2597,25 +2597,6 @@ fn build_status_output_matches_blocklist_profile_case_insensitively() {
 }
 
 #[test]
-fn build_status_output_trims_selected_break_template_name() {
-    let config = AppConfig {
-        selected_break_template: "  deep work  ".to_string(),
-        custom_profile: Some(CustomProfileConfig {
-            focus_secs: DEFAULT_FOCUS_SECS,
-            short_break_secs: 10 * 60,
-            long_break_secs: 30 * 60,
-            long_break_interval: 3,
-        }),
-        ..AppConfig::default()
-    };
-    let stats = FocusStats::default();
-
-    let output = build_status_output(&config, &stats);
-
-    assert_eq!(output.selected_break_template.name, "Deep Work");
-}
-
-#[test]
 fn build_status_output_includes_selected_theme_preset() {
     let config = AppConfig {
         selected_theme_preset: ThemePreset::DeuteranopiaFriendly,
@@ -2627,28 +2608,6 @@ fn build_status_output_includes_selected_theme_preset() {
 
     assert_eq!(output.selected_theme_preset.id, "deuteranopia-friendly");
     assert_eq!(output.selected_theme_preset.label, "Deuteranopia Friendly");
-}
-
-#[test]
-fn build_status_output_uses_custom_template_sentinel_when_unmatched() {
-    let config = AppConfig {
-        selected_break_template: String::new(),
-        custom_profile: Some(CustomProfileConfig {
-            focus_secs: DEFAULT_FOCUS_SECS,
-            short_break_secs: 7 * 60,
-            long_break_secs: 21 * 60,
-            long_break_interval: 5,
-        }),
-        ..AppConfig::default()
-    };
-    let stats = FocusStats::default();
-
-    let output = build_status_output(&config, &stats);
-
-    assert_eq!(output.selected_break_template.name, "Custom");
-    assert_eq!(output.selected_break_template.short_break_secs, 7 * 60);
-    assert_eq!(output.selected_break_template.long_break_secs, 21 * 60);
-    assert_eq!(output.selected_break_template.long_break_interval, 5);
 }
 
 #[test]

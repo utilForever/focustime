@@ -33,26 +33,9 @@ pub(super) fn print_profile_output(payload: &ProfileOutput) {
         payload.selected.long_break_interval
     );
     println!(
-        "Selected break template: {} ({}/{}, every {} focus)",
-        payload.selected_break_template.name,
-        format_duration(payload.selected_break_template.short_break_secs),
-        format_duration(payload.selected_break_template.long_break_secs),
-        payload.selected_break_template.long_break_interval
-    );
-    println!(
         "Selected theme preset: {} ({})",
         payload.selected_theme_preset.label, payload.selected_theme_preset.id
     );
-    println!("Available break templates:");
-    for template in &payload.available_break_templates {
-        println!(
-            "  - {}: {}/{}, every {} focus",
-            template.name,
-            format_duration(template.short_break_secs),
-            format_duration(template.long_break_secs),
-            template.long_break_interval
-        );
-    }
     println!("Available profiles:");
     for profile in &payload.available {
         println!(
@@ -409,13 +392,6 @@ pub(super) fn print_status_output(payload: &StatusOutput) {
     println!(
         "Selected profile: {} ({})",
         payload.selected_profile.label, payload.selected_profile.id
-    );
-    println!(
-        "Selected break template: {} ({}/{}, every {} focus)",
-        payload.selected_break_template.name,
-        format_duration(payload.selected_break_template.short_break_secs),
-        format_duration(payload.selected_break_template.long_break_secs),
-        payload.selected_break_template.long_break_interval
     );
     println!(
         "Selected theme preset: {} ({})",

@@ -16,14 +16,13 @@ use crate::calendar::{CalendarBusyWindow, active_window_at as active_calendar_wi
 use crate::config::{
     AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
     BlockingBackendPolicyConfig, BlocklistCategoryConfig, BlocklistProfileConfig,
-    BreakTemplateConfig, CalendarSyncConfig, CommandBlockingBackendConfig, CustomProfileConfig,
-    DailyGoalConfig, FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig,
-    HistoryKpiCardId, MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig,
-    ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
-    SessionTemplateConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
-    WakatimeRuntimeConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
-    validate_automation_trigger_rules,
+    CalendarSyncConfig, CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig,
+    FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig, HistoryKpiCardId,
+    MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
+    ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
+    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeekdayProfileRuleConfig,
+    WeeklyGoalConfig, validate_automation_trigger_rules,
 };
 use crate::integration::{IntegrationLifecycleEvent, IntegrationRuntime};
 use crate::notifications::PhaseNotifier;
@@ -183,7 +182,6 @@ const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
 const DEFAULT_BLOCKLIST_CATEGORY_NAME: &str = "General";
-const UNLINKED_BREAK_TEMPLATE_NAME: &str = "Custom";
 #[cfg(not(test))]
 const STATS_FILE_NAME: &str = "stats.toml";
 pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
@@ -270,12 +268,6 @@ fn blocklist_category_index(categories: &[BlocklistCategoryConfig], selected_nam
         .unwrap_or(0)
 }
 
-fn break_template_index(templates: &[BreakTemplateConfig], selected_name: &str) -> Option<usize> {
-    templates
-        .iter()
-        .position(|template| template.name.eq_ignore_ascii_case(selected_name))
-}
-
 fn session_template_index(
     templates: &[SessionTemplateConfig],
     selected_name: &str,
@@ -283,44 +275,6 @@ fn session_template_index(
     templates
         .iter()
         .position(|template| template.name.eq_ignore_ascii_case(selected_name))
-}
-
-fn break_template_matches_custom_profile(
-    template: &BreakTemplateConfig,
-    custom_profile: &CustomProfileConfig,
-) -> bool {
-    let template = template.normalized();
-    let custom_profile = custom_profile.normalized();
-    template.short_break_secs == custom_profile.short_break_secs
-        && template.long_break_secs == custom_profile.long_break_secs
-        && template.long_break_interval == custom_profile.long_break_interval
-}
-
-fn break_template_index_for_custom_profile(
-    templates: &[BreakTemplateConfig],
-    custom_profile: &CustomProfileConfig,
-) -> Option<usize> {
-    templates
-        .iter()
-        .position(|template| break_template_matches_custom_profile(template, custom_profile))
-}
-
-fn resolve_active_break_template(
-    templates: &[BreakTemplateConfig],
-    selected_name: &str,
-    custom_profile: &CustomProfileConfig,
-) -> Option<usize> {
-    let selected = break_template_index(templates, selected_name);
-    if let Some(selected_index) = selected {
-        if templates
-            .get(selected_index)
-            .is_some_and(|template| break_template_matches_custom_profile(template, custom_profile))
-        {
-            return Some(selected_index);
-        }
-    }
-
-    break_template_index_for_custom_profile(templates, custom_profile)
 }
 
 fn blocking_backend_policy_for_config(
@@ -835,8 +789,6 @@ pub struct App {
     site_edit_index: Option<usize>,
     pub blocklist_profiles: Vec<BlocklistProfileConfig>,
     active_blocklist_profile: usize,
-    pub break_templates: Vec<BreakTemplateConfig>,
-    active_break_template: Option<usize>,
     pub session_templates: Vec<SessionTemplateConfig>,
     active_session_template: Option<usize>,
     pub blocklist_profile_input: String,
@@ -1006,7 +958,6 @@ impl App {
         let blocklist_profiles = config.blocklist_profiles.clone();
         let active_blocklist_profile =
             blocklist_profile_index(&blocklist_profiles, &config.selected_blocklist_profile);
-        let break_templates = config.break_templates.clone();
         let (shortcuts, shortcut_diagnostics) =
             ShortcutBindings::from_config_with_diagnostics(&config.shortcuts);
         let shortcut_config_error = (!shortcut_diagnostics.is_empty()).then(|| {
@@ -1043,11 +994,6 @@ impl App {
         .join(" ");
         let initial_config_error =
             (!initial_config_error.trim().is_empty()).then_some(initial_config_error);
-        let active_break_template = resolve_active_break_template(
-            &break_templates,
-            &config.selected_break_template,
-            &custom_profile,
-        );
         let session_templates = config.session_templates.clone();
         let active_session_template =
             session_template_index(&session_templates, &config.selected_session_template);
@@ -1093,8 +1039,6 @@ impl App {
             site_edit_index: None,
             blocklist_profiles,
             active_blocklist_profile,
-            break_templates,
-            active_break_template,
             session_templates,
             active_session_template,
             blocklist_profile_input: String::new(),
@@ -1191,7 +1135,6 @@ impl App {
             stats_has_unsaved_elapsed: false,
             shortcuts,
         };
-        app.clamp_break_template_selection();
         app.recompute_blocker_sites_from_active_profile();
         app.restore_in_progress_session();
         app.restore_cli_workflow_state();
@@ -1742,13 +1685,6 @@ impl App {
             .unwrap_or(1)
     }
 
-    pub fn active_break_template_name(&self) -> &str {
-        self.active_break_template
-            .and_then(|index| self.break_templates.get(index))
-            .map(|template| template.name.as_str())
-            .unwrap_or(UNLINKED_BREAK_TEMPLATE_NAME)
-    }
-
     pub fn active_session_template_name(&self) -> Option<&str> {
         self.active_session_template
             .and_then(|index| self.session_templates.get(index))
@@ -1759,53 +1695,11 @@ impl App {
         self.session_templates.len()
     }
 
-    pub fn active_break_template_summary(&self) -> String {
-        if let Some(template) = self
-            .active_break_template
-            .and_then(|index| self.break_templates.get(index))
-        {
-            format!(
-                "{}/{}, every {} focus",
-                format_duration_label(template.short_break_secs),
-                format_duration_label(template.long_break_secs),
-                template.long_break_interval
-            )
-        } else {
-            let custom_profile = self.custom_profile.normalized();
-            format!(
-                "{}/{}, every {} focus",
-                format_duration_label(custom_profile.short_break_secs),
-                format_duration_label(custom_profile.long_break_secs),
-                custom_profile.long_break_interval
-            )
-        }
-    }
-
-    fn selected_break_template_for_persistence(&self) -> String {
-        self.active_break_template
-            .and_then(|index| self.break_templates.get(index))
-            .map(|template| template.name.clone())
-            .unwrap_or_default()
-    }
-
     fn selected_session_template_for_persistence(&self) -> String {
         self.active_session_template
             .and_then(|index| self.session_templates.get(index))
             .map(|template| template.name.clone())
             .unwrap_or_default()
-    }
-
-    fn sync_active_break_template_to_custom_profile(&mut self) {
-        let selected_name = self
-            .active_break_template
-            .and_then(|index| self.break_templates.get(index))
-            .map(|template| template.name.clone())
-            .unwrap_or_default();
-        self.active_break_template = resolve_active_break_template(
-            &self.break_templates,
-            &selected_name,
-            &self.custom_profile,
-        );
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {

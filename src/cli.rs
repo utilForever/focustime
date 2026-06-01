@@ -12,10 +12,10 @@ use crate::app::App;
 use crate::app::{SetupCheck, SetupCheckLevel, SetupDiagnostics};
 use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
-    AppConfig, AutomationTriggerRuleConfig, BlocklistProfileConfig, BreakTemplateConfig,
-    CustomProfileConfig, DailyGoalConfig, HistoryKpiCardId, MonthlyGoalConfig,
-    OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
-    ThemePreset, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    AppConfig, AutomationTriggerRuleConfig, BlocklistProfileConfig, CustomProfileConfig,
+    DailyGoalConfig, HistoryKpiCardId, MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, ThemePreset, WeekdayProfileRuleConfig,
+    WeeklyGoalConfig,
 };
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
@@ -78,9 +78,8 @@ use parsing::{
 #[cfg(test)]
 use status::build_status_output;
 use status::{
-    available_break_template_views, available_theme_preset_views,
-    build_status_output_with_comparison, build_task_goal_output, profile_id, profile_view,
-    selected_break_template_view, theme_preset_view, timer_phase_id, timer_status_id,
+    available_theme_preset_views, build_status_output_with_comparison, build_task_goal_output,
+    profile_id, profile_view, theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const USAGE_TEXT: &str = r#"Usage:
@@ -681,14 +680,6 @@ struct ProfileView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct BreakTemplateView {
-    name: String,
-    short_break_secs: u64,
-    long_break_secs: u64,
-    long_break_interval: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct ThemePresetView {
     id: &'static str,
     label: &'static str,
@@ -699,8 +690,6 @@ struct ProfileOutput {
     updated: bool,
     selected: ProfileView,
     available: Vec<ProfileView>,
-    selected_break_template: BreakTemplateView,
-    available_break_templates: Vec<BreakTemplateView>,
     selected_theme_preset: ThemePresetView,
     available_theme_presets: Vec<ThemePresetView>,
 }
@@ -805,8 +794,6 @@ struct StatusComparisonOutput {
 struct StatusOutput {
     day: String,
     selected_profile: ProfileView,
-    selected_break_template: BreakTemplateView,
-    available_break_templates: Vec<BreakTemplateView>,
     selected_theme_preset: ThemePresetView,
     selected_task_label: Option<String>,
     focus_intention: Option<String>,

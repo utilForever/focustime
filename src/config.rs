@@ -74,14 +74,9 @@ pub struct AppConfig {
     /// Editable custom profile persisted by the app.
     ///
     /// When this is absent, the app derives it from the legacy duration fields.
+    /// This is the canonical persisted timer-duration surface.
     #[serde(default)]
     pub custom_profile: Option<CustomProfileConfig>,
-    /// Globally reusable break templates for quick selection.
-    #[serde(default = "default_break_templates")]
-    pub break_templates: Vec<BreakTemplateConfig>,
-    /// Name of the active break template.
-    #[serde(default)]
-    pub selected_break_template: String,
     /// Weekday smart-switch rules for profile and planning defaults.
     #[serde(default)]
     pub weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
@@ -341,10 +336,6 @@ pub struct ShortcutConfig {
     pub back_profile_manager: String,
     #[serde(default = "default_shortcut_profile_edit")]
     pub profile_edit: String,
-    #[serde(default = "default_shortcut_select_previous_break_template")]
-    pub select_previous_break_template: String,
-    #[serde(default = "default_shortcut_select_next_break_template")]
-    pub select_next_break_template: String,
     #[serde(default = "default_shortcut_back_stats_history")]
     pub back_stats_history: String,
     #[serde(default = "default_shortcut_export_stats_history")]
@@ -499,14 +490,6 @@ impl ShortcutConfig {
                 &self.profile_edit,
                 &default_shortcut_profile_edit(),
             ),
-            select_previous_break_template: normalize_shortcut_token(
-                &self.select_previous_break_template,
-                &default_shortcut_select_previous_break_template(),
-            ),
-            select_next_break_template: normalize_shortcut_token(
-                &self.select_next_break_template,
-                &default_shortcut_select_next_break_template(),
-            ),
             back_stats_history: normalize_shortcut_token(
                 &self.back_stats_history,
                 &default_shortcut_back_stats_history(),
@@ -607,8 +590,6 @@ impl Default for ShortcutConfig {
             planner_select_recent: default_shortcut_planner_select_recent(),
             back_profile_manager: default_shortcut_back_profile_manager(),
             profile_edit: default_shortcut_profile_edit(),
-            select_previous_break_template: default_shortcut_select_previous_break_template(),
-            select_next_break_template: default_shortcut_select_next_break_template(),
             back_stats_history: default_shortcut_back_stats_history(),
             export_stats_history: default_shortcut_export_stats_history(),
             history_dashboard_select_previous: default_shortcut_history_dashboard_select_previous(),
@@ -1712,10 +1693,6 @@ fn default_break_glass_duration_secs() -> u64 {
     5 * 60
 }
 
-fn default_break_template_name() -> String {
-    "Classic".to_string()
-}
-
 fn default_session_template_name() -> String {
     "Template".to_string()
 }
@@ -1844,14 +1821,6 @@ fn default_shortcut_profile_edit() -> String {
     "e".to_string()
 }
 
-fn default_shortcut_select_previous_break_template() -> String {
-    "[".to_string()
-}
-
-fn default_shortcut_select_next_break_template() -> String {
-    "]".to_string()
-}
-
 fn default_shortcut_back_stats_history() -> String {
     "h".to_string()
 }
@@ -1926,23 +1895,6 @@ fn default_history_dashboard_pinned_cards() -> Vec<HistoryKpiCardId> {
 
 fn default_history_dashboard_card_order() -> Vec<HistoryKpiCardId> {
     HistoryKpiCardId::all().to_vec()
-}
-
-fn default_break_templates() -> Vec<BreakTemplateConfig> {
-    vec![
-        BreakTemplateConfig {
-            name: "Classic".to_string(),
-            short_break_secs: default_short_break_secs(),
-            long_break_secs: default_long_break_secs(),
-            long_break_interval: default_long_break_interval(),
-        },
-        BreakTemplateConfig {
-            name: "Deep Work".to_string(),
-            short_break_secs: 10 * 60,
-            long_break_secs: 30 * 60,
-            long_break_interval: 3,
-        },
-    ]
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
@@ -2094,38 +2046,6 @@ impl Default for CustomProfileConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct BreakTemplateConfig {
-    #[serde(default = "default_break_template_name")]
-    pub name: String,
-    #[serde(default = "default_short_break_secs")]
-    pub short_break_secs: u64,
-    #[serde(default = "default_long_break_secs")]
-    pub long_break_secs: u64,
-    #[serde(default = "default_long_break_interval")]
-    pub long_break_interval: u32,
-}
-
-impl BreakTemplateConfig {
-    pub fn normalized(&self) -> Self {
-        Self {
-            name: normalize_nonempty_or_default_string(&self.name, &default_break_template_name()),
-            short_break_secs: nonzero_or_default_u64(
-                self.short_break_secs,
-                default_short_break_secs(),
-            ),
-            long_break_secs: nonzero_or_default_u64(
-                self.long_break_secs,
-                default_long_break_secs(),
-            ),
-            long_break_interval: nonzero_or_default_u32(
-                self.long_break_interval,
-                default_long_break_interval(),
-            ),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SessionTemplateConfig {
     #[serde(default = "default_session_template_name")]
     pub name: String,
@@ -2156,17 +2076,6 @@ impl SessionTemplateConfig {
             blocklist_profile,
             schedule: self.schedule.normalized(),
         })
-    }
-}
-
-impl Default for BreakTemplateConfig {
-    fn default() -> Self {
-        Self {
-            name: default_break_template_name(),
-            short_break_secs: default_short_break_secs(),
-            long_break_secs: default_long_break_secs(),
-            long_break_interval: default_long_break_interval(),
-        }
     }
 }
 
@@ -2203,8 +2112,6 @@ impl Default for AppConfig {
             blocking_backend: BlockingBackendConfig::default(),
             selected_profile: ProfileId::default(),
             custom_profile: None,
-            break_templates: default_break_templates(),
-            selected_break_template: default_break_template_name(),
             weekday_profile_rules: Vec::new(),
             session_templates: Vec::new(),
             selected_session_template: String::new(),
@@ -2381,13 +2288,6 @@ impl AppConfig {
         );
         self.feature_flags = self.feature_flags.normalized();
         self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
-        self.break_templates = normalize_break_templates(&self.break_templates);
-        let effective_custom_profile = self.effective_custom_profile();
-        self.selected_break_template = normalize_selected_break_template(
-            &self.selected_break_template,
-            &self.break_templates,
-            &effective_custom_profile,
-        );
         self.recurring_schedule = self.recurring_schedule.normalized();
         let legacy_automation = ProfileAutomationConfig::from_legacy(
             self.notifications,
@@ -2793,47 +2693,6 @@ fn parse_schedule_exception_date(value: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()
 }
 
-fn normalize_break_templates(templates: &[BreakTemplateConfig]) -> Vec<BreakTemplateConfig> {
-    let mut normalized = Vec::new();
-    let mut seen_names = HashSet::new();
-
-    for template in templates {
-        let template = template.normalized();
-        let name = make_unique_profile_name(&template.name, &mut seen_names);
-        normalized.push(BreakTemplateConfig { name, ..template });
-    }
-
-    if normalized.is_empty() {
-        return default_break_templates();
-    }
-
-    normalized
-}
-
-fn normalize_selected_break_template(
-    selected_name: &str,
-    templates: &[BreakTemplateConfig],
-    custom_profile: &CustomProfileConfig,
-) -> String {
-    let selected_name = selected_name.trim();
-    if selected_name.is_empty() {
-        return String::new();
-    }
-
-    if let Some(template) = templates.iter().find(|template| {
-        template.name.eq_ignore_ascii_case(selected_name)
-            && break_template_matches_custom_profile(template, custom_profile)
-    }) {
-        template.name.clone()
-    } else {
-        templates
-            .iter()
-            .find(|template| break_template_matches_custom_profile(template, custom_profile))
-            .map(|template| template.name.clone())
-            .unwrap_or_default()
-    }
-}
-
 fn normalize_session_templates(
     templates: &[SessionTemplateConfig],
     blocklist_profiles: &[BlocklistProfileConfig],
@@ -3182,17 +3041,6 @@ fn weekday_token_from_index(index: usize) -> &'static str {
         6 => "sun",
         _ => "mon",
     }
-}
-
-fn break_template_matches_custom_profile(
-    template: &BreakTemplateConfig,
-    custom_profile: &CustomProfileConfig,
-) -> bool {
-    let template = template.normalized();
-    let custom_profile = custom_profile.normalized();
-    template.short_break_secs == custom_profile.short_break_secs
-        && template.long_break_secs == custom_profile.long_break_secs
-        && template.long_break_interval == custom_profile.long_break_interval
 }
 
 fn normalize_blocklist_profiles(
