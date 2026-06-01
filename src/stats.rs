@@ -516,29 +516,37 @@ pub struct SessionInterruptionEvent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum ProfileBucket {
+    #[serde(rename = "basic", alias = "classic")]
     Classic,
+    #[serde(
+        rename = "standard",
+        alias = "deep_work",
+        alias = "deep-work",
+        alias = "deepwork"
+    )]
     DeepWork,
+    #[serde(rename = "advanced", alias = "custom")]
     Custom,
+    #[serde(rename = "unknown")]
     Unknown,
 }
 
 impl ProfileBucket {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Classic => "Classic",
-            Self::DeepWork => "Deep Work",
-            Self::Custom => "Custom",
+            Self::Classic => "Basic",
+            Self::DeepWork => "Standard",
+            Self::Custom => "Advanced",
             Self::Unknown => "Unknown",
         }
     }
 
     pub fn id(self) -> &'static str {
         match self {
-            Self::Classic => "classic",
-            Self::DeepWork => "deep_work",
-            Self::Custom => "custom",
+            Self::Classic => "basic",
+            Self::DeepWork => "standard",
+            Self::Custom => "advanced",
             Self::Unknown => "unknown",
         }
     }

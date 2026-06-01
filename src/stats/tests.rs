@@ -1699,12 +1699,12 @@ fn productivity_comparison_applies_task_and_time_filters() {
     assert_eq!(rows.len(), 2);
     let classic = rows
         .iter()
-        .find(|row| row.label == "Classic")
-        .expect("classic row should be present");
+        .find(|row| row.label == "Basic")
+        .expect("basic row should be present");
     let deep_work = rows
         .iter()
-        .find(|row| row.label == "Deep Work")
-        .expect("deep work row should be present");
+        .find(|row| row.label == "Standard")
+        .expect("standard row should be present");
     assert_eq!(classic.sessions_completed, 1);
     assert_eq!(classic.focused_minutes(), 30);
     assert_eq!(classic.focus_share_pct, 60);
@@ -1830,7 +1830,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     assert_eq!(sessions[0]["focus_intention"], "Project A");
     assert_eq!(sessions[0]["task_note"], "Project A");
     assert_eq!(sessions[0]["focused_minutes"], 30);
-    assert_eq!(sessions[0]["profile"], "classic");
+    assert_eq!(sessions[0]["profile"], "basic");
     assert_eq!(interruptions[0]["reason"], "manual_skip");
     assert_eq!(interruptions[0]["remaining_secs"], 600);
     assert_eq!(interruptions[0]["task_label"], "Project A");
@@ -1857,7 +1857,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
             .iter()
             .any(|entry| entry.get("focus_score_pct").is_some())
     );
-    assert_eq!(profile_effectiveness[0]["profile"], "Classic");
+    assert_eq!(profile_effectiveness[0]["profile"], "Basic");
     assert_eq!(
         profile_effectiveness[0]["average_focused_minutes_per_session"],
         30
@@ -1885,12 +1885,12 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         .lines()
         .find(|line| line.contains(",focus_session,"))
         .expect("focus session row should be present");
-    assert!(focus_session_line.contains(",Classic,"));
+    assert!(focus_session_line.contains(",Basic,"));
     let interruption_line = csv
         .lines()
         .find(|line| line.contains(",session_interruption,"))
         .expect("session interruption row should be present");
-    assert!(interruption_line.contains(",Classic,"));
+    assert!(interruption_line.contains(",Basic,"));
     assert!(csv_header.contains("comparison_dimension"));
     assert!(csv_header.contains("comparison_label"));
     assert!(csv_header.contains("time_of_day_bucket"));
@@ -1927,7 +1927,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         EXPORT_SCHEMA_VERSION
     )));
     assert!(csv.contains(&format!("{},history_kpi", EXPORT_SCHEMA_VERSION)));
-    assert!(csv.contains("Classic,1,1,"));
+    assert!(csv.contains("Basic,1,1,"));
 
     #[derive(serde::Deserialize)]
     struct CsvKpiRow {
