@@ -1,6 +1,6 @@
 use crate::app::{
-    App, AppMode, KeyCode, KeyEvent, KeyModifiers, NavigationAction, PendingTimerAction,
-    SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
+    App, AppMode, FocusStartOutcome, FocusStartTemplateMode, KeyCode, KeyEvent, KeyModifiers,
+    NavigationAction, PendingTimerAction, SessionInterruptionReason, ShortcutAction, TimerState,
     format_duration_label,
 };
 
@@ -91,20 +91,21 @@ impl App {
     }
 
     fn handle_timer_toggle_pause_key(&mut self) {
-        if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Idle {
-            if let Err(error) = self.apply_selected_session_template_before_start() {
-                self.phase_notification = Some(error);
-                return;
-            }
-            if !self.has_selectable_task_label_for_focus() {
+        match self.try_start_focus_session(FocusStartTemplateMode::ApplySelectedTemplate) {
+            Ok(FocusStartOutcome::Started) => {}
+            Ok(FocusStartOutcome::MissingTaskLabel) => {
                 self.phase_notification = Some(format!(
                     "Select a task label with {} before starting focus.",
                     self.shortcut_hint(ShortcutAction::OpenSessionPlanner)
                 ));
-                return;
+            }
+            Ok(FocusStartOutcome::NotIdleFocusPhase) => {
+                self.update_timer_and_sync(TimerState::toggle_pause);
+            }
+            Err(error) => {
+                self.phase_notification = Some(error);
             }
         }
-        self.update_timer_and_sync(TimerState::toggle_pause);
     }
 
     fn handle_timer_stop_reset_key(&mut self) {

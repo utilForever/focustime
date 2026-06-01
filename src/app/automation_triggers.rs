@@ -1,6 +1,6 @@
 use chrono::{DateTime, Datelike, Local, Timelike};
 
-use crate::app::{App, TimerPhase, TimerState, TimerStatus};
+use crate::app::{App, FocusStartTemplateMode, TimerStatus};
 use crate::config::{AutomationTriggerActionConfig, AutomationTriggerConditionConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,12 +86,8 @@ impl App {
     ) -> Result<(), String> {
         match action {
             AutomationTriggerActionConfig::StartFocus => {
-                if self.timer.phase == TimerPhase::Focus
-                    && self.timer.status == TimerStatus::Idle
-                    && self.has_selectable_task_label_for_focus()
-                {
-                    self.update_timer_and_sync(TimerState::toggle_pause);
-                }
+                let _ =
+                    self.try_start_focus_session(FocusStartTemplateMode::SkipSelectedTemplate)?;
                 Ok(())
             }
             AutomationTriggerActionConfig::DelayScheduleStart { delay_secs } => {
