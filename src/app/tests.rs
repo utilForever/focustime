@@ -111,8 +111,6 @@ fn app_default_uses_canonical_config_in_tests() {
     assert!(app.blocker.sites.is_empty());
     assert_eq!(app.blocklist_profile_count(), 1);
     assert_eq!(app.active_blocklist_profile_name(), "Default");
-    assert_eq!(app.break_templates.len(), 2);
-    assert_eq!(app.active_break_template_name(), "Classic");
     assert_eq!(app.timer.focus_secs, DEFAULT_FOCUS_SECS);
     assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
     assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
@@ -156,21 +154,6 @@ fn selected_builtin_profile_is_applied_on_startup() {
             long_break_secs: 16 * 60,
             long_break_interval: 2,
         }),
-        break_templates: vec![
-            BreakTemplateConfig {
-                name: "Classic".to_string(),
-                short_break_secs: 5 * 60,
-                long_break_secs: 15 * 60,
-                long_break_interval: 4,
-            },
-            BreakTemplateConfig {
-                name: "Deep Work".to_string(),
-                short_break_secs: 10 * 60,
-                long_break_secs: 30 * 60,
-                long_break_interval: 3,
-            },
-        ],
-        selected_break_template: "Classic".to_string(),
         session_templates: Vec::new(),
         selected_session_template: String::new(),
         automation_triggers: Vec::new(),
@@ -419,119 +402,6 @@ fn profile_manager_enter_applies_selection() {
     assert_eq!(app.timer.short_break_secs, short_break);
     assert_eq!(app.timer.long_break_secs, long_break);
     assert_eq!(app.timer.long_break_interval, cadence);
-}
-
-#[test]
-fn profile_manager_cycles_break_template_for_custom_profile() {
-    let config = AppConfig {
-        selected_profile: ProfileId::Custom,
-        custom_profile: Some(CustomProfileConfig::default()),
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-
-    app.handle_key(key(KeyCode::Char('p')));
-    app.handle_key(key(KeyCode::Char(']')));
-
-    assert_eq!(app.active_break_template_name(), "Deep Work");
-    assert_eq!(app.custom_profile.short_break_secs, 10 * 60);
-    assert_eq!(app.custom_profile.long_break_secs, 30 * 60);
-    assert_eq!(app.custom_profile.long_break_interval, 3);
-    assert_eq!(app.timer.short_break_secs, 10 * 60);
-    assert_eq!(app.timer.long_break_secs, 30 * 60);
-    assert_eq!(app.timer.long_break_interval, 3);
-}
-
-#[test]
-fn profile_manager_cycles_break_template_without_replacing_builtin_timer() {
-    let config = AppConfig {
-        selected_profile: ProfileId::Classic,
-        custom_profile: Some(CustomProfileConfig::default()),
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    let original_short = app.timer.short_break_secs;
-    let original_long = app.timer.long_break_secs;
-    let original_cadence = app.timer.long_break_interval;
-
-    app.handle_key(key(KeyCode::Char('p')));
-    app.handle_key(key(KeyCode::Char(']')));
-
-    assert_eq!(app.active_break_template_name(), "Deep Work");
-    assert_eq!(app.custom_profile.short_break_secs, 10 * 60);
-    assert_eq!(app.custom_profile.long_break_secs, 30 * 60);
-    assert_eq!(app.custom_profile.long_break_interval, 3);
-    assert_eq!(app.timer.short_break_secs, original_short);
-    assert_eq!(app.timer.long_break_secs, original_long);
-    assert_eq!(app.timer.long_break_interval, original_cadence);
-}
-
-#[test]
-fn startup_recomputes_selected_break_template_from_custom_values() {
-    let config = AppConfig {
-        selected_profile: ProfileId::Classic,
-        custom_profile: Some(CustomProfileConfig {
-            focus_secs: DEFAULT_FOCUS_SECS,
-            short_break_secs: 10 * 60,
-            long_break_secs: 30 * 60,
-            long_break_interval: 3,
-        }),
-        break_templates: vec![
-            BreakTemplateConfig {
-                name: "Classic".to_string(),
-                short_break_secs: 5 * 60,
-                long_break_secs: 15 * 60,
-                long_break_interval: 4,
-            },
-            BreakTemplateConfig {
-                name: "Deep Work".to_string(),
-                short_break_secs: 10 * 60,
-                long_break_secs: 30 * 60,
-                long_break_interval: 3,
-            },
-        ],
-        selected_break_template: "Classic".to_string(),
-        ..AppConfig::default()
-    };
-
-    let app = App::from_config(config);
-
-    assert_eq!(app.active_break_template_name(), "Deep Work");
-}
-
-#[test]
-fn committing_custom_profile_edit_clears_unmatched_template_selection() {
-    let config = AppConfig {
-        selected_profile: ProfileId::Custom,
-        custom_profile: Some(CustomProfileConfig::default()),
-        selected_break_template: "Classic".to_string(),
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-
-    app.handle_key(key(KeyCode::Char('p')));
-    app.handle_key(key(KeyCode::Char('e')));
-    app.handle_key(key(KeyCode::Down));
-    app.handle_key(key(KeyCode::Right));
-    app.handle_key(key(KeyCode::Enter));
-
-    assert_eq!(app.active_break_template_name(), "Custom");
-    assert_eq!(app.persisted_config().selected_break_template, "");
-}
-
-#[test]
-fn cycling_break_templates_from_unlinked_state_uses_first_and_last_entries() {
-    let mut app = App::default();
-    app.active_break_template = None;
-
-    app.select_next_break_template();
-    assert_eq!(app.active_break_template, Some(0));
-    assert_eq!(app.active_break_template_name(), "Classic");
-
-    app.active_break_template = None;
-    app.select_previous_break_template();
-    assert_eq!(app.active_break_template, Some(1));
-    assert_eq!(app.active_break_template_name(), "Deep Work");
 }
 
 #[test]
