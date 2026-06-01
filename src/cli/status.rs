@@ -1,13 +1,13 @@
 use crate::app::weekly_daily_goal_allocation_for_context;
 use crate::cli::{
-    AppConfig, BreakTemplateConfig, BreakTemplateView, CustomProfileConfig, DEFAULT_FOCUS_SECS,
-    DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS,
-    DailyGoalSnapshot, Datelike, FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput,
-    NaiveDate, ProfileId, ProfileSpec, ProfileView, SessionOutput, StatsRetentionStatusOutput,
-    StatusComparisonOptions, StatusComparisonOutput, StatusOutput, TaskGoalOutput,
-    TemporaryAllowlistStatusOutput, ThemePreset, ThemePresetView, TimerPhase, TimerStatus,
-    TodayOutput, WeeklyAllocationDayOutput, WeeklyAllocationOutput, carry_over_goal_target,
-    current_day_key, effective_blocked_sites_for_profile, session_recovery,
+    AppConfig, CustomProfileConfig, DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL,
+    DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS, DailyGoalSnapshot, Datelike,
+    FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput, NaiveDate, ProfileId, ProfileSpec,
+    ProfileView, SessionOutput, StatsRetentionStatusOutput, StatusComparisonOptions,
+    StatusComparisonOutput, StatusOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
+    ThemePreset, ThemePresetView, TimerPhase, TimerStatus, TodayOutput, WeeklyAllocationDayOutput,
+    WeeklyAllocationOutput, carry_over_goal_target, current_day_key,
+    effective_blocked_sites_for_profile, session_recovery,
 };
 use crate::stats::ProductivityComparisonFilter;
 use crate::timer::TimerState;
@@ -100,8 +100,6 @@ pub(super) fn build_status_output_with_comparison(
     StatusOutput {
         day,
         selected_profile: profile_view(config.selected_profile, &config.effective_custom_profile()),
-        selected_break_template: selected_break_template_view(config),
-        available_break_templates: available_break_template_views(config),
         selected_theme_preset: theme_preset_view(config.selected_theme_preset),
         selected_task_label,
         focus_intention,
@@ -545,75 +543,6 @@ pub(super) fn profile_id(profile: ProfileId) -> &'static str {
         ProfileId::DeepWork => "deep-work",
         ProfileId::Custom => "custom",
     }
-}
-
-fn break_template_view(template: &BreakTemplateConfig) -> BreakTemplateView {
-    let template = template.normalized();
-    BreakTemplateView {
-        name: template.name,
-        short_break_secs: template.short_break_secs,
-        long_break_secs: template.long_break_secs,
-        long_break_interval: template.long_break_interval,
-    }
-}
-
-fn break_template_matches_custom_profile(
-    template: &BreakTemplateConfig,
-    custom_profile: &CustomProfileConfig,
-) -> bool {
-    let template = template.normalized();
-    let custom_profile = custom_profile.normalized();
-    template.short_break_secs == custom_profile.short_break_secs
-        && template.long_break_secs == custom_profile.long_break_secs
-        && template.long_break_interval == custom_profile.long_break_interval
-}
-
-fn selected_break_template_index(config: &AppConfig) -> Option<usize> {
-    let custom_profile = config.effective_custom_profile();
-    let selected_name = config.selected_break_template.trim();
-    let selected_index = config
-        .break_templates
-        .iter()
-        .position(|template| template.name.eq_ignore_ascii_case(selected_name));
-
-    if let Some(index) = selected_index
-        && config.break_templates.get(index).is_some_and(|template| {
-            break_template_matches_custom_profile(template, &custom_profile)
-        })
-    {
-        return Some(index);
-    }
-
-    config
-        .break_templates
-        .iter()
-        .position(|template| break_template_matches_custom_profile(template, &custom_profile))
-}
-
-pub(super) fn selected_break_template_view(config: &AppConfig) -> BreakTemplateView {
-    if let Some(index) = selected_break_template_index(config) {
-        return config
-            .break_templates
-            .get(index)
-            .map(break_template_view)
-            .unwrap_or_else(|| break_template_view(&BreakTemplateConfig::default()));
-    }
-
-    let custom = config.effective_custom_profile();
-    BreakTemplateView {
-        name: "Custom".to_string(),
-        short_break_secs: custom.short_break_secs,
-        long_break_secs: custom.long_break_secs,
-        long_break_interval: custom.long_break_interval,
-    }
-}
-
-pub(super) fn available_break_template_views(config: &AppConfig) -> Vec<BreakTemplateView> {
-    config
-        .break_templates
-        .iter()
-        .map(break_template_view)
-        .collect()
 }
 
 pub(super) fn theme_preset_view(preset: ThemePreset) -> ThemePresetView {

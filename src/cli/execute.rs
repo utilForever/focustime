@@ -33,17 +33,17 @@ use crate::cli::{
     SyncRestoreOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
     TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset,
     TimerCommandOutput, TimerStateOutput, UsageSignalsCommandOutput, WeekdayProfileRuleConfig,
-    WeekdayRulesCommandOutput, WeeklyGoalConfig, available_break_template_views,
-    available_theme_preset_views, build_blocking_preview_command_output,
-    build_diagnostics_command_output, build_schedule_inspection_output,
-    build_status_output_with_comparison, build_task_goal_output, display_input_value,
-    effective_blocked_sites_for_profile, flush_stdout, print_automation_triggers_command_output,
-    print_backup_output, print_blocking_preview_command_output,
-    print_blocklist_category_command_output, print_blocklist_profile_command_output,
-    print_break_glass_command_output, print_calendar_sync_command_output,
-    print_daemon_start_command_output, print_daemon_status_command_output,
-    print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
-    print_feature_inventory_output, print_goal_carry_command_output, print_goal_command_output,
+    WeekdayRulesCommandOutput, WeeklyGoalConfig, available_theme_preset_views,
+    build_blocking_preview_command_output, build_diagnostics_command_output,
+    build_schedule_inspection_output, build_status_output_with_comparison, build_task_goal_output,
+    display_input_value, effective_blocked_sites_for_profile, flush_stdout,
+    print_automation_triggers_command_output, print_backup_output,
+    print_blocking_preview_command_output, print_blocklist_category_command_output,
+    print_blocklist_profile_command_output, print_break_glass_command_output,
+    print_calendar_sync_command_output, print_daemon_start_command_output,
+    print_daemon_status_command_output, print_daemon_stop_command_output,
+    print_diagnostics_command_output, print_export_output, print_feature_inventory_output,
+    print_goal_carry_command_output, print_goal_command_output,
     print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
     print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
     print_session_metadata_command_output, print_session_template_command_output,
@@ -52,8 +52,8 @@ use crate::cli::{
     print_strict_command_output, print_sync_backup_output, print_sync_restore_output,
     print_task_goal_command_output, print_temporary_site_add_command_output,
     print_theme_command_output, print_timer_state_output, print_usage_signals_command_output,
-    print_weekday_rules_command_output, profile_id, profile_view, selected_break_template_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    print_weekday_rules_command_output, profile_id, profile_view, theme_preset_view,
+    timer_phase_id, timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -1391,16 +1391,12 @@ fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Re
         .into_iter()
         .map(|candidate| profile_view(candidate, &custom))
         .collect();
-    let selected_break_template = selected_break_template_view(&config);
-    let available_break_templates = available_break_template_views(&config);
     let selected_theme_preset = theme_preset_view(config.selected_theme_preset);
     let available_theme_presets = available_theme_preset_views();
     let payload = ProfileOutput {
         updated,
         selected,
         available,
-        selected_break_template,
-        available_break_templates,
         selected_theme_preset,
         available_theme_presets,
     };
