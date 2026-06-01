@@ -1580,6 +1580,76 @@ strict_mode = false
 }
 
 #[test]
+fn migrate_config_toml_v1_to_v2_merges_legacy_profile_automation_into_existing_preset_key() {
+    let v1: toml::Value = toml::from_str(
+        r#"
+schema_version = 1
+
+[profile_automation.standard]
+strict_mode = true
+[profile_automation.standard.notifications]
+enabled = false
+
+[profile_automation.deep_work]
+strict_mode = false
+[profile_automation.deep_work.notifications]
+enabled = true
+sound = true
+[profile_automation.deep_work.auto_start]
+focus_to_break = true
+break_to_focus = true
+"#,
+    )
+    .unwrap();
+
+    let migrated = migrate_config_toml_to_current(v1).expect("v1 payload should migrate to v2");
+    let profile_automation = migrated
+        .as_table()
+        .and_then(|root| root.get("profile_automation"))
+        .and_then(toml::Value::as_table)
+        .expect("profile_automation should be a table");
+
+    let standard = profile_automation
+        .get("standard")
+        .and_then(toml::Value::as_table)
+        .expect("standard profile automation should exist");
+    let notifications = standard
+        .get("notifications")
+        .and_then(toml::Value::as_table)
+        .expect("notifications should exist");
+    let auto_start = standard
+        .get("auto_start")
+        .and_then(toml::Value::as_table)
+        .expect("auto_start should exist");
+
+    assert_eq!(
+        standard.get("strict_mode").and_then(toml::Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        notifications.get("enabled").and_then(toml::Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        notifications.get("sound").and_then(toml::Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        auto_start
+            .get("focus_to_break")
+            .and_then(toml::Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        auto_start
+            .get("break_to_focus")
+            .and_then(toml::Value::as_bool),
+        Some(true)
+    );
+    assert!(profile_automation.get("deep_work").is_none());
+}
+
+#[test]
 fn load_with_env_leniently_parses_newer_schema_version() {
     let temp_base = unique_temp_base("future-version");
     let app_dir = temp_base.join("focustime");

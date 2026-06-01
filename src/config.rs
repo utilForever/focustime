@@ -2520,14 +2520,30 @@ fn migrate_table_key(
     old_key: &str,
     new_key: &str,
 ) {
-    if table.contains_key(new_key) {
-        let _ = table.remove(old_key);
-        return;
-    }
     let Some(value) = table.remove(old_key) else {
         return;
     };
+    if let Some(existing) = table.get_mut(new_key) {
+        merge_toml_value_prefer_existing(existing, value);
+        return;
+    }
     table.insert(new_key.to_string(), value);
+}
+
+fn merge_toml_value_prefer_existing(existing: &mut toml::Value, incoming: toml::Value) {
+    let (toml::Value::Table(existing_table), toml::Value::Table(incoming_table)) =
+        (existing, incoming)
+    else {
+        return;
+    };
+
+    for (key, incoming_value) in incoming_table {
+        if let Some(existing_value) = existing_table.get_mut(&key) {
+            merge_toml_value_prefer_existing(existing_value, incoming_value);
+        } else {
+            existing_table.insert(key, incoming_value);
+        }
+    }
 }
 
 fn migrate_automation_trigger_action_profiles(table: &mut toml::map::Map<String, toml::Value>) {
