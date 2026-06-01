@@ -3299,7 +3299,7 @@ fn build_status_output_uses_recovery_snapshot_for_live_state() {
     assert_eq!(output.live.selected_task_label.as_deref(), Some("Docs"));
     assert_eq!(output.live.focus_intention.as_deref(), Some("Write docs"));
     assert_eq!(output.live.task_note.as_deref(), Some("API section"));
-    assert_eq!(output.live.selected_profile.id, "deep-work");
+    assert_eq!(output.live.selected_profile.id, "standard");
     assert!(output.live.recovery_error.is_none());
     assert_eq!(output.session.pomodoros_completed, 3);
     assert_eq!(output.session.focused_minutes, 199);

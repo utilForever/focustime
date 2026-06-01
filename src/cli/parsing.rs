@@ -754,11 +754,11 @@ pub(super) fn finalize_cli_action(
 
 pub(super) fn parse_profile_id(value: &str) -> Result<ProfileId, String> {
     match value.trim().to_ascii_lowercase().as_str() {
-        "classic" => Ok(ProfileId::Classic),
-        "deep-work" | "deep_work" | "deepwork" => Ok(ProfileId::DeepWork),
-        "custom" => Ok(ProfileId::Custom),
+        "basic" | "classic" => Ok(ProfileId::Classic),
+        "standard" | "deep-work" | "deep_work" | "deepwork" => Ok(ProfileId::DeepWork),
+        "advanced" | "custom" => Ok(ProfileId::Custom),
         _ => Err(invalid_usage(&format!(
-            "Invalid profile `{value}`. Use `classic`, `deep-work`, or `custom`."
+            "Invalid profile `{value}`. Use `basic`, `standard`, or `advanced`."
         ))),
     }
 }
@@ -934,7 +934,7 @@ pub(super) fn parse_weekday_rules_value(
 ) -> Result<Vec<WeekdayProfileRuleConfig>, String> {
     let rules = serde_json::from_str::<Vec<WeekdayProfileRuleConfig>>(value).map_err(|error| {
         invalid_usage(&format!(
-            "Invalid weekday-rules JSON payload: {error}. Use `--weekday-rules-set='[{{\"day\":\"mon\",\"profile\":\"deep-work\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}}]'`."
+            "Invalid weekday-rules JSON payload: {error}. Use `--weekday-rules-set='[{{\"day\":\"mon\",\"profile\":\"standard\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}}]'`."
         ))
     })?;
     validate_weekday_rules_value(&rules)?;
@@ -1342,12 +1342,12 @@ pub(super) fn parse_compare_by_value(value: &str) -> Result<ComparisonDimension,
 pub(super) fn parse_compare_profile_value(value: &str) -> Result<Option<ProfileBucket>, String> {
     match value.trim().to_ascii_lowercase().as_str() {
         "all" => Ok(None),
-        "classic" => Ok(Some(ProfileBucket::Classic)),
-        "deep-work" | "deep_work" | "deepwork" => Ok(Some(ProfileBucket::DeepWork)),
-        "custom" => Ok(Some(ProfileBucket::Custom)),
+        "basic" | "classic" => Ok(Some(ProfileBucket::Classic)),
+        "standard" | "deep-work" | "deep_work" | "deepwork" => Ok(Some(ProfileBucket::DeepWork)),
+        "advanced" | "custom" => Ok(Some(ProfileBucket::Custom)),
         "unknown" => Ok(Some(ProfileBucket::Unknown)),
         _ => Err(invalid_usage(&format!(
-            "Invalid compare profile `{value}`. Use `classic`, `deep-work`, `custom`, `unknown`, or `all`."
+            "Invalid compare profile `{value}`. Use `basic`, `standard`, `advanced`, `unknown`, or `all`."
         ))),
     }
 }

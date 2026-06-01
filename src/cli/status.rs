@@ -539,9 +539,9 @@ fn resolve_profile_spec(profile: ProfileId, custom: &CustomProfileConfig) -> Pro
 
 pub(super) fn profile_id(profile: ProfileId) -> &'static str {
     match profile {
-        ProfileId::Classic => "classic",
-        ProfileId::DeepWork => "deep-work",
-        ProfileId::Custom => "custom",
+        ProfileId::Classic => "basic",
+        ProfileId::DeepWork => "standard",
+        ProfileId::Custom => "advanced",
     }
 }
 
