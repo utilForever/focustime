@@ -1,7 +1,7 @@
 use crate::app::automation_triggers::AutomationTriggerEvent;
 use crate::app::{
-    App, Local, SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
-    current_day_key,
+    App, FocusStartOutcome, FocusStartTemplateMode, Local, SessionInterruptionReason,
+    ShortcutAction, TimerPhase, TimerState, TimerStatus, current_day_key,
 };
 
 impl App {
@@ -118,6 +118,23 @@ impl App {
                 self.shortcut_hint(ShortcutAction::OpenSessionPlanner)
             ));
         }
+    }
+
+    pub(super) fn try_start_focus_session(
+        &mut self,
+        template_mode: FocusStartTemplateMode,
+    ) -> Result<FocusStartOutcome, String> {
+        if self.timer.phase != TimerPhase::Focus || self.timer.status != TimerStatus::Idle {
+            return Ok(FocusStartOutcome::NotIdleFocusPhase);
+        }
+        if matches!(template_mode, FocusStartTemplateMode::ApplySelectedTemplate) {
+            self.apply_selected_session_template_before_start()?;
+        }
+        if !self.has_selectable_task_label_for_focus() {
+            return Ok(FocusStartOutcome::MissingTaskLabel);
+        }
+        self.update_timer_and_sync(TimerState::toggle_pause);
+        Ok(FocusStartOutcome::Started)
     }
 
     pub(super) fn update_timer_and_sync(&mut self, action: fn(&mut TimerState)) {

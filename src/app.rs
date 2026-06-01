@@ -373,6 +373,19 @@ enum PendingTimerAction {
     BreakGlassOverride,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FocusStartTemplateMode {
+    ApplySelectedTemplate,
+    SkipSelectedTemplate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FocusStartOutcome {
+    Started,
+    MissingTaskLabel,
+    NotIdleFocusPhase,
+}
+
 #[derive(Debug, Clone)]
 struct ScheduleDisplayState {
     has_schedule_windows: bool,

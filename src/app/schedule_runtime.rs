@@ -1,9 +1,9 @@
 use crate::app::automation_triggers::AutomationTriggerEvent;
 use crate::app::{
-    App, DateTime, Local, ScheduleDisplayState, ShortcutAction, TimerPhase, TimerState,
-    TimerStatus, WindowOccurrence, active_occurrence, active_one_time_occurrence,
-    format_duration_label, next_occurrence_after, next_one_time_occurrence_after, occurrence_key,
-    pick_active_occurrence, pick_next_occurrence,
+    App, DateTime, FocusStartOutcome, FocusStartTemplateMode, Local, ScheduleDisplayState,
+    ShortcutAction, TimerPhase, TimerState, TimerStatus, WindowOccurrence, active_occurrence,
+    active_one_time_occurrence, format_duration_label, next_occurrence_after,
+    next_one_time_occurrence_after, occurrence_key, pick_active_occurrence, pick_next_occurrence,
 };
 
 struct ScheduleShortcutLabels {
@@ -226,28 +226,21 @@ impl App {
             self.update_timer_and_sync(TimerState::next_phase);
         }
 
-        if let Err(error) = self.apply_selected_session_template_before_start() {
-            self.schedule_armed_occurrence_key = Some(active_occurrence_key.to_string());
-            self.phase_notification = Some(error);
-            return;
+        match self.try_start_focus_session(FocusStartTemplateMode::ApplySelectedTemplate) {
+            Ok(FocusStartOutcome::Started) => {
+                self.phase_notification =
+                    Some("Scheduled window started. Focus auto-started.".to_string());
+                self.schedule_armed_occurrence_key = None;
+            }
+            Ok(FocusStartOutcome::MissingTaskLabel) | Ok(FocusStartOutcome::NotIdleFocusPhase) => {
+                self.schedule_armed_occurrence_key = Some(active_occurrence_key.to_string());
+                self.phase_notification = Some(self.schedule_arm_notification());
+            }
+            Err(error) => {
+                self.schedule_armed_occurrence_key = Some(active_occurrence_key.to_string());
+                self.phase_notification = Some(error);
+            }
         }
-
-        if self.can_auto_start_focus_for_schedule() {
-            self.update_timer_and_sync(TimerState::toggle_pause);
-            self.phase_notification =
-                Some("Scheduled window started. Focus auto-started.".to_string());
-            self.schedule_armed_occurrence_key = None;
-            return;
-        }
-
-        self.schedule_armed_occurrence_key = Some(active_occurrence_key.to_string());
-        self.phase_notification = Some(self.schedule_arm_notification());
-    }
-
-    fn can_auto_start_focus_for_schedule(&self) -> bool {
-        self.timer.phase == TimerPhase::Focus
-            && self.timer.status == TimerStatus::Idle
-            && self.has_selectable_task_label_for_focus()
     }
 
     fn schedule_arm_notification(&self) -> String {

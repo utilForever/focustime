@@ -3650,6 +3650,31 @@ fn time_trigger_fires_once_per_minute() {
 }
 
 #[test]
+fn automation_start_focus_keeps_selected_task_without_template_reapply() {
+    let now = local_datetime_today(10, 15);
+    let mut app = App::default();
+    app.task_labels = vec!["Docs".to_string(), "Writing".to_string()];
+    app.selected_task_label = Some("Docs".to_string());
+    app.capture_session_template("Deep Flow")
+        .expect("template should be created");
+    app.selected_task_label = Some("Writing".to_string());
+    app.automation_triggers = vec![AutomationTriggerRuleConfig {
+        trigger: AutomationTriggerConditionConfig::Time {
+            days: vec![weekday_token(now.weekday()).to_string()],
+            at: now.format("%H:%M").to_string(),
+        },
+        action: AutomationTriggerActionConfig::StartFocus,
+    }];
+
+    app.sync_time_based_automation_triggers(now);
+
+    assert_eq!(app.timer.phase, TimerPhase::Focus);
+    assert_eq!(app.timer.status, TimerStatus::Running);
+    assert_eq!(app.active_focus_task_label.as_deref(), Some("Writing"));
+    assert_eq!(app.active_focus_intention.as_deref(), Some("Writing"));
+}
+
+#[test]
 fn profile_editor_adjusts_automation_trigger_fields() {
     let mut app = App::default();
 
@@ -5016,6 +5041,29 @@ fn cli_start_fails_when_selected_task_label_is_archived() {
 
     assert!(result.is_err());
     assert_eq!(app.timer.status, TimerStatus::Idle);
+}
+
+#[test]
+fn timer_and_cli_start_share_selected_template_validation_error() {
+    let mut app = App::default();
+    app.task_labels = vec!["Docs".to_string()];
+    app.selected_task_label = Some("Docs".to_string());
+    app.capture_session_template("Broken")
+        .expect("template should be created");
+    app.session_templates[0].blocklist_profile = "Missing".to_string();
+    app.select_session_template(Some("Broken"))
+        .expect("template should be selected");
+
+    app.handle_key(key(KeyCode::Char(' ')));
+    assert_eq!(app.timer.status, TimerStatus::Idle);
+    let tui_error = app
+        .phase_notification
+        .clone()
+        .expect("tui start should surface template error");
+    assert!(tui_error.contains("references missing blocklist profile"));
+
+    let cli_error = app.start_focus_for_cli().unwrap_err();
+    assert_eq!(cli_error, tui_error);
 }
 
 #[test]
