@@ -96,7 +96,7 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --focus-intention=TEXT [--json]
   focustime --task-note [TEXT] [--json]
   focustime --task-note=TEXT [--json]
-  focustime --profile [classic|deep-work|custom] [--json]
+  focustime --profile [basic|standard|advanced] [--json]
   focustime --theme [classic|high-contrast|deuteranopia-friendly] [--json]
   focustime --goal [--json]
   focustime --goal=MINUTES,POMODOROS [--json]
@@ -153,7 +153,7 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --diagnostics [--json]
   focustime --blocking-preview [--json]
   focustime --usage-signals [--json]
-  focustime --status [--watch[=SECONDS]] [--compare-by=task|profile|time-of-day] [--compare-task=LABEL|all] [--compare-profile=classic|deep-work|custom|unknown|all] [--compare-time=morning|afternoon|evening|night|unknown|all] [--compare-limit=N] [--json]
+  focustime --status [--watch[=SECONDS]] [--compare-by=task|profile|time-of-day] [--compare-task=LABEL|all] [--compare-profile=basic|standard|advanced|unknown|all] [--compare-time=morning|afternoon|evening|night|unknown|all] [--compare-limit=N] [--json]
   focustime --backup[=DIR] [--json]
   focustime --restore[=DIR] [--json]
   focustime --sync-backup[=DIR] [--sync-passphrase=PASSPHRASE] [--json]
@@ -227,7 +227,7 @@ Options:
   --watch         Stream periodic status updates (status command only; default 1s)
   --compare-by    Status comparison dimension: task | profile | time-of-day
   --compare-task  Status comparison task slice label, or `all` to clear
-  --compare-profile  Status comparison profile slice: classic | deep-work | custom | unknown | all
+  --compare-profile  Status comparison profile slice: basic | standard | advanced | unknown | all
   --compare-time  Status comparison time-of-day slice: morning | afternoon | evening | night | unknown | all
   --compare-limit Status comparison row limit (positive integer)
   --backup        Back up config.toml and stats.toml to current directory or DIR

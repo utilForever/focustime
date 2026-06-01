@@ -15,7 +15,7 @@ use paths::{app_dir_with_env, stats_app_dir_with_env};
 #[cfg(test)]
 use paths::{config_dir_from_env, stats_state_dir_from_env};
 
-const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 1;
+const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 2;
 const LEGACY_CONFIG_SCHEMA_VERSION: u32 = 0;
 const SCHEDULE_TIME_STEP_MIN_MINUTES: u16 = 1;
 const SCHEDULE_TIME_STEP_MAX_MINUTES: u16 = 60;
@@ -949,29 +949,34 @@ impl ProfileAutomationConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct ProfileAutomationSettingsConfig {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub classic: Option<ProfileAutomationConfig>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub deep_work: Option<ProfileAutomationConfig>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub custom: Option<ProfileAutomationConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "classic")]
+    pub basic: Option<ProfileAutomationConfig>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "deep_work",
+        alias = "deep-work"
+    )]
+    pub standard: Option<ProfileAutomationConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "custom")]
+    pub advanced: Option<ProfileAutomationConfig>,
 }
 
 impl ProfileAutomationSettingsConfig {
     fn with_shared_defaults(shared: ProfileAutomationConfig) -> Self {
         let shared = Some(shared.normalized());
         Self {
-            classic: shared.clone(),
-            deep_work: shared.clone(),
-            custom: shared,
+            basic: shared.clone(),
+            standard: shared.clone(),
+            advanced: shared,
         }
     }
 
     fn normalized_with_fallback(&self, fallback: &ProfileAutomationConfig) -> Self {
         Self {
-            classic: Some(self.for_profile(ProfileId::Classic, fallback).normalized()),
-            deep_work: Some(self.for_profile(ProfileId::DeepWork, fallback).normalized()),
-            custom: Some(self.for_profile(ProfileId::Custom, fallback).normalized()),
+            basic: Some(self.for_profile(ProfileId::Classic, fallback).normalized()),
+            standard: Some(self.for_profile(ProfileId::DeepWork, fallback).normalized()),
+            advanced: Some(self.for_profile(ProfileId::Custom, fallback).normalized()),
         }
     }
 
@@ -981,9 +986,9 @@ impl ProfileAutomationSettingsConfig {
         fallback: &ProfileAutomationConfig,
     ) -> ProfileAutomationConfig {
         let configured = match profile {
-            ProfileId::Classic => self.classic.clone(),
-            ProfileId::DeepWork => self.deep_work.clone(),
-            ProfileId::Custom => self.custom.clone(),
+            ProfileId::Classic => self.basic.clone(),
+            ProfileId::DeepWork => self.standard.clone(),
+            ProfileId::Custom => self.advanced.clone(),
         };
         configured.unwrap_or_else(|| fallback.clone()).normalized()
     }
@@ -991,9 +996,9 @@ impl ProfileAutomationSettingsConfig {
     pub fn set_for_profile(&mut self, profile: ProfileId, config: ProfileAutomationConfig) {
         let value = Some(config.normalized());
         match profile {
-            ProfileId::Classic => self.classic = value,
-            ProfileId::DeepWork => self.deep_work = value,
-            ProfileId::Custom => self.custom = value,
+            ProfileId::Classic => self.basic = value,
+            ProfileId::DeepWork => self.standard = value,
+            ProfileId::Custom => self.advanced = value,
         }
     }
 }
@@ -1898,29 +1903,28 @@ fn default_history_dashboard_card_order() -> Vec<HistoryKpiCardId> {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "kebab-case")]
 pub enum ProfileId {
+    #[serde(rename = "basic")]
     Classic,
+    #[serde(rename = "standard")]
     DeepWork,
     #[default]
+    #[serde(rename = "advanced")]
     Custom,
 }
 
 impl ProfileId {
     fn from_config_value(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "classic" => Self::Classic,
-            "deep-work" | "deep_work" | "deepwork" => Self::DeepWork,
-            "custom" => Self::Custom,
-            _ => Self::Custom,
-        }
+        canonical_profile_id_token(value)
+            .map(profile_id_for_token)
+            .unwrap_or(Self::Custom)
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            ProfileId::Classic => "Classic",
-            ProfileId::DeepWork => "Deep Work",
-            ProfileId::Custom => "Custom",
+            ProfileId::Classic => "Basic",
+            ProfileId::DeepWork => "Standard",
+            ProfileId::Custom => "Advanced",
         }
     }
 }
@@ -1932,6 +1936,24 @@ impl<'de> Deserialize<'de> for ProfileId {
     {
         let value = String::deserialize(deserializer)?;
         Ok(Self::from_config_value(&value))
+    }
+}
+
+fn canonical_profile_id_token(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "basic" | "classic" => Some("basic"),
+        "standard" | "deep-work" | "deep_work" | "deepwork" => Some("standard"),
+        "advanced" | "custom" => Some("advanced"),
+        _ => None,
+    }
+}
+
+fn profile_id_for_token(token: &str) -> ProfileId {
+    match token {
+        "basic" => ProfileId::Classic,
+        "standard" => ProfileId::DeepWork,
+        "advanced" => ProfileId::Custom,
+        _ => ProfileId::Custom,
     }
 }
 
@@ -2383,14 +2405,14 @@ fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> Vec<String> 
         .profile_automation
         .as_ref()
         .map(|settings| {
-            settings.classic.is_none() || settings.deep_work.is_none() || settings.custom.is_none()
+            settings.basic.is_none() || settings.standard.is_none() || settings.advanced.is_none()
         })
         .unwrap_or(true);
     let legacy_automation_in_use =
         legacy_automation_values_configured && profile_automation_incomplete;
     if legacy_automation_in_use {
         warnings.push(
-            "Deprecated top-level automation fields (`notifications`, `auto_start`, `strict_mode`, `recurring_schedule`) are in use. Move them under `[profile_automation.<profile>]`.".to_string(),
+            "Deprecated top-level automation fields (`notifications`, `auto_start`, `strict_mode`, `recurring_schedule`) are in use. Move them under `[profile_automation.<preset>]`.".to_string(),
         );
     }
 
@@ -2417,6 +2439,7 @@ fn migrate_config_toml_step(
 ) -> Option<toml::Value> {
     match from_schema_version {
         LEGACY_CONFIG_SCHEMA_VERSION => migrate_config_toml_legacy_to_v1(config_toml),
+        1 => migrate_config_toml_v1_to_v2(config_toml),
         _ => None,
     }
 }
@@ -2428,6 +2451,120 @@ fn migrate_config_toml_legacy_to_v1(mut config_toml: toml::Value) -> Option<toml
         toml::Value::Integer(i64::from(CURRENT_CONFIG_SCHEMA_VERSION)),
     );
     Some(config_toml)
+}
+
+fn migrate_config_toml_v1_to_v2(mut config_toml: toml::Value) -> Option<toml::Value> {
+    let table = config_toml.as_table_mut()?;
+    migrate_profile_value_in_table(table, "selected_profile");
+    migrate_profile_automation_preset_keys(table);
+    migrate_profile_value_in_array_table(table, "session_templates", "profile");
+    migrate_profile_value_in_array_table(table, "weekday_profile_rules", "profile");
+    migrate_automation_trigger_action_profiles(table);
+    table.insert(
+        "schema_version".to_string(),
+        toml::Value::Integer(i64::from(CURRENT_CONFIG_SCHEMA_VERSION)),
+    );
+    Some(config_toml)
+}
+
+fn migrate_profile_value_in_array_table(
+    table: &mut toml::map::Map<String, toml::Value>,
+    array_key: &str,
+    field_key: &str,
+) {
+    let Some(array) = table
+        .get_mut(array_key)
+        .and_then(|value| value.as_array_mut())
+    else {
+        return;
+    };
+    for entry in array {
+        let Some(entry_table) = entry.as_table_mut() else {
+            continue;
+        };
+        migrate_profile_value_in_table(entry_table, field_key);
+    }
+}
+
+fn migrate_profile_value_in_table(
+    table: &mut toml::map::Map<String, toml::Value>,
+    field_key: &str,
+) {
+    let Some(value) = table.get_mut(field_key) else {
+        return;
+    };
+    let Some(raw) = value.as_str() else {
+        return;
+    };
+    let Some(mapped) = canonical_profile_id_token(raw) else {
+        return;
+    };
+    *value = toml::Value::String(mapped.to_string());
+}
+
+fn migrate_profile_automation_preset_keys(table: &mut toml::map::Map<String, toml::Value>) {
+    let Some(profile_automation) = table
+        .get_mut("profile_automation")
+        .and_then(|value| value.as_table_mut())
+    else {
+        return;
+    };
+    migrate_table_key(profile_automation, "classic", "basic");
+    migrate_table_key(profile_automation, "deep_work", "standard");
+    migrate_table_key(profile_automation, "deep-work", "standard");
+    migrate_table_key(profile_automation, "custom", "advanced");
+}
+
+fn migrate_table_key(
+    table: &mut toml::map::Map<String, toml::Value>,
+    old_key: &str,
+    new_key: &str,
+) {
+    let Some(value) = table.remove(old_key) else {
+        return;
+    };
+    if let Some(existing) = table.get_mut(new_key) {
+        merge_toml_value_prefer_existing(existing, value);
+        return;
+    }
+    table.insert(new_key.to_string(), value);
+}
+
+fn merge_toml_value_prefer_existing(existing: &mut toml::Value, incoming: toml::Value) {
+    let (toml::Value::Table(existing_table), toml::Value::Table(incoming_table)) =
+        (existing, incoming)
+    else {
+        return;
+    };
+
+    for (key, incoming_value) in incoming_table {
+        if let Some(existing_value) = existing_table.get_mut(&key) {
+            merge_toml_value_prefer_existing(existing_value, incoming_value);
+        } else {
+            existing_table.insert(key, incoming_value);
+        }
+    }
+}
+
+fn migrate_automation_trigger_action_profiles(table: &mut toml::map::Map<String, toml::Value>) {
+    let Some(triggers) = table
+        .get_mut("automation_triggers")
+        .and_then(|value| value.as_array_mut())
+    else {
+        return;
+    };
+    for entry in triggers {
+        let Some(entry_table) = entry.as_table_mut() else {
+            continue;
+        };
+        let Some(action_table) = entry_table
+            .get_mut("action")
+            .and_then(|action| action.as_table_mut())
+        else {
+            continue;
+        };
+        migrate_profile_value_in_table(action_table, "profile");
+    }
 }
 
 #[cfg_attr(test, allow(dead_code))]

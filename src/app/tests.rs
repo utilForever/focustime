@@ -222,7 +222,7 @@ fn applying_profile_loads_profile_scoped_automation_rules() {
     let config = AppConfig {
         selected_profile: ProfileId::Classic,
         profile_automation: Some(ProfileAutomationSettingsConfig {
-            classic: Some(ProfileAutomationConfig {
+            basic: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig {
                     enabled: true,
                     sound: false,
@@ -234,7 +234,7 @@ fn applying_profile_loads_profile_scoped_automation_rules() {
                 strict_mode: false,
                 recurring_schedule: classic_schedule.clone(),
             }),
-            deep_work: Some(ProfileAutomationConfig {
+            standard: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig {
                     enabled: false,
                     sound: false,
@@ -246,7 +246,7 @@ fn applying_profile_loads_profile_scoped_automation_rules() {
                 strict_mode: true,
                 recurring_schedule: deep_work_schedule.clone(),
             }),
-            custom: None,
+            advanced: None,
         }),
         ..AppConfig::default()
     };
@@ -285,7 +285,7 @@ fn applying_profile_with_missing_automation_uses_neutral_defaults() {
         exception_dates: vec!["2026-12-25".to_string()],
         one_time_windows: Vec::new(),
     };
-    app.profile_automation.deep_work = None;
+    app.profile_automation.standard = None;
 
     assert!(app.apply_profile(ProfileId::DeepWork));
     assert_eq!(app.selected_profile, ProfileId::DeepWork);
@@ -6343,8 +6343,8 @@ fn startup_recovery_rehydrates_profile_automation_runtime_for_snapshot_profile()
         selected_profile: ProfileId::Custom,
         strict_mode: false,
         profile_automation: Some(ProfileAutomationSettingsConfig {
-            classic: Some(ProfileAutomationConfig::default()),
-            deep_work: Some(ProfileAutomationConfig {
+            basic: Some(ProfileAutomationConfig::default()),
+            standard: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig {
                     enabled: false,
                     sound: true,
@@ -6356,7 +6356,7 @@ fn startup_recovery_rehydrates_profile_automation_runtime_for_snapshot_profile()
                 strict_mode: true,
                 recurring_schedule: deep_work_schedule.clone(),
             }),
-            custom: Some(ProfileAutomationConfig::default()),
+            advanced: Some(ProfileAutomationConfig::default()),
         }),
         ..AppConfig::default()
     };

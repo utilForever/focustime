@@ -438,7 +438,7 @@ fn classify_compare_profile_arg(
     {
         let value = require_nonempty_key_value(
             next,
-            "`--compare-profile` requires `classic`, `deep-work`, `custom`, `unknown`, or `all`.",
+            "`--compare-profile` requires `basic`, `standard`, `advanced`, `unknown`, or `all`.",
         )?;
         return Ok((
             ParsedToken::CompareProfile(parse_compare_profile_value(value)?),
@@ -446,7 +446,7 @@ fn classify_compare_profile_arg(
         ));
     }
     Err(invalid_usage(
-        "`--compare-profile` requires a value. Use `--compare-profile=classic|deep-work|custom|unknown|all`.",
+        "`--compare-profile` requires a value. Use `--compare-profile=basic|standard|advanced|unknown|all`.",
     ))
 }
 
@@ -952,7 +952,7 @@ fn classify_weekday_rules_set_arg(
         ));
     }
     Err(invalid_usage(
-        "`--weekday-rules-set` requires a JSON payload. Use `--weekday-rules-set='[{\"day\":\"mon\",\"profile\":\"deep-work\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}]'`.",
+        "`--weekday-rules-set` requires a JSON payload. Use `--weekday-rules-set='[{\"day\":\"mon\",\"profile\":\"standard\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}]'`.",
     ))
 }
 
@@ -1320,7 +1320,7 @@ fn parse_compare_profile_key_value_arg(arg: &str) -> Result<Option<ParsedToken>,
     if let Some(value) = arg.strip_prefix("--compare-profile=") {
         let value = require_nonempty_key_value(
             value,
-            "`--compare-profile=` requires `classic`, `deep-work`, `custom`, `unknown`, or `all`.",
+            "`--compare-profile=` requires `basic`, `standard`, `advanced`, `unknown`, or `all`.",
         )?;
         return Ok(Some(ParsedToken::CompareProfile(
             parse_compare_profile_value(value)?,
