@@ -37,8 +37,6 @@ pub enum ShortcutAction {
     PlannerSelectRecent,
     BackProfileManager,
     ProfileEdit,
-    SelectPreviousBreakTemplate,
-    SelectNextBreakTemplate,
     BackStatsHistory,
     ExportStatsHistory,
     HistoryDashboardSelectPrevious,
@@ -112,11 +110,9 @@ const SESSION_PLANNER_SCOPE_ACTIONS: [ShortcutAction; 7] = [
     ShortcutAction::PlannerSelectRecent,
 ];
 
-const PROFILE_MANAGER_SCOPE_ACTIONS: [ShortcutAction; 4] = [
+const PROFILE_MANAGER_SCOPE_ACTIONS: [ShortcutAction; 2] = [
     ShortcutAction::BackProfileManager,
     ShortcutAction::ProfileEdit,
-    ShortcutAction::SelectPreviousBreakTemplate,
-    ShortcutAction::SelectNextBreakTemplate,
 ];
 
 const STATS_HISTORY_SCOPE_ACTIONS: [ShortcutAction; 7] = [
@@ -365,12 +361,6 @@ impl ShortcutBindings {
             planner_select_recent: key_token(self.key(ShortcutAction::PlannerSelectRecent)),
             back_profile_manager: key_token(self.key(ShortcutAction::BackProfileManager)),
             profile_edit: key_token(self.key(ShortcutAction::ProfileEdit)),
-            select_previous_break_template: key_token(
-                self.key(ShortcutAction::SelectPreviousBreakTemplate),
-            ),
-            select_next_break_template: key_token(
-                self.key(ShortcutAction::SelectNextBreakTemplate),
-            ),
             back_stats_history: key_token(self.key(ShortcutAction::BackStatsHistory)),
             export_stats_history: key_token(self.key(ShortcutAction::ExportStatsHistory)),
             history_dashboard_select_previous: key_token(
@@ -558,8 +548,6 @@ fn requested_shortcut_char(config: &ShortcutConfig, action: ShortcutAction) -> c
         ShortcutAction::PlannerSelectRecent => &config.planner_select_recent,
         ShortcutAction::BackProfileManager => &config.back_profile_manager,
         ShortcutAction::ProfileEdit => &config.profile_edit,
-        ShortcutAction::SelectPreviousBreakTemplate => &config.select_previous_break_template,
-        ShortcutAction::SelectNextBreakTemplate => &config.select_next_break_template,
         ShortcutAction::BackStatsHistory => &config.back_stats_history,
         ShortcutAction::ExportStatsHistory => &config.export_stats_history,
         ShortcutAction::HistoryDashboardSelectPrevious => &config.history_dashboard_select_previous,
@@ -620,8 +608,6 @@ fn default_shortcut_char(action: ShortcutAction) -> char {
         ShortcutAction::PlannerSelectRecent => 'r',
         ShortcutAction::BackProfileManager => 'p',
         ShortcutAction::ProfileEdit => 'e',
-        ShortcutAction::SelectPreviousBreakTemplate => '[',
-        ShortcutAction::SelectNextBreakTemplate => ']',
         ShortcutAction::BackStatsHistory => 'h',
         ShortcutAction::ExportStatsHistory => 'e',
         ShortcutAction::HistoryDashboardSelectPrevious => 'k',
