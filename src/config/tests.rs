@@ -192,7 +192,7 @@ fn round_trip_full_config() {
         },
         calendar_sync: CalendarSyncConfig::default(),
         profile_automation: Some(ProfileAutomationSettingsConfig {
-            classic: Some(ProfileAutomationConfig {
+            basic: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig {
                     enabled: true,
                     sound: false,
@@ -204,7 +204,7 @@ fn round_trip_full_config() {
                 strict_mode: false,
                 recurring_schedule: RecurringScheduleConfig::default(),
             }),
-            deep_work: Some(ProfileAutomationConfig {
+            standard: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig {
                     enabled: true,
                     sound: true,
@@ -228,7 +228,7 @@ fn round_trip_full_config() {
                     }],
                 },
             }),
-            custom: Some(ProfileAutomationConfig {
+            advanced: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig::default(),
                 auto_start: AutoStartConfig::default(),
                 strict_mode: false,
@@ -1494,6 +1494,92 @@ fn load_with_env_migrates_explicit_legacy_schema_version() {
 }
 
 #[test]
+fn migrate_config_toml_v1_to_v2_maps_profile_ids_and_profile_automation_keys() {
+    let v1: toml::Value = toml::from_str(
+        r#"
+schema_version = 1
+selected_profile = "deep-work"
+
+[[session_templates]]
+name = "Template"
+task_label = "Task"
+profile = "custom"
+blocklist_profile = "Default"
+
+[[weekday_profile_rules]]
+day = "mon"
+profile = "classic"
+blocklist_profile = "Default"
+
+[[automation_triggers]]
+trigger = { type = "focus_completed" }
+action = { type = "apply_defaults", profile = "deep_work", blocklist_profile = "Default" }
+
+[profile_automation.classic]
+strict_mode = false
+
+[profile_automation.deep_work]
+strict_mode = true
+
+[profile_automation.custom]
+strict_mode = false
+"#,
+    )
+    .unwrap();
+    let migrated = migrate_config_toml_to_current(v1).expect("v1 payload should migrate to v2");
+    let root = migrated.as_table().expect("root should be a table");
+
+    assert_eq!(
+        root.get("schema_version").and_then(toml::Value::as_integer),
+        Some(i64::from(CURRENT_CONFIG_SCHEMA_VERSION))
+    );
+    assert_eq!(
+        root.get("selected_profile").and_then(toml::Value::as_str),
+        Some("standard")
+    );
+
+    let profile_automation = root
+        .get("profile_automation")
+        .and_then(toml::Value::as_table)
+        .expect("profile_automation should be a table");
+    assert!(profile_automation.get("basic").is_some());
+    assert!(profile_automation.get("standard").is_some());
+    assert!(profile_automation.get("advanced").is_some());
+    assert!(profile_automation.get("classic").is_none());
+    assert!(profile_automation.get("deep_work").is_none());
+    assert!(profile_automation.get("custom").is_none());
+
+    let session_template_profile = root
+        .get("session_templates")
+        .and_then(toml::Value::as_array)
+        .and_then(|array| array.first())
+        .and_then(toml::Value::as_table)
+        .and_then(|template| template.get("profile"))
+        .and_then(toml::Value::as_str);
+    assert_eq!(session_template_profile, Some("advanced"));
+
+    let weekday_rule_profile = root
+        .get("weekday_profile_rules")
+        .and_then(toml::Value::as_array)
+        .and_then(|array| array.first())
+        .and_then(toml::Value::as_table)
+        .and_then(|rule| rule.get("profile"))
+        .and_then(toml::Value::as_str);
+    assert_eq!(weekday_rule_profile, Some("basic"));
+
+    let automation_trigger_profile = root
+        .get("automation_triggers")
+        .and_then(toml::Value::as_array)
+        .and_then(|array| array.first())
+        .and_then(toml::Value::as_table)
+        .and_then(|trigger| trigger.get("action"))
+        .and_then(toml::Value::as_table)
+        .and_then(|action| action.get("profile"))
+        .and_then(toml::Value::as_str);
+    assert_eq!(automation_trigger_profile, Some("standard"));
+}
+
+#[test]
 fn load_with_env_leniently_parses_newer_schema_version() {
     let temp_base = unique_temp_base("future-version");
     let app_dir = temp_base.join("focustime");
@@ -2044,9 +2130,9 @@ fn normalize_selected_profile_automation_keeps_top_level_legacy_fields() {
         recurring_schedule: RecurringScheduleConfig::default(),
         strict_mode: false,
         profile_automation: Some(ProfileAutomationSettingsConfig {
-            classic: Some(classic),
-            deep_work: Some(deep_work.clone()),
-            custom: None,
+            basic: Some(classic),
+            standard: Some(deep_work.clone()),
+            advanced: None,
         }),
         ..AppConfig::default()
     }
@@ -2093,9 +2179,9 @@ fn normalize_legacy_automation_fields_do_not_override_profile_automation() {
         strict_mode: false,
         recurring_schedule: RecurringScheduleConfig::default(),
         profile_automation: Some(ProfileAutomationSettingsConfig {
-            classic: None,
-            deep_work: Some(deep_work.clone()),
-            custom: None,
+            basic: None,
+            standard: Some(deep_work.clone()),
+            advanced: None,
         }),
         ..AppConfig::default()
     }
