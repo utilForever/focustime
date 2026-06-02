@@ -50,10 +50,10 @@ use output::{
     flush_stdout, print_automation_triggers_command_output, print_backup_output,
     print_blocking_preview_command_output, print_blocklist_category_command_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_calendar_sync_command_output, print_daemon_start_command_output,
-    print_daemon_status_command_output, print_daemon_stop_command_output,
-    print_diagnostics_command_output, print_export_output, print_feature_inventory_output,
-    print_goal_carry_command_output, print_goal_command_output,
+    print_calendar_sync_command_output, print_config_doctor_output, print_config_migration_output,
+    print_daemon_start_command_output, print_daemon_status_command_output,
+    print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
+    print_feature_inventory_output, print_goal_carry_command_output, print_goal_command_output,
     print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
     print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
     print_session_metadata_command_output, print_session_template_command_output,
@@ -150,6 +150,9 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --daemon-start [--daemon-port=PORT] [--json]
   focustime --daemon-status [--json]
   focustime --daemon-stop [--json]
+  focustime --config-doctor [--json]
+  focustime --config-migrate [--json]
+  focustime --config-migrate-apply [--json]
   focustime --diagnostics [--json]
   focustime --blocking-preview [--json]
   focustime --usage-signals [--json]
@@ -220,6 +223,9 @@ Options:
   --daemon-status Show local daemon mode status
   --daemon-stop   Stop a running local daemon
   --daemon-port   Override daemon API listen port (daemon start only; default random loopback port)
+  --config-doctor  Run config diagnostics (invalid/conflicting/stale settings) with remediation guidance
+  --config-migrate  Preview config migration assistant changes for deprecated/renamed keys
+  --config-migrate-apply  Apply config migration assistant changes and write migrated config.toml
   --diagnostics   Show setup diagnostics checks
   --blocking-preview  Preview backend-selected blocking changes without writing
   --usage-signals  Show local command/screen usage summary (top + rare surfaces)
@@ -368,6 +374,10 @@ pub enum CommandKind {
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
+    ConfigDoctor,
+    ConfigMigrate {
+        apply: bool,
+    },
     Diagnostics,
     BlockingPreview,
     UsageSignals,
@@ -470,6 +480,10 @@ enum PrimaryCommand {
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
+    ConfigDoctor,
+    ConfigMigrate {
+        apply: bool,
+    },
     Diagnostics,
     BlockingPreview,
     UsageSignals,
@@ -554,6 +568,10 @@ enum ParsedToken {
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
+    ConfigDoctor,
+    ConfigMigrate {
+        apply: bool,
+    },
     Diagnostics,
     BlockingPreview,
     UsageSignals,
