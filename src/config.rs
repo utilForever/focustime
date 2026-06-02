@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::blocker::{domain_rule_matches_host, normalize_domain_rule};
 use chrono::{Local, NaiveDate};
@@ -174,6 +174,61 @@ impl AppConfigDisk {
             config,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigHealthStatus {
+    Ok,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigHealthSeverity {
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ConfigHealthFinding {
+    pub code: String,
+    pub severity: ConfigHealthSeverity,
+    pub message: String,
+    pub remediation: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ConfigMigrationStepReport {
+    pub from_schema_version: u32,
+    pub to_schema_version: u32,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ConfigDoctorReport {
+    pub action: &'static str,
+    pub config_path: Option<PathBuf>,
+    pub detected_schema_version: Option<u32>,
+    pub current_schema_version: u32,
+    pub status: ConfigHealthStatus,
+    pub migration_steps: Vec<ConfigMigrationStepReport>,
+    pub findings: Vec<ConfigHealthFinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ConfigMigrationReport {
+    pub action: &'static str,
+    pub applied: bool,
+    pub config_path: Option<PathBuf>,
+    pub backup_path: Option<PathBuf>,
+    pub detected_schema_version: Option<u32>,
+    pub target_schema_version: u32,
+    pub changed: bool,
+    pub status: ConfigHealthStatus,
+    pub steps: Vec<ConfigMigrationStepReport>,
+    pub findings: Vec<ConfigHealthFinding>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -2369,19 +2424,664 @@ impl AppConfig {
     }
 }
 
-fn migrate_config_toml_to_current(mut config_toml: toml::Value) -> Option<toml::Value> {
-    let schema_version = detect_config_schema_version(&config_toml)?;
+fn migrate_config_toml_to_current(config_toml: toml::Value) -> Option<toml::Value> {
+    migrate_config_toml_to_current_detailed(config_toml)
+        .ok()
+        .map(|(migrated, _, _)| migrated)
+}
+
+fn migrate_config_toml_to_current_detailed(
+    mut config_toml: toml::Value,
+) -> Result<(toml::Value, u32, Vec<ConfigMigrationStepReport>), String> {
+    let schema_version = detect_config_schema_version(&config_toml)
+        .ok_or_else(|| "Missing or invalid `schema_version` in config.toml.".to_string())?;
+    let mut steps = Vec::new();
     if schema_version > CURRENT_CONFIG_SCHEMA_VERSION {
-        // Forward-compatibility mode: try best-effort deserialization with known fields.
-        return Some(config_toml);
+        // Forward-compatibility mode: keep unknown/newer schema content untouched.
+        return Ok((config_toml, schema_version, steps));
     }
 
     let mut from_schema_version = schema_version;
     while from_schema_version < CURRENT_CONFIG_SCHEMA_VERSION {
-        config_toml = migrate_config_toml_step(config_toml, from_schema_version)?;
-        from_schema_version += 1;
+        let to_schema_version = from_schema_version + 1;
+        config_toml = migrate_config_toml_step(config_toml, from_schema_version).ok_or_else(|| {
+            format!(
+                "Unsupported migration step from schema v{from_schema_version} to v{to_schema_version}."
+            )
+        })?;
+        steps.push(ConfigMigrationStepReport {
+            from_schema_version,
+            to_schema_version,
+            summary: migration_step_summary(from_schema_version, to_schema_version),
+        });
+        from_schema_version = to_schema_version;
     }
-    Some(config_toml)
+    Ok((config_toml, schema_version, steps))
+}
+
+fn migration_step_summary(from_schema_version: u32, to_schema_version: u32) -> String {
+    match (from_schema_version, to_schema_version) {
+        (0, 1) => "Add explicit config schema version marker.".to_string(),
+        (1, 2) => {
+            "Rename legacy profile tokens and profile_automation preset keys to canonical values."
+                .to_string()
+        }
+        _ => format!("Migrate config schema from v{from_schema_version} to v{to_schema_version}."),
+    }
+}
+
+fn config_health_warning(
+    code: impl Into<String>,
+    message: impl Into<String>,
+    remediation: impl Into<String>,
+) -> ConfigHealthFinding {
+    ConfigHealthFinding {
+        code: code.into(),
+        severity: ConfigHealthSeverity::Warning,
+        message: message.into(),
+        remediation: remediation.into(),
+    }
+}
+
+fn config_health_error(
+    code: impl Into<String>,
+    message: impl Into<String>,
+    remediation: impl Into<String>,
+) -> ConfigHealthFinding {
+    ConfigHealthFinding {
+        code: code.into(),
+        severity: ConfigHealthSeverity::Error,
+        message: message.into(),
+        remediation: remediation.into(),
+    }
+}
+
+fn summarize_config_health(findings: &[ConfigHealthFinding]) -> ConfigHealthStatus {
+    if findings
+        .iter()
+        .any(|finding| finding.severity == ConfigHealthSeverity::Error)
+    {
+        return ConfigHealthStatus::Error;
+    }
+    if findings.is_empty() {
+        ConfigHealthStatus::Ok
+    } else {
+        ConfigHealthStatus::Warning
+    }
+}
+
+fn sort_config_health_findings(findings: &mut [ConfigHealthFinding]) {
+    findings.sort_by(|left, right| {
+        left.code
+            .cmp(&right.code)
+            .then_with(|| left.message.cmp(&right.message))
+    });
+}
+
+fn legacy_profile_token_migration_target(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "classic" => Some("basic"),
+        "deep-work" | "deep_work" | "deepwork" => Some("standard"),
+        "custom" => Some("advanced"),
+        _ => None,
+    }
+}
+
+fn collect_legacy_profile_rename_advice(config_toml: &toml::Value) -> Vec<String> {
+    let Some(table) = config_toml.as_table() else {
+        return Vec::new();
+    };
+
+    let mut advice = Vec::new();
+    if let Some(value) = table.get("selected_profile").and_then(toml::Value::as_str) {
+        push_legacy_profile_value_advice(&mut advice, "selected_profile", value);
+    }
+
+    push_legacy_profile_value_array_advice(
+        &mut advice,
+        table,
+        "session_templates",
+        "profile",
+        "session_templates",
+    );
+    push_legacy_profile_value_array_advice(
+        &mut advice,
+        table,
+        "weekday_profile_rules",
+        "profile",
+        "weekday_profile_rules",
+    );
+    push_legacy_automation_trigger_profile_advice(&mut advice, table);
+    push_legacy_profile_automation_key_advice(&mut advice, table);
+
+    advice.sort_unstable();
+    advice.dedup();
+    advice
+}
+
+fn push_legacy_profile_value_array_advice(
+    advice: &mut Vec<String>,
+    table: &toml::map::Map<String, toml::Value>,
+    array_key: &str,
+    field_key: &str,
+    location_prefix: &str,
+) {
+    let Some(array) = table.get(array_key).and_then(toml::Value::as_array) else {
+        return;
+    };
+    for (index, entry) in array.iter().enumerate() {
+        let Some(entry_table) = entry.as_table() else {
+            continue;
+        };
+        let Some(value) = entry_table.get(field_key).and_then(toml::Value::as_str) else {
+            continue;
+        };
+        push_legacy_profile_value_advice(
+            advice,
+            &format!("{location_prefix}[{index}].{field_key}"),
+            value,
+        );
+    }
+}
+
+fn push_legacy_automation_trigger_profile_advice(
+    advice: &mut Vec<String>,
+    table: &toml::map::Map<String, toml::Value>,
+) {
+    let Some(array) = table
+        .get("automation_triggers")
+        .and_then(toml::Value::as_array)
+    else {
+        return;
+    };
+    for (index, entry) in array.iter().enumerate() {
+        let Some(entry_table) = entry.as_table() else {
+            continue;
+        };
+        let Some(action_table) = entry_table.get("action").and_then(toml::Value::as_table) else {
+            continue;
+        };
+        let Some(value) = action_table.get("profile").and_then(toml::Value::as_str) else {
+            continue;
+        };
+        push_legacy_profile_value_advice(
+            advice,
+            &format!("automation_triggers[{index}].action.profile"),
+            value,
+        );
+    }
+}
+
+fn push_legacy_profile_automation_key_advice(
+    advice: &mut Vec<String>,
+    table: &toml::map::Map<String, toml::Value>,
+) {
+    let Some(profile_automation) = table
+        .get("profile_automation")
+        .and_then(toml::Value::as_table)
+    else {
+        return;
+    };
+
+    for (legacy_key, canonical_key) in [
+        ("classic", "basic"),
+        ("deep_work", "standard"),
+        ("deep-work", "standard"),
+        ("custom", "advanced"),
+    ] {
+        if profile_automation.contains_key(legacy_key) {
+            advice.push(format!(
+                "[profile_automation.{legacy_key}] should be renamed to [profile_automation.{canonical_key}]."
+            ));
+        }
+    }
+}
+
+fn push_legacy_profile_value_advice(advice: &mut Vec<String>, location: &str, value: &str) {
+    let Some(target) = legacy_profile_token_migration_target(value) else {
+        return;
+    };
+    advice.push(format!(
+        "{location} uses legacy value \"{value}\"; migrate it to \"{target}\"."
+    ));
+}
+
+fn next_config_backup_path(path: &Path) -> PathBuf {
+    let mut index: usize = 0;
+    loop {
+        let candidate = if index == 0 {
+            path.with_extension("toml.bak")
+        } else {
+            path.with_extension(format!("toml.bak.{index}"))
+        };
+        if !candidate.exists() {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+fn write_atomic_text_file(path: &Path, content: &str) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension("toml.tmp");
+    fs::write(&tmp, content)?;
+    #[cfg(target_os = "windows")]
+    {
+        match fs::rename(&tmp, path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                fs::remove_file(path)?;
+                fs::rename(&tmp, path)
+            }
+            Err(error) => Err(error),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        fs::rename(&tmp, path)
+    }
+}
+
+fn write_migrated_config_with_backup(
+    path: &Path,
+    migrated_toml: &toml::Value,
+) -> Result<PathBuf, String> {
+    let backup_path = next_config_backup_path(path);
+    fs::copy(path, &backup_path).map_err(|error| {
+        format!(
+            "Failed to create config backup at `{}`: {error}",
+            backup_path.display()
+        )
+    })?;
+    let content = toml::to_string_pretty(migrated_toml)
+        .map_err(|error| format!("Failed to serialize migrated config TOML: {error}"))?;
+    write_atomic_text_file(path, &content).map_err(|error| {
+        format!(
+            "Failed to write migrated config to `{}`: {error}",
+            path.display()
+        )
+    })?;
+    Ok(backup_path)
+}
+
+pub fn run_config_doctor() -> ConfigDoctorReport {
+    run_config_doctor_with_path(AppConfig::config_path())
+}
+
+fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> ConfigDoctorReport {
+    let action = "config-doctor";
+    let mut detected_schema_version = None;
+    let mut migration_steps = Vec::new();
+    let mut findings = Vec::new();
+
+    let Some(path) = config_path.clone() else {
+        findings.push(config_health_error(
+            "config.path_unavailable",
+            "Could not determine the config.toml path from the current environment.",
+            "Set the platform config directory environment variables (for example APPDATA on Windows, XDG_CONFIG_HOME/HOME on Unix), then retry.",
+        ));
+        return ConfigDoctorReport {
+            action,
+            config_path,
+            detected_schema_version,
+            current_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+            status: summarize_config_health(&findings),
+            migration_steps,
+            findings,
+        };
+    };
+
+    if !path.exists() {
+        findings.push(config_health_warning(
+            "config.file_missing",
+            format!("Config file `{}` does not exist.", path.display()),
+            "Run focustime once (or create config.toml), then rerun the doctor.",
+        ));
+        return ConfigDoctorReport {
+            action,
+            config_path: Some(path),
+            detected_schema_version,
+            current_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+            status: summarize_config_health(&findings),
+            migration_steps,
+            findings,
+        };
+    }
+
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(error) => {
+            findings.push(config_health_error(
+                "config.read_failed",
+                format!("Failed to read `{}`: {error}", path.display()),
+                "Check filesystem permissions and path accessibility, then rerun the doctor.",
+            ));
+            return ConfigDoctorReport {
+                action,
+                config_path: Some(path),
+                detected_schema_version,
+                current_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+                status: summarize_config_health(&findings),
+                migration_steps,
+                findings,
+            };
+        }
+    };
+
+    let original_toml: toml::Value = match toml::from_str(&content) {
+        Ok(value) => value,
+        Err(error) => {
+            findings.push(config_health_error(
+                "config.toml_parse_error",
+                format!("config.toml is not valid TOML: {error}"),
+                "Fix the TOML syntax error and rerun the doctor.",
+            ));
+            return ConfigDoctorReport {
+                action,
+                config_path: Some(path),
+                detected_schema_version,
+                current_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+                status: summarize_config_health(&findings),
+                migration_steps,
+                findings,
+            };
+        }
+    };
+
+    let rename_advice = collect_legacy_profile_rename_advice(&original_toml);
+    let (migrated_toml, schema_version, steps) =
+        match migrate_config_toml_to_current_detailed(original_toml.clone()) {
+            Ok(result) => result,
+            Err(error) => {
+                findings.push(config_health_error(
+                    "config.migration_failed",
+                    format!("Config migration analysis failed: {error}"),
+                    "Ensure schema_version is valid and the file is structurally correct TOML.",
+                ));
+                return ConfigDoctorReport {
+                    action,
+                    config_path: Some(path),
+                    detected_schema_version,
+                    current_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+                    status: summarize_config_health(&findings),
+                    migration_steps,
+                    findings,
+                };
+            }
+        };
+    detected_schema_version = Some(schema_version);
+    migration_steps = steps;
+
+    if schema_version > CURRENT_CONFIG_SCHEMA_VERSION {
+        findings.push(config_health_warning(
+            "config.schema_newer_than_supported",
+            format!(
+                "Config schema version {schema_version} is newer than this build's supported schema version {}.",
+                CURRENT_CONFIG_SCHEMA_VERSION
+            ),
+            "Use a focustime build that supports this schema before writing config changes.",
+        ));
+    } else if schema_version < CURRENT_CONFIG_SCHEMA_VERSION {
+        findings.push(config_health_warning(
+            "config.schema_outdated",
+            format!(
+                "Config schema version {schema_version} is older than current schema version {}.",
+                CURRENT_CONFIG_SCHEMA_VERSION
+            ),
+            "Run `focustime --config-migrate` to preview migration and `focustime --config-migrate-apply` to apply it.",
+        ));
+    }
+
+    for advice in rename_advice {
+        findings.push(config_health_warning(
+            "config.legacy_profile_token",
+            advice,
+            "Run `focustime --config-migrate` to preview canonical profile-key migrations.",
+        ));
+    }
+
+    let disk: AppConfigDisk = match migrated_toml.try_into() {
+        Ok(disk) => disk,
+        Err(error) => {
+            findings.push(config_health_error(
+                "config.deserialize_failed",
+                format!("Config could not be deserialized after migration steps: {error}"),
+                "Fix incompatible field types/structures in config.toml, then rerun the doctor.",
+            ));
+            return ConfigDoctorReport {
+                action,
+                config_path: Some(path),
+                detected_schema_version,
+                current_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+                status: summarize_config_health(&findings),
+                migration_steps,
+                findings,
+            };
+        }
+    };
+
+    let normalized = disk.config.normalize();
+    for warning in detect_legacy_config_deprecation_warnings(&normalized) {
+        findings.push(config_health_warning(
+            "config.deprecated_field_in_use",
+            warning,
+            "Update config.toml to canonical fields and rerun the doctor.",
+        ));
+    }
+    if let Err(error) = validate_automation_trigger_rules(
+        &normalized.automation_triggers,
+        &normalized.blocklist_profiles,
+        &normalized.session_templates,
+    ) {
+        findings.push(config_health_error(
+            "config.automation_trigger_conflict",
+            format!("Automation trigger configuration conflict: {error}"),
+            "Fix the conflicting trigger rules and rerun the doctor.",
+        ));
+    }
+
+    sort_config_health_findings(&mut findings);
+    ConfigDoctorReport {
+        action,
+        config_path: Some(path),
+        detected_schema_version,
+        current_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+        status: summarize_config_health(&findings),
+        migration_steps,
+        findings,
+    }
+}
+
+pub fn run_config_migration_assistant(apply: bool) -> ConfigMigrationReport {
+    run_config_migration_assistant_with_path(apply, AppConfig::config_path())
+}
+
+fn run_config_migration_assistant_with_path(
+    apply: bool,
+    config_path: Option<PathBuf>,
+) -> ConfigMigrationReport {
+    let action = if apply {
+        "config-migrate-apply"
+    } else {
+        "config-migrate"
+    };
+    let mut detected_schema_version = None;
+    let mut backup_path = None;
+    let mut steps = Vec::new();
+    let mut changed = false;
+    let mut applied = false;
+    let mut findings = Vec::new();
+
+    let Some(path) = config_path.clone() else {
+        findings.push(config_health_error(
+            "config.path_unavailable",
+            "Could not determine the config.toml path from the current environment.",
+            "Set the platform config directory environment variables (for example APPDATA on Windows, XDG_CONFIG_HOME/HOME on Unix), then retry.",
+        ));
+        return ConfigMigrationReport {
+            action,
+            applied,
+            config_path,
+            backup_path,
+            detected_schema_version,
+            target_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+            changed,
+            status: summarize_config_health(&findings),
+            steps,
+            findings,
+        };
+    };
+
+    if !path.exists() {
+        findings.push(config_health_warning(
+            "config.file_missing",
+            format!("Config file `{}` does not exist.", path.display()),
+            "Run focustime once (or create config.toml), then rerun config migration.",
+        ));
+        return ConfigMigrationReport {
+            action,
+            applied,
+            config_path: Some(path),
+            backup_path,
+            detected_schema_version,
+            target_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+            changed,
+            status: summarize_config_health(&findings),
+            steps,
+            findings,
+        };
+    }
+
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(error) => {
+            findings.push(config_health_error(
+                "config.read_failed",
+                format!("Failed to read `{}`: {error}", path.display()),
+                "Check filesystem permissions and path accessibility, then rerun migration.",
+            ));
+            return ConfigMigrationReport {
+                action,
+                applied,
+                config_path: Some(path),
+                backup_path,
+                detected_schema_version,
+                target_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+                changed,
+                status: summarize_config_health(&findings),
+                steps,
+                findings,
+            };
+        }
+    };
+
+    let original_toml: toml::Value = match toml::from_str(&content) {
+        Ok(value) => value,
+        Err(error) => {
+            findings.push(config_health_error(
+                "config.toml_parse_error",
+                format!("config.toml is not valid TOML: {error}"),
+                "Fix the TOML syntax error and rerun config migration.",
+            ));
+            return ConfigMigrationReport {
+                action,
+                applied,
+                config_path: Some(path),
+                backup_path,
+                detected_schema_version,
+                target_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+                changed,
+                status: summarize_config_health(&findings),
+                steps,
+                findings,
+            };
+        }
+    };
+
+    for advice in collect_legacy_profile_rename_advice(&original_toml) {
+        findings.push(config_health_warning(
+            "config.legacy_profile_token",
+            advice,
+            "Use canonical profile tokens (`basic`, `standard`, `advanced`).",
+        ));
+    }
+
+    let (migrated_toml, schema_version, migration_steps) =
+        match migrate_config_toml_to_current_detailed(original_toml.clone()) {
+            Ok(result) => result,
+            Err(error) => {
+                findings.push(config_health_error(
+                    "config.migration_failed",
+                    format!("Migration analysis failed: {error}"),
+                    "Ensure schema_version is valid and the file is structurally correct TOML.",
+                ));
+                return ConfigMigrationReport {
+                    action,
+                    applied,
+                    config_path: Some(path),
+                    backup_path,
+                    detected_schema_version,
+                    target_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+                    changed,
+                    status: summarize_config_health(&findings),
+                    steps,
+                    findings,
+                };
+            }
+        };
+    detected_schema_version = Some(schema_version);
+    steps = migration_steps;
+    changed = original_toml != migrated_toml;
+
+    if schema_version > CURRENT_CONFIG_SCHEMA_VERSION {
+        findings.push(config_health_warning(
+            "config.schema_newer_than_supported",
+            format!(
+                "Config schema version {schema_version} is newer than this build's supported schema version {}.",
+                CURRENT_CONFIG_SCHEMA_VERSION
+            ),
+            "Use a focustime build that supports this schema before applying migration.",
+        ));
+    } else if !changed {
+        findings.push(config_health_warning(
+            "config.already_current",
+            "Config already matches the current migration schema and canonical key mapping."
+                .to_string(),
+            "No migration apply step is required.",
+        ));
+    }
+
+    if apply && changed && schema_version <= CURRENT_CONFIG_SCHEMA_VERSION {
+        match write_migrated_config_with_backup(&path, &migrated_toml) {
+            Ok(created_backup) => {
+                backup_path = Some(created_backup);
+                applied = true;
+            }
+            Err(error) => {
+                findings.push(config_health_error(
+                    "config.apply_failed",
+                    error,
+                    "Fix the file system error, restore from backup if needed, and retry migration apply.",
+                ));
+            }
+        }
+    }
+
+    sort_config_health_findings(&mut findings);
+    ConfigMigrationReport {
+        action,
+        applied,
+        config_path: Some(path),
+        backup_path,
+        detected_schema_version,
+        target_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+        changed,
+        status: summarize_config_health(&findings),
+        steps,
+        findings,
+    }
 }
 
 fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> Vec<String> {
@@ -2446,10 +3146,7 @@ fn migrate_config_toml_step(
 
 fn migrate_config_toml_legacy_to_v1(mut config_toml: toml::Value) -> Option<toml::Value> {
     let table = config_toml.as_table_mut()?;
-    table.insert(
-        "schema_version".to_string(),
-        toml::Value::Integer(i64::from(CURRENT_CONFIG_SCHEMA_VERSION)),
-    );
+    table.insert("schema_version".to_string(), toml::Value::Integer(1));
     Some(config_toml)
 }
 
