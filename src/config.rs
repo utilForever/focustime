@@ -2460,7 +2460,7 @@ fn migrate_config_toml_to_current_detailed(
     canonicalize_legacy_profile_aliases(&mut config_toml);
     if canonicalization_input != config_toml {
         steps.push(ConfigMigrationStepReport {
-            from_schema_version: from_schema_version,
+            from_schema_version,
             to_schema_version: from_schema_version,
             summary: "Canonicalize legacy profile aliases in config values.".to_string(),
         });
