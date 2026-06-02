@@ -307,6 +307,22 @@ Milestone policy:
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
+### Low-value feature deprecation pipeline
+
+`focustime` applies a staged retirement pipeline to low-value features:
+
+1. **warning:** command remains available and emits warning notices.
+2. **migration_guidance:** command remains available and emphasizes migration path.
+3. **removal:** command is blocked with explicit migration guidance.
+
+Current low-value feature schedule:
+
+| Feature | Warning from | Migration guidance from | Removal from | Migration guidance | Release-notes hook |
+| --- | --- | --- | --- | --- | --- |
+| Encrypted sync bundles (`--sync-backup`, `--sync-restore`) | v0.14.2 | v0.15.0 | v0.16.0 | Use local backup/restore (`--backup`, `--restore`) for portable recovery. | Deprecated encrypted sync bundle commands and directed users to backup/restore workflows. |
+
+Setup diagnostics only surfaces low-value deprecation notices after command usage is detected in local usage signals.
+
 ### CLI JSON/error contract
 
 - `--json` success responses are emitted to `stdout` as JSON and exit with code `0`.
