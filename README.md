@@ -247,14 +247,6 @@ cargo run -- --backup=./reports --json
 cargo run -- --restore
 cargo run -- --restore=./reports --json
 
-# Create encrypted cross-device sync snapshot (writes focustime-sync.toml)
-cargo run -- --sync-backup --sync-passphrase=secret
-cargo run -- --sync-backup=./reports --sync-passphrase=secret --json
-
-# Restore from encrypted cross-device sync snapshot
-cargo run -- --sync-restore --sync-passphrase=secret
-cargo run -- --sync-restore=./reports --sync-passphrase=secret --json
-
 # Export stats to current directory or a target directory
 cargo run -- --export
 cargo run -- --export=./reports --json
@@ -276,11 +268,10 @@ Backup/restore behavior:
 - `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
 - Runtime persistence is canonical-path only; if only legacy `stats.toml` exists, copy it to the canonical stats path (the backup/restore commands can help).
 
-Encrypted sync behavior:
+Retired workflow notice:
 
-- `--sync-backup` writes an encrypted `focustime-sync.toml` bundle that includes config/stats payload hashes and snapshot lineage metadata.
-- `--sync-restore` verifies bundle integrity before replacing local files and rejects conflicting local changes since the last encrypted snapshot.
-- Use `--sync-passphrase` (or `FOCUSTIME_SYNC_PASSPHRASE`) with encrypted sync commands; passphrases are runtime-only and never persisted.
+- Encrypted sync commands (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) are retired.
+- Use local backup/restore (`--backup`, `--restore`) for portable recovery workflows.
 
 ### Integration framework foundation
 
@@ -320,21 +311,13 @@ Milestone policy:
 - **Unreleased/main branch:** config migration assistant + doctor commands are available (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
-### Low-value feature deprecation pipeline
+### Low-value feature retirements
 
-`focustime` applies a staged retirement pipeline to low-value features:
+Retired low-value command surfaces and replacements:
 
-1. **warning:** command remains available and emits warning notices.
-2. **migration_guidance:** command remains available and emphasizes migration path.
-3. **removal:** command is blocked with explicit migration guidance.
-
-Current low-value feature schedule:
-
-| Feature | Warning from | Migration guidance from | Removal from | Migration guidance | Release-notes hook |
-| --- | --- | --- | --- | --- | --- |
-| Encrypted sync bundles (`--sync-backup`, `--sync-restore`) | v0.14.2 | v0.15.0 | v0.16.0 | Use local backup/restore (`--backup`, `--restore`) for portable recovery. | Deprecated encrypted sync bundle commands and directed users to backup/restore workflows. |
-
-Setup diagnostics only surfaces low-value deprecation notices after command usage is detected in local usage signals.
+| Retired commands | Replacement behavior |
+| --- | --- |
+| `--sync-backup`, `--sync-restore`, `--sync-passphrase` | Use `--backup` and `--restore` for portable recovery and migration workflows. |
 
 ### CLI JSON/error contract
 

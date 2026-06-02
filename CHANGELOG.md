@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Config migration assistant and doctor workflows (#384):** added `--config-migrate`, `--config-migrate-apply`, and `--config-doctor` command surfaces with deterministic text/JSON reporting for config schema/key migrations, stale/deprecated field guidance, and conflict diagnostics.
 
+### Changed
+
+- **Low-value encrypted sync retirement (#392):** removed `--sync-backup`, `--sync-restore`, and `--sync-passphrase` command surfaces plus related setup diagnostics/runtime branches, and aligned migration guidance to local backup/restore workflows (`--backup`, `--restore`).
+
 ## [0.14.2] - 2026-06-01
 
 ### Changed
