@@ -117,6 +117,8 @@ fn usage_signal_recording_normalizes_and_accumulates_counts() {
 
     assert_eq!(stats.command_usage_counts.get("status"), Some(&2));
     assert_eq!(stats.screen_usage_counts.get("site-manager"), Some(&1));
+    assert_eq!(stats.command_usage_count("status"), 2);
+    assert_eq!(stats.command_usage_count("unknown"), 0);
 }
 
 #[test]
