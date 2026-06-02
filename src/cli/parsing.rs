@@ -68,6 +68,8 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::ScheduleDelay
             | ParsedToken::BreakGlassTrigger
             | ParsedToken::BreakGlassCancel
+            | ParsedToken::ConfigDoctor
+            | ParsedToken::ConfigMigrate { .. }
             | ParsedToken::Diagnostics
             | ParsedToken::CalendarSync
             | ParsedToken::BlockingPreview
@@ -207,6 +209,13 @@ pub(super) fn parse_primary_command(
             ParsedToken::BreakGlassCancel => {
                 set_primary_command(&mut primary, PrimaryCommand::BreakGlassCancel)?
             }
+            ParsedToken::ConfigDoctor => {
+                set_primary_command(&mut primary, PrimaryCommand::ConfigDoctor)?
+            }
+            ParsedToken::ConfigMigrate { apply } => set_primary_command(
+                &mut primary,
+                PrimaryCommand::ConfigMigrate { apply: *apply },
+            )?,
             ParsedToken::Diagnostics => {
                 set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
             }
@@ -480,6 +489,14 @@ pub(super) fn finalize_cli_action(
         })),
         Some(PrimaryCommand::BreakGlassCancel) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::BreakGlassCancel,
+            output,
+        })),
+        Some(PrimaryCommand::ConfigDoctor) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::ConfigDoctor,
+            output,
+        })),
+        Some(PrimaryCommand::ConfigMigrate { apply }) => Ok(CliAction::RunCommand(CliCommand {
+            kind: CommandKind::ConfigMigrate { apply },
             output,
         })),
         Some(PrimaryCommand::Diagnostics) => Ok(CliAction::RunCommand(CliCommand {
@@ -1151,6 +1168,9 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::ScheduleDelay => "--schedule-delay",
         PrimaryCommand::BreakGlassTrigger => "--break-glass-trigger",
         PrimaryCommand::BreakGlassCancel => "--break-glass-cancel",
+        PrimaryCommand::ConfigDoctor => "--config-doctor",
+        PrimaryCommand::ConfigMigrate { apply: false } => "--config-migrate",
+        PrimaryCommand::ConfigMigrate { apply: true } => "--config-migrate-apply",
         PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::CalendarSync => "--calendar-sync",
         PrimaryCommand::BlockingPreview => "--blocking-preview",

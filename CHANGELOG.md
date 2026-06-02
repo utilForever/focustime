@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Config migration assistant and doctor workflows (#384):** added `--config-migrate`, `--config-migrate-apply`, and `--config-doctor` command surfaces with deterministic text/JSON reporting for config schema/key migrations, stale/deprecated field guidance, and conflict diagnostics.
+
 ## [0.14.2] - 2026-06-01
 
 ### Changed

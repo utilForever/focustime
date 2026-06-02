@@ -841,6 +841,50 @@ fn parse_diagnostics_supports_json_mode() {
 }
 
 #[test]
+fn parse_config_doctor_supports_json_mode() {
+    let parsed = parse(&["--config-doctor", "--json"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::ConfigDoctor,
+            output: OutputMode::Json
+        })
+    );
+}
+
+#[test]
+fn parse_config_migrate_supports_text_mode() {
+    let parsed = parse(&["--config-migrate"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::ConfigMigrate { apply: false },
+            output: OutputMode::Text
+        })
+    );
+}
+
+#[test]
+fn parse_config_migrate_apply_supports_json_mode() {
+    let parsed = parse(&["--config-migrate-apply", "--json"]).unwrap();
+    assert_eq!(
+        parsed,
+        CliAction::RunCommand(CliCommand {
+            kind: CommandKind::ConfigMigrate { apply: true },
+            output: OutputMode::Json
+        })
+    );
+}
+
+#[test]
+fn parse_rejects_config_migrate_and_apply_combination() {
+    let error = parse(&["--config-migrate", "--config-migrate-apply"]).unwrap_err();
+    assert!(error.contains("Multiple primary commands"));
+    assert!(error.contains("--config-migrate"));
+    assert!(error.contains("--config-migrate-apply"));
+}
+
+#[test]
 fn diagnostics_output_includes_deprecation_warnings_field() {
     let app = App::default();
     let payload = build_diagnostics_command_output(&app.setup_diagnostics);

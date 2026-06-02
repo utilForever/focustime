@@ -106,6 +106,9 @@
       "--compare-profile",
       "--compare-task",
       "--compare-time",
+      "--config-doctor",
+      "--config-migrate",
+      "--config-migrate-apply",
       "--daemon-port",
       "--daemon-start",
       "--daemon-status",
@@ -633,7 +636,10 @@
       "surface": "integration",
       "description": "Provide system diagnostics and setup checks for blocker, notifications, and integrations.",
       "cli_flags": [
-        "--diagnostics"
+        "--diagnostics",
+        "--config-doctor",
+        "--config-migrate",
+        "--config-migrate-apply"
       ],
       "value": 3,
       "complexity": 3,

@@ -15,6 +15,9 @@ use crate::cli::{
     UsageSignalsCommandOutput, WeekdayRulesCommandOutput, Write, format_schedule_conflict,
     inspect_schedule_conflicts_from_config, io,
 };
+use crate::config::{
+    ConfigDoctorReport, ConfigHealthFinding, ConfigHealthStatus, ConfigMigrationReport,
+};
 use chrono::{Local, TimeZone};
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -1020,6 +1023,119 @@ pub(super) fn build_schedule_inspection_output(
     ScheduleInspectionOutput {
         conflict_count: conflicts.len(),
         conflicts,
+    }
+}
+
+pub(super) fn print_config_doctor_output(payload: &ConfigDoctorReport) {
+    println!(
+        "Config doctor status: {}",
+        config_health_status_id(payload.status)
+    );
+    println!(
+        "Config path: {}",
+        payload
+            .config_path
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "unavailable".to_string())
+    );
+    println!(
+        "Detected schema version: {}",
+        payload
+            .detected_schema_version
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    );
+    println!("Current schema version: {}", payload.current_schema_version);
+    print_migration_steps(&payload.migration_steps);
+    print_config_health_findings(&payload.findings);
+}
+
+pub(super) fn print_config_migration_output(payload: &ConfigMigrationReport) {
+    println!("Config migration command: {}", payload.action);
+    println!(
+        "Config path: {}",
+        payload
+            .config_path
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "unavailable".to_string())
+    );
+    println!(
+        "Detected schema version: {}",
+        payload
+            .detected_schema_version
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    );
+    println!("Target schema version: {}", payload.target_schema_version);
+    println!(
+        "Migration changes detected: {}",
+        if payload.changed { "yes" } else { "no" }
+    );
+    println!(
+        "Migration applied: {}",
+        if payload.applied { "yes" } else { "no" }
+    );
+    println!(
+        "Migration status: {}",
+        config_health_status_id(payload.status)
+    );
+    println!(
+        "Backup path: {}",
+        payload
+            .backup_path
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "none".to_string())
+    );
+    print_migration_steps(&payload.steps);
+    print_config_health_findings(&payload.findings);
+}
+
+fn print_migration_steps(steps: &[crate::config::ConfigMigrationStepReport]) {
+    if steps.is_empty() {
+        println!("Migration steps: none");
+        return;
+    }
+    println!("Migration steps:");
+    for step in steps {
+        println!(
+            "  - v{} -> v{}: {}",
+            step.from_schema_version, step.to_schema_version, step.summary
+        );
+    }
+}
+
+fn print_config_health_findings(findings: &[ConfigHealthFinding]) {
+    if findings.is_empty() {
+        println!("Findings: none");
+        return;
+    }
+    println!("Findings:");
+    for finding in findings {
+        println!(
+            "  - [{}:{}] {}",
+            finding.code,
+            config_health_severity_id(finding.severity),
+            finding.message
+        );
+        println!("    remediation: {}", finding.remediation);
+    }
+}
+
+fn config_health_status_id(status: ConfigHealthStatus) -> &'static str {
+    match status {
+        ConfigHealthStatus::Ok => "ok",
+        ConfigHealthStatus::Warning => "warning",
+        ConfigHealthStatus::Error => "error",
+    }
+}
+
+fn config_health_severity_id(severity: crate::config::ConfigHealthSeverity) -> &'static str {
+    match severity {
+        crate::config::ConfigHealthSeverity::Warning => "warning",
+        crate::config::ConfigHealthSeverity::Error => "error",
     }
 }
 

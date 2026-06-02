@@ -10,7 +10,9 @@ use std::{
 };
 
 use crate::app::App;
-use crate::config::validate_automation_trigger_rules;
+use crate::config::{
+    run_config_doctor, run_config_migration_assistant, validate_automation_trigger_rules,
+};
 use crate::daemon;
 use crate::feature_inventory::{
     DeprecationStage, build_feature_inventory_report, command_deprecation_notice_for_version,
@@ -43,10 +45,10 @@ use crate::cli::{
     print_automation_triggers_command_output, print_backup_output,
     print_blocking_preview_command_output, print_blocklist_category_command_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_calendar_sync_command_output, print_daemon_start_command_output,
-    print_daemon_status_command_output, print_daemon_stop_command_output,
-    print_diagnostics_command_output, print_export_output, print_feature_inventory_output,
-    print_goal_carry_command_output, print_goal_command_output,
+    print_calendar_sync_command_output, print_config_doctor_output, print_config_migration_output,
+    print_daemon_start_command_output, print_daemon_status_command_output,
+    print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
+    print_feature_inventory_output, print_goal_carry_command_output, print_goal_command_output,
     print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
     print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
     print_session_metadata_command_output, print_session_template_command_output,
@@ -126,6 +128,10 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::ScheduleDelay => execute_schedule_delay_command(cli_command.output),
         CommandKind::BreakGlassTrigger => execute_break_glass_trigger_command(cli_command.output),
         CommandKind::BreakGlassCancel => execute_break_glass_cancel_command(cli_command.output),
+        CommandKind::ConfigDoctor => execute_config_doctor_command(cli_command.output),
+        CommandKind::ConfigMigrate { apply } => {
+            execute_config_migrate_command(apply, cli_command.output)
+        }
         CommandKind::Diagnostics => execute_diagnostics_command(cli_command.output),
         CommandKind::BlockingPreview => execute_blocking_preview_command(cli_command.output),
         CommandKind::UsageSignals => execute_usage_signals_command(cli_command.output),
@@ -215,6 +221,8 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::ScheduleDelay => Some("schedule-delay"),
         CommandKind::BreakGlassTrigger => Some("break-glass-trigger"),
         CommandKind::BreakGlassCancel => Some("break-glass-cancel"),
+        CommandKind::ConfigDoctor => None,
+        CommandKind::ConfigMigrate { .. } => None,
         CommandKind::Diagnostics => Some("diagnostics"),
         CommandKind::BlockingPreview => Some("blocking-preview"),
         CommandKind::Status { .. } => Some("status"),
@@ -1760,6 +1768,24 @@ fn execute_break_glass_cancel_command(output: OutputMode) -> Result<(), String> 
     app.record_command_usage_for_cli("break-glass-cancel");
     app.cancel_break_glass_for_cli()?;
     emit_break_glass_command_output("break-glass-cancel", &app, output)
+}
+
+fn execute_config_doctor_command(output: OutputMode) -> Result<(), String> {
+    let payload = run_config_doctor();
+    match output {
+        OutputMode::Text => print_config_doctor_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn execute_config_migrate_command(apply: bool, output: OutputMode) -> Result<(), String> {
+    let payload = run_config_migration_assistant(apply);
+    match output {
+        OutputMode::Text => print_config_migration_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
 }
 
 fn execute_diagnostics_command(output: OutputMode) -> Result<(), String> {

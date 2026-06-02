@@ -72,5 +72,5 @@
 | `calendar-busy-window-sync` | Integration | 3 | 3.75 | 0.80 | merge | --calendar-sync |
 | `daemon-api-lifecycle` | Integration | 3 | 4.25 | 0.71 | merge | --daemon-start, --daemon-status, --daemon-stop, --daemon-port |
 | `encrypted-sync-bundles` | Integration | 2 | 5.00 | 0.40 | remove | --sync-backup, --sync-restore, --sync-passphrase |
-| `setup-diagnostics-and-health-signals` | Integration | 3 | 2.75 | 1.09 | merge | --diagnostics |
+| `setup-diagnostics-and-health-signals` | Integration | 3 | 2.75 | 1.09 | merge | --diagnostics, --config-doctor, --config-migrate, --config-migrate-apply |
 | `wakatime-heartbeat-pipeline` | Integration | 4 | 3.00 | 1.33 | keep | (none) |

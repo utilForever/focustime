@@ -213,6 +213,17 @@ cargo run -- --break-glass-cancel
 cargo run -- --diagnostics
 cargo run -- --diagnostics --json
 
+# Run config doctor checks (invalid/conflicting/stale config with remediation)
+cargo run -- --config-doctor
+cargo run -- --config-doctor --json
+
+# Preview/apply config migration assistant changes for deprecated/renamed keys
+cargo run -- --config-migrate
+cargo run -- --config-migrate --json
+# Apply mode writes migrated config.toml and creates a backup first
+cargo run -- --config-migrate-apply
+cargo run -- --config-migrate-apply --json
+
 # Preview backend-selected blocking changes without writing
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
@@ -292,8 +303,9 @@ Set `enabled = []` to disable all built-in integrations.
 
 ### Legacy compatibility deprecation milestones
 
-`focustime --diagnostics` and the TUI Setup Diagnostics screen report targeted
-deprecation warnings when legacy compatibility fields are detected.
+`focustime --diagnostics`, `focustime --config-doctor`, and the TUI Setup
+Diagnostics screen report targeted deprecation warnings when legacy
+compatibility fields are detected.
 
 | Legacy field/path                                                                    | Canonical replacement                                                                                                                             | Removal milestone |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -305,6 +317,7 @@ Milestone policy:
 
 - **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
+- **Unreleased/main branch:** config migration assistant + doctor commands are available (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
 ### Low-value feature deprecation pipeline

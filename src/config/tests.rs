@@ -1650,6 +1650,207 @@ break_to_focus = true
 }
 
 #[test]
+fn migrate_config_toml_current_schema_canonicalizes_legacy_profile_aliases() {
+    let v2_with_legacy_alias: toml::Value = toml::from_str(
+        r#"
+schema_version = 2
+selected_profile = "deep_work"
+"#,
+    )
+    .unwrap();
+
+    let migrated = migrate_config_toml_to_current(v2_with_legacy_alias)
+        .expect("current-schema payload should still canonicalize aliases");
+    let root = migrated.as_table().expect("root should be a table");
+    assert_eq!(
+        root.get("selected_profile").and_then(toml::Value::as_str),
+        Some("standard")
+    );
+}
+
+#[test]
+fn migrate_config_toml_legacy_to_v1_sets_intermediate_schema_version_to_one() {
+    let legacy: toml::Value = toml::from_str("focus_secs = 1500").unwrap();
+    let migrated = migrate_config_toml_legacy_to_v1(legacy).expect("legacy migration should work");
+    let root = migrated.as_table().expect("root should be a table");
+    assert_eq!(
+        root.get("schema_version").and_then(toml::Value::as_integer),
+        Some(1)
+    );
+}
+
+#[test]
+fn config_doctor_reports_parse_errors() {
+    let temp_base = unique_temp_base("doctor-parse-error");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    let config_path = app_dir.join("config.toml");
+    fs::write(&config_path, "this is not valid toml !!!").unwrap();
+
+    let report = run_config_doctor_with_path(Some(config_path.clone()));
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(report.action, "config-doctor");
+    assert_eq!(report.status, ConfigHealthStatus::Error);
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|finding| finding.code == "config.toml_parse_error")
+    );
+}
+
+#[test]
+fn config_doctor_reports_schema_and_legacy_profile_findings() {
+    let temp_base = unique_temp_base("doctor-schema-legacy-profile");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    let config_path = app_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+schema_version = 1
+selected_profile = "deep_work"
+"#,
+    )
+    .unwrap();
+
+    let report = run_config_doctor_with_path(Some(config_path.clone()));
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(report.status, ConfigHealthStatus::Warning);
+    assert!(!report.migration_steps.is_empty());
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|finding| finding.code == "config.schema_outdated")
+    );
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|finding| finding.code == "config.legacy_profile_token")
+    );
+}
+
+#[test]
+fn config_doctor_stops_after_newer_schema_warning() {
+    let temp_base = unique_temp_base("doctor-newer-schema");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    let config_path = app_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+schema_version = 99
+selected_profile = "standard"
+future_only = "ignored"
+"#,
+    )
+    .unwrap();
+
+    let report = run_config_doctor_with_path(Some(config_path.clone()));
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(report.status, ConfigHealthStatus::Warning);
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|finding| finding.code == "config.schema_newer_than_supported")
+    );
+    assert!(
+        report
+            .findings
+            .iter()
+            .all(|finding| finding.code != "config.deserialize_failed")
+    );
+}
+
+#[test]
+fn config_doctor_detects_legacy_automation_fields_before_normalization() {
+    let temp_base = unique_temp_base("doctor-legacy-automation-pre-normalize");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    let config_path = app_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+[notifications]
+enabled = true
+sound = true
+"#,
+    )
+    .unwrap();
+
+    let report = run_config_doctor_with_path(Some(config_path.clone()));
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert!(
+        report.findings.iter().any(|finding| {
+            finding.code == "config.deprecated_field_in_use"
+                && finding
+                    .message
+                    .contains("Deprecated top-level automation fields")
+        }),
+        "expected deprecation warning for top-level automation fields"
+    );
+}
+
+#[test]
+fn config_migration_assistant_preview_reports_changes_without_writing() {
+    let temp_base = unique_temp_base("migration-preview");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    let config_path = app_dir.join("config.toml");
+    let original = r#"
+schema_version = 1
+selected_profile = "deep_work"
+"#;
+    fs::write(&config_path, original).unwrap();
+
+    let report = run_config_migration_assistant_with_path(false, Some(config_path.clone()));
+    let persisted = fs::read_to_string(&config_path).unwrap();
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(report.action, "config-migrate");
+    assert!(!report.applied);
+    assert!(report.changed);
+    assert!(report.backup_path.is_none());
+    assert_eq!(persisted, original);
+}
+
+#[test]
+fn config_migration_assistant_apply_writes_migrated_config_and_backup() {
+    let temp_base = unique_temp_base("migration-apply");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    let config_path = app_dir.join("config.toml");
+    let original = r#"
+schema_version = 1
+selected_profile = "deep_work"
+"#;
+    fs::write(&config_path, original).unwrap();
+
+    let report = run_config_migration_assistant_with_path(true, Some(config_path.clone()));
+    let migrated = fs::read_to_string(&config_path).unwrap();
+    let backup_path = report
+        .backup_path
+        .clone()
+        .expect("backup path should be recorded when apply succeeds");
+    let backup = fs::read_to_string(&backup_path).unwrap();
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(report.action, "config-migrate-apply");
+    assert!(report.applied);
+    assert!(report.changed);
+    assert!(migrated.contains("schema_version = 2"));
+    assert!(migrated.contains("selected_profile = \"standard\""));
+    assert_eq!(backup, original);
+}
+
+#[test]
 fn load_with_env_leniently_parses_newer_schema_version() {
     let temp_base = unique_temp_base("future-version");
     let app_dir = temp_base.join("focustime");
