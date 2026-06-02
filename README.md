@@ -270,8 +270,8 @@ Backup/restore behavior:
 
 Retired workflow notice:
 
-- Encrypted sync commands (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) are retired.
-- Use local backup/restore (`--backup`, `--restore`) for portable recovery workflows.
+- `--sync-backup` and `--sync-restore` are retired; use local `--backup` and `--restore` for portable recovery workflows.
+- `--sync-passphrase` is also retired; there is no direct replacement because encrypted sync/backups are no longer supported.
 
 ### Integration framework foundation
 
@@ -317,7 +317,8 @@ Retired low-value command surfaces and replacements:
 
 | Retired commands | Replacement behavior |
 | --- | --- |
-| `--sync-backup`, `--sync-restore`, `--sync-passphrase` | Use `--backup` and `--restore` for portable recovery and migration workflows. |
+| `--sync-backup`, `--sync-restore` | Use `--backup` and `--restore` for portable recovery and migration workflows. |
+| `--sync-passphrase` | No direct replacement; encrypted sync/backups are no longer supported. |
 
 ### CLI JSON/error contract
 
