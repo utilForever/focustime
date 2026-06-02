@@ -2892,14 +2892,15 @@ fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> ConfigDoctorRepo
         }
     };
 
-    let normalized = disk.config.normalize();
-    for warning in detect_legacy_config_deprecation_warnings(&normalized) {
+    let config = disk.config;
+    for warning in detect_legacy_config_deprecation_warnings(&config) {
         findings.push(config_health_warning(
             "config.deprecated_field_in_use",
             warning,
             "Update config.toml to canonical fields and rerun the doctor.",
         ));
     }
+    let normalized = config.normalize();
     if let Err(error) = validate_automation_trigger_rules(
         &normalized.automation_triggers,
         &normalized.blocklist_profiles,

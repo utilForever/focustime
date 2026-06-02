@@ -1769,6 +1769,36 @@ future_only = "ignored"
 }
 
 #[test]
+fn config_doctor_detects_legacy_automation_fields_before_normalization() {
+    let temp_base = unique_temp_base("doctor-legacy-automation-pre-normalize");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    let config_path = app_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+[notifications]
+enabled = true
+sound = true
+"#,
+    )
+    .unwrap();
+
+    let report = run_config_doctor_with_path(Some(config_path.clone()));
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert!(
+        report.findings.iter().any(|finding| {
+            finding.code == "config.deprecated_field_in_use"
+                && finding
+                    .message
+                    .contains("Deprecated top-level automation fields")
+        }),
+        "expected deprecation warning for top-level automation fields"
+    );
+}
+
+#[test]
 fn config_migration_assistant_preview_reports_changes_without_writing() {
     let temp_base = unique_temp_base("migration-preview");
     let app_dir = temp_base.join("focustime");
