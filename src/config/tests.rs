@@ -1827,14 +1827,11 @@ fn config_migration_assistant_apply_writes_migrated_config_and_backup() {
     let app_dir = temp_base.join("focustime");
     fs::create_dir_all(&app_dir).unwrap();
     let config_path = app_dir.join("config.toml");
-    fs::write(
-        &config_path,
-        r#"
+    let original = r#"
 schema_version = 1
 selected_profile = "deep_work"
-"#,
-    )
-    .unwrap();
+"#;
+    fs::write(&config_path, original).unwrap();
 
     let report = run_config_migration_assistant_with_path(true, Some(config_path.clone()));
     let migrated = fs::read_to_string(&config_path).unwrap();
@@ -1850,7 +1847,7 @@ selected_profile = "deep_work"
     assert!(report.changed);
     assert!(migrated.contains("schema_version = 2"));
     assert!(migrated.contains("selected_profile = \"standard\""));
-    assert!(backup.contains("selected_profile = \"deep_work\""));
+    assert_eq!(backup, original);
 }
 
 #[test]
