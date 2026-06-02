@@ -1804,14 +1804,11 @@ fn config_migration_assistant_preview_reports_changes_without_writing() {
     let app_dir = temp_base.join("focustime");
     fs::create_dir_all(&app_dir).unwrap();
     let config_path = app_dir.join("config.toml");
-    fs::write(
-        &config_path,
-        r#"
+    let original = r#"
 schema_version = 1
 selected_profile = "deep_work"
-"#,
-    )
-    .unwrap();
+"#;
+    fs::write(&config_path, original).unwrap();
 
     let report = run_config_migration_assistant_with_path(false, Some(config_path.clone()));
     let persisted = fs::read_to_string(&config_path).unwrap();
@@ -1821,7 +1818,7 @@ selected_profile = "deep_work"
     assert!(!report.applied);
     assert!(report.changed);
     assert!(report.backup_path.is_none());
-    assert!(persisted.contains("schema_version = 1"));
+    assert_eq!(persisted, original);
 }
 
 #[test]
