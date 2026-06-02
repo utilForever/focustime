@@ -317,7 +317,7 @@ Milestone policy:
 
 - **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
-- **v0.14.2+:** config migration assistant + doctor commands are available (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
+- **Unreleased/main branch:** config migration assistant + doctor commands are available (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
 ### Low-value feature deprecation pipeline
