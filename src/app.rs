@@ -688,12 +688,6 @@ pub struct SetupDiagnostics {
     pub hosts_write_capability: SetupCheck,
     pub command_backend: SetupCheck,
     pub wakatime_config: SetupCheck,
-    pub sync_status: SetupCheck,
-    pub sync_device_id: Option<String>,
-    pub sync_last_snapshot_id: Option<String>,
-    pub sync_last_success_epoch_secs: Option<i64>,
-    pub sync_last_error: Option<String>,
-    pub sync_last_error_epoch_secs: Option<i64>,
     pub deprecation_warnings: Vec<String>,
 }
 
@@ -735,12 +729,6 @@ impl SetupDiagnostics {
         } else {
             SetupCheck::ok("Disabled by integration framework configuration.".to_string())
         };
-        let sync_diagnostics = crate::sync::diagnostics();
-        let sync_status = if sync_diagnostics.warning {
-            SetupCheck::warning(sync_diagnostics.message.clone())
-        } else {
-            SetupCheck::ok(sync_diagnostics.message.clone())
-        };
         Self {
             hosts_file_path,
             backend_policy,
@@ -750,12 +738,6 @@ impl SetupDiagnostics {
             hosts_write_capability,
             command_backend,
             wakatime_config,
-            sync_status,
-            sync_device_id: sync_diagnostics.device_id,
-            sync_last_snapshot_id: sync_diagnostics.last_snapshot_id,
-            sync_last_success_epoch_secs: sync_diagnostics.last_success_epoch_secs,
-            sync_last_error: sync_diagnostics.last_error,
-            sync_last_error_epoch_secs: sync_diagnostics.last_error_epoch_secs,
             deprecation_warnings,
         }
     }
@@ -2104,12 +2086,9 @@ fn permission_remediation_guidance() -> &'static str {
 
 pub(super) fn setup_deprecation_warnings(
     config_deprecation_warnings: &[String],
-    stats: &FocusStats,
+    _stats: &FocusStats,
 ) -> Vec<String> {
     let mut warnings = config_deprecation_warnings.to_vec();
-    warnings.extend(crate::feature_inventory::active_usage_deprecation_warnings(
-        |command_id| stats.command_usage_count(command_id),
-    ));
     if let Some(stats_warning) = legacy_stats_path_migration_warning() {
         warnings.push(stats_warning);
     }

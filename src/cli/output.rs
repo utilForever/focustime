@@ -10,10 +10,9 @@ use crate::cli::{
     SessionTemplateCommandOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
     SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
     StatsGrowthSummary, StatsRetentionStatusOutput, StatusComparisonOutput, StatusOutput,
-    StrictCommandOutput, SyncBackupOutput, SyncRestoreOutput, TaskGoalCommandOutput,
-    TaskGoalOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, TimerStateOutput,
-    UsageSignalsCommandOutput, WeekdayRulesCommandOutput, Write, format_schedule_conflict,
-    inspect_schedule_conflicts_from_config, io,
+    StrictCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, TemporarySiteAddCommandOutput,
+    ThemeCommandOutput, TimerStateOutput, UsageSignalsCommandOutput, WeekdayRulesCommandOutput,
+    Write, format_schedule_conflict, inspect_schedule_conflicts_from_config, io,
 };
 use crate::config::{
     ConfigDoctorReport, ConfigHealthFinding, ConfigHealthStatus, ConfigMigrationReport,
@@ -830,38 +829,6 @@ pub(super) fn print_restore_output(payload: &RestoreOutput) {
     println!("Stats: {}", payload.stats_restored_path.display());
 }
 
-pub(super) fn print_sync_backup_output(payload: &SyncBackupOutput) {
-    println!(
-        "Created encrypted sync snapshot in {}",
-        payload.bundle_dir.display()
-    );
-    println!("Bundle: {}", payload.bundle_path.display());
-    println!("Snapshot: {}", payload.snapshot_id);
-    if let Some(base_snapshot_id) = payload.base_snapshot_id.as_deref() {
-        println!("Base snapshot: {base_snapshot_id}");
-    } else {
-        println!("Base snapshot: none");
-    }
-    println!("Device ID: {}", payload.device_id);
-}
-
-pub(super) fn print_sync_restore_output(payload: &SyncRestoreOutput) {
-    println!(
-        "Restored encrypted sync snapshot from {}",
-        payload.restore_dir.display()
-    );
-    println!("Bundle: {}", payload.bundle_path.display());
-    println!("Snapshot: {}", payload.snapshot_id);
-    if let Some(base_snapshot_id) = payload.base_snapshot_id.as_deref() {
-        println!("Base snapshot: {base_snapshot_id}");
-    } else {
-        println!("Base snapshot: none");
-    }
-    println!("Source device ID: {}", payload.source_device_id);
-    println!("Config: {}", payload.config_restored_path.display());
-    println!("Stats: {}", payload.stats_restored_path.display());
-}
-
 pub(super) fn print_calendar_sync_command_output(payload: &CalendarSyncCommandOutput) {
     println!("Calendar sync refreshed.");
     println!("Sources: {}", payload.source_count);
@@ -1150,30 +1117,6 @@ pub(super) fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutpu
     print_diagnostics_check("Blocking permissions", &payload.blocking_permissions);
     print_diagnostics_check("Hosts write capability", &payload.hosts_write_capability);
     print_diagnostics_check("WakaTime config", &payload.wakatime_config);
-    print_diagnostics_check("Encrypted sync", &payload.sync_status);
-    println!(
-        "Encrypted sync device ID: {}",
-        payload.sync_device_id.as_deref().unwrap_or("none")
-    );
-    println!(
-        "Encrypted sync last snapshot: {}",
-        payload.sync_last_snapshot_id.as_deref().unwrap_or("none")
-    );
-    if let Some(last_success_epoch_secs) = payload.sync_last_success_epoch_secs {
-        println!("Encrypted sync last success (epoch): {last_success_epoch_secs}");
-    } else {
-        println!("Encrypted sync last success (epoch): none");
-    }
-    if let Some(last_error) = payload.sync_last_error.as_deref() {
-        println!("Encrypted sync last error: {last_error}");
-    } else {
-        println!("Encrypted sync last error: none");
-    }
-    if let Some(last_error_epoch_secs) = payload.sync_last_error_epoch_secs {
-        println!("Encrypted sync last error (epoch): {last_error_epoch_secs}");
-    } else {
-        println!("Encrypted sync last error (epoch): none");
-    }
     if payload.deprecation_warnings.is_empty() {
         println!("Deprecation warnings: none");
     } else {
@@ -1200,12 +1143,6 @@ pub(super) fn build_diagnostics_command_output(
         blocking_permissions: setup_check_output(&diagnostics.blocking_permissions),
         hosts_write_capability: setup_check_output(&diagnostics.hosts_write_capability),
         wakatime_config: setup_check_output(&diagnostics.wakatime_config),
-        sync_status: setup_check_output(&diagnostics.sync_status),
-        sync_device_id: diagnostics.sync_device_id.clone(),
-        sync_last_snapshot_id: diagnostics.sync_last_snapshot_id.clone(),
-        sync_last_success_epoch_secs: diagnostics.sync_last_success_epoch_secs,
-        sync_last_error: diagnostics.sync_last_error.clone(),
-        sync_last_error_epoch_secs: diagnostics.sync_last_error_epoch_secs,
         deprecation_warnings: diagnostics.deprecation_warnings.clone(),
     }
 }

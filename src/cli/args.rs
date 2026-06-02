@@ -58,7 +58,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 50] = [
+    let parsers: [(&str, ValueArgParser); 47] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -87,9 +87,6 @@ fn classify_value_arg(
         ("--compare-limit", classify_compare_limit_arg),
         ("--backup", classify_backup_arg),
         ("--restore", classify_restore_arg),
-        ("--sync-backup", classify_sync_backup_arg),
-        ("--sync-restore", classify_sync_restore_arg),
-        ("--sync-passphrase", classify_sync_passphrase_arg),
         ("--export", classify_export_arg),
         ("--feature-inventory", classify_feature_inventory_arg),
         ("--blocklist-profile", classify_blocklist_profile_arg),
@@ -326,47 +323,6 @@ fn classify_restore_arg(args: &[String], index: usize) -> Result<(ParsedToken, u
         return Ok((ParsedToken::Restore(Some(PathBuf::from(value))), 2));
     }
     Ok((ParsedToken::Restore(None), 1))
-}
-
-fn classify_sync_backup_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--sync-backup` requires a target directory.")?;
-        return Ok((ParsedToken::SyncBackup(Some(PathBuf::from(value))), 2));
-    }
-    Ok((ParsedToken::SyncBackup(None), 1))
-}
-
-fn classify_sync_restore_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--sync-restore` requires a source directory.")?;
-        return Ok((ParsedToken::SyncRestore(Some(PathBuf::from(value))), 2));
-    }
-    Ok((ParsedToken::SyncRestore(None), 1))
-}
-
-fn classify_sync_passphrase_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--sync-passphrase` requires a non-empty value.")?;
-        return Ok((ParsedToken::SyncPassphrase(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--sync-passphrase` requires a value. Use `--sync-passphrase=VALUE` or `--sync-passphrase VALUE`.",
-    ))
 }
 
 fn classify_watch_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
@@ -977,7 +933,7 @@ fn classify_automation_triggers_set_arg(
 }
 
 pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 50] = [
+    let parsers: [KeyValueParser; 47] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -1003,9 +959,6 @@ pub(super) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, S
         parse_compare_limit_key_value_arg,
         parse_backup_key_value_arg,
         parse_restore_key_value_arg,
-        parse_sync_backup_key_value_arg,
-        parse_sync_restore_key_value_arg,
-        parse_sync_passphrase_key_value_arg,
         parse_export_key_value_arg,
         parse_feature_inventory_key_value_arg,
         parse_blocklist_profile_key_value_arg,
@@ -1239,33 +1192,6 @@ fn parse_restore_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String>
     if let Some(value) = arg.strip_prefix("--restore=") {
         let value = require_nonempty_key_value(value, "`--restore=` requires a source directory.")?;
         return Ok(Some(ParsedToken::Restore(Some(PathBuf::from(value)))));
-    }
-    Ok(None)
-}
-
-fn parse_sync_backup_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--sync-backup=") {
-        let value =
-            require_nonempty_key_value(value, "`--sync-backup=` requires a target directory.")?;
-        return Ok(Some(ParsedToken::SyncBackup(Some(PathBuf::from(value)))));
-    }
-    Ok(None)
-}
-
-fn parse_sync_restore_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--sync-restore=") {
-        let value =
-            require_nonempty_key_value(value, "`--sync-restore=` requires a source directory.")?;
-        return Ok(Some(ParsedToken::SyncRestore(Some(PathBuf::from(value)))));
-    }
-    Ok(None)
-}
-
-fn parse_sync_passphrase_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--sync-passphrase=") {
-        let value =
-            require_nonempty_key_value(value, "`--sync-passphrase=` requires a non-empty value.")?;
-        return Ok(Some(ParsedToken::SyncPassphrase(value.to_string())));
     }
     Ok(None)
 }
