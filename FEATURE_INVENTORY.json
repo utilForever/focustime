@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "scoring_model": {
     "score_min": 1,
     "score_max": 5,
@@ -30,30 +30,13 @@
         "phase": "Phase 3: Retire",
         "objective": "Plan sunset with migration guidance and minimal disruption by late v0.14.x."
       }
-    ],
-    "deprecation_pipeline": [
-      {
-        "stage": "warning",
-        "enforcement": "allow_command",
-        "user_notice": "Show warning banner and migration reminder while command remains available."
-      },
-      {
-        "stage": "migration_guidance",
-        "enforcement": "allow_command",
-        "user_notice": "Show migration-first notice with explicit replacement workflow guidance."
-      },
-      {
-        "stage": "removal",
-        "enforcement": "block_command",
-        "user_notice": "Reject command with explicit migration guidance and release-notes remediation text."
-      }
     ]
   },
   "summary": {
-    "total_features": 28,
+    "total_features": 27,
     "keep_count": 13,
     "merge_count": 14,
-    "remove_count": 1,
+    "remove_count": 0,
     "by_surface": [
       {
         "surface": "timer",
@@ -73,7 +56,7 @@
       },
       {
         "surface": "integration",
-        "feature_count": 5
+        "feature_count": 4
       }
     ],
     "covered_cli_flags": [
@@ -144,9 +127,6 @@
       "--status",
       "--stop",
       "--strict",
-      "--sync-backup",
-      "--sync-passphrase",
-      "--sync-restore",
       "--task",
       "--task-goal",
       "--task-note",
@@ -603,32 +583,6 @@
       "maintenance_cost": 4.25,
       "value_to_maintenance_ratio": 0.71,
       "recommendation": "merge"
-    },
-    {
-      "feature_id": "encrypted-sync-bundles",
-      "name": "Encrypted sync bundles",
-      "surface": "integration",
-      "description": "Create encrypted backup bundles and restore them with passphrase protection.",
-      "cli_flags": [
-        "--sync-backup",
-        "--sync-restore",
-        "--sync-passphrase"
-      ],
-      "value": 2,
-      "complexity": 5,
-      "support_burden": 5,
-      "failure_impact": 5,
-      "maintenance_cost": 5.0,
-      "value_to_maintenance_ratio": 0.4,
-      "recommendation": "remove",
-      "deprecation": {
-        "warning_from_version": "0.14.2",
-        "migration_from_version": "0.15.0",
-        "removal_from_version": "0.16.0",
-        "migration_guidance": "Switch to local backup/restore workflows (`--backup`, `--restore`) for portable recovery.",
-        "release_notes_hook": "Deprecated encrypted sync bundle commands (`--sync-backup`, `--sync-restore`) and directed users to backup/restore workflows.",
-        "active_stage": "warning"
-      }
     },
     {
       "feature_id": "setup-diagnostics-and-health-signals",
