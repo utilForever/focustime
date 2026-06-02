@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-06-02
+
 ### Added
 
-- **Config migration assistant and doctor workflows (#384):** added `--config-migrate`, `--config-migrate-apply`, and `--config-doctor` command surfaces with deterministic text/JSON reporting for config schema/key migrations, stale/deprecated field guidance, and conflict diagnostics.
+- **Low-value feature deprecation lifecycle pipeline (#411):** added staged deprecation lifecycle modeling in feature inventory plus CLI diagnostics gating so low-value retirement guidance is surfaced consistently.
+- **Config migration assistant and doctor workflows (#412):** added `--config-migrate`, `--config-migrate-apply`, and `--config-doctor` command surfaces with deterministic text/JSON reporting for config schema/key migrations, stale/deprecated field guidance, and conflict diagnostics.
 
 ### Changed
 
-- **Low-value encrypted sync retirement (#392):** removed `--sync-backup`, `--sync-restore`, and `--sync-passphrase` command surfaces plus related setup diagnostics/runtime branches, and aligned migration guidance to local backup/restore workflows (`--backup`, `--restore`).
+- **Low-value encrypted sync retirement (#413):** removed `--sync-backup`, `--sync-restore`, and `--sync-passphrase` command surfaces plus related setup diagnostics/runtime branches, and aligned migration guidance to local backup/restore workflows (`--backup`, `--restore`).
 
 ## [0.14.2] - 2026-06-01
 
@@ -392,7 +395,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.2...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.3...HEAD
+[0.14.3]: https://github.com/utilForever/focustime/compare/v0.14.2...v0.14.3
 [0.14.2]: https://github.com/utilForever/focustime/compare/v0.14.1...v0.14.2
 [0.14.1]: https://github.com/utilForever/focustime/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/utilForever/focustime/compare/v0.13.1...v0.14.0
