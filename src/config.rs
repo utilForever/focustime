@@ -2843,6 +2843,16 @@ fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> ConfigDoctorRepo
             ),
             "Use a focustime build that supports this schema before writing config changes.",
         ));
+        sort_config_health_findings(&mut findings);
+        return ConfigDoctorReport {
+            action,
+            config_path: Some(path),
+            detected_schema_version,
+            current_schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+            status: summarize_config_health(&findings),
+            migration_steps,
+            findings,
+        };
     } else if schema_version < CURRENT_CONFIG_SCHEMA_VERSION {
         findings.push(config_health_warning(
             "config.schema_outdated",

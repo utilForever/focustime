@@ -1735,6 +1735,40 @@ selected_profile = "deep_work"
 }
 
 #[test]
+fn config_doctor_stops_after_newer_schema_warning() {
+    let temp_base = unique_temp_base("doctor-newer-schema");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    let config_path = app_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+schema_version = 99
+selected_profile = "standard"
+future_only = "ignored"
+"#,
+    )
+    .unwrap();
+
+    let report = run_config_doctor_with_path(Some(config_path.clone()));
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(report.status, ConfigHealthStatus::Warning);
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|finding| finding.code == "config.schema_newer_than_supported")
+    );
+    assert!(
+        report
+            .findings
+            .iter()
+            .all(|finding| finding.code != "config.deserialize_failed")
+    );
+}
+
+#[test]
 fn config_migration_assistant_preview_reports_changes_without_writing() {
     let temp_base = unique_temp_base("migration-preview");
     let app_dir = temp_base.join("focustime");
