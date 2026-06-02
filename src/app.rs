@@ -929,7 +929,6 @@ impl App {
         let selected_profile = config.selected_profile;
         let selected_theme_preset = config.selected_theme_preset;
         let feature_flags = config.feature_flags.clone();
-        let setup_deprecation_warnings = setup_deprecation_warnings(&config_deprecation_warnings);
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
         let mut automation_triggers = config.automation_triggers.clone();
@@ -1017,6 +1016,8 @@ impl App {
                 Err(e) => (FocusStats::default(), Some(e)),
             };
         let retained = stats.apply_retention_policy(stats_retention, Local::now().date_naive());
+        let setup_deprecation_warnings =
+            setup_deprecation_warnings(&config_deprecation_warnings, &stats);
         let (task_labels, selected_task_label) = stats.task_planner_state();
         let task_label_favorites = task_label_state_keys(stats.task_label_favorites());
         let task_label_archived = task_label_state_keys(stats.task_label_archived());
@@ -2101,8 +2102,14 @@ fn permission_remediation_guidance() -> &'static str {
     }
 }
 
-pub(super) fn setup_deprecation_warnings(config_deprecation_warnings: &[String]) -> Vec<String> {
+pub(super) fn setup_deprecation_warnings(
+    config_deprecation_warnings: &[String],
+    stats: &FocusStats,
+) -> Vec<String> {
     let mut warnings = config_deprecation_warnings.to_vec();
+    warnings.extend(crate::feature_inventory::active_usage_deprecation_warnings(
+        |command_id| stats.command_usage_count(command_id),
+    ));
     if let Some(stats_warning) = legacy_stats_path_migration_warning() {
         warnings.push(stats_warning);
     }
