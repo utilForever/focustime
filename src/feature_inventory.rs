@@ -574,7 +574,12 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         name: "Setup diagnostics and health signals",
         surface: FeatureSurface::Integration,
         description: "Provide system diagnostics and setup checks for blocker, notifications, and integrations.",
-        cli_flags: &["--diagnostics"],
+        cli_flags: &[
+            "--diagnostics",
+            "--config-doctor",
+            "--config-migrate",
+            "--config-migrate-apply",
+        ],
         value: 3,
         complexity: 3,
         support_burden: 3,
