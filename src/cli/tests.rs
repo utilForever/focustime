@@ -1,3 +1,4 @@
+use super::execute::apply_command_deprecation_policy;
 use crate::cli::*;
 use crate::config::{AutomationTriggerActionConfig, AutomationTriggerConditionConfig};
 use crate::session_recovery::{
@@ -864,6 +865,36 @@ fn diagnostics_output_includes_deprecation_warnings() {
             "Deprecated top-level automation fields are in use.".to_string()
         ]
     );
+}
+
+#[test]
+fn sync_backup_deprecation_policy_allows_warning_stage() {
+    let result = apply_command_deprecation_policy(
+        &CommandKind::SyncBackup {
+            dir: Some(PathBuf::from("reports")),
+            passphrase: Some("secret".to_string()),
+        },
+        OutputMode::Json,
+        "0.14.2",
+    );
+
+    assert!(result.is_ok());
+}
+
+#[test]
+fn sync_backup_deprecation_policy_blocks_removal_stage() {
+    let result = apply_command_deprecation_policy(
+        &CommandKind::SyncBackup {
+            dir: Some(PathBuf::from("reports")),
+            passphrase: Some("secret".to_string()),
+        },
+        OutputMode::Json,
+        "0.16.0",
+    );
+
+    let error = result.expect_err("sync backup should be blocked at removal stage");
+    assert!(error.contains("--sync-backup"));
+    assert!(error.contains("removed"));
 }
 
 #[test]

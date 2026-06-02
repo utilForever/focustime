@@ -12,7 +12,10 @@ use std::{
 use crate::app::App;
 use crate::config::validate_automation_trigger_rules;
 use crate::daemon;
-use crate::feature_inventory::{build_feature_inventory_report, export_feature_inventory_report};
+use crate::feature_inventory::{
+    DeprecationStage, build_feature_inventory_report, command_deprecation_notice_for_version,
+    export_feature_inventory_report,
+};
 
 use crate::cli::{
     AppConfig, AutomationTriggerRuleConfig, AutomationTriggersCommandOutput, BackupOutput,
@@ -73,6 +76,11 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
             eprintln!("Warning: failed to record command usage signal for `{surface_id}`: {error}");
         }
     }
+    apply_command_deprecation_policy(
+        &cli_command.kind,
+        cli_command.output,
+        env!("CARGO_PKG_VERSION"),
+    )?;
 
     match cli_command.kind {
         CommandKind::Start => execute_start_command(cli_command.output),
@@ -159,6 +167,28 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
     }
 }
 
+pub(super) fn apply_command_deprecation_policy(
+    command: &CommandKind,
+    output: OutputMode,
+    version: &str,
+) -> Result<(), String> {
+    let Some(command_id) = command_usage_surface_id(command) else {
+        return Ok(());
+    };
+    let Some(notice) = command_deprecation_notice_for_version(command_id, version) else {
+        return Ok(());
+    };
+
+    match notice.stage {
+        DeprecationStage::Removal => Err(notice.message),
+        DeprecationStage::Warning | DeprecationStage::MigrationGuidance => {
+            if matches!(output, OutputMode::Text) {
+                eprintln!("{}", notice.message);
+            }
+            Ok(())
+        }
+    }
+}
 fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
     match command {
         CommandKind::Start => Some("start"),
