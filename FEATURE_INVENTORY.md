@@ -12,6 +12,11 @@
 - Remove tie-break (delta == -1.50): remove when safety/migration_risk/user_disruption are all <= 2
 - Tie-break dimensions: safety = failure_impact, migration_risk = complexity, user_disruption = support_burden
 
+- Deprecation pipeline stages:
+  - warning: Show warning banner and migration reminder while command remains available. (allow_command)
+  - migration_guidance: Show migration-first notice with explicit replacement workflow guidance. (allow_command)
+  - removal: Reject command with explicit migration guidance and release-notes remediation text. (block_command)
+
 ## Summary
 
 - Total features: 28
@@ -30,6 +35,12 @@
 - keep: Phase 1: Stabilize — Preserve and harden high-confidence capabilities throughout v0.14.x.
 - merge: Phase 2: Consolidate — Combine overlapping workflows behind unified UX/API surfaces in v0.14.x.
 - remove: Phase 3: Retire — Plan sunset with migration guidance and minimal disruption by late v0.14.x.
+
+## Low-value deprecation schedule controls
+
+- `encrypted-sync-bundles`: warning 0.14.2 -> migration 0.15.0 -> removal 0.16.0 (active: warning)
+  - Migration guidance: Switch to local backup/restore workflows (`--backup`, `--restore`) for portable recovery.
+  - Release notes hook: Deprecated encrypted sync bundle commands (`--sync-backup`, `--sync-restore`) and directed users to backup/restore workflows.
 
 ## Feature inventory
 

@@ -649,6 +649,30 @@ fn feature_inventory_json_exports_scored_report_artifacts() {
 
     assert!(report_dir.join("FEATURE_INVENTORY.json").is_file());
     assert!(report_dir.join("FEATURE_INVENTORY.md").is_file());
+
+    let inventory_payload: Value = serde_json::from_slice(
+        &fs::read(report_dir.join("FEATURE_INVENTORY.json"))
+            .expect("failed to read exported feature inventory JSON"),
+    )
+    .expect("feature inventory export JSON should parse");
+    assert_eq!(inventory_payload["schema_version"], 3);
+    assert!(
+        inventory_payload["scoring_model"]["deprecation_pipeline"]
+            .as_array()
+            .is_some_and(|stages| !stages.is_empty())
+    );
+    let features = inventory_payload["features"]
+        .as_array()
+        .expect("features should be array");
+    let encrypted_sync = features
+        .iter()
+        .find(|entry| entry["feature_id"] == "encrypted-sync-bundles")
+        .expect("encrypted-sync-bundles entry should exist");
+    assert!(encrypted_sync["deprecation"].is_object());
+    assert_eq!(
+        encrypted_sync["deprecation"]["removal_from_version"],
+        "0.16.0"
+    );
 }
 
 #[test]
