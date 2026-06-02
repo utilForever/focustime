@@ -220,6 +220,7 @@ cargo run -- --config-doctor --json
 # Preview/apply config migration assistant changes for deprecated/renamed keys
 cargo run -- --config-migrate
 cargo run -- --config-migrate --json
+# Apply mode writes migrated config.toml and creates a backup first
 cargo run -- --config-migrate-apply
 cargo run -- --config-migrate-apply --json
 
