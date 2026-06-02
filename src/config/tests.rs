@@ -1650,6 +1650,25 @@ break_to_focus = true
 }
 
 #[test]
+fn migrate_config_toml_current_schema_canonicalizes_legacy_profile_aliases() {
+    let v2_with_legacy_alias: toml::Value = toml::from_str(
+        r#"
+schema_version = 2
+selected_profile = "deep_work"
+"#,
+    )
+    .unwrap();
+
+    let migrated = migrate_config_toml_to_current(v2_with_legacy_alias)
+        .expect("current-schema payload should still canonicalize aliases");
+    let root = migrated.as_table().expect("root should be a table");
+    assert_eq!(
+        root.get("selected_profile").and_then(toml::Value::as_str),
+        Some("standard")
+    );
+}
+
+#[test]
 fn migrate_config_toml_legacy_to_v1_sets_intermediate_schema_version_to_one() {
     let legacy: toml::Value = toml::from_str("focus_secs = 1500").unwrap();
     let migrated = migrate_config_toml_legacy_to_v1(legacy).expect("legacy migration should work");

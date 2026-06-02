@@ -2456,6 +2456,15 @@ fn migrate_config_toml_to_current_detailed(
         });
         from_schema_version = to_schema_version;
     }
+    let canonicalization_input = config_toml.clone();
+    canonicalize_legacy_profile_aliases(&mut config_toml);
+    if canonicalization_input != config_toml {
+        steps.push(ConfigMigrationStepReport {
+            from_schema_version: from_schema_version,
+            to_schema_version: from_schema_version,
+            summary: "Canonicalize legacy profile aliases in config values.".to_string(),
+        });
+    }
     Ok((config_toml, schema_version, steps))
 }
 
@@ -2468,6 +2477,17 @@ fn migration_step_summary(from_schema_version: u32, to_schema_version: u32) -> S
         }
         _ => format!("Migrate config schema from v{from_schema_version} to v{to_schema_version}."),
     }
+}
+
+fn canonicalize_legacy_profile_aliases(config_toml: &mut toml::Value) {
+    let Some(table) = config_toml.as_table_mut() else {
+        return;
+    };
+    migrate_profile_value_in_table(table, "selected_profile");
+    migrate_profile_automation_preset_keys(table);
+    migrate_profile_value_in_array_table(table, "session_templates", "profile");
+    migrate_profile_value_in_array_table(table, "weekday_profile_rules", "profile");
+    migrate_automation_trigger_action_profiles(table);
 }
 
 fn config_health_warning(
