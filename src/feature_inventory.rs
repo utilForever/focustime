@@ -9,7 +9,7 @@ use serde::Serialize;
 pub const FEATURE_INVENTORY_JSON_FILE_NAME: &str = "FEATURE_INVENTORY.json";
 pub const FEATURE_INVENTORY_MARKDOWN_FILE_NAME: &str = "FEATURE_INVENTORY.md";
 
-const SCHEMA_VERSION: u8 = 3;
+const SCHEMA_VERSION: u8 = 4;
 const COMPLEXITY_WEIGHT: f64 = 0.40;
 const SUPPORT_BURDEN_WEIGHT: f64 = 0.35;
 const FAILURE_IMPACT_WEIGHT: f64 = 0.25;
@@ -72,24 +72,6 @@ impl FeatureRecommendation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DeprecationStage {
-    Warning,
-    MigrationGuidance,
-    Removal,
-}
-
-impl DeprecationStage {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Warning => "warning",
-            Self::MigrationGuidance => "migration_guidance",
-            Self::Removal => "removal",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct FeatureInventoryReport {
     pub schema_version: u8,
@@ -110,7 +92,6 @@ pub struct FeatureScoringModel {
     pub remove_max_delta: f64,
     pub tie_break_model: TieBreakModel,
     pub release_phase_mapping: Vec<RecommendationReleasePhase>,
-    pub deprecation_pipeline: Vec<DeprecationStagePolicy>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -125,13 +106,6 @@ pub struct RecommendationReleasePhase {
     pub recommendation: FeatureRecommendation,
     pub phase: &'static str,
     pub objective: &'static str,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct DeprecationStagePolicy {
-    pub stage: DeprecationStage,
-    pub enforcement: &'static str,
-    pub user_notice: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -164,27 +138,6 @@ pub struct FeatureInventoryEntry {
     pub maintenance_cost: f64,
     pub value_to_maintenance_ratio: f64,
     pub recommendation: FeatureRecommendation,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub deprecation: Option<FeatureDeprecationInfo>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct FeatureDeprecationInfo {
-    pub warning_from_version: String,
-    pub migration_from_version: String,
-    pub removal_from_version: String,
-    pub migration_guidance: String,
-    pub release_notes_hook: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub active_stage: Option<DeprecationStage>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CommandDeprecationNotice {
-    pub feature_id: &'static str,
-    pub feature_name: &'static str,
-    pub stage: DeprecationStage,
-    pub message: String,
 }
 
 #[derive(Debug, Clone)]
@@ -211,16 +164,6 @@ struct TieBreakSignals {
     safety: u8,
     migration_risk: u8,
     user_disruption: u8,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct FeatureDeprecationSeed {
-    feature_id: &'static str,
-    warning_from_version: &'static str,
-    migration_from_version: &'static str,
-    removal_from_version: &'static str,
-    migration_guidance: &'static str,
-    release_notes_hook: &'static str,
 }
 
 const FEATURE_SEEDS: &[FeatureSeed] = &[
@@ -548,17 +491,6 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         failure_impact: 3,
     },
     FeatureSeed {
-        feature_id: "encrypted-sync-bundles",
-        name: "Encrypted sync bundles",
-        surface: FeatureSurface::Integration,
-        description: "Create encrypted backup bundles and restore them with passphrase protection.",
-        cli_flags: &["--sync-backup", "--sync-restore", "--sync-passphrase"],
-        value: 2,
-        complexity: 5,
-        support_burden: 5,
-        failure_impact: 5,
-    },
-    FeatureSeed {
         feature_id: "wakatime-heartbeat-pipeline",
         name: "WakaTime heartbeat pipeline",
         surface: FeatureSurface::Integration,
@@ -587,32 +519,16 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
     },
 ];
 
-const FEATURE_DEPRECATION_SEEDS: &[FeatureDeprecationSeed] = &[FeatureDeprecationSeed {
-    feature_id: "encrypted-sync-bundles",
-    warning_from_version: "0.14.2",
-    migration_from_version: "0.15.0",
-    removal_from_version: "0.16.0",
-    migration_guidance: "Switch to local backup/restore workflows (`--backup`, `--restore`) for portable recovery.",
-    release_notes_hook: "Deprecated encrypted sync bundle commands (`--sync-backup`, `--sync-restore`) and directed users to backup/restore workflows.",
-}];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct SemanticVersion {
-    major: u64,
-    minor: u64,
-    patch: u64,
-}
-
 pub fn build_feature_inventory_report() -> FeatureInventoryReport {
     build_feature_inventory_report_for_version(env!("CARGO_PKG_VERSION"))
 }
 
 pub(crate) fn build_feature_inventory_report_for_version(
-    current_version: &str,
+    _current_version: &str,
 ) -> FeatureInventoryReport {
     let mut features = FEATURE_SEEDS
         .iter()
-        .map(|seed| build_feature_entry(seed, current_version))
+        .map(build_feature_entry)
         .collect::<Vec<_>>();
     features.sort_by(|left, right| {
         left.surface
@@ -639,7 +555,6 @@ pub(crate) fn build_feature_inventory_report_for_version(
                 remove_signal_max: TIE_BREAK_REMOVE_SIGNAL_MAX,
             },
             release_phase_mapping: build_release_phase_mapping(),
-            deprecation_pipeline: build_deprecation_pipeline(),
         },
         summary,
         features,
@@ -704,16 +619,6 @@ pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
         model.remove_max_delta, tie_break.remove_signal_max
     ));
     markdown.push_str("- Tie-break dimensions: safety = failure_impact, migration_risk = complexity, user_disruption = support_burden\n\n");
-    markdown.push_str("- Deprecation pipeline stages:\n");
-    for policy in &model.deprecation_pipeline {
-        markdown.push_str(&format!(
-            "  - {}: {} ({})\n",
-            policy.stage.as_str(),
-            policy.user_notice,
-            policy.enforcement
-        ));
-    }
-    markdown.push('\n');
 
     markdown.push_str("## Summary\n\n");
     markdown.push_str(&format!(
@@ -739,32 +644,6 @@ pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
             mapping.recommendation.as_str(),
             mapping.phase,
             mapping.objective
-        ));
-    }
-    markdown.push('\n');
-
-    markdown.push_str("## Low-value deprecation schedule controls\n\n");
-    for feature in report
-        .features
-        .iter()
-        .filter(|entry| entry.deprecation.is_some())
-    {
-        let Some(deprecation) = feature.deprecation.as_ref() else {
-            continue;
-        };
-        let active_stage = deprecation
-            .active_stage
-            .map(DeprecationStage::as_str)
-            .unwrap_or("inactive");
-        markdown.push_str(&format!(
-            "- `{}`: warning {} -> migration {} -> removal {} (active: {})\n  - Migration guidance: {}\n  - Release notes hook: {}\n",
-            feature.feature_id,
-            deprecation.warning_from_version,
-            deprecation.migration_from_version,
-            deprecation.removal_from_version,
-            active_stage,
-            deprecation.migration_guidance,
-            deprecation.release_notes_hook
         ));
     }
     markdown.push('\n');
@@ -796,7 +675,7 @@ pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
     markdown
 }
 
-fn build_feature_entry(seed: &FeatureSeed, current_version: &str) -> FeatureInventoryEntry {
+fn build_feature_entry(seed: &FeatureSeed) -> FeatureInventoryEntry {
     let maintenance_cost = round_to_two_decimals(
         f64::from(seed.complexity) * COMPLEXITY_WEIGHT
             + f64::from(seed.support_burden) * SUPPORT_BURDEN_WEIGHT
@@ -808,7 +687,6 @@ fn build_feature_entry(seed: &FeatureSeed, current_version: &str) -> FeatureInve
         maintenance_cost,
         tie_break_signals_from_seed(seed),
     );
-    let deprecation = deprecation_info_for_feature(seed.feature_id, current_version);
 
     FeatureInventoryEntry {
         feature_id: seed.feature_id.to_string(),
@@ -827,7 +705,6 @@ fn build_feature_entry(seed: &FeatureSeed, current_version: &str) -> FeatureInve
         maintenance_cost,
         value_to_maintenance_ratio: ratio,
         recommendation,
-        deprecation,
     }
 }
 
@@ -896,211 +773,6 @@ fn build_release_phase_mapping() -> Vec<RecommendationReleasePhase> {
     ]
 }
 
-fn build_deprecation_pipeline() -> Vec<DeprecationStagePolicy> {
-    vec![
-        DeprecationStagePolicy {
-            stage: DeprecationStage::Warning,
-            enforcement: "allow_command",
-            user_notice: "Show warning banner and migration reminder while command remains available.",
-        },
-        DeprecationStagePolicy {
-            stage: DeprecationStage::MigrationGuidance,
-            enforcement: "allow_command",
-            user_notice: "Show migration-first notice with explicit replacement workflow guidance.",
-        },
-        DeprecationStagePolicy {
-            stage: DeprecationStage::Removal,
-            enforcement: "block_command",
-            user_notice: "Reject command with explicit migration guidance and release-notes remediation text.",
-        },
-    ]
-}
-
-pub fn command_deprecation_notice_for_version(
-    command_id: &str,
-    current_version: &str,
-) -> Option<CommandDeprecationNotice> {
-    let normalized_command_id = normalize_surface_id(command_id)?;
-    for &seed in FEATURE_DEPRECATION_SEEDS {
-        let Some(stage) = active_stage_for_deprecation_seed(seed, current_version) else {
-            continue;
-        };
-        let Some(feature_seed) = feature_seed_for_id(seed.feature_id) else {
-            continue;
-        };
-        let matches_command = feature_seed
-            .cli_flags
-            .iter()
-            .filter_map(|flag| flag.strip_prefix("--"))
-            .any(|flag| flag == normalized_command_id);
-        if !matches_command {
-            continue;
-        }
-        let message =
-            format_command_stage_message(feature_seed, seed, stage, normalized_command_id);
-        return Some(CommandDeprecationNotice {
-            feature_id: seed.feature_id,
-            feature_name: feature_seed.name,
-            stage,
-            message,
-        });
-    }
-    None
-}
-
-pub fn active_usage_deprecation_warnings(
-    mut command_usage_count: impl FnMut(&str) -> u64,
-) -> Vec<String> {
-    active_usage_deprecation_warnings_for_version(env!("CARGO_PKG_VERSION"), |command_id| {
-        command_usage_count(command_id)
-    })
-}
-
-pub fn active_usage_deprecation_warnings_for_version(
-    current_version: &str,
-    mut command_usage_count: impl FnMut(&str) -> u64,
-) -> Vec<String> {
-    let mut warnings = Vec::new();
-    for &seed in FEATURE_DEPRECATION_SEEDS {
-        let Some(stage) = active_stage_for_deprecation_seed(seed, current_version) else {
-            continue;
-        };
-        let Some(feature_seed) = feature_seed_for_id(seed.feature_id) else {
-            continue;
-        };
-        let used = feature_seed
-            .cli_flags
-            .iter()
-            .filter_map(|flag| flag.strip_prefix("--"))
-            .any(|command_id| command_usage_count(command_id) > 0);
-        if !used {
-            continue;
-        }
-        warnings.push(format_feature_stage_warning(feature_seed, seed, stage));
-    }
-    warnings.sort();
-    warnings
-}
-
-fn deprecation_info_for_feature(
-    feature_id: &str,
-    current_version: &str,
-) -> Option<FeatureDeprecationInfo> {
-    let seed = deprecation_seed_for_feature(feature_id)?;
-    Some(FeatureDeprecationInfo {
-        warning_from_version: seed.warning_from_version.to_string(),
-        migration_from_version: seed.migration_from_version.to_string(),
-        removal_from_version: seed.removal_from_version.to_string(),
-        migration_guidance: seed.migration_guidance.to_string(),
-        release_notes_hook: seed.release_notes_hook.to_string(),
-        active_stage: active_stage_for_deprecation_seed(seed, current_version),
-    })
-}
-
-fn deprecation_seed_for_feature(feature_id: &str) -> Option<FeatureDeprecationSeed> {
-    FEATURE_DEPRECATION_SEEDS
-        .iter()
-        .copied()
-        .find(|seed| seed.feature_id == feature_id)
-}
-
-fn feature_seed_for_id(feature_id: &str) -> Option<&'static FeatureSeed> {
-    FEATURE_SEEDS
-        .iter()
-        .find(|seed| seed.feature_id == feature_id)
-}
-
-fn active_stage_for_deprecation_seed(
-    seed: FeatureDeprecationSeed,
-    current_version: &str,
-) -> Option<DeprecationStage> {
-    let current = parse_semantic_version(current_version)?;
-    let warning_from = parse_semantic_version(seed.warning_from_version)?;
-    let migration_from = parse_semantic_version(seed.migration_from_version)?;
-    let removal_from = parse_semantic_version(seed.removal_from_version)?;
-    if current < warning_from {
-        None
-    } else if current >= removal_from {
-        Some(DeprecationStage::Removal)
-    } else if current >= migration_from {
-        Some(DeprecationStage::MigrationGuidance)
-    } else {
-        Some(DeprecationStage::Warning)
-    }
-}
-
-fn parse_semantic_version(raw: &str) -> Option<SemanticVersion> {
-    let core = raw
-        .trim()
-        .split_once('-')
-        .map_or(raw.trim(), |(version, _)| version);
-    let mut parts = core.split('.');
-    let major = parts.next()?.parse::<u64>().ok()?;
-    let minor = parts.next()?.parse::<u64>().ok()?;
-    let patch = parts.next()?.parse::<u64>().ok()?;
-    Some(SemanticVersion {
-        major,
-        minor,
-        patch,
-    })
-}
-
-fn normalize_surface_id(value: &str) -> Option<&str> {
-    let normalized = value.trim();
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
-    }
-}
-
-fn format_feature_stage_warning(
-    feature_seed: &FeatureSeed,
-    deprecation_seed: FeatureDeprecationSeed,
-    stage: DeprecationStage,
-) -> String {
-    let commands = feature_seed.cli_flags.to_vec().join(", ");
-    format!(
-        "Low-value feature `{}` ({commands}) is in `{}` stage (warning {} -> migration {} -> removal {}). {} Release notes hook: {}",
-        feature_seed.name,
-        stage.as_str(),
-        deprecation_seed.warning_from_version,
-        deprecation_seed.migration_from_version,
-        deprecation_seed.removal_from_version,
-        deprecation_seed.migration_guidance,
-        deprecation_seed.release_notes_hook
-    )
-}
-
-fn format_command_stage_message(
-    feature_seed: &FeatureSeed,
-    deprecation_seed: FeatureDeprecationSeed,
-    stage: DeprecationStage,
-    command_id: &str,
-) -> String {
-    let flag = format!("--{command_id}");
-    match stage {
-        DeprecationStage::Warning => format!(
-            "Warning: `{flag}` is in deprecation warning stage for low-value feature `{}`. Migration guidance: {} (planned removal {}).",
-            feature_seed.name,
-            deprecation_seed.migration_guidance,
-            deprecation_seed.removal_from_version
-        ),
-        DeprecationStage::MigrationGuidance => format!(
-            "Warning: `{flag}` is in migration guidance stage for low-value feature `{}`. {} (planned removal {}).",
-            feature_seed.name,
-            deprecation_seed.migration_guidance,
-            deprecation_seed.removal_from_version
-        ),
-        DeprecationStage::Removal => format!(
-            "`{flag}` has been removed for low-value feature `{}` (removal milestone {}). {}",
-            feature_seed.name,
-            deprecation_seed.removal_from_version,
-            deprecation_seed.migration_guidance
-        ),
-    }
-}
-
 fn classify_recommendation(
     value: u8,
     maintenance_cost: f64,
@@ -1157,7 +829,7 @@ mod tests {
 
     #[test]
     fn schema_version_tracks_rubric_contract() {
-        assert_eq!(SCHEMA_VERSION, 3);
+        assert_eq!(SCHEMA_VERSION, 4);
     }
 
     #[test]
@@ -1213,12 +885,6 @@ mod tests {
                 .iter()
                 .any(|entry| entry.recommendation == FeatureRecommendation::Merge)
         );
-        assert!(
-            report
-                .features
-                .iter()
-                .any(|entry| entry.recommendation == FeatureRecommendation::Remove)
-        );
     }
 
     #[test]
@@ -1242,74 +908,6 @@ mod tests {
                 recommendation.as_str()
             );
         }
-    }
-
-    #[test]
-    fn deprecation_pipeline_covers_all_stages() {
-        let report = build_feature_inventory_report();
-        let stages = report
-            .scoring_model
-            .deprecation_pipeline
-            .iter()
-            .map(|policy| policy.stage)
-            .collect::<HashSet<_>>();
-        for stage in [
-            DeprecationStage::Warning,
-            DeprecationStage::MigrationGuidance,
-            DeprecationStage::Removal,
-        ] {
-            assert!(
-                stages.contains(&stage),
-                "missing deprecation stage policy: {}",
-                stage.as_str()
-            );
-        }
-    }
-
-    #[test]
-    fn deprecation_stage_transitions_follow_version_windows() {
-        let warning_notice = command_deprecation_notice_for_version("sync-backup", "0.14.2")
-            .expect("sync-backup should have warning-stage notice");
-        assert_eq!(warning_notice.stage, DeprecationStage::Warning);
-
-        let migration_notice = command_deprecation_notice_for_version("sync-backup", "0.15.0")
-            .expect("sync-backup should have migration-stage notice");
-        assert_eq!(migration_notice.stage, DeprecationStage::MigrationGuidance);
-
-        let removal_notice = command_deprecation_notice_for_version("sync-backup", "0.16.0")
-            .expect("sync-backup should have removal-stage notice");
-        assert_eq!(removal_notice.stage, DeprecationStage::Removal);
-    }
-
-    #[test]
-    fn usage_deprecation_warnings_require_prior_command_usage() {
-        let no_warnings = active_usage_deprecation_warnings_for_version("0.14.2", |_command_id| 0);
-        assert!(no_warnings.is_empty());
-
-        let with_warnings = active_usage_deprecation_warnings_for_version("0.14.2", |command_id| {
-            if command_id == "sync-backup" { 2 } else { 0 }
-        });
-        assert_eq!(with_warnings.len(), 1);
-        assert!(with_warnings[0].contains("--sync-backup"));
-    }
-
-    #[test]
-    fn report_includes_deprecation_metadata_for_low_value_features() {
-        let report = build_feature_inventory_report_for_version("0.14.2");
-        let encrypted_sync = report
-            .features
-            .iter()
-            .find(|entry| entry.feature_id == "encrypted-sync-bundles")
-            .expect("encrypted-sync-bundles should exist in report");
-        let deprecation = encrypted_sync
-            .deprecation
-            .as_ref()
-            .expect("encrypted-sync-bundles should include deprecation metadata");
-        assert_eq!(deprecation.warning_from_version, "0.14.2");
-        assert_eq!(deprecation.migration_from_version, "0.15.0");
-        assert_eq!(deprecation.removal_from_version, "0.16.0");
-        assert_eq!(deprecation.active_stage, Some(DeprecationStage::Warning));
-        assert!(!deprecation.release_notes_hook.is_empty());
     }
 
     #[test]

@@ -59,10 +59,9 @@ use output::{
     print_session_metadata_command_output, print_session_template_command_output,
     print_site_add_command_output, print_site_delete_command_output,
     print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_sync_backup_output, print_sync_restore_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_usage_signals_command_output,
-    print_weekday_rules_command_output,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_usage_signals_command_output, print_weekday_rules_command_output,
 };
 use parsing::{
     finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_compare_by_value,
@@ -71,9 +70,9 @@ use parsing::{
     parse_goal_value, parse_history_dashboard_order_value, parse_history_kpi_card_id,
     parse_monthly_goal_value, parse_primary_command, parse_profile_id, parse_schedule_value,
     parse_site_edit_value, parse_status_comparison_options, parse_strict_value,
-    parse_sync_passphrase_option, parse_task_goal_value, parse_theme_preset,
-    parse_watch_interval_option, parse_watch_interval_secs, parse_weekday_rules_value,
-    parse_weekly_goal_value, require_nonempty_key_value,
+    parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
+    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 #[cfg(test)]
 use status::build_status_output;
@@ -159,8 +158,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --status [--watch[=SECONDS]] [--compare-by=task|profile|time-of-day] [--compare-task=LABEL|all] [--compare-profile=basic|standard|advanced|unknown|all] [--compare-time=morning|afternoon|evening|night|unknown|all] [--compare-limit=N] [--json]
   focustime --backup[=DIR] [--json]
   focustime --restore[=DIR] [--json]
-  focustime --sync-backup[=DIR] [--sync-passphrase=PASSPHRASE] [--json]
-  focustime --sync-restore[=DIR] [--sync-passphrase=PASSPHRASE] [--json]
   focustime --calendar-sync [--json]
   focustime --export[=DIR] [--json]
   focustime --feature-inventory[=DIR] [--json]
@@ -238,9 +235,6 @@ Options:
   --compare-limit Status comparison row limit (positive integer)
   --backup        Back up config.toml and stats.toml to current directory or DIR
   --restore       Restore config.toml and stats.toml from current directory or DIR
-  --sync-backup   Create encrypted cross-device sync snapshot in current directory or DIR
-  --sync-restore  Restore from encrypted sync snapshot in current directory or DIR
-  --sync-passphrase  Passphrase for encrypted sync commands (or use FOCUSTIME_SYNC_PASSPHRASE)
   --calendar-sync  Refresh calendar busy-window cache from configured ICS feeds
   --export        Export stats to current directory or DIR
   --feature-inventory  Export feature inventory scoring report to current directory or DIR
@@ -391,14 +385,6 @@ pub enum CommandKind {
     Restore {
         dir: Option<PathBuf>,
     },
-    SyncBackup {
-        dir: Option<PathBuf>,
-        passphrase: Option<String>,
-    },
-    SyncRestore {
-        dir: Option<PathBuf>,
-        passphrase: Option<String>,
-    },
     CalendarSync,
     Export {
         dir: Option<PathBuf>,
@@ -490,8 +476,6 @@ enum PrimaryCommand {
     Status,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
-    SyncBackup(Option<PathBuf>),
-    SyncRestore(Option<PathBuf>),
     CalendarSync,
     Export(Option<PathBuf>),
     FeatureInventory(Option<PathBuf>),
@@ -577,9 +561,6 @@ enum ParsedToken {
     UsageSignals,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
-    SyncBackup(Option<PathBuf>),
-    SyncRestore(Option<PathBuf>),
-    SyncPassphrase(String),
     CalendarSync,
     Export(Option<PathBuf>),
     FeatureInventory(Option<PathBuf>),
@@ -882,31 +863,6 @@ struct RestoreOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct SyncBackupOutput {
-    bundle_dir: PathBuf,
-    bundle_path: PathBuf,
-    snapshot_id: String,
-    base_snapshot_id: Option<String>,
-    device_id: String,
-    created_at_epoch_secs: i64,
-    config_hash_sha256: String,
-    stats_hash_sha256: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct SyncRestoreOutput {
-    restore_dir: PathBuf,
-    bundle_path: PathBuf,
-    snapshot_id: String,
-    base_snapshot_id: Option<String>,
-    source_device_id: String,
-    config_restored_path: PathBuf,
-    stats_restored_path: PathBuf,
-    config_hash_sha256: String,
-    stats_hash_sha256: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct CalendarSyncCommandOutput {
     action: &'static str,
     synced_at_epoch_secs: i64,
@@ -1077,12 +1033,6 @@ struct DiagnosticsCommandOutput {
     blocking_permissions: SetupCheckOutput,
     hosts_write_capability: SetupCheckOutput,
     wakatime_config: SetupCheckOutput,
-    sync_status: SetupCheckOutput,
-    sync_device_id: Option<String>,
-    sync_last_snapshot_id: Option<String>,
-    sync_last_success_epoch_secs: Option<i64>,
-    sync_last_error: Option<String>,
-    sync_last_error_epoch_secs: Option<i64>,
     deprecation_warnings: Vec<String>,
 }
 
@@ -1271,8 +1221,6 @@ where
     let primary = parse_primary_command(&tokens).map_err(|message| usage_error(output, message))?;
     let daemon_port =
         parse_daemon_port_option(&tokens).map_err(|message| usage_error(output, message))?;
-    let sync_passphrase =
-        parse_sync_passphrase_option(&tokens).map_err(|message| usage_error(output, message))?;
     let watch_interval_secs =
         parse_watch_interval_option(&tokens).map_err(|message| usage_error(output, message))?;
     let (comparison, has_comparison_options) =
@@ -1282,7 +1230,6 @@ where
         output,
         primary,
         daemon_port,
-        sync_passphrase,
         watch_interval_secs,
         comparison,
         has_comparison_options,

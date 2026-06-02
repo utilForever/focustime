@@ -209,6 +209,7 @@ impl FocusStats {
         record_usage_count(&mut self.screen_usage_counts, surface_id)
     }
 
+    #[cfg(test)]
     pub fn command_usage_count(&self, surface_id: &str) -> u64 {
         let key = surface_id.trim().to_ascii_lowercase();
         if key.is_empty() {

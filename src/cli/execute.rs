@@ -14,10 +14,7 @@ use crate::config::{
     run_config_doctor, run_config_migration_assistant, validate_automation_trigger_rules,
 };
 use crate::daemon;
-use crate::feature_inventory::{
-    DeprecationStage, build_feature_inventory_report, command_deprecation_notice_for_version,
-    export_feature_inventory_report,
-};
+use crate::feature_inventory::{build_feature_inventory_report, export_feature_inventory_report};
 
 use crate::cli::{
     AppConfig, AutomationTriggerRuleConfig, AutomationTriggersCommandOutput, BackupOutput,
@@ -34,10 +31,10 @@ use crate::cli::{
     ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SessionTemplateCommandKind,
     SessionTemplateCommandOutput, SessionTemplateSummaryOutput, SiteAddCommandOutput, SiteBlocker,
     SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
-    SiteListTarget, StatusComparisonOptions, StatusOutput, StrictCommandOutput, SyncBackupOutput,
-    SyncRestoreOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
-    TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset,
-    TimerCommandOutput, TimerStateOutput, UsageSignalsCommandOutput, WeekdayProfileRuleConfig,
+    SiteListTarget, StatusComparisonOptions, StatusOutput, StrictCommandOutput, TaskCommandOutput,
+    TaskGoalCommandOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
+    TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
+    TimerStateOutput, UsageSignalsCommandOutput, WeekdayProfileRuleConfig,
     WeekdayRulesCommandOutput, WeeklyGoalConfig, available_theme_preset_views,
     build_blocking_preview_command_output, build_diagnostics_command_output,
     build_schedule_inspection_output, build_status_output_with_comparison, build_task_goal_output,
@@ -54,17 +51,15 @@ use crate::cli::{
     print_session_metadata_command_output, print_session_template_command_output,
     print_site_add_command_output, print_site_delete_command_output,
     print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_sync_backup_output, print_sync_restore_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, print_usage_signals_command_output,
-    print_weekday_rules_command_output, profile_id, profile_view, theme_preset_view,
-    timer_phase_id, timer_status_id,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_usage_signals_command_output, print_weekday_rules_command_output, profile_id,
+    profile_view, theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 const CONFIG_FILE_NAME: &str = "config.toml";
 const STATS_FILE_NAME: &str = "stats.toml";
 const WATCH_INTERRUPT_POLL_INTERVAL: Duration = Duration::from_millis(200);
-const SYNC_PASSPHRASE_ENV: &str = "FOCUSTIME_SYNC_PASSPHRASE";
 const USAGE_SIGNAL_SUMMARY_LIMIT: usize = 5;
 
 static WATCH_INTERRUPTED: AtomicBool = AtomicBool::new(false);
@@ -78,12 +73,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
             eprintln!("Warning: failed to record command usage signal for `{surface_id}`: {error}");
         }
     }
-    apply_command_deprecation_policy(
-        &cli_command.kind,
-        cli_command.output,
-        env!("CARGO_PKG_VERSION"),
-    )?;
-
     match cli_command.kind {
         CommandKind::Start => execute_start_command(cli_command.output),
         CommandKind::Pause => execute_pause_command(cli_command.output),
@@ -141,12 +130,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         } => execute_status_command(cli_command.output, watch_interval_secs, comparison),
         CommandKind::Backup { dir } => execute_backup_command(dir, cli_command.output),
         CommandKind::Restore { dir } => execute_restore_command(dir, cli_command.output),
-        CommandKind::SyncBackup { dir, passphrase } => {
-            execute_sync_backup_command(dir, passphrase, cli_command.output)
-        }
-        CommandKind::SyncRestore { dir, passphrase } => {
-            execute_sync_restore_command(dir, passphrase, cli_command.output)
-        }
         CommandKind::CalendarSync => execute_calendar_sync_command(cli_command.output),
         CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
         CommandKind::FeatureInventory { dir } => {
@@ -169,29 +152,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         }
         CommandKind::HistoryDashboard { command } => {
             execute_history_dashboard_command(command, cli_command.output)
-        }
-    }
-}
-
-pub(super) fn apply_command_deprecation_policy(
-    command: &CommandKind,
-    output: OutputMode,
-    version: &str,
-) -> Result<(), String> {
-    let Some(command_id) = command_usage_surface_id(command) else {
-        return Ok(());
-    };
-    let Some(notice) = command_deprecation_notice_for_version(command_id, version) else {
-        return Ok(());
-    };
-
-    match notice.stage {
-        DeprecationStage::Removal => Err(notice.message),
-        DeprecationStage::Warning | DeprecationStage::MigrationGuidance => {
-            if matches!(output, OutputMode::Text) {
-                eprintln!("{}", notice.message);
-            }
-            Ok(())
         }
     }
 }
@@ -228,8 +188,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Status { .. } => Some("status"),
         CommandKind::Backup { .. } => Some("backup"),
         CommandKind::Restore { .. } => Some("restore"),
-        CommandKind::SyncBackup { .. } => Some("sync-backup"),
-        CommandKind::SyncRestore { .. } => Some("sync-restore"),
         CommandKind::CalendarSync => Some("calendar-sync"),
         CommandKind::Export { .. } => Some("export"),
         CommandKind::FeatureInventory { .. } => Some("feature-inventory"),
@@ -2184,67 +2142,6 @@ fn execute_restore_command(dir: Option<PathBuf>, output: OutputMode) -> Result<(
     Ok(())
 }
 
-fn execute_sync_backup_command(
-    dir: Option<PathBuf>,
-    passphrase: Option<String>,
-    output: OutputMode,
-) -> Result<(), String> {
-    let backup_dir = match dir {
-        Some(path) => path,
-        None => env::current_dir().map_err(|error| {
-            format!("Encrypted sync backup failed: could not determine current directory: {error}")
-        })?,
-    };
-    let passphrase = resolve_sync_passphrase(passphrase)?;
-    let result = crate::sync::backup_to_dir(&backup_dir, &passphrase)?;
-    let payload = SyncBackupOutput {
-        bundle_dir: result.bundle_dir,
-        bundle_path: result.bundle_path,
-        snapshot_id: result.snapshot_id,
-        base_snapshot_id: result.base_snapshot_id,
-        device_id: result.device_id,
-        created_at_epoch_secs: result.created_at_epoch_secs,
-        config_hash_sha256: result.config_hash_sha256,
-        stats_hash_sha256: result.stats_hash_sha256,
-    };
-    match output {
-        OutputMode::Text => print_sync_backup_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn execute_sync_restore_command(
-    dir: Option<PathBuf>,
-    passphrase: Option<String>,
-    output: OutputMode,
-) -> Result<(), String> {
-    let restore_dir = match dir {
-        Some(path) => path,
-        None => env::current_dir().map_err(|error| {
-            format!("Encrypted sync restore failed: could not determine current directory: {error}")
-        })?,
-    };
-    let passphrase = resolve_sync_passphrase(passphrase)?;
-    let result = crate::sync::restore_from_dir(&restore_dir, &passphrase)?;
-    let payload = SyncRestoreOutput {
-        restore_dir: result.restore_dir,
-        bundle_path: result.bundle_path,
-        snapshot_id: result.snapshot_id,
-        base_snapshot_id: result.base_snapshot_id,
-        source_device_id: result.source_device_id,
-        config_restored_path: result.config_restored_path,
-        stats_restored_path: result.stats_restored_path,
-        config_hash_sha256: result.config_hash_sha256,
-        stats_hash_sha256: result.stats_hash_sha256,
-    };
-    match output {
-        OutputMode::Text => print_sync_restore_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
 fn execute_calendar_sync_command(output: OutputMode) -> Result<(), String> {
     let config = AppConfig::load().normalized();
     let result = crate::calendar::sync_from_config(&config.calendar_sync, chrono::Local::now())?;
@@ -2332,31 +2229,6 @@ fn is_wrapper_punctuation(ch: char) -> bool {
         ch,
         '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | ',' | ';'
     )
-}
-
-fn resolve_sync_passphrase(passphrase: Option<String>) -> Result<String, String> {
-    if let Some(value) = passphrase {
-        if value.trim().is_empty() {
-            return Err(
-                "Encrypted sync command failed: `--sync-passphrase` cannot be empty.".to_string(),
-            );
-        }
-        return Ok(value);
-    }
-    let env_value = std::env::var(SYNC_PASSPHRASE_ENV)
-        .map_err(|_| {
-            format!(
-                "Encrypted sync command failed: provide `--sync-passphrase` or set {SYNC_PASSPHRASE_ENV}."
-            )
-        })?
-        .trim()
-        .to_string();
-    if env_value.is_empty() {
-        return Err(format!(
-            "Encrypted sync command failed: `{SYNC_PASSPHRASE_ENV}` cannot be empty."
-        ));
-    }
-    Ok(env_value)
 }
 
 fn ensure_restore_source_file(path: &Path, file_name: &str) -> Result<(), String> {
