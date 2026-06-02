@@ -1,4 +1,3 @@
-use super::execute::apply_command_deprecation_policy;
 use crate::cli::*;
 use crate::config::{AutomationTriggerActionConfig, AutomationTriggerConditionConfig};
 use crate::session_recovery::{
@@ -912,45 +911,6 @@ fn diagnostics_output_includes_deprecation_warnings() {
 }
 
 #[test]
-fn sync_backup_deprecation_policy_allows_warning_stage() {
-    let result = apply_command_deprecation_policy(
-        &CommandKind::SyncBackup {
-            dir: Some(PathBuf::from("reports")),
-            passphrase: Some("secret".to_string()),
-        },
-        OutputMode::Json,
-        "0.14.2",
-    );
-
-    assert!(result.is_ok());
-}
-
-#[test]
-fn sync_backup_deprecation_policy_blocks_removal_stage() {
-    let result = apply_command_deprecation_policy(
-        &CommandKind::SyncBackup {
-            dir: Some(PathBuf::from("reports")),
-            passphrase: Some("secret".to_string()),
-        },
-        OutputMode::Json,
-        "0.16.0",
-    );
-
-    let error = result.expect_err("sync backup should be blocked at removal stage");
-    assert!(error.contains("--sync-backup"));
-    assert!(error.contains("removed"));
-}
-
-#[test]
-fn diagnostics_output_includes_sync_fields() {
-    let app = App::default();
-    let payload = build_diagnostics_command_output(&app.setup_diagnostics);
-    assert!(!payload.sync_status.level.is_empty());
-    assert!(!payload.sync_status.message.is_empty());
-    assert!(payload.sync_last_snapshot_id.is_none());
-}
-
-#[test]
 fn parse_blocking_preview_supports_json_mode() {
     let parsed = parse(&["--blocking-preview", "--json"]).unwrap();
     assert_eq!(
@@ -1050,51 +1010,6 @@ fn parse_restore_with_equals_accepts_directory() {
         CliAction::RunCommand(CliCommand {
             kind: CommandKind::Restore {
                 dir: Some(PathBuf::from("reports"))
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_sync_backup_accepts_optional_directory_and_passphrase() {
-    let parsed = parse(&["--sync-backup", "reports", "--sync-passphrase", "secret"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SyncBackup {
-                dir: Some(PathBuf::from("reports")),
-                passphrase: Some("secret".to_string())
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_sync_backup_without_value_uses_default_directory() {
-    let parsed = parse(&["--sync-backup"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SyncBackup {
-                dir: None,
-                passphrase: None
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_sync_restore_with_equals_accepts_directory_and_passphrase() {
-    let parsed = parse(&["--sync-restore=reports", "--sync-passphrase=secret"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SyncRestore {
-                dir: Some(PathBuf::from("reports")),
-                passphrase: Some("secret".to_string())
             },
             output: OutputMode::Text
         })
@@ -1554,33 +1469,6 @@ fn classify_key_value_arg_accepts_restore_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_sync_backup_equals_value() {
-    let parsed = classify_key_value_arg("--sync-backup=reports").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::SyncBackup(Some(PathBuf::from("reports"))))
-    );
-}
-
-#[test]
-fn classify_key_value_arg_accepts_sync_restore_equals_value() {
-    let parsed = classify_key_value_arg("--sync-restore=reports").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::SyncRestore(Some(PathBuf::from("reports"))))
-    );
-}
-
-#[test]
-fn classify_key_value_arg_accepts_sync_passphrase_equals_value() {
-    let parsed = classify_key_value_arg("--sync-passphrase=secret").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::SyncPassphrase("secret".to_string()))
-    );
-}
-
-#[test]
 fn classify_key_value_arg_accepts_goal_equals_value() {
     let parsed = classify_key_value_arg("--goal=90,3").unwrap();
     assert_eq!(
@@ -1783,24 +1671,6 @@ fn classify_key_value_arg_rejects_empty_backup_equals_value() {
 fn classify_key_value_arg_rejects_empty_restore_equals_value() {
     let error = classify_key_value_arg("--restore=").unwrap_err();
     assert!(error.contains("`--restore=` requires a source directory."));
-}
-
-#[test]
-fn classify_key_value_arg_rejects_empty_sync_backup_equals_value() {
-    let error = classify_key_value_arg("--sync-backup=").unwrap_err();
-    assert!(error.contains("`--sync-backup=` requires a target directory."));
-}
-
-#[test]
-fn classify_key_value_arg_rejects_empty_sync_restore_equals_value() {
-    let error = classify_key_value_arg("--sync-restore=").unwrap_err();
-    assert!(error.contains("`--sync-restore=` requires a source directory."));
-}
-
-#[test]
-fn classify_key_value_arg_rejects_empty_sync_passphrase_equals_value() {
-    let error = classify_key_value_arg("--sync-passphrase=").unwrap_err();
-    assert!(error.contains("`--sync-passphrase=` requires a non-empty value."));
 }
 
 #[test]
@@ -2180,6 +2050,18 @@ fn parse_rejects_removed_dry_run_option() {
 }
 
 #[test]
+fn parse_rejects_removed_sync_backup_option() {
+    let error = parse(&["--sync-backup"]).unwrap_err();
+    assert!(error.contains("Unknown option `--sync-backup`"));
+}
+
+#[test]
+fn parse_rejects_removed_sync_passphrase_option() {
+    let error = parse(&["--sync-passphrase=secret"]).unwrap_err();
+    assert!(error.contains("Unknown option `--sync-passphrase=secret`"));
+}
+
+#[test]
 fn parse_rejects_backup_with_blank_positional_value() {
     let error = parse(&["--backup", "   "]).unwrap_err();
     assert!(error.contains("`--backup` requires a target directory."));
@@ -2189,23 +2071,6 @@ fn parse_rejects_backup_with_blank_positional_value() {
 fn parse_rejects_restore_with_blank_positional_value() {
     let error = parse(&["--restore", "   "]).unwrap_err();
     assert!(error.contains("`--restore` requires a source directory."));
-}
-
-#[test]
-fn parse_rejects_sync_passphrase_without_sync_command() {
-    let error = parse(&["--status", "--sync-passphrase=secret"]).unwrap_err();
-    assert!(error.contains("`--sync-passphrase` is only valid"));
-}
-
-#[test]
-fn parse_rejects_duplicate_sync_passphrase_flags() {
-    let error = parse(&[
-        "--sync-backup",
-        "--sync-passphrase=a",
-        "--sync-passphrase=b",
-    ])
-    .unwrap_err();
-    assert!(error.contains("`--sync-passphrase` can only be specified once."));
 }
 
 #[test]
