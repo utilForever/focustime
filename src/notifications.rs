@@ -11,16 +11,16 @@ use crate::timer::TimerPhase;
 
 const NOTIFICATION_TITLE: &str = "focustime";
 
-pub struct PhaseNotifier {
+pub(crate) struct PhaseNotifier {
     settings: NotificationConfig,
 }
 
 impl PhaseNotifier {
-    pub fn new(settings: NotificationConfig) -> Self {
+    pub(crate) fn new(settings: NotificationConfig) -> Self {
         Self { settings }
     }
 
-    pub fn notify_phase_completion(
+    pub(crate) fn notify_phase_completion(
         &self,
         completed_phase: TimerPhase,
         next_phase: TimerPhase,

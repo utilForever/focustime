@@ -14,12 +14,12 @@ const WAKATIME_CAPABILITIES: [IntegrationCapability; 5] = [
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum IntegrationId {
+pub(crate) enum IntegrationId {
     Wakatime,
 }
 
 impl IntegrationId {
-    pub fn config_name(self) -> &'static str {
+    pub(crate) fn config_name(self) -> &'static str {
         match self {
             Self::Wakatime => WAKATIME_PLUGIN_NAME,
         }
@@ -34,7 +34,7 @@ impl IntegrationId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum IntegrationCapability {
+pub(crate) enum IntegrationCapability {
     FocusLifecycleHooks,
     FocusElapsedHooks,
     TaskMetadataHooks,
@@ -43,13 +43,13 @@ pub enum IntegrationCapability {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct IntegrationDescriptor {
-    pub id: IntegrationId,
-    pub capabilities: &'static [IntegrationCapability],
+pub(crate) struct IntegrationDescriptor {
+    pub(crate) id: IntegrationId,
+    pub(crate) capabilities: &'static [IntegrationCapability],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IntegrationLifecycleEvent {
+pub(crate) enum IntegrationLifecycleEvent {
     Poll,
     FocusStateChanged { focus_running: bool },
     FocusElapsed { elapsed_secs: u64 },
@@ -77,12 +77,12 @@ struct LoadedIntegration {
     plugin: Box<dyn IntegrationPlugin>,
 }
 
-pub struct IntegrationRuntime {
+pub(crate) struct IntegrationRuntime {
     integrations: Vec<LoadedIntegration>,
 }
 
 impl IntegrationRuntime {
-    pub fn load(
+    pub(crate) fn load(
         enabled_plugins: &[String],
         wakatime_metadata: WakatimeHeartbeatMetadata,
         wakatime_runtime: WakatimeRuntimeOptions,
@@ -111,7 +111,7 @@ impl IntegrationRuntime {
         (Self { integrations }, warnings)
     }
 
-    pub fn dispatch_lifecycle_event(
+    pub(crate) fn dispatch_lifecycle_event(
         &mut self,
         event: IntegrationLifecycleEvent,
     ) -> Result<(), String> {
@@ -140,20 +140,20 @@ impl IntegrationRuntime {
         }
     }
 
-    pub fn set_wakatime_metadata(&mut self, metadata: WakatimeHeartbeatMetadata) {
+    pub(crate) fn set_wakatime_metadata(&mut self, metadata: WakatimeHeartbeatMetadata) {
         let Some(plugin) = self.wakatime_plugin_mut() else {
             return;
         };
         plugin.set_metadata(metadata);
     }
 
-    pub fn wakatime_runtime_state(&self) -> WakatimeRuntimeState {
+    pub(crate) fn wakatime_runtime_state(&self) -> WakatimeRuntimeState {
         self.wakatime_plugin()
             .map(|plugin| plugin.tracker().runtime_state())
             .unwrap_or(WakatimeRuntimeState::NotConfigured)
     }
 
-    pub fn wakatime_last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
+    pub(crate) fn wakatime_last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
         self.wakatime_plugin()
             .and_then(|plugin| plugin.tracker().last_successful_heartbeat_epoch_secs())
     }

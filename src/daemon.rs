@@ -31,30 +31,30 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const DETACHED_PROCESS: u32 = 0x0000_0008;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DaemonConnectionInfo {
-    pub pid: u32,
-    pub host: String,
-    pub port: u16,
-    pub started_at_epoch_secs: i64,
+pub(crate) struct DaemonConnectionInfo {
+    pub(crate) pid: u32,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) started_at_epoch_secs: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DaemonStartResult {
-    pub already_running: bool,
-    pub info: DaemonConnectionInfo,
+pub(crate) struct DaemonStartResult {
+    pub(crate) already_running: bool,
+    pub(crate) info: DaemonConnectionInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DaemonStatusResult {
-    pub running: bool,
-    pub info: Option<DaemonConnectionInfo>,
+pub(crate) struct DaemonStatusResult {
+    pub(crate) running: bool,
+    pub(crate) info: Option<DaemonConnectionInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DaemonStopResult {
-    pub was_running: bool,
-    pub stopped: bool,
-    pub info: Option<DaemonConnectionInfo>,
+pub(crate) struct DaemonStopResult {
+    pub(crate) was_running: bool,
+    pub(crate) stopped: bool,
+    pub(crate) info: Option<DaemonConnectionInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,11 +86,11 @@ impl Drop for DaemonStateGuard {
     }
 }
 
-pub fn is_daemon_child_process() -> bool {
+pub(crate) fn is_daemon_child_process() -> bool {
     std::env::var_os(DAEMON_CHILD_ENV).is_some()
 }
 
-pub fn start_background(port: Option<u16>) -> Result<DaemonStartResult, String> {
+pub(crate) fn start_background(port: Option<u16>) -> Result<DaemonStartResult, String> {
     let status = status()?;
     if status.running {
         return Ok(DaemonStartResult {
@@ -109,7 +109,7 @@ pub fn start_background(port: Option<u16>) -> Result<DaemonStartResult, String> 
     })
 }
 
-pub fn status() -> Result<DaemonStatusResult, String> {
+pub(crate) fn status() -> Result<DaemonStatusResult, String> {
     let Some(state) = load_state_file()? else {
         return Ok(DaemonStatusResult {
             running: false,
@@ -129,7 +129,7 @@ pub fn status() -> Result<DaemonStatusResult, String> {
     }
 }
 
-pub fn stop() -> Result<DaemonStopResult, String> {
+pub(crate) fn stop() -> Result<DaemonStopResult, String> {
     let Some(state) = load_state_file()? else {
         return Ok(DaemonStopResult {
             was_running: false,
@@ -171,7 +171,7 @@ pub fn stop() -> Result<DaemonStopResult, String> {
     })
 }
 
-pub fn run_foreground(port: Option<u16>) -> Result<(), String> {
+pub(crate) fn run_foreground(port: Option<u16>) -> Result<(), String> {
     if let Some(existing_state) = load_state_file()? {
         if ping_health_with_retry(&existing_state).is_ok() {
             return Err(format!(

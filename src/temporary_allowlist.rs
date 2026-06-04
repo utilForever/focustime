@@ -5,29 +5,29 @@ use serde::{Deserialize, Serialize};
 use crate::blocker::SiteBlocker;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct TemporaryAllowlistEntry {
+pub(crate) struct TemporaryAllowlistEntry {
     #[serde(default)]
-    pub profile: String,
+    pub(crate) profile: String,
     #[serde(default)]
-    pub site: String,
+    pub(crate) site: String,
     #[serde(default)]
-    pub expires_at_epoch_secs: i64,
+    pub(crate) expires_at_epoch_secs: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsedTemporaryAllowlistSpec {
-    pub site: String,
-    pub duration_secs: u64,
+pub(crate) struct ParsedTemporaryAllowlistSpec {
+    pub(crate) site: String,
+    pub(crate) duration_secs: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ActiveTemporaryAllowlistEntry {
-    pub site: String,
-    pub remaining_secs: u64,
-    pub expires_at_epoch_secs: i64,
+pub(crate) struct ActiveTemporaryAllowlistEntry {
+    pub(crate) site: String,
+    pub(crate) remaining_secs: u64,
+    pub(crate) expires_at_epoch_secs: i64,
 }
 
-pub fn parse_temporary_allowlist_specs(
+pub(crate) fn parse_temporary_allowlist_specs(
     input: &str,
 ) -> Result<Vec<ParsedTemporaryAllowlistSpec>, String> {
     let mut parsed: Vec<ParsedTemporaryAllowlistSpec> = Vec::new();
@@ -73,7 +73,7 @@ pub fn parse_temporary_allowlist_specs(
     Ok(parsed)
 }
 
-pub fn prune_expired_temporary_allowlist_entries(
+pub(crate) fn prune_expired_temporary_allowlist_entries(
     entries: &mut Vec<TemporaryAllowlistEntry>,
     now_epoch_secs: i64,
 ) -> usize {
@@ -86,7 +86,7 @@ pub fn prune_expired_temporary_allowlist_entries(
     original_len.saturating_sub(entries.len())
 }
 
-pub fn upsert_temporary_allowlist_entries(
+pub(crate) fn upsert_temporary_allowlist_entries(
     entries: &mut Vec<TemporaryAllowlistEntry>,
     profile: &str,
     specs: &[ParsedTemporaryAllowlistSpec],
@@ -139,7 +139,7 @@ pub fn upsert_temporary_allowlist_entries(
     (added, refreshed)
 }
 
-pub fn active_temporary_allowlist_sites_for_profile(
+pub(crate) fn active_temporary_allowlist_sites_for_profile(
     entries: &[TemporaryAllowlistEntry],
     profile: &str,
     now_epoch_secs: i64,
@@ -150,7 +150,7 @@ pub fn active_temporary_allowlist_sites_for_profile(
         .collect()
 }
 
-pub fn active_temporary_allowlist_status_entries_for_profile(
+pub(crate) fn active_temporary_allowlist_status_entries_for_profile(
     entries: &[TemporaryAllowlistEntry],
     profile: &str,
     now_epoch_secs: i64,

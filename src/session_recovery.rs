@@ -27,14 +27,14 @@ const WORKFLOW_STATE_FILE_NAME: &str = "workflow-state.toml";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum RecoveryTimerPhase {
+pub(crate) enum RecoveryTimerPhase {
     Focus,
     ShortBreak,
     LongBreak,
 }
 
 impl RecoveryTimerPhase {
-    pub fn from_timer_phase(phase: TimerPhase) -> Self {
+    pub(crate) fn from_timer_phase(phase: TimerPhase) -> Self {
         match phase {
             TimerPhase::Focus => Self::Focus,
             TimerPhase::ShortBreak => Self::ShortBreak,
@@ -42,7 +42,7 @@ impl RecoveryTimerPhase {
         }
     }
 
-    pub fn to_timer_phase(self) -> TimerPhase {
+    pub(crate) fn to_timer_phase(self) -> TimerPhase {
         match self {
             Self::Focus => TimerPhase::Focus,
             Self::ShortBreak => TimerPhase::ShortBreak,
@@ -53,14 +53,14 @@ impl RecoveryTimerPhase {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum RecoveryTimerStatus {
+pub(crate) enum RecoveryTimerStatus {
     Idle,
     Running,
     Paused,
 }
 
 impl RecoveryTimerStatus {
-    pub fn from_timer_status(status: TimerStatus) -> Self {
+    pub(crate) fn from_timer_status(status: TimerStatus) -> Self {
         match status {
             TimerStatus::Idle => Self::Idle,
             TimerStatus::Running => Self::Running,
@@ -68,7 +68,7 @@ impl RecoveryTimerStatus {
         }
     }
 
-    pub fn to_timer_status(self) -> TimerStatus {
+    pub(crate) fn to_timer_status(self) -> TimerStatus {
         match self {
             Self::Idle => TimerStatus::Idle,
             Self::Running => TimerStatus::Running,
@@ -78,55 +78,55 @@ impl RecoveryTimerStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct InProgressSessionSnapshot {
-    pub phase: RecoveryTimerPhase,
-    pub status: RecoveryTimerStatus,
-    pub remaining_secs: u64,
+pub(crate) struct InProgressSessionSnapshot {
+    pub(crate) phase: RecoveryTimerPhase,
+    pub(crate) status: RecoveryTimerStatus,
+    pub(crate) remaining_secs: u64,
     #[serde(default)]
-    pub pomodoros_completed: u32,
-    pub selected_task_label: Option<String>,
+    pub(crate) pomodoros_completed: u32,
+    pub(crate) selected_task_label: Option<String>,
     #[serde(default)]
-    pub focus_intention: Option<String>,
+    pub(crate) focus_intention: Option<String>,
     #[serde(default)]
-    pub task_note: Option<String>,
-    pub selected_profile: ProfileId,
+    pub(crate) task_note: Option<String>,
+    pub(crate) selected_profile: ProfileId,
     #[serde(default)]
-    pub captured_at_epoch_secs: Option<i64>,
+    pub(crate) captured_at_epoch_secs: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct WorkflowStateSnapshot {
+pub(crate) struct WorkflowStateSnapshot {
     #[serde(default)]
-    pub schedule_delayed_occurrence_key: Option<String>,
+    pub(crate) schedule_delayed_occurrence_key: Option<String>,
     #[serde(default)]
-    pub schedule_delay_until_epoch_secs: Option<i64>,
+    pub(crate) schedule_delay_until_epoch_secs: Option<i64>,
     #[serde(default)]
-    pub schedule_armed_occurrence_key: Option<String>,
+    pub(crate) schedule_armed_occurrence_key: Option<String>,
     #[serde(default)]
-    pub last_schedule_occurrence_key: Option<String>,
+    pub(crate) last_schedule_occurrence_key: Option<String>,
     #[serde(default)]
-    pub break_glass_expires_at_epoch_secs: Option<i64>,
+    pub(crate) break_glass_expires_at_epoch_secs: Option<i64>,
     #[serde(default)]
-    pub break_glass_confirmation_pending: bool,
+    pub(crate) break_glass_confirmation_pending: bool,
     #[serde(default)]
-    pub strict_reset_confirmation_pending: bool,
+    pub(crate) strict_reset_confirmation_pending: bool,
     #[serde(default)]
-    pub temporary_allowlist_entries: Vec<WorkflowTemporaryAllowlistEntrySnapshot>,
+    pub(crate) temporary_allowlist_entries: Vec<WorkflowTemporaryAllowlistEntrySnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct WorkflowTemporaryAllowlistEntrySnapshot {
+pub(crate) struct WorkflowTemporaryAllowlistEntrySnapshot {
     #[serde(default)]
-    pub profile: String,
+    pub(crate) profile: String,
     #[serde(default)]
-    pub site: String,
+    pub(crate) site: String,
     #[serde(default)]
-    pub expires_at_epoch_secs: i64,
+    pub(crate) expires_at_epoch_secs: i64,
 }
 
 impl InProgressSessionSnapshot {
     #[allow(dead_code)]
-    pub fn from_timer_state_with_metadata(
+    pub(crate) fn from_timer_state_with_metadata(
         timer: &TimerState,
         selected_task_label: Option<String>,
         focus_intention: Option<String>,
@@ -156,34 +156,34 @@ impl InProgressSessionSnapshot {
         })
     }
 
-    pub fn phase(&self) -> TimerPhase {
+    pub(crate) fn phase(&self) -> TimerPhase {
         self.phase.to_timer_phase()
     }
 
-    pub fn status(&self) -> TimerStatus {
+    pub(crate) fn status(&self) -> TimerStatus {
         self.status.to_timer_status()
     }
 
-    pub fn normalized_task_label(&self) -> Option<String> {
+    pub(crate) fn normalized_task_label(&self) -> Option<String> {
         self.selected_task_label
             .as_deref()
             .and_then(normalize_task_label)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn normalized_focus_intention(&self) -> Option<String> {
+    pub(crate) fn normalized_focus_intention(&self) -> Option<String> {
         self.focus_intention
             .as_deref()
             .and_then(normalize_metadata_text)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn normalized_task_note(&self) -> Option<String> {
+    pub(crate) fn normalized_task_note(&self) -> Option<String> {
         self.task_note.as_deref().and_then(normalize_metadata_text)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn validate_for_timer(&self, timer: &TimerState) -> Result<(), String> {
+    pub(crate) fn validate_for_timer(&self, timer: &TimerState) -> Result<(), String> {
         if !matches!(
             self.status,
             RecoveryTimerStatus::Running | RecoveryTimerStatus::Paused
@@ -207,7 +207,7 @@ impl InProgressSessionSnapshot {
         Ok(())
     }
 
-    pub fn reconcile_elapsed_for_timer(&self, timer: &TimerState) -> Self {
+    pub(crate) fn reconcile_elapsed_for_timer(&self, timer: &TimerState) -> Self {
         let Some(now_epoch_secs) = current_epoch_secs() else {
             return self.clone();
         };
@@ -215,7 +215,7 @@ impl InProgressSessionSnapshot {
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn reconcile_elapsed_for_timer_at_epoch_secs(
+    pub(crate) fn reconcile_elapsed_for_timer_at_epoch_secs(
         &self,
         timer: &TimerState,
         now_epoch_secs: i64,
@@ -262,7 +262,7 @@ impl InProgressSessionSnapshot {
 }
 
 #[cfg(not(test))]
-pub fn load() -> Result<Option<InProgressSessionSnapshot>, String> {
+pub(crate) fn load() -> Result<Option<InProgressSessionSnapshot>, String> {
     let path = recovery_path().map_err(|e| format!("session recovery path failed: {e}"))?;
     match fs::read_to_string(path) {
         Ok(content) => toml::from_str(&content)
@@ -274,7 +274,7 @@ pub fn load() -> Result<Option<InProgressSessionSnapshot>, String> {
 }
 
 #[cfg(not(test))]
-pub fn save(snapshot: &InProgressSessionSnapshot) -> io::Result<()> {
+pub(crate) fn save(snapshot: &InProgressSessionSnapshot) -> io::Result<()> {
     let path = recovery_path()?;
     let content = toml::to_string_pretty(snapshot)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -282,7 +282,7 @@ pub fn save(snapshot: &InProgressSessionSnapshot) -> io::Result<()> {
 }
 
 #[cfg(not(test))]
-pub fn clear() -> io::Result<()> {
+pub(crate) fn clear() -> io::Result<()> {
     let path = recovery_path()?;
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
@@ -292,7 +292,7 @@ pub fn clear() -> io::Result<()> {
 }
 
 #[cfg(not(test))]
-pub fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
+pub(crate) fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
     let path = workflow_state_path().map_err(|e| format!("workflow state path failed: {e}"))?;
     match fs::read_to_string(path) {
         Ok(content) => toml::from_str(&content)
@@ -304,7 +304,7 @@ pub fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
 }
 
 #[cfg(not(test))]
-pub fn save_workflow_state(snapshot: &WorkflowStateSnapshot) -> io::Result<()> {
+pub(crate) fn save_workflow_state(snapshot: &WorkflowStateSnapshot) -> io::Result<()> {
     let path = workflow_state_path()?;
     let content = toml::to_string_pretty(snapshot)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -312,7 +312,7 @@ pub fn save_workflow_state(snapshot: &WorkflowStateSnapshot) -> io::Result<()> {
 }
 
 #[cfg(not(test))]
-pub fn clear_workflow_state() -> io::Result<()> {
+pub(crate) fn clear_workflow_state() -> io::Result<()> {
     let path = workflow_state_path()?;
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
@@ -423,12 +423,12 @@ thread_local! {
 }
 
 #[cfg(test)]
-pub fn load() -> Result<Option<InProgressSessionSnapshot>, String> {
+pub(crate) fn load() -> Result<Option<InProgressSessionSnapshot>, String> {
     TEST_LOAD_OVERRIDE.with(|slot| slot.borrow_mut().take().unwrap_or(Ok(None)))
 }
 
 #[cfg(test)]
-pub fn save(snapshot: &InProgressSessionSnapshot) -> io::Result<()> {
+pub(crate) fn save(snapshot: &InProgressSessionSnapshot) -> io::Result<()> {
     TEST_SAVED_SNAPSHOT.with(|slot| {
         *slot.borrow_mut() = Some(snapshot.clone());
     });
@@ -436,7 +436,7 @@ pub fn save(snapshot: &InProgressSessionSnapshot) -> io::Result<()> {
 }
 
 #[cfg(test)]
-pub fn clear() -> io::Result<()> {
+pub(crate) fn clear() -> io::Result<()> {
     TEST_SAVED_SNAPSHOT.with(|slot| {
         *slot.borrow_mut() = None;
     });
@@ -444,7 +444,7 @@ pub fn clear() -> io::Result<()> {
 }
 
 #[cfg(test)]
-pub fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
+pub(crate) fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
     let override_value = TEST_WORKFLOW_LOAD_OVERRIDE.with(|slot| slot.borrow_mut().take());
     if let Some(result) = override_value {
         return result;
@@ -457,7 +457,7 @@ pub fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
 }
 
 #[cfg(test)]
-pub fn save_workflow_state(snapshot: &WorkflowStateSnapshot) -> io::Result<()> {
+pub(crate) fn save_workflow_state(snapshot: &WorkflowStateSnapshot) -> io::Result<()> {
     TEST_SAVED_WORKFLOW_SNAPSHOT.with(|slot| {
         *slot.borrow_mut() = Some(snapshot.clone());
     });
@@ -465,7 +465,7 @@ pub fn save_workflow_state(snapshot: &WorkflowStateSnapshot) -> io::Result<()> {
 }
 
 #[cfg(test)]
-pub fn clear_workflow_state() -> io::Result<()> {
+pub(crate) fn clear_workflow_state() -> io::Result<()> {
     TEST_SAVED_WORKFLOW_SNAPSHOT.with(|slot| {
         *slot.borrow_mut() = None;
     });

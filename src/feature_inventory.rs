@@ -6,8 +6,8 @@ use std::{
 
 use serde::Serialize;
 
-pub const FEATURE_INVENTORY_JSON_FILE_NAME: &str = "FEATURE_INVENTORY.json";
-pub const FEATURE_INVENTORY_MARKDOWN_FILE_NAME: &str = "FEATURE_INVENTORY.md";
+pub(crate) const FEATURE_INVENTORY_JSON_FILE_NAME: &str = "FEATURE_INVENTORY.json";
+pub(crate) const FEATURE_INVENTORY_MARKDOWN_FILE_NAME: &str = "FEATURE_INVENTORY.md";
 
 const SCHEMA_VERSION: u8 = 4;
 const COMPLEXITY_WEIGHT: f64 = 0.40;
@@ -22,7 +22,7 @@ const TIE_BREAK_REMOVE_SIGNAL_MAX: u8 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
-pub enum FeatureSurface {
+pub(crate) enum FeatureSurface {
     Timer,
     Schedule,
     Blocker,
@@ -32,7 +32,7 @@ pub enum FeatureSurface {
 
 impl FeatureSurface {
     #[cfg(test)]
-    pub const ALL: [Self; 5] = [
+    pub(crate) const ALL: [Self; 5] = [
         Self::Timer,
         Self::Schedule,
         Self::Blocker,
@@ -56,7 +56,7 @@ impl std::fmt::Display for FeatureSurface {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FeatureRecommendation {
+pub(crate) enum FeatureRecommendation {
     Keep,
     Merge,
     Remove,
@@ -73,77 +73,77 @@ impl FeatureRecommendation {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct FeatureInventoryReport {
-    pub schema_version: u8,
-    pub scoring_model: FeatureScoringModel,
-    pub summary: FeatureInventorySummary,
-    pub features: Vec<FeatureInventoryEntry>,
+pub(crate) struct FeatureInventoryReport {
+    pub(crate) schema_version: u8,
+    pub(crate) scoring_model: FeatureScoringModel,
+    pub(crate) summary: FeatureInventorySummary,
+    pub(crate) features: Vec<FeatureInventoryEntry>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct FeatureScoringModel {
-    pub score_min: u8,
-    pub score_max: u8,
-    pub complexity_weight: f64,
-    pub support_burden_weight: f64,
-    pub failure_impact_weight: f64,
-    pub keep_min_value: u8,
-    pub keep_min_delta: f64,
-    pub remove_max_delta: f64,
-    pub tie_break_model: TieBreakModel,
-    pub release_phase_mapping: Vec<RecommendationReleasePhase>,
+pub(crate) struct FeatureScoringModel {
+    pub(crate) score_min: u8,
+    pub(crate) score_max: u8,
+    pub(crate) complexity_weight: f64,
+    pub(crate) support_burden_weight: f64,
+    pub(crate) failure_impact_weight: f64,
+    pub(crate) keep_min_value: u8,
+    pub(crate) keep_min_delta: f64,
+    pub(crate) remove_max_delta: f64,
+    pub(crate) tie_break_model: TieBreakModel,
+    pub(crate) release_phase_mapping: Vec<RecommendationReleasePhase>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct TieBreakModel {
-    pub boundary_epsilon: f64,
-    pub keep_signal_min: u8,
-    pub remove_signal_max: u8,
+pub(crate) struct TieBreakModel {
+    pub(crate) boundary_epsilon: f64,
+    pub(crate) keep_signal_min: u8,
+    pub(crate) remove_signal_max: u8,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct RecommendationReleasePhase {
-    pub recommendation: FeatureRecommendation,
-    pub phase: &'static str,
-    pub objective: &'static str,
+pub(crate) struct RecommendationReleasePhase {
+    pub(crate) recommendation: FeatureRecommendation,
+    pub(crate) phase: &'static str,
+    pub(crate) objective: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct FeatureInventorySummary {
-    pub total_features: usize,
-    pub keep_count: usize,
-    pub merge_count: usize,
-    pub remove_count: usize,
-    pub by_surface: Vec<SurfaceSummary>,
-    pub covered_cli_flags: Vec<String>,
+pub(crate) struct FeatureInventorySummary {
+    pub(crate) total_features: usize,
+    pub(crate) keep_count: usize,
+    pub(crate) merge_count: usize,
+    pub(crate) remove_count: usize,
+    pub(crate) by_surface: Vec<SurfaceSummary>,
+    pub(crate) covered_cli_flags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct SurfaceSummary {
-    pub surface: FeatureSurface,
-    pub feature_count: usize,
+pub(crate) struct SurfaceSummary {
+    pub(crate) surface: FeatureSurface,
+    pub(crate) feature_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct FeatureInventoryEntry {
-    pub feature_id: String,
-    pub name: String,
-    pub surface: FeatureSurface,
-    pub description: String,
-    pub cli_flags: Vec<String>,
-    pub value: u8,
-    pub complexity: u8,
-    pub support_burden: u8,
-    pub failure_impact: u8,
-    pub maintenance_cost: f64,
-    pub value_to_maintenance_ratio: f64,
-    pub recommendation: FeatureRecommendation,
+pub(crate) struct FeatureInventoryEntry {
+    pub(crate) feature_id: String,
+    pub(crate) name: String,
+    pub(crate) surface: FeatureSurface,
+    pub(crate) description: String,
+    pub(crate) cli_flags: Vec<String>,
+    pub(crate) value: u8,
+    pub(crate) complexity: u8,
+    pub(crate) support_burden: u8,
+    pub(crate) failure_impact: u8,
+    pub(crate) maintenance_cost: f64,
+    pub(crate) value_to_maintenance_ratio: f64,
+    pub(crate) recommendation: FeatureRecommendation,
 }
 
 #[derive(Debug, Clone)]
-pub struct FeatureInventoryExportPaths {
-    pub json_path: PathBuf,
-    pub markdown_path: PathBuf,
+pub(crate) struct FeatureInventoryExportPaths {
+    pub(crate) json_path: PathBuf,
+    pub(crate) markdown_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -519,7 +519,7 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
     },
 ];
 
-pub fn build_feature_inventory_report() -> FeatureInventoryReport {
+pub(crate) fn build_feature_inventory_report() -> FeatureInventoryReport {
     build_feature_inventory_report_for_version(env!("CARGO_PKG_VERSION"))
 }
 
@@ -561,7 +561,7 @@ pub(crate) fn build_feature_inventory_report_for_version(
     }
 }
 
-pub fn export_feature_inventory_report(
+pub(crate) fn export_feature_inventory_report(
     dir: &Path,
     report: &FeatureInventoryReport,
 ) -> io::Result<FeatureInventoryExportPaths> {
@@ -585,7 +585,7 @@ pub fn export_feature_inventory_report(
     })
 }
 
-pub fn render_markdown_report(report: &FeatureInventoryReport) -> String {
+pub(crate) fn render_markdown_report(report: &FeatureInventoryReport) -> String {
     let model = &report.scoring_model;
     let tie_break = &model.tie_break_model;
     let mut markdown = String::new();

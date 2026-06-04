@@ -36,7 +36,7 @@ const DEFAULT_HEARTBEAT_PROJECT: &str = "focustime";
 const DEFAULT_HEARTBEAT_LANGUAGE: &str = "Pomodoro";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WakatimeRuntimeState {
+pub(crate) enum WakatimeRuntimeState {
     NotConfigured,
     Idle,
     Tracking,
@@ -57,7 +57,7 @@ pub enum WakatimeRuntimeState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WakatimeConfigStatus {
+pub(crate) enum WakatimeConfigStatus {
     Configured,
     MissingConfigFile,
     MissingApiKey,
@@ -66,20 +66,20 @@ pub enum WakatimeConfigStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WakatimeConfigDiagnostics {
-    pub config_path: Option<String>,
-    pub status: WakatimeConfigStatus,
-    pub detail: String,
+pub(crate) struct WakatimeConfigDiagnostics {
+    pub(crate) config_path: Option<String>,
+    pub(crate) status: WakatimeConfigStatus,
+    pub(crate) detail: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WakatimeHeartbeatMetadata {
-    pub project: String,
-    pub language: String,
+pub(crate) struct WakatimeHeartbeatMetadata {
+    pub(crate) project: String,
+    pub(crate) language: String,
 }
 
 impl WakatimeHeartbeatMetadata {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             project: normalize_nonempty_or_default(&self.project, DEFAULT_HEARTBEAT_PROJECT),
             language: normalize_nonempty_or_default(&self.language, DEFAULT_HEARTBEAT_LANGUAGE),
@@ -97,14 +97,14 @@ impl Default for WakatimeHeartbeatMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WakatimeRuntimeOptions {
-    pub retry_backoff_secs: Vec<u64>,
-    pub queue_capacity: usize,
-    pub queue_retry_delay_secs: u64,
+pub(crate) struct WakatimeRuntimeOptions {
+    pub(crate) retry_backoff_secs: Vec<u64>,
+    pub(crate) queue_capacity: usize,
+    pub(crate) queue_retry_delay_secs: u64,
 }
 
 impl WakatimeRuntimeOptions {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         let retry_backoff_secs = self
             .retry_backoff_secs
             .iter()
@@ -178,7 +178,7 @@ enum HeartbeatEvent {
 }
 
 /// Tracks WakaTime heartbeats during Focus sessions.
-pub struct WakatimeTracker {
+pub(crate) struct WakatimeTracker {
     api_key: Option<String>,
     api_url: String,
     /// Seconds elapsed since the last heartbeat was sent.
@@ -221,14 +221,14 @@ pub struct WakatimeTracker {
 }
 
 impl WakatimeTracker {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::new_with_settings(
             WakatimeHeartbeatMetadata::default(),
             WakatimeRuntimeOptions::default(),
         )
     }
 
-    pub fn new_with_settings(
+    pub(crate) fn new_with_settings(
         metadata: WakatimeHeartbeatMetadata,
         runtime: WakatimeRuntimeOptions,
     ) -> Self {
@@ -264,11 +264,11 @@ impl WakatimeTracker {
     }
 
     /// Returns `true` if actively sending heartbeats for a focus session.
-    pub fn is_tracking(&self) -> bool {
+    pub(crate) fn is_tracking(&self) -> bool {
         self.tracking
     }
 
-    pub fn runtime_state(&self) -> WakatimeRuntimeState {
+    pub(crate) fn runtime_state(&self) -> WakatimeRuntimeState {
         if self.api_key.is_none() {
             return WakatimeRuntimeState::NotConfigured;
         }
@@ -306,7 +306,7 @@ impl WakatimeTracker {
         }
     }
 
-    pub fn config_diagnostics() -> WakatimeConfigDiagnostics {
+    pub(crate) fn config_diagnostics() -> WakatimeConfigDiagnostics {
         let Some(config_path) = WakatimeConfig::config_file_path() else {
             return WakatimeConfigDiagnostics {
                 config_path: None,
@@ -317,11 +317,11 @@ impl WakatimeTracker {
         config_diagnostics_from_read_result(config_path.clone(), fs::read_to_string(config_path))
     }
 
-    pub fn last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
+    pub(crate) fn last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
         self.last_successful_heartbeat_epoch_secs
     }
 
-    pub fn pending_heartbeat_count(&self) -> usize {
+    pub(crate) fn pending_heartbeat_count(&self) -> usize {
         self.queued_heartbeats.len()
             + usize::from(self.heartbeat_in_flight && self.in_flight_from_queue)
     }
@@ -414,7 +414,7 @@ impl WakatimeTracker {
     }
 
     /// Drains heartbeat events from worker threads and updates tracker status.
-    pub fn poll_events(&mut self) {
+    pub(crate) fn poll_events(&mut self) {
         let mut queue_state_changed = false;
         while let Ok(event) = self.result_rx.try_recv() {
             match event {
@@ -474,7 +474,7 @@ impl WakatimeTracker {
     /// Called when a focus session starts (timer transitions to Running in Focus phase).
     /// Sends an immediate heartbeat and resets the interval counter.
     /// Does nothing if no API key is configured.
-    pub fn on_focus_start(&mut self) {
+    pub(crate) fn on_focus_start(&mut self) {
         if self.api_key.is_none() {
             return;
         }
@@ -488,7 +488,7 @@ impl WakatimeTracker {
     /// Sends at most one heartbeat per call regardless of how large `secs` is,
     /// so that a burst of catch-up ticks after a suspend/resume does not
     /// trigger multiple rapid HTTP requests.
-    pub fn tick_elapsed(&mut self, secs: u64) {
+    pub(crate) fn tick_elapsed(&mut self, secs: u64) {
         self.poll_events();
         if !self.tracking || secs == 0 {
             return;
@@ -503,11 +503,11 @@ impl WakatimeTracker {
     }
 
     /// Called when the focus session pauses, stops, or moves to a break phase.
-    pub fn on_focus_stop(&mut self) {
+    pub(crate) fn on_focus_stop(&mut self) {
         self.set_tracking_state(false);
     }
 
-    pub fn set_heartbeat_metadata(&mut self, metadata: WakatimeHeartbeatMetadata) {
+    pub(crate) fn set_heartbeat_metadata(&mut self, metadata: WakatimeHeartbeatMetadata) {
         self.heartbeat_metadata = metadata.normalized();
     }
 
