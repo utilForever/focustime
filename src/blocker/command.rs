@@ -6,14 +6,14 @@ use super::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct CommandBlockingBackend {
-    pub block_command: String,
-    pub unblock_command: String,
-    pub diagnostics_command: String,
+pub(crate) struct CommandBlockingBackend {
+    pub(crate) block_command: String,
+    pub(crate) unblock_command: String,
+    pub(crate) diagnostics_command: String,
 }
 
 impl CommandBlockingBackend {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             block_command: self.block_command.trim().to_string(),
             unblock_command: self.unblock_command.trim().to_string(),
@@ -21,7 +21,7 @@ impl CommandBlockingBackend {
         }
     }
 
-    pub fn is_configured(&self) -> bool {
+    pub(crate) fn is_configured(&self) -> bool {
         !self.block_command.trim().is_empty() && !self.unblock_command.trim().is_empty()
     }
 }

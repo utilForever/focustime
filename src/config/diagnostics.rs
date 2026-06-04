@@ -71,7 +71,7 @@ fn write_migrated_config_with_backup(
     Ok(backup_path)
 }
 
-pub fn run_config_doctor() -> ConfigDoctorReport {
+pub(crate) fn run_config_doctor() -> ConfigDoctorReport {
     run_config_doctor_with_path(AppConfig::config_path())
 }
 
@@ -270,7 +270,7 @@ pub(super) fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> Confi
     }
 }
 
-pub fn run_config_migration_assistant(apply: bool) -> ConfigMigrationReport {
+pub(crate) fn run_config_migration_assistant(apply: bool) -> ConfigMigrationReport {
     run_config_migration_assistant_with_path(apply, AppConfig::config_path())
 }
 

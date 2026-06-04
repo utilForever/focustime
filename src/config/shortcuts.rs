@@ -1,107 +1,107 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ShortcutConfig {
+pub(crate) struct ShortcutConfig {
     #[serde(default = "default_shortcut_quit")]
-    pub quit: String,
+    pub(crate) quit: String,
     #[serde(default = "default_shortcut_timer_toggle_pause")]
-    pub timer_toggle_pause: String,
+    pub(crate) timer_toggle_pause: String,
     #[serde(default = "default_shortcut_timer_stop_reset")]
-    pub timer_stop_reset: String,
+    pub(crate) timer_stop_reset: String,
     #[serde(default = "default_shortcut_timer_next_phase")]
-    pub timer_next_phase: String,
+    pub(crate) timer_next_phase: String,
     #[serde(default = "default_shortcut_open_site_manager")]
-    pub open_site_manager: String,
+    pub(crate) open_site_manager: String,
     #[serde(default = "default_shortcut_open_profile_manager")]
-    pub open_profile_manager: String,
+    pub(crate) open_profile_manager: String,
     #[serde(default = "default_shortcut_open_session_planner")]
-    pub open_session_planner: String,
+    pub(crate) open_session_planner: String,
     #[serde(default = "default_shortcut_open_stats_history")]
-    pub open_stats_history: String,
+    pub(crate) open_stats_history: String,
     #[serde(default = "default_shortcut_open_setup_diagnostics")]
-    pub open_setup_diagnostics: String,
+    pub(crate) open_setup_diagnostics: String,
     #[serde(default = "default_shortcut_timer_edit_note")]
-    pub timer_edit_note: String,
+    pub(crate) timer_edit_note: String,
     #[serde(default = "default_shortcut_break_glass_override")]
-    pub break_glass_override: String,
+    pub(crate) break_glass_override: String,
     #[serde(default = "default_shortcut_delay_schedule_start")]
-    pub delay_schedule_start: String,
+    pub(crate) delay_schedule_start: String,
     #[serde(default = "default_shortcut_back_site_manager")]
-    pub back_site_manager: String,
+    pub(crate) back_site_manager: String,
     #[serde(default = "default_shortcut_toggle_site_list_mode")]
-    pub toggle_site_list_mode: String,
+    pub(crate) toggle_site_list_mode: String,
     #[serde(default = "default_shortcut_site_add")]
-    pub site_add: String,
+    pub(crate) site_add: String,
     #[serde(default = "default_shortcut_site_edit")]
-    pub site_edit: String,
+    pub(crate) site_edit: String,
     #[serde(default = "default_shortcut_site_delete")]
-    pub site_delete: String,
+    pub(crate) site_delete: String,
     #[serde(default = "default_shortcut_select_previous_blocklist_profile")]
-    pub select_previous_blocklist_profile: String,
+    pub(crate) select_previous_blocklist_profile: String,
     #[serde(default = "default_shortcut_select_next_blocklist_profile")]
-    pub select_next_blocklist_profile: String,
+    pub(crate) select_next_blocklist_profile: String,
     #[serde(default = "default_shortcut_create_blocklist_profile")]
-    pub create_blocklist_profile: String,
+    pub(crate) create_blocklist_profile: String,
     #[serde(default = "default_shortcut_rename_blocklist_profile")]
-    pub rename_blocklist_profile: String,
+    pub(crate) rename_blocklist_profile: String,
     #[serde(default = "default_shortcut_delete_blocklist_profile")]
-    pub delete_blocklist_profile: String,
+    pub(crate) delete_blocklist_profile: String,
     #[serde(default = "default_shortcut_back_session_planner")]
-    pub back_session_planner: String,
+    pub(crate) back_session_planner: String,
     #[serde(default = "default_shortcut_planner_add")]
-    pub planner_add: String,
+    pub(crate) planner_add: String,
     #[serde(default = "default_shortcut_planner_rename")]
-    pub planner_rename: String,
+    pub(crate) planner_rename: String,
     #[serde(default = "default_shortcut_planner_favorite")]
-    pub planner_favorite: String,
+    pub(crate) planner_favorite: String,
     #[serde(default = "default_shortcut_planner_archive")]
-    pub planner_archive: String,
+    pub(crate) planner_archive: String,
     #[serde(default = "default_shortcut_planner_delete")]
-    pub planner_delete: String,
+    pub(crate) planner_delete: String,
     #[serde(default = "default_shortcut_planner_select_recent")]
-    pub planner_select_recent: String,
+    pub(crate) planner_select_recent: String,
     #[serde(default = "default_shortcut_back_profile_manager")]
-    pub back_profile_manager: String,
+    pub(crate) back_profile_manager: String,
     #[serde(default = "default_shortcut_profile_edit")]
-    pub profile_edit: String,
+    pub(crate) profile_edit: String,
     #[serde(default = "default_shortcut_back_stats_history")]
-    pub back_stats_history: String,
+    pub(crate) back_stats_history: String,
     #[serde(default = "default_shortcut_export_stats_history")]
-    pub export_stats_history: String,
+    pub(crate) export_stats_history: String,
     #[serde(default = "default_shortcut_history_dashboard_select_previous")]
-    pub history_dashboard_select_previous: String,
+    pub(crate) history_dashboard_select_previous: String,
     #[serde(default = "default_shortcut_history_dashboard_select_next")]
-    pub history_dashboard_select_next: String,
+    pub(crate) history_dashboard_select_next: String,
     #[serde(default = "default_shortcut_history_dashboard_toggle_pin")]
-    pub history_dashboard_toggle_pin: String,
+    pub(crate) history_dashboard_toggle_pin: String,
     #[serde(default = "default_shortcut_history_dashboard_move_left")]
-    pub history_dashboard_move_left: String,
+    pub(crate) history_dashboard_move_left: String,
     #[serde(default = "default_shortcut_history_dashboard_move_right")]
-    pub history_dashboard_move_right: String,
+    pub(crate) history_dashboard_move_right: String,
     #[serde(default = "default_shortcut_back_setup_diagnostics")]
-    pub back_setup_diagnostics: String,
+    pub(crate) back_setup_diagnostics: String,
     #[serde(default = "default_shortcut_refresh_setup_diagnostics")]
-    pub refresh_setup_diagnostics: String,
+    pub(crate) refresh_setup_diagnostics: String,
     #[serde(default = "default_shortcut_navigate_up")]
-    pub navigate_up: String,
+    pub(crate) navigate_up: String,
     #[serde(default = "default_shortcut_navigate_down")]
-    pub navigate_down: String,
+    pub(crate) navigate_down: String,
     #[serde(default = "default_shortcut_navigate_left")]
-    pub navigate_left: String,
+    pub(crate) navigate_left: String,
     #[serde(default = "default_shortcut_navigate_right")]
-    pub navigate_right: String,
+    pub(crate) navigate_right: String,
     #[serde(default = "default_shortcut_confirm")]
-    pub confirm: String,
+    pub(crate) confirm: String,
     #[serde(default = "default_shortcut_cancel")]
-    pub cancel: String,
+    pub(crate) cancel: String,
     #[serde(default = "default_shortcut_delete")]
-    pub delete: String,
+    pub(crate) delete: String,
     #[serde(default = "default_shortcut_backspace")]
-    pub backspace: String,
+    pub(crate) backspace: String,
 }
 
 impl ShortcutConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             quit: normalize_shortcut_token(&self.quit, &default_shortcut_quit()),
             timer_toggle_pause: normalize_shortcut_token(

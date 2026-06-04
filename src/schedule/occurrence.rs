@@ -4,7 +4,7 @@ use chrono::{DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, TimeZo
 
 use super::{OneTimeWindow, RecurringWindow, WindowOccurrence, WindowOccurrenceKind};
 
-pub fn occurrence_key(occurrence: &WindowOccurrence) -> String {
+pub(crate) fn occurrence_key(occurrence: &WindowOccurrence) -> String {
     let kind_key = match occurrence.kind {
         WindowOccurrenceKind::Recurring => "r",
         WindowOccurrenceKind::OneTime => "o",
@@ -16,7 +16,7 @@ pub fn occurrence_key(occurrence: &WindowOccurrence) -> String {
     )
 }
 
-pub fn active_occurrence(
+pub(crate) fn active_occurrence(
     now: DateTime<Local>,
     windows: &[RecurringWindow],
     exception_dates: &HashSet<NaiveDate>,
@@ -62,7 +62,7 @@ pub fn active_occurrence(
     selected
 }
 
-pub fn next_occurrence_after(
+pub(crate) fn next_occurrence_after(
     now: DateTime<Local>,
     windows: &[RecurringWindow],
     exception_dates: &HashSet<NaiveDate>,
@@ -111,7 +111,7 @@ pub fn next_occurrence_after(
     selected
 }
 
-pub fn active_one_time_occurrence(
+pub(crate) fn active_one_time_occurrence(
     now: DateTime<Local>,
     windows: &[OneTimeWindow],
 ) -> Option<WindowOccurrence> {
@@ -153,7 +153,7 @@ pub fn active_one_time_occurrence(
     selected
 }
 
-pub fn next_one_time_occurrence_after(
+pub(crate) fn next_one_time_occurrence_after(
     now: DateTime<Local>,
     windows: &[OneTimeWindow],
 ) -> Option<WindowOccurrence> {
@@ -186,7 +186,7 @@ pub fn next_one_time_occurrence_after(
     selected
 }
 
-pub fn pick_active_occurrence(
+pub(crate) fn pick_active_occurrence(
     first: Option<WindowOccurrence>,
     second: Option<WindowOccurrence>,
 ) -> Option<WindowOccurrence> {
@@ -204,7 +204,7 @@ pub fn pick_active_occurrence(
     }
 }
 
-pub fn pick_next_occurrence(
+pub(crate) fn pick_next_occurrence(
     first: Option<WindowOccurrence>,
     second: Option<WindowOccurrence>,
 ) -> Option<WindowOccurrence> {

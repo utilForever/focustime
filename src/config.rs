@@ -15,19 +15,19 @@ mod paths;
 mod shortcuts;
 mod wakatime;
 
-pub use automation::validate_automation_trigger_rules;
+pub(crate) use automation::validate_automation_trigger_rules;
 use automation::{
     normalize_automation_triggers, normalize_trigger_days, normalize_weekday_profile_rules,
     normalize_weekday_token,
 };
-pub use blocklists::{
+pub(crate) use blocklists::{
     BlocklistCategoryConfig, BlocklistProfileConfig, effective_blocked_sites_for_profile,
 };
 use blocklists::{
     default_blocklist_profile_name, make_unique_profile_name, normalize_blocklist_profiles,
     normalize_selected_blocklist_profile,
 };
-pub use diagnostics::{run_config_doctor, run_config_migration_assistant};
+pub(crate) use diagnostics::{run_config_doctor, run_config_migration_assistant};
 #[cfg(test)]
 use diagnostics::{run_config_doctor_with_path, run_config_migration_assistant_with_path};
 #[cfg(test)]
@@ -42,10 +42,10 @@ use paths::env_path_from_value;
 use paths::{app_dir_with_env, stats_app_dir_with_env};
 #[cfg(test)]
 use paths::{config_dir_from_env, stats_state_dir_from_env};
-pub use shortcuts::ShortcutConfig;
+pub(crate) use shortcuts::ShortcutConfig;
 #[allow(unused_imports)]
-pub use wakatime::WakatimeTaskMappingConfig;
-pub use wakatime::{WakatimeMetadataConfig, WakatimeRuntimeConfig};
+pub(crate) use wakatime::WakatimeTaskMappingConfig;
+pub(crate) use wakatime::{WakatimeMetadataConfig, WakatimeRuntimeConfig};
 
 const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 2;
 const LEGACY_CONFIG_SCHEMA_VERSION: u32 = 0;
@@ -65,123 +65,123 @@ const CALENDAR_SYNC_LOOKAHEAD_MAX_DAYS: u16 = 90;
 ///   otherwise `~/.config/focustime/config.toml`
 /// - Windows:      `%APPDATA%\focustime\config.toml`
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppConfig {
+pub(crate) struct AppConfig {
     /// Duration of a focus session in seconds (legacy load-time compatibility field).
     #[serde(default = "default_focus_secs", skip_serializing)]
-    pub focus_secs: u64,
+    pub(crate) focus_secs: u64,
     /// Duration of a short-break session in seconds (legacy load-time compatibility field).
     #[serde(default = "default_short_break_secs", skip_serializing)]
-    pub short_break_secs: u64,
+    pub(crate) short_break_secs: u64,
     /// Duration of a long-break session in seconds (legacy load-time compatibility field).
     #[serde(default = "default_long_break_secs", skip_serializing)]
-    pub long_break_secs: u64,
+    pub(crate) long_break_secs: u64,
     /// Number of completed focus sessions before a long break.
     #[serde(default = "default_long_break_interval", skip_serializing)]
-    pub long_break_interval: u32,
+    pub(crate) long_break_interval: u32,
     /// Deprecated blocked-sites mirror (legacy load-time compatibility field).
     #[serde(default, skip_serializing)]
-    pub blocked_sites: Vec<String>,
+    pub(crate) blocked_sites: Vec<String>,
     /// Named blocklist profiles.
     ///
     /// Each profile stores a separate blocked-sites list. This field supports
     /// issue #110 and supersedes `blocked_sites` as the primary representation.
     #[serde(default)]
-    pub blocklist_profiles: Vec<BlocklistProfileConfig>,
+    pub(crate) blocklist_profiles: Vec<BlocklistProfileConfig>,
     /// Name of the active blocklist profile.
     #[serde(default = "default_blocklist_profile_name")]
-    pub selected_blocklist_profile: String,
+    pub(crate) selected_blocklist_profile: String,
     /// Blocking backend selection and fallback behavior.
     #[serde(default)]
-    pub blocking_backend: BlockingBackendConfig,
+    pub(crate) blocking_backend: BlockingBackendConfig,
     /// Selected profile identifier.
     #[serde(default)]
-    pub selected_profile: ProfileId,
+    pub(crate) selected_profile: ProfileId,
     /// Editable custom profile persisted by the app.
     ///
     /// When this is absent, the app derives it from the legacy duration fields.
     /// This is the canonical persisted timer-duration surface.
     #[serde(default)]
-    pub custom_profile: Option<CustomProfileConfig>,
+    pub(crate) custom_profile: Option<CustomProfileConfig>,
     /// Weekday smart-switch rules for profile and planning defaults.
     #[serde(default)]
-    pub weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
+    pub(crate) weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     /// Reusable session templates bundling task/profile/blocklist/schedule settings.
     #[serde(default)]
-    pub session_templates: Vec<SessionTemplateConfig>,
+    pub(crate) session_templates: Vec<SessionTemplateConfig>,
     /// Name of the active session template (empty = none selected).
     #[serde(default)]
-    pub selected_session_template: String,
+    pub(crate) selected_session_template: String,
     /// Rule-based automation triggers for time/schedule/runtime events.
     #[serde(default)]
-    pub automation_triggers: Vec<AutomationTriggerRuleConfig>,
+    pub(crate) automation_triggers: Vec<AutomationTriggerRuleConfig>,
     /// Selected UI theme preset.
     #[serde(default)]
-    pub selected_theme_preset: ThemePreset,
+    pub(crate) selected_theme_preset: ThemePreset,
     /// Deprecated top-level automation mirror (legacy load-time compatibility field).
     #[serde(default, skip_serializing)]
-    pub notifications: NotificationConfig,
+    pub(crate) notifications: NotificationConfig,
     /// Deprecated top-level automation mirror (legacy load-time compatibility field).
     #[serde(default, skip_serializing)]
-    pub auto_start: AutoStartConfig,
+    pub(crate) auto_start: AutoStartConfig,
     /// Deprecated top-level automation mirror (legacy load-time compatibility field).
     #[serde(default, skip_serializing)]
-    pub recurring_schedule: RecurringScheduleConfig,
+    pub(crate) recurring_schedule: RecurringScheduleConfig,
     /// Runtime tuning knobs for schedule editing and delay behavior.
     #[serde(default)]
-    pub schedule_runtime: ScheduleRuntimeConfig,
+    pub(crate) schedule_runtime: ScheduleRuntimeConfig,
     /// External calendar sync settings (ICS feeds, including provider feeds).
     #[serde(default)]
-    pub calendar_sync: CalendarSyncConfig,
+    pub(crate) calendar_sync: CalendarSyncConfig,
     /// Profile-scoped automation settings.
     ///
     /// When absent, legacy global automation fields are used as shared defaults
     /// for all profiles during normalization.
     #[serde(default)]
-    pub profile_automation: Option<ProfileAutomationSettingsConfig>,
+    pub(crate) profile_automation: Option<ProfileAutomationSettingsConfig>,
     /// Deprecated top-level automation mirror (legacy load-time compatibility field).
     #[serde(default, skip_serializing)]
-    pub strict_mode: bool,
+    pub(crate) strict_mode: bool,
     /// Duration of a break-glass unblock override in seconds.
     ///
     /// This value is clamped to a non-zero default during normalization.
     #[serde(default = "default_break_glass_duration_secs")]
-    pub break_glass_duration_secs: u64,
+    pub(crate) break_glass_duration_secs: u64,
     /// Daily goal settings for focus minutes and completed pomodoros.
     ///
     /// A value of `0` disables the corresponding goal.
     #[serde(default)]
-    pub daily_goal: DailyGoalConfig,
+    pub(crate) daily_goal: DailyGoalConfig,
     /// Weekly goal settings for focus minutes and completed pomodoros.
     ///
     /// A value of `0` disables the corresponding goal.
     #[serde(default)]
-    pub weekly_goal: WeeklyGoalConfig,
+    pub(crate) weekly_goal: WeeklyGoalConfig,
     /// Monthly goal settings for focus minutes and completed pomodoros.
     ///
     /// A value of `0` disables the corresponding goal.
     #[serde(default)]
-    pub monthly_goal: MonthlyGoalConfig,
+    pub(crate) monthly_goal: MonthlyGoalConfig,
     /// Carry-over behavior for unmet daily/weekly/monthly targets.
     #[serde(default)]
-    pub goal_carry_over: GoalCarryOverConfig,
+    pub(crate) goal_carry_over: GoalCarryOverConfig,
     /// Retention policy for persisted stats history.
     #[serde(default)]
-    pub stats_retention: StatsRetentionConfig,
+    pub(crate) stats_retention: StatsRetentionConfig,
     /// History dashboard KPI card layout (pinning + display order).
     #[serde(default)]
-    pub history_dashboard: HistoryDashboardConfig,
+    pub(crate) history_dashboard: HistoryDashboardConfig,
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
-    pub wakatime: WakatimeMetadataConfig,
+    pub(crate) wakatime: WakatimeMetadataConfig,
     /// Runtime tuning knobs for WakaTime retry/queue behavior.
     #[serde(default)]
-    pub wakatime_runtime: WakatimeRuntimeConfig,
+    pub(crate) wakatime_runtime: WakatimeRuntimeConfig,
     /// Feature flags used to safely gate compatibility-sensitive behavior.
     #[serde(default)]
-    pub feature_flags: FeatureFlagsConfig,
+    pub(crate) feature_flags: FeatureFlagsConfig,
     /// User-configurable keyboard shortcuts for core TUI command actions.
     #[serde(default)]
-    pub shortcuts: ShortcutConfig,
+    pub(crate) shortcuts: ShortcutConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,7 +203,7 @@ impl AppConfigDisk {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ConfigHealthStatus {
+pub(crate) enum ConfigHealthStatus {
     Ok,
     Warning,
     Error,
@@ -211,59 +211,59 @@ pub enum ConfigHealthStatus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ConfigHealthSeverity {
+pub(crate) enum ConfigHealthSeverity {
     Warning,
     Error,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ConfigHealthFinding {
-    pub code: String,
-    pub severity: ConfigHealthSeverity,
-    pub message: String,
-    pub remediation: String,
+pub(crate) struct ConfigHealthFinding {
+    pub(crate) code: String,
+    pub(crate) severity: ConfigHealthSeverity,
+    pub(crate) message: String,
+    pub(crate) remediation: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ConfigMigrationStepReport {
-    pub from_schema_version: u32,
-    pub to_schema_version: u32,
-    pub summary: String,
+pub(crate) struct ConfigMigrationStepReport {
+    pub(crate) from_schema_version: u32,
+    pub(crate) to_schema_version: u32,
+    pub(crate) summary: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ConfigDoctorReport {
-    pub action: &'static str,
-    pub config_path: Option<PathBuf>,
-    pub detected_schema_version: Option<u32>,
-    pub current_schema_version: u32,
-    pub status: ConfigHealthStatus,
-    pub migration_steps: Vec<ConfigMigrationStepReport>,
-    pub findings: Vec<ConfigHealthFinding>,
+pub(crate) struct ConfigDoctorReport {
+    pub(crate) action: &'static str,
+    pub(crate) config_path: Option<PathBuf>,
+    pub(crate) detected_schema_version: Option<u32>,
+    pub(crate) current_schema_version: u32,
+    pub(crate) status: ConfigHealthStatus,
+    pub(crate) migration_steps: Vec<ConfigMigrationStepReport>,
+    pub(crate) findings: Vec<ConfigHealthFinding>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ConfigMigrationReport {
-    pub action: &'static str,
-    pub applied: bool,
-    pub config_path: Option<PathBuf>,
-    pub backup_path: Option<PathBuf>,
-    pub detected_schema_version: Option<u32>,
-    pub target_schema_version: u32,
-    pub changed: bool,
-    pub status: ConfigHealthStatus,
-    pub steps: Vec<ConfigMigrationStepReport>,
-    pub findings: Vec<ConfigHealthFinding>,
+pub(crate) struct ConfigMigrationReport {
+    pub(crate) action: &'static str,
+    pub(crate) applied: bool,
+    pub(crate) config_path: Option<PathBuf>,
+    pub(crate) backup_path: Option<PathBuf>,
+    pub(crate) detected_schema_version: Option<u32>,
+    pub(crate) target_schema_version: u32,
+    pub(crate) changed: bool,
+    pub(crate) status: ConfigHealthStatus,
+    pub(crate) steps: Vec<ConfigMigrationStepReport>,
+    pub(crate) findings: Vec<ConfigHealthFinding>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct FeatureFlagsConfig {
+pub(crate) struct FeatureFlagsConfig {
     #[serde(default)]
-    pub integrations: IntegrationFeatureFlagsConfig,
+    pub(crate) integrations: IntegrationFeatureFlagsConfig,
 }
 
 impl FeatureFlagsConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             integrations: self.integrations.normalized(),
         }
@@ -271,13 +271,13 @@ impl FeatureFlagsConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct IntegrationFeatureFlagsConfig {
+pub(crate) struct IntegrationFeatureFlagsConfig {
     #[serde(default = "default_enabled_integrations")]
-    pub enabled: Vec<String>,
+    pub(crate) enabled: Vec<String>,
 }
 
 impl IntegrationFeatureFlagsConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         let mut enabled = Vec::new();
         for integration in &self.enabled {
             let trimmed = integration.trim().to_ascii_lowercase();
@@ -289,7 +289,7 @@ impl IntegrationFeatureFlagsConfig {
         Self { enabled }
     }
 
-    pub fn is_enabled(&self, integration: &str) -> bool {
+    pub(crate) fn is_enabled(&self, integration: &str) -> bool {
         let normalized = integration.trim().to_ascii_lowercase();
         self.enabled
             .iter()
@@ -306,15 +306,15 @@ impl Default for IntegrationFeatureFlagsConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct BlockingBackendConfig {
+pub(crate) struct BlockingBackendConfig {
     #[serde(default)]
-    pub policy: BlockingBackendPolicyConfig,
+    pub(crate) policy: BlockingBackendPolicyConfig,
     #[serde(default)]
-    pub command: CommandBlockingBackendConfig,
+    pub(crate) command: CommandBlockingBackendConfig,
 }
 
 impl BlockingBackendConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             policy: self.policy,
             command: self.command.normalized(),
@@ -324,7 +324,7 @@ impl BlockingBackendConfig {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum BlockingBackendPolicyConfig {
+pub(crate) enum BlockingBackendPolicyConfig {
     HostsOnly,
     #[default]
     HostsThenCommand,
@@ -333,17 +333,17 @@ pub enum BlockingBackendPolicyConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct CommandBlockingBackendConfig {
+pub(crate) struct CommandBlockingBackendConfig {
     #[serde(default)]
-    pub block_command: String,
+    pub(crate) block_command: String,
     #[serde(default)]
-    pub unblock_command: String,
+    pub(crate) unblock_command: String,
     #[serde(default)]
-    pub diagnostics_command: String,
+    pub(crate) diagnostics_command: String,
 }
 
 impl CommandBlockingBackendConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             block_command: self.block_command.trim().to_string(),
             unblock_command: self.unblock_command.trim().to_string(),
@@ -353,33 +353,33 @@ impl CommandBlockingBackendConfig {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub struct NotificationConfig {
+pub(crate) struct NotificationConfig {
     #[serde(default = "default_notification_enabled")]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
     #[serde(default)]
-    pub sound: bool,
+    pub(crate) sound: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct AutoStartConfig {
+pub(crate) struct AutoStartConfig {
     #[serde(default)]
-    pub focus_to_break: bool,
+    pub(crate) focus_to_break: bool,
     #[serde(default)]
-    pub break_to_focus: bool,
+    pub(crate) break_to_focus: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct RecurringScheduleConfig {
+pub(crate) struct RecurringScheduleConfig {
     #[serde(default)]
-    pub windows: Vec<RecurringFocusWindowConfig>,
+    pub(crate) windows: Vec<RecurringFocusWindowConfig>,
     #[serde(default)]
-    pub exception_dates: Vec<String>,
+    pub(crate) exception_dates: Vec<String>,
     #[serde(default)]
-    pub one_time_windows: Vec<OneTimeFocusWindowConfig>,
+    pub(crate) one_time_windows: Vec<OneTimeFocusWindowConfig>,
 }
 
 impl RecurringScheduleConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         let windows = self
             .windows
             .iter()
@@ -421,15 +421,15 @@ impl RecurringScheduleConfig {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ScheduleRuntimeConfig {
+pub(crate) struct ScheduleRuntimeConfig {
     #[serde(default = "default_schedule_time_step_minutes")]
-    pub time_step_minutes: u16,
+    pub(crate) time_step_minutes: u16,
     #[serde(default = "default_schedule_delay_secs")]
-    pub delay_secs: u64,
+    pub(crate) delay_secs: u64,
 }
 
 impl ScheduleRuntimeConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             time_step_minutes: self.time_step_minutes.clamp(
                 SCHEDULE_TIME_STEP_MIN_MINUTES,
@@ -452,19 +452,19 @@ impl Default for ScheduleRuntimeConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CalendarSyncConfig {
+pub(crate) struct CalendarSyncConfig {
     #[serde(default)]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
     #[serde(default = "default_calendar_sync_refresh_secs")]
-    pub refresh_secs: u64,
+    pub(crate) refresh_secs: u64,
     #[serde(default = "default_calendar_sync_lookahead_days")]
-    pub lookahead_days: u16,
+    pub(crate) lookahead_days: u16,
     #[serde(default)]
-    pub sources: Vec<CalendarSourceConfig>,
+    pub(crate) sources: Vec<CalendarSourceConfig>,
 }
 
 impl CalendarSyncConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             enabled: self.enabled,
             refresh_secs: self.refresh_secs.clamp(
@@ -492,19 +492,19 @@ impl Default for CalendarSyncConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CalendarSourceConfig {
+pub(crate) struct CalendarSourceConfig {
     #[serde(default)]
-    pub name: String,
+    pub(crate) name: String,
     #[serde(default)]
-    pub provider: CalendarProviderConfig,
+    pub(crate) provider: CalendarProviderConfig,
     #[serde(default)]
-    pub url: String,
+    pub(crate) url: String,
     #[serde(default = "default_calendar_source_enabled")]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
 }
 
 impl CalendarSourceConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             name: self.name.trim().to_string(),
             provider: self.provider,
@@ -516,7 +516,7 @@ impl CalendarSourceConfig {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum CalendarProviderConfig {
+pub(crate) enum CalendarProviderConfig {
     #[default]
     Ics,
     Google,
@@ -524,19 +524,19 @@ pub enum CalendarProviderConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct ProfileAutomationConfig {
+pub(crate) struct ProfileAutomationConfig {
     #[serde(default)]
-    pub notifications: NotificationConfig,
+    pub(crate) notifications: NotificationConfig,
     #[serde(default)]
-    pub auto_start: AutoStartConfig,
+    pub(crate) auto_start: AutoStartConfig,
     #[serde(default)]
-    pub strict_mode: bool,
+    pub(crate) strict_mode: bool,
     #[serde(default)]
-    pub recurring_schedule: RecurringScheduleConfig,
+    pub(crate) recurring_schedule: RecurringScheduleConfig,
 }
 
 impl ProfileAutomationConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             notifications: self.notifications,
             auto_start: self.auto_start,
@@ -562,18 +562,18 @@ impl ProfileAutomationConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct ProfileAutomationSettingsConfig {
+pub(crate) struct ProfileAutomationSettingsConfig {
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "classic")]
-    pub basic: Option<ProfileAutomationConfig>,
+    pub(crate) basic: Option<ProfileAutomationConfig>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         alias = "deep_work",
         alias = "deep-work"
     )]
-    pub standard: Option<ProfileAutomationConfig>,
+    pub(crate) standard: Option<ProfileAutomationConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "custom")]
-    pub advanced: Option<ProfileAutomationConfig>,
+    pub(crate) advanced: Option<ProfileAutomationConfig>,
 }
 
 impl ProfileAutomationSettingsConfig {
@@ -594,7 +594,7 @@ impl ProfileAutomationSettingsConfig {
         }
     }
 
-    pub fn for_profile(
+    pub(crate) fn for_profile(
         &self,
         profile: ProfileId,
         fallback: &ProfileAutomationConfig,
@@ -607,7 +607,7 @@ impl ProfileAutomationSettingsConfig {
         configured.unwrap_or_else(|| fallback.clone()).normalized()
     }
 
-    pub fn set_for_profile(&mut self, profile: ProfileId, config: ProfileAutomationConfig) {
+    pub(crate) fn set_for_profile(&mut self, profile: ProfileId, config: ProfileAutomationConfig) {
         let value = Some(config.normalized());
         match profile {
             ProfileId::Classic => self.basic = value,
@@ -618,15 +618,15 @@ impl ProfileAutomationSettingsConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WeekdayProfileRuleConfig {
+pub(crate) struct WeekdayProfileRuleConfig {
     #[serde(default = "default_weekday_profile_rule_day")]
-    pub day: String,
+    pub(crate) day: String,
     #[serde(default)]
-    pub profile: ProfileId,
+    pub(crate) profile: ProfileId,
     #[serde(default = "default_blocklist_profile_name")]
-    pub blocklist_profile: String,
+    pub(crate) blocklist_profile: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_template: Option<String>,
+    pub(crate) session_template: Option<String>,
 }
 
 impl WeekdayProfileRuleConfig {
@@ -663,9 +663,9 @@ impl Default for WeekdayProfileRuleConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct AutomationTriggerRuleConfig {
-    pub trigger: AutomationTriggerConditionConfig,
-    pub action: AutomationTriggerActionConfig,
+pub(crate) struct AutomationTriggerRuleConfig {
+    pub(crate) trigger: AutomationTriggerConditionConfig,
+    pub(crate) action: AutomationTriggerActionConfig,
 }
 
 impl AutomationTriggerRuleConfig {
@@ -684,7 +684,7 @@ impl AutomationTriggerRuleConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum AutomationTriggerConditionConfig {
+pub(crate) enum AutomationTriggerConditionConfig {
     #[default]
     ScheduleWindowStart,
     ScheduleWindowEnd,
@@ -720,7 +720,7 @@ impl AutomationTriggerConditionConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum AutomationTriggerActionConfig {
+pub(crate) enum AutomationTriggerActionConfig {
     #[default]
     StartFocus,
     DelayScheduleStart {
@@ -768,17 +768,17 @@ impl AutomationTriggerActionConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RecurringFocusWindowConfig {
+pub(crate) struct RecurringFocusWindowConfig {
     #[serde(default = "default_schedule_window_days")]
-    pub days: Vec<String>,
+    pub(crate) days: Vec<String>,
     #[serde(default = "default_schedule_window_start")]
-    pub start: String,
+    pub(crate) start: String,
     #[serde(default = "default_schedule_window_end")]
-    pub end: String,
+    pub(crate) end: String,
 }
 
 impl RecurringFocusWindowConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             days: normalize_schedule_days(&self.days),
             start: normalize_schedule_time_or_default(&self.start, default_schedule_window_start),
@@ -798,17 +798,17 @@ impl Default for RecurringFocusWindowConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct OneTimeFocusWindowConfig {
+pub(crate) struct OneTimeFocusWindowConfig {
     #[serde(default)]
-    pub date: String,
+    pub(crate) date: String,
     #[serde(default = "default_schedule_window_start")]
-    pub start: String,
+    pub(crate) start: String,
     #[serde(default = "default_schedule_window_end")]
-    pub end: String,
+    pub(crate) end: String,
 }
 
 impl OneTimeFocusWindowConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             date: self.date.trim().to_string(),
             start: self.start.trim().to_string(),
@@ -828,51 +828,51 @@ impl Default for OneTimeFocusWindowConfig {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct DailyGoalConfig {
+pub(crate) struct DailyGoalConfig {
     /// Target focused minutes for the current day.
     #[serde(default)]
-    pub minutes: u64,
+    pub(crate) minutes: u64,
     /// Target completed pomodoros for the current day.
     #[serde(default)]
-    pub pomodoros: u32,
+    pub(crate) pomodoros: u32,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct WeeklyGoalConfig {
+pub(crate) struct WeeklyGoalConfig {
     /// Target focused minutes for the current week.
     #[serde(default)]
-    pub minutes: u64,
+    pub(crate) minutes: u64,
     /// Target completed pomodoros for the current week.
     #[serde(default)]
-    pub pomodoros: u32,
+    pub(crate) pomodoros: u32,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct MonthlyGoalConfig {
+pub(crate) struct MonthlyGoalConfig {
     /// Target focused minutes for the current month.
     #[serde(default)]
-    pub minutes: u64,
+    pub(crate) minutes: u64,
     /// Target completed pomodoros for the current month.
     #[serde(default)]
-    pub pomodoros: u32,
+    pub(crate) pomodoros: u32,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct GoalCarryOverConfig {
+pub(crate) struct GoalCarryOverConfig {
     /// When enabled, unmet daily targets are added to the next day's target.
     #[serde(default)]
-    pub daily: bool,
+    pub(crate) daily: bool,
     /// When enabled, unmet weekly targets are added to the next week's target.
     #[serde(default)]
-    pub weekly: bool,
+    pub(crate) weekly: bool,
     /// When enabled, unmet monthly targets are added to the next month's target.
     #[serde(default)]
-    pub monthly: bool,
+    pub(crate) monthly: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum StatsRetentionPreset {
+pub(crate) enum StatsRetentionPreset {
     KeepAll,
     Aggressive,
     #[default]
@@ -880,7 +880,7 @@ pub enum StatsRetentionPreset {
 }
 
 impl StatsRetentionPreset {
-    pub fn id(self) -> &'static str {
+    pub(crate) fn id(self) -> &'static str {
         match self {
             Self::KeepAll => "keep_all",
             Self::Balanced => "balanced",
@@ -890,13 +890,13 @@ impl StatsRetentionPreset {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct StatsRetentionConfig {
+pub(crate) struct StatsRetentionConfig {
     #[serde(default)]
-    pub preset: StatsRetentionPreset,
+    pub(crate) preset: StatsRetentionPreset,
 }
 
 impl StatsRetentionConfig {
-    pub fn windows(self) -> StatsRetentionWindows {
+    pub(crate) fn windows(self) -> StatsRetentionWindows {
         match self.preset {
             StatsRetentionPreset::KeepAll => StatsRetentionWindows {
                 keep_daily_days: None,
@@ -927,18 +927,18 @@ impl StatsRetentionConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StatsRetentionWindows {
-    pub keep_daily_days: Option<u16>,
-    pub keep_focus_sessions_days: Option<u16>,
-    pub keep_session_interruptions_days: Option<u16>,
-    pub keep_break_glass_overrides_days: Option<u16>,
-    pub keep_weekly_goal_snapshots_days: Option<u16>,
-    pub keep_monthly_goal_snapshots_days: Option<u16>,
+pub(crate) struct StatsRetentionWindows {
+    pub(crate) keep_daily_days: Option<u16>,
+    pub(crate) keep_focus_sessions_days: Option<u16>,
+    pub(crate) keep_session_interruptions_days: Option<u16>,
+    pub(crate) keep_break_glass_overrides_days: Option<u16>,
+    pub(crate) keep_weekly_goal_snapshots_days: Option<u16>,
+    pub(crate) keep_monthly_goal_snapshots_days: Option<u16>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
-pub enum HistoryKpiCardId {
+pub(crate) enum HistoryKpiCardId {
     SessionSummary,
     FocusScore,
     GoalStreak,
@@ -952,7 +952,7 @@ pub enum HistoryKpiCardId {
 }
 
 impl HistoryKpiCardId {
-    pub const fn id(self) -> &'static str {
+    pub(crate) const fn id(self) -> &'static str {
         match self {
             Self::SessionSummary => "session_summary",
             Self::FocusScore => "focus_score",
@@ -967,7 +967,7 @@ impl HistoryKpiCardId {
         }
     }
 
-    pub const fn label(self) -> &'static str {
+    pub(crate) const fn label(self) -> &'static str {
         match self {
             Self::SessionSummary => "Session Summary",
             Self::FocusScore => "Focus Score",
@@ -982,7 +982,7 @@ impl HistoryKpiCardId {
         }
     }
 
-    pub const fn all() -> [Self; 9] {
+    pub(crate) const fn all() -> [Self; 9] {
         [
             Self::SessionSummary,
             Self::FocusScore,
@@ -996,7 +996,7 @@ impl HistoryKpiCardId {
         ]
     }
 
-    pub fn from_id(value: &str) -> Option<Self> {
+    pub(crate) fn from_id(value: &str) -> Option<Self> {
         let parsed = Self::from_config_value(value);
         if parsed == Self::Unknown {
             None
@@ -1042,15 +1042,15 @@ impl<'de> Deserialize<'de> for HistoryKpiCardId {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct HistoryDashboardConfig {
+pub(crate) struct HistoryDashboardConfig {
     #[serde(default = "default_history_dashboard_card_order")]
-    pub card_order: Vec<HistoryKpiCardId>,
+    pub(crate) card_order: Vec<HistoryKpiCardId>,
     #[serde(default = "default_history_dashboard_pinned_cards")]
-    pub pinned_cards: Vec<HistoryKpiCardId>,
+    pub(crate) pinned_cards: Vec<HistoryKpiCardId>,
 }
 
 impl HistoryDashboardConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         let card_order = normalize_history_dashboard_card_order(&self.card_order);
         let pinned_cards =
             normalize_history_dashboard_pinned_cards(&self.pinned_cards, &card_order);
@@ -1185,7 +1185,7 @@ fn default_history_dashboard_card_order() -> Vec<HistoryKpiCardId> {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
-pub enum ProfileId {
+pub(crate) enum ProfileId {
     #[serde(rename = "basic")]
     Classic,
     #[serde(rename = "standard")]
@@ -1202,7 +1202,7 @@ impl ProfileId {
             .unwrap_or(Self::Custom)
     }
 
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             ProfileId::Classic => "Basic",
             ProfileId::DeepWork => "Standard",
@@ -1241,7 +1241,7 @@ fn profile_id_for_token(token: &str) -> ProfileId {
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]
-pub enum ThemePreset {
+pub(crate) enum ThemePreset {
     #[default]
     Classic,
     HighContrast,
@@ -1263,7 +1263,7 @@ impl ThemePreset {
         }
     }
 
-    pub fn id(self) -> &'static str {
+    pub(crate) fn id(self) -> &'static str {
         match self {
             Self::Classic => "classic",
             Self::HighContrast => "high-contrast",
@@ -1271,7 +1271,7 @@ impl ThemePreset {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Classic => "Classic",
             Self::HighContrast => "High Contrast",
@@ -1279,7 +1279,7 @@ impl ThemePreset {
         }
     }
 
-    pub fn next(self) -> Self {
+    pub(crate) fn next(self) -> Self {
         match self {
             Self::Classic => Self::HighContrast,
             Self::HighContrast => Self::DeuteranopiaFriendly,
@@ -1287,7 +1287,7 @@ impl ThemePreset {
         }
     }
 
-    pub fn previous(self) -> Self {
+    pub(crate) fn previous(self) -> Self {
         match self {
             Self::Classic => Self::DeuteranopiaFriendly,
             Self::HighContrast => Self::Classic,
@@ -1307,19 +1307,19 @@ impl<'de> Deserialize<'de> for ThemePreset {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CustomProfileConfig {
+pub(crate) struct CustomProfileConfig {
     #[serde(default = "default_focus_secs")]
-    pub focus_secs: u64,
+    pub(crate) focus_secs: u64,
     #[serde(default = "default_short_break_secs")]
-    pub short_break_secs: u64,
+    pub(crate) short_break_secs: u64,
     #[serde(default = "default_long_break_secs")]
-    pub long_break_secs: u64,
+    pub(crate) long_break_secs: u64,
     #[serde(default = "default_long_break_interval")]
-    pub long_break_interval: u32,
+    pub(crate) long_break_interval: u32,
 }
 
 impl CustomProfileConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             focus_secs: nonzero_or_default_u64(self.focus_secs, default_focus_secs()),
             short_break_secs: nonzero_or_default_u64(
@@ -1350,21 +1350,21 @@ impl Default for CustomProfileConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SessionTemplateConfig {
+pub(crate) struct SessionTemplateConfig {
     #[serde(default = "default_session_template_name")]
-    pub name: String,
+    pub(crate) name: String,
     #[serde(default)]
-    pub task_label: String,
+    pub(crate) task_label: String,
     #[serde(default)]
-    pub profile: ProfileId,
+    pub(crate) profile: ProfileId,
     #[serde(default = "default_blocklist_profile_name")]
-    pub blocklist_profile: String,
+    pub(crate) blocklist_profile: String,
     #[serde(default)]
-    pub schedule: RecurringScheduleConfig,
+    pub(crate) schedule: RecurringScheduleConfig,
 }
 
 impl SessionTemplateConfig {
-    pub fn normalized_with_blocklists(
+    pub(crate) fn normalized_with_blocklists(
         &self,
         blocklist_profiles: &[BlocklistProfileConfig],
     ) -> Option<Self> {
@@ -1444,7 +1444,7 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    pub fn normalized(self) -> Self {
+    pub(crate) fn normalized(self) -> Self {
         self.normalize()
     }
 
@@ -1455,7 +1455,7 @@ impl AppConfig {
     /// Load the config from disk, falling back to [`AppConfig::default`] on any
     /// error (missing file, parse error, corrupt data, etc.).
     #[cfg_attr(test, allow(dead_code))]
-    pub fn load() -> Self {
+    pub(crate) fn load() -> Self {
         Self::load_with_deprecation_warnings().0
     }
 
@@ -1463,7 +1463,7 @@ impl AppConfig {
     ///
     /// If `custom_profile` is not present in the config file, this derives
     /// values from legacy duration fields to preserve user settings.
-    pub fn effective_custom_profile(&self) -> CustomProfileConfig {
+    pub(crate) fn effective_custom_profile(&self) -> CustomProfileConfig {
         self.custom_profile
             .clone()
             .unwrap_or(CustomProfileConfig {
@@ -1475,7 +1475,7 @@ impl AppConfig {
             .normalized()
     }
 
-    pub fn profile_automation_for(&self, profile: ProfileId) -> ProfileAutomationConfig {
+    pub(crate) fn profile_automation_for(&self, profile: ProfileId) -> ProfileAutomationConfig {
         let fallback = ProfileAutomationConfig::default();
         self.profile_automation
             .as_ref()
@@ -1483,7 +1483,7 @@ impl AppConfig {
             .unwrap_or(fallback)
     }
 
-    pub fn set_profile_automation_for(
+    pub(crate) fn set_profile_automation_for(
         &mut self,
         profile: ProfileId,
         automation: ProfileAutomationConfig,
@@ -1532,7 +1532,7 @@ impl AppConfig {
     /// Persist the current config to disk.
     /// Creates parent directories as needed.
     #[cfg_attr(test, allow(dead_code))]
-    pub fn save(&self) -> io::Result<()> {
+    pub(crate) fn save(&self) -> io::Result<()> {
         let path = Self::config_path().ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, "cannot determine config directory")
         })?;

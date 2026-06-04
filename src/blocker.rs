@@ -12,15 +12,15 @@ mod command;
 mod hosts;
 mod rules;
 
-pub use command::CommandBlockingBackend;
+pub(crate) use command::CommandBlockingBackend;
 use command::{apply_command_backend, command_backend_diagnostics, preview_from_command};
 use hosts::{HOSTS_FILE, atomic_write_hosts_to_path, flush_dns_cache, hosts_file_diagnostics_for};
 #[cfg(test)]
 use hosts::{HostsWriteFailStep, set_test_hosts_write_fail_steps};
 
 #[cfg(test)]
-pub use rules::normalize_domain_host;
-pub use rules::{SiteValidationError, domain_rule_matches_host, normalize_domain_rule};
+pub(crate) use rules::normalize_domain_host;
+pub(crate) use rules::{SiteValidationError, domain_rule_matches_host, normalize_domain_rule};
 
 #[cfg(test)]
 thread_local! {
@@ -39,9 +39,9 @@ pub(crate) fn take_test_blocking_action() -> Option<&'static str> {
     TEST_LAST_BLOCKING_ACTION.with(|slot| slot.borrow_mut().take())
 }
 
-pub struct SiteBlocker {
-    pub sites: Vec<String>,
-    pub is_blocking: bool,
+pub(crate) struct SiteBlocker {
+    pub(crate) sites: Vec<String>,
+    pub(crate) is_blocking: bool,
     backend_policy: BlockingBackendPolicy,
     command_backend: CommandBlockingBackend,
     active_backend: Option<BlockingBackendKind>,
@@ -51,37 +51,37 @@ pub struct SiteBlocker {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HostsFileDiagnostics {
-    pub path: String,
-    pub read_error: Option<String>,
-    pub write_error: Option<String>,
+pub(crate) struct HostsFileDiagnostics {
+    pub(crate) path: String,
+    pub(crate) read_error: Option<String>,
+    pub(crate) write_error: Option<String>,
 }
 
 impl HostsFileDiagnostics {
-    pub fn can_read(&self) -> bool {
+    pub(crate) fn can_read(&self) -> bool {
         self.read_error.is_none()
     }
 
-    pub fn can_write(&self) -> bool {
+    pub(crate) fn can_write(&self) -> bool {
         self.write_error.is_none()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InvalidSiteInput {
-    pub input: String,
-    pub reason: SiteValidationError,
+pub(crate) struct InvalidSiteInput {
+    pub(crate) input: String,
+    pub(crate) reason: SiteValidationError,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct BulkAddResult {
-    pub added: Vec<String>,
-    pub duplicates: Vec<String>,
-    pub invalid: Vec<InvalidSiteInput>,
+pub(crate) struct BulkAddResult {
+    pub(crate) added: Vec<String>,
+    pub(crate) duplicates: Vec<String>,
+    pub(crate) invalid: Vec<InvalidSiteInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EditSiteResult {
+pub(crate) enum EditSiteResult {
     Updated { old: String, new: String },
     Unchanged { hostname: String },
     Duplicate { hostname: String },
@@ -90,26 +90,26 @@ pub enum EditSiteResult {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlockingIntent {
+pub(crate) enum BlockingIntent {
     Block,
     Unblock,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlockingPreviewAction {
+pub(crate) enum BlockingPreviewAction {
     Block,
     Unblock,
     NoChange,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlockingBackendKind {
+pub(crate) enum BlockingBackendKind {
     Hosts,
     Command,
 }
 
 impl BlockingBackendKind {
-    pub fn id(self) -> &'static str {
+    pub(crate) fn id(self) -> &'static str {
         match self {
             BlockingBackendKind::Hosts => "hosts",
             BlockingBackendKind::Command => "command",
@@ -118,7 +118,7 @@ impl BlockingBackendKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BlockingBackendPolicy {
+pub(crate) enum BlockingBackendPolicy {
     HostsOnly,
     #[default]
     HostsThenCommand,
@@ -127,7 +127,7 @@ pub enum BlockingBackendPolicy {
 }
 
 impl BlockingBackendPolicy {
-    pub fn id(self) -> &'static str {
+    pub(crate) fn id(self) -> &'static str {
         match self {
             BlockingBackendPolicy::HostsOnly => "hosts_only",
             BlockingBackendPolicy::HostsThenCommand => "hosts_then_command",
@@ -151,32 +151,32 @@ impl BlockingBackendPolicy {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockingBackendStatus {
-    pub policy: BlockingBackendPolicy,
-    pub order: Vec<BlockingBackendKind>,
-    pub active_backend: Option<BlockingBackendKind>,
-    pub last_backend: Option<BlockingBackendKind>,
-    pub fallback_used: bool,
-    pub last_error: Option<String>,
-    pub command_configured: bool,
+pub(crate) struct BlockingBackendStatus {
+    pub(crate) policy: BlockingBackendPolicy,
+    pub(crate) order: Vec<BlockingBackendKind>,
+    pub(crate) active_backend: Option<BlockingBackendKind>,
+    pub(crate) last_backend: Option<BlockingBackendKind>,
+    pub(crate) fallback_used: bool,
+    pub(crate) last_error: Option<String>,
+    pub(crate) command_configured: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockingPreview {
-    pub backend: BlockingBackendKind,
-    pub backend_target: String,
-    pub attempted_backends: Vec<BlockingBackendKind>,
-    pub fallback_used: bool,
-    pub hosts_file_path: String,
-    pub action: BlockingPreviewAction,
-    pub effective_blocked_sites: Vec<String>,
-    pub would_change: bool,
-    pub current_section: Option<String>,
-    pub next_section: Option<String>,
+pub(crate) struct BlockingPreview {
+    pub(crate) backend: BlockingBackendKind,
+    pub(crate) backend_target: String,
+    pub(crate) attempted_backends: Vec<BlockingBackendKind>,
+    pub(crate) fallback_used: bool,
+    pub(crate) hosts_file_path: String,
+    pub(crate) action: BlockingPreviewAction,
+    pub(crate) effective_blocked_sites: Vec<String>,
+    pub(crate) would_change: bool,
+    pub(crate) current_section: Option<String>,
+    pub(crate) next_section: Option<String>,
 }
 
 impl BlockingPreview {
-    pub fn section_for_display(&self) -> Option<&str> {
+    pub(crate) fn section_for_display(&self) -> Option<&str> {
         self.next_section
             .as_deref()
             .or(self.current_section.as_deref())
@@ -184,14 +184,14 @@ impl BlockingPreview {
 }
 
 impl SiteBlocker {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::with_backend_config(
             BlockingBackendPolicy::default(),
             CommandBlockingBackend::default(),
         )
     }
 
-    pub fn with_backend_config(
+    pub(crate) fn with_backend_config(
         backend_policy: BlockingBackendPolicy,
         command_backend: CommandBlockingBackend,
     ) -> Self {
@@ -207,7 +207,7 @@ impl SiteBlocker {
         }
     }
 
-    pub fn backend_status(&self) -> BlockingBackendStatus {
+    pub(crate) fn backend_status(&self) -> BlockingBackendStatus {
         BlockingBackendStatus {
             policy: self.backend_policy,
             order: self.backend_policy.backend_order(),
@@ -219,19 +219,19 @@ impl SiteBlocker {
         }
     }
 
-    pub fn backend_config(&self) -> (BlockingBackendPolicy, CommandBlockingBackend) {
+    pub(crate) fn backend_config(&self) -> (BlockingBackendPolicy, CommandBlockingBackend) {
         (self.backend_policy, self.command_backend.clone())
     }
 
-    pub fn command_backend_diagnostics(&self) -> io::Result<()> {
+    pub(crate) fn command_backend_diagnostics(&self) -> io::Result<()> {
         command_backend_diagnostics(&self.command_backend)
     }
 
-    pub fn add_site(&mut self, site: String) {
+    pub(crate) fn add_site(&mut self, site: String) {
         let _ = self.add_sites_from_input(&site);
     }
 
-    pub fn add_sites_from_input(&mut self, input: &str) -> BulkAddResult {
+    pub(crate) fn add_sites_from_input(&mut self, input: &str) -> BulkAddResult {
         let candidates = split_hostname_candidates(input);
         let mut result = BulkAddResult::default();
         let mut known_sites: HashSet<String> = self.sites.iter().cloned().collect();
@@ -264,7 +264,7 @@ impl SiteBlocker {
         result
     }
 
-    pub fn edit_site_from_input(&mut self, index: usize, input: &str) -> EditSiteResult {
+    pub(crate) fn edit_site_from_input(&mut self, index: usize, input: &str) -> EditSiteResult {
         if index >= self.sites.len() {
             return EditSiteResult::MissingSelection;
         }
@@ -324,18 +324,21 @@ impl SiteBlocker {
         normalize_domain_rule(input)
     }
 
-    pub fn remove_site(&mut self, index: usize) -> Option<String> {
+    pub(crate) fn remove_site(&mut self, index: usize) -> Option<String> {
         if index < self.sites.len() {
             return Some(self.sites.remove(index));
         }
         None
     }
 
-    pub fn hosts_file_diagnostics(&self) -> HostsFileDiagnostics {
+    pub(crate) fn hosts_file_diagnostics(&self) -> HostsFileDiagnostics {
         hosts_file_diagnostics_for(Path::new(HOSTS_FILE))
     }
 
-    pub fn preview_hosts_update(&self, intent: BlockingIntent) -> io::Result<BlockingPreview> {
+    pub(crate) fn preview_hosts_update(
+        &self,
+        intent: BlockingIntent,
+    ) -> io::Result<BlockingPreview> {
         let order = self.backend_order_for_intent(intent);
         let mut errors = Vec::new();
         for (index, backend) in order.iter().copied().enumerate() {
@@ -356,7 +359,7 @@ impl SiteBlocker {
 
     /// Activate blocking by writing entries into the hosts file.
     /// Returns an error if the file is not writable (e.g. needs sudo).
-    pub fn block(&mut self) -> io::Result<()> {
+    pub(crate) fn block(&mut self) -> io::Result<()> {
         #[cfg(test)]
         record_test_blocking_action("block");
 
@@ -381,7 +384,7 @@ impl SiteBlocker {
     /// Remove the focustime block section from the hosts file.
     /// Always attempts to strip any existing block section, even after a crash
     /// left entries behind with is_blocking == false.
-    pub fn unblock(&mut self) -> io::Result<()> {
+    pub(crate) fn unblock(&mut self) -> io::Result<()> {
         #[cfg(test)]
         record_test_blocking_action("unblock");
 
@@ -392,7 +395,7 @@ impl SiteBlocker {
     }
 
     /// Remove block entries on app exit (best-effort).
-    pub fn cleanup(&mut self) {
+    pub(crate) fn cleanup(&mut self) {
         let _ = self.unblock();
     }
 
