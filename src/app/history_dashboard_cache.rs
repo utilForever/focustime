@@ -1,10 +1,106 @@
 use chrono::Local;
 
-use crate::app::{
-    App, HistoryDashboardComparisonSnapshot, HistoryDashboardComparisonSnapshotKey,
-    HistoryDashboardStaticSnapshot, HistoryDashboardStaticSnapshotKey, HistoryDashboardViewData,
-    parse_day_key,
+use crate::app::{App, DailyGoalProgress, WeeklyDailyGoalAllocation, parse_day_key};
+use crate::config::{
+    DailyGoalConfig, GoalCarryOverConfig, MonthlyGoalConfig, RecurringScheduleConfig,
+    StatsRetentionConfig, WeeklyGoalConfig,
 };
+use crate::stats::{
+    BreakGlassOverrideEvent, ComparisonDimension, DailyStats, FocusRiskForecast, GoalStreak,
+    MonthlyHeatmap, MonthlyStats, ProductivityComparisonRow, ProfileBucket, ProfileEffectiveness,
+    SessionInterruptionEvent, SessionStats, StatsGrowthSummary, StatsRetentionPruneResult,
+    TaskTrend, TimeOfDayBucket, WeeklyFocusScore,
+};
+
+#[derive(Debug, Clone)]
+pub struct HistoryDashboardViewData {
+    pub session_stats: SessionStats,
+    pub today_stats: DailyStats,
+    pub daily_goal_progress: DailyGoalProgress,
+    pub weekly_goal_progress: DailyGoalProgress,
+    pub monthly_goal_progress: DailyGoalProgress,
+    pub latest_weekly_focus_score: Option<WeeklyFocusScore>,
+    pub goal_streak: GoalStreak,
+    pub focus_risk_forecast: FocusRiskForecast,
+    pub weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
+    pub latest_session_interruption: Option<SessionInterruptionEvent>,
+    pub stats_growth_summary: StatsGrowthSummary,
+    pub stats_retention_config: StatsRetentionConfig,
+    pub stats_retention_preview: StatsRetentionPruneResult,
+    pub comparison_filter_summary: String,
+    pub comparison_rows: Vec<ProductivityComparisonRow>,
+    pub task_trends: Vec<TaskTrend>,
+    pub profile_effectiveness: Vec<ProfileEffectiveness>,
+    pub break_glass_overrides: Vec<BreakGlassOverrideEvent>,
+    pub monthly_stats: Vec<MonthlyStats>,
+    pub monthly_heatmap: MonthlyHeatmap,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct HistoryDashboardStaticSnapshot {
+    session_stats: SessionStats,
+    today_stats: DailyStats,
+    daily_goal_progress: DailyGoalProgress,
+    weekly_goal_progress: DailyGoalProgress,
+    monthly_goal_progress: DailyGoalProgress,
+    latest_weekly_focus_score: Option<WeeklyFocusScore>,
+    goal_streak: GoalStreak,
+    focus_risk_forecast: FocusRiskForecast,
+    weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
+    latest_session_interruption: Option<SessionInterruptionEvent>,
+    stats_growth_summary: StatsGrowthSummary,
+    stats_retention_config: StatsRetentionConfig,
+    stats_retention_preview: StatsRetentionPruneResult,
+    task_trends: Vec<TaskTrend>,
+    profile_effectiveness: Vec<ProfileEffectiveness>,
+    break_glass_overrides: Vec<BreakGlassOverrideEvent>,
+    monthly_stats: Vec<MonthlyStats>,
+    monthly_heatmap: MonthlyHeatmap,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct HistoryDashboardComparisonSnapshot {
+    comparison_filter_summary: String,
+    comparison_rows: Vec<ProductivityComparisonRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct HistoryDashboardStaticSnapshotKey {
+    stats_revision: u64,
+    day_key: String,
+    retention: StatsRetentionConfig,
+    recurring_schedule: RecurringScheduleConfig,
+    daily_goal: DailyGoalConfig,
+    weekly_goal: WeeklyGoalConfig,
+    monthly_goal: MonthlyGoalConfig,
+    goal_carry_over: GoalCarryOverConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct HistoryDashboardComparisonSnapshotKey {
+    stats_revision: u64,
+    dimension: ComparisonDimension,
+    task_filter: Option<String>,
+    profile_filter: Option<ProfileBucket>,
+    time_of_day_filter: Option<TimeOfDayBucket>,
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HistoryDashboardCacheStats {
+    pub static_rebuilds: u64,
+    pub comparison_rebuilds: u64,
+}
+
+#[derive(Debug, Default, Clone)]
+pub(super) struct HistoryDashboardCache {
+    static_key: Option<HistoryDashboardStaticSnapshotKey>,
+    static_snapshot: Option<HistoryDashboardStaticSnapshot>,
+    comparison_key: Option<HistoryDashboardComparisonSnapshotKey>,
+    comparison_snapshot: Option<HistoryDashboardComparisonSnapshot>,
+    #[cfg(test)]
+    cache_stats: HistoryDashboardCacheStats,
+}
 
 impl App {
     pub fn history_dashboard_view_data(&self) -> HistoryDashboardViewData {

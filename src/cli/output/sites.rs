@@ -1,0 +1,279 @@
+use crate::cli::{
+    BlocklistCategoryCommandOutput, BlocklistProfileCommandOutput, HistoryDashboardCommandOutput,
+    SessionTemplateCommandOutput, SiteAddCommandOutput, SiteDeleteCommandOutput,
+    SiteEditCommandOutput, SiteListCommandOutput, TemporarySiteAddCommandOutput,
+    UsageSignalsCommandOutput,
+};
+
+use super::{display_input_value, format_duration};
+
+pub(in crate::cli) fn print_blocklist_profile_command_output(
+    payload: &BlocklistProfileCommandOutput,
+) {
+    if payload.updated {
+        println!("Blocklist profile updated.");
+    }
+    println!(
+        "Selected blocklist profile: {}",
+        payload.selected_blocklist_profile
+    );
+    if payload.profiles.is_empty() {
+        println!("Profiles: none");
+        return;
+    }
+    println!("Profiles:");
+    for profile in &payload.profiles {
+        let marker = if profile.active { "*" } else { " " };
+        println!(
+            "  {marker} {} (blocklist {}, allowlist {}, effective {})",
+            profile.name,
+            profile.blocklist_sites_count,
+            profile.allowlist_sites_count,
+            profile.effective_blocked_sites_count
+        );
+    }
+}
+
+pub(in crate::cli) fn print_blocklist_category_command_output(
+    payload: &BlocklistCategoryCommandOutput,
+) {
+    if payload.updated {
+        println!("Blocklist category updated.");
+    }
+    println!(
+        "Selected blocklist profile/category: {} / {}",
+        payload.selected_blocklist_profile, payload.selected_blocklist_category
+    );
+    if payload.categories.is_empty() {
+        println!("Categories: none");
+        return;
+    }
+    println!("Categories:");
+    for category in &payload.categories {
+        let marker = if category.active { "*" } else { " " };
+        println!(
+            "  {marker} {} (blocklist {}, allowlist {})",
+            category.name, category.blocklist_sites_count, category.allowlist_sites_count
+        );
+    }
+}
+
+pub(in crate::cli) fn print_session_template_command_output(
+    payload: &SessionTemplateCommandOutput,
+) {
+    if payload.updated {
+        println!("Session template updated.");
+    }
+    println!(
+        "Selected session template: {}",
+        payload
+            .selected_session_template
+            .as_deref()
+            .unwrap_or("none")
+    );
+    if payload.templates.is_empty() {
+        println!("Templates: none");
+        return;
+    }
+    println!("Templates:");
+    for template in &payload.templates {
+        let marker = if template.active { "*" } else { " " };
+        println!(
+            "  {marker} {} (task `{}`, profile {}, blocklist `{}`, windows {})",
+            template.name,
+            template.task_label,
+            template.profile,
+            template.blocklist_profile,
+            template.schedule_windows_count
+        );
+    }
+}
+
+pub(in crate::cli) fn print_history_dashboard_command_output(
+    payload: &HistoryDashboardCommandOutput,
+) {
+    if payload.updated {
+        println!("History dashboard updated.");
+    }
+    println!("Card order: {}", payload.card_order.join(", "));
+    println!("Pinned cards: {}", payload.pinned_cards.join(", "));
+    if payload.cards.is_empty() {
+        println!("Cards: none");
+        return;
+    }
+    println!("Cards:");
+    for card in &payload.cards {
+        let marker = if card.pinned { "*" } else { " " };
+        println!("  {marker} {} ({})", card.label, card.id);
+    }
+}
+
+pub(in crate::cli) fn print_usage_signals_command_output(payload: &UsageSignalsCommandOutput) {
+    println!("Usage signals summary:");
+    print_usage_signal_summary("Commands", &payload.summary.commands);
+    print_usage_signal_summary("Screens", &payload.summary.screens);
+}
+
+fn print_usage_signal_summary(label: &str, summary: &crate::stats::UsageSignalSummary) {
+    println!(
+        "{label}: {} events across {} surface(s)",
+        summary.total_events, summary.unique_surfaces
+    );
+    if summary.top.is_empty() {
+        println!("  Top: none");
+    } else {
+        println!("  Top:");
+        for entry in &summary.top {
+            println!(
+                "    - {}: {} ({}%)",
+                entry.surface, entry.count, entry.share_pct
+            );
+        }
+    }
+    if summary.rare.is_empty() {
+        println!("  Rare: none");
+    } else {
+        println!("  Rare:");
+        for entry in &summary.rare {
+            println!(
+                "    - {}: {} ({}%)",
+                entry.surface, entry.count, entry.share_pct
+            );
+        }
+    }
+}
+
+pub(in crate::cli) fn print_site_list_command_output(payload: &SiteListCommandOutput) {
+    println!(
+        "Active profile/category `{}` / `{}` {} entries: {}",
+        payload.profile,
+        payload.category,
+        payload.target.id(),
+        payload.sites.len()
+    );
+    for site in &payload.sites {
+        println!("  - {site}");
+    }
+    println!(
+        "Effective blocked sites: {}",
+        payload.effective_blocked_sites_count
+    );
+}
+
+pub(in crate::cli) fn print_site_add_command_output(payload: &SiteAddCommandOutput) {
+    if payload.updated {
+        println!(
+            "Added {} hostname(s) to {} in profile/category `{}` / `{}`.",
+            payload.added.len(),
+            payload.target.id(),
+            payload.profile,
+            payload.category
+        );
+    } else {
+        println!(
+            "No {} hostnames were added in profile/category `{}` / `{}`.",
+            payload.target.id(),
+            payload.profile,
+            payload.category
+        );
+    }
+    if !payload.duplicates.is_empty() {
+        println!("Skipped duplicates: {}", payload.duplicates.join(", "));
+    }
+    if !payload.invalid.is_empty() {
+        println!("Rejected invalid hostnames:");
+        for invalid in &payload.invalid {
+            println!(
+                "  - {} ({})",
+                display_input_value(&invalid.input),
+                invalid.reason
+            );
+        }
+    }
+    println!(
+        "{} entries now: {}",
+        payload.target.id(),
+        payload.sites.join(", ")
+    );
+    println!(
+        "Effective blocked sites: {}",
+        payload.effective_blocked_sites_count
+    );
+}
+
+pub(in crate::cli) fn print_temporary_site_add_command_output(
+    payload: &TemporarySiteAddCommandOutput,
+) {
+    if payload.updated {
+        println!(
+            "Temporary allowlist updated in profile `{}`: added {}, refreshed {}.",
+            payload.profile, payload.added, payload.refreshed
+        );
+    } else {
+        println!(
+            "No temporary allowlist changes were applied in profile `{}`.",
+            payload.profile
+        );
+    }
+    if payload.active.is_empty() {
+        println!("Active temporary exceptions: none");
+        return;
+    }
+    println!("Active temporary exceptions ({}):", payload.active.len());
+    for entry in &payload.active {
+        println!(
+            "  - {} (expires in {})",
+            entry.site,
+            format_duration(entry.remaining_secs)
+        );
+    }
+}
+
+pub(in crate::cli) fn print_site_edit_command_output(payload: &SiteEditCommandOutput) {
+    if payload.updated {
+        println!(
+            "Updated {} hostname in profile/category `{}` / `{}`: {} -> {}",
+            payload.target.id(),
+            payload.profile,
+            payload.category,
+            payload.previous,
+            payload.current
+        );
+    } else {
+        println!(
+            "No change for {} hostname `{}` in profile/category `{}` / `{}`.",
+            payload.target.id(),
+            payload.current,
+            payload.profile,
+            payload.category
+        );
+    }
+    println!(
+        "{} entries now: {}",
+        payload.target.id(),
+        payload.sites.join(", ")
+    );
+    println!(
+        "Effective blocked sites: {}",
+        payload.effective_blocked_sites_count
+    );
+}
+
+pub(in crate::cli) fn print_site_delete_command_output(payload: &SiteDeleteCommandOutput) {
+    println!(
+        "Deleted {} hostname `{}` from profile/category `{}` / `{}`.",
+        payload.target.id(),
+        payload.removed,
+        payload.profile,
+        payload.category
+    );
+    println!(
+        "{} entries now: {}",
+        payload.target.id(),
+        payload.sites.join(", ")
+    );
+    println!(
+        "Effective blocked sites: {}",
+        payload.effective_blocked_sites_count
+    );
+}
