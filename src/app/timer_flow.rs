@@ -5,7 +5,7 @@ use crate::app::{
 };
 
 impl App {
-    pub fn on_tick(&mut self, is_catchup: bool) {
+    pub(crate) fn on_tick(&mut self, is_catchup: bool) {
         self.sync_today_goal_snapshot();
         let completed_phase = self.timer.phase;
         let completed_focus_secs = self.timer.focus_secs;

@@ -4,15 +4,15 @@ use crate::blocker::{
 use crate::wakatime::{WakatimeConfigStatus, WakatimeTracker};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SetupCheckLevel {
+pub(crate) enum SetupCheckLevel {
     Ok,
     Warning,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SetupCheck {
-    pub level: SetupCheckLevel,
-    pub message: String,
+pub(crate) struct SetupCheck {
+    pub(crate) level: SetupCheckLevel,
+    pub(crate) message: String,
 }
 
 impl SetupCheck {
@@ -32,16 +32,16 @@ impl SetupCheck {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SetupDiagnostics {
-    pub hosts_file_path: String,
-    pub backend_policy: String,
-    pub backend_order: String,
-    pub backend_selection: SetupCheck,
-    pub blocking_permissions: SetupCheck,
-    pub hosts_write_capability: SetupCheck,
-    pub command_backend: SetupCheck,
-    pub wakatime_config: SetupCheck,
-    pub deprecation_warnings: Vec<String>,
+pub(crate) struct SetupDiagnostics {
+    pub(crate) hosts_file_path: String,
+    pub(crate) backend_policy: String,
+    pub(crate) backend_order: String,
+    pub(crate) backend_selection: SetupCheck,
+    pub(crate) blocking_permissions: SetupCheck,
+    pub(crate) hosts_write_capability: SetupCheck,
+    pub(crate) command_backend: SetupCheck,
+    pub(crate) wakatime_config: SetupCheck,
+    pub(crate) deprecation_warnings: Vec<String>,
 }
 
 impl SetupDiagnostics {
@@ -97,16 +97,16 @@ impl SetupDiagnostics {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockingPreviewSnapshot {
-    pub backend: Option<BlockingBackendKind>,
-    pub backend_target: Option<String>,
-    pub attempted_backends: Vec<BlockingBackendKind>,
-    pub fallback_used: bool,
-    pub action: BlockingPreviewAction,
-    pub would_change: bool,
-    pub effective_blocked_sites_count: usize,
-    pub section: Option<String>,
-    pub error: Option<String>,
+pub(crate) struct BlockingPreviewSnapshot {
+    pub(crate) backend: Option<BlockingBackendKind>,
+    pub(crate) backend_target: Option<String>,
+    pub(crate) attempted_backends: Vec<BlockingBackendKind>,
+    pub(crate) fallback_used: bool,
+    pub(crate) action: BlockingPreviewAction,
+    pub(crate) would_change: bool,
+    pub(crate) effective_blocked_sites_count: usize,
+    pub(crate) section: Option<String>,
+    pub(crate) error: Option<String>,
 }
 
 impl Default for BlockingPreviewSnapshot {

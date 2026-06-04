@@ -242,7 +242,7 @@ Options:
   -h, --help      Show this help"#;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OutputMode {
+pub(crate) enum OutputMode {
     Text,
     Json,
 }
@@ -253,12 +253,12 @@ const DEFAULT_WATCH_INTERVAL_SECS: u64 = 1;
 const DEFAULT_STATUS_COMPARISON_LIMIT: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StatusComparisonOptions {
-    pub dimension: ComparisonDimension,
-    pub task_label: Option<String>,
-    pub profile: Option<ProfileBucket>,
-    pub time_of_day: Option<TimeOfDayBucket>,
-    pub limit: usize,
+pub(crate) struct StatusComparisonOptions {
+    pub(crate) dimension: ComparisonDimension,
+    pub(crate) task_label: Option<String>,
+    pub(crate) profile: Option<ProfileBucket>,
+    pub(crate) time_of_day: Option<TimeOfDayBucket>,
+    pub(crate) limit: usize,
 }
 
 impl Default for StatusComparisonOptions {
@@ -275,20 +275,20 @@ impl Default for StatusComparisonOptions {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum CliErrorKind {
+pub(crate) enum CliErrorKind {
     Usage,
     Runtime,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CliError {
+pub(crate) struct CliError {
     kind: CliErrorKind,
     output: OutputMode,
     message: String,
 }
 
 impl CliError {
-    pub fn exit_code(&self) -> i32 {
+    pub(crate) fn exit_code(&self) -> i32 {
         match self.kind {
             CliErrorKind::Usage => EXIT_CODE_USAGE_ERROR,
             CliErrorKind::Runtime => EXIT_CODE_RUNTIME_ERROR,
@@ -310,7 +310,7 @@ struct CliErrorPayload {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommandKind {
+pub(crate) enum CommandKind {
     Start,
     Pause,
     Resume,
@@ -419,13 +419,13 @@ pub enum CommandKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CliCommand {
-    pub kind: CommandKind,
-    pub output: OutputMode,
+pub(crate) struct CliCommand {
+    pub(crate) kind: CommandKind,
+    pub(crate) output: OutputMode,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CliAction {
+pub(crate) enum CliAction {
     RunTui,
     RunCommand(CliCommand),
     ShowHelp,
@@ -599,7 +599,7 @@ type ValueArgParser = fn(&[String], usize) -> Result<(ParsedToken, usize), Strin
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SiteListTarget {
+pub(crate) enum SiteListTarget {
     Blocklist,
     Allowlist,
 }
@@ -614,13 +614,13 @@ impl SiteListTarget {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SiteEditValue {
+pub(crate) struct SiteEditValue {
     previous: String,
     next: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BlocklistProfileCommandKind {
+pub(crate) enum BlocklistProfileCommandKind {
     Select { profile: Option<String> },
     Create { name: String },
     Rename { name: String },
@@ -628,7 +628,7 @@ pub enum BlocklistProfileCommandKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BlocklistCategoryCommandKind {
+pub(crate) enum BlocklistCategoryCommandKind {
     Select { category: Option<String> },
     Create { name: String },
     Rename { name: String },
@@ -636,7 +636,7 @@ pub enum BlocklistCategoryCommandKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BlocklistSiteCommandKind {
+pub(crate) enum BlocklistSiteCommandKind {
     List,
     Add { input: String },
     Edit { value: SiteEditValue },
@@ -644,7 +644,7 @@ pub enum BlocklistSiteCommandKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SessionTemplateCommandKind {
+pub(crate) enum SessionTemplateCommandKind {
     Select { name: Option<String> },
     Apply { name: Option<String> },
     Create { name: String },
@@ -653,7 +653,7 @@ pub enum SessionTemplateCommandKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HistoryDashboardCommandKind {
+pub(crate) enum HistoryDashboardCommandKind {
     Show,
     Pin { card: HistoryKpiCardId },
     Unpin { card: HistoryKpiCardId },
@@ -1189,19 +1189,19 @@ struct SiteDeleteCommandOutput {
     effective_blocked_sites_count: usize,
 }
 
-pub fn usage_text() -> &'static str {
+pub(crate) fn usage_text() -> &'static str {
     USAGE_TEXT
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-pub fn parse_args<I>(args: I) -> Result<CliAction, String>
+pub(crate) fn parse_args<I>(args: I) -> Result<CliAction, String>
 where
     I: IntoIterator<Item = OsString>,
 {
     parse_args_with_contract(args).map_err(|error| error.message)
 }
 
-pub fn parse_args_with_contract<I>(args: I) -> Result<CliAction, CliError>
+pub(crate) fn parse_args_with_contract<I>(args: I) -> Result<CliAction, CliError>
 where
     I: IntoIterator<Item = OsString>,
 {
@@ -1237,7 +1237,7 @@ where
     .map_err(|message| usage_error(output, message))
 }
 
-pub fn runtime_error(output: OutputMode, message: String) -> CliError {
+pub(crate) fn runtime_error(output: OutputMode, message: String) -> CliError {
     CliError {
         kind: CliErrorKind::Runtime,
         output,
@@ -1245,7 +1245,7 @@ pub fn runtime_error(output: OutputMode, message: String) -> CliError {
     }
 }
 
-pub fn emit_cli_error(error: &CliError) -> Result<(), String> {
+pub(crate) fn emit_cli_error(error: &CliError) -> Result<(), String> {
     match error.output {
         OutputMode::Text => {
             eprintln!("{}", error.message);
@@ -1270,7 +1270,7 @@ fn usage_error(output: OutputMode, message: String) -> CliError {
     }
 }
 
-pub fn execute_command(cli_command: CliCommand) -> Result<(), String> {
+pub(crate) fn execute_command(cli_command: CliCommand) -> Result<(), String> {
     execute_cli_command(cli_command)
 }
 

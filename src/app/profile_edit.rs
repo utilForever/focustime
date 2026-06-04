@@ -4,7 +4,7 @@ use crate::config::{
     ThemePreset, WakatimeMetadataConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
 };
 
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 52] = [
+pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 52] = [
     "Focus",
     "Short Break",
     "Long Break",

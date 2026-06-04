@@ -13,27 +13,27 @@ use crate::stats::{
 };
 
 #[derive(Debug, Clone)]
-pub struct HistoryDashboardViewData {
-    pub session_stats: SessionStats,
-    pub today_stats: DailyStats,
-    pub daily_goal_progress: DailyGoalProgress,
-    pub weekly_goal_progress: DailyGoalProgress,
-    pub monthly_goal_progress: DailyGoalProgress,
-    pub latest_weekly_focus_score: Option<WeeklyFocusScore>,
-    pub goal_streak: GoalStreak,
-    pub focus_risk_forecast: FocusRiskForecast,
-    pub weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
-    pub latest_session_interruption: Option<SessionInterruptionEvent>,
-    pub stats_growth_summary: StatsGrowthSummary,
-    pub stats_retention_config: StatsRetentionConfig,
-    pub stats_retention_preview: StatsRetentionPruneResult,
-    pub comparison_filter_summary: String,
-    pub comparison_rows: Vec<ProductivityComparisonRow>,
-    pub task_trends: Vec<TaskTrend>,
-    pub profile_effectiveness: Vec<ProfileEffectiveness>,
-    pub break_glass_overrides: Vec<BreakGlassOverrideEvent>,
-    pub monthly_stats: Vec<MonthlyStats>,
-    pub monthly_heatmap: MonthlyHeatmap,
+pub(crate) struct HistoryDashboardViewData {
+    pub(crate) session_stats: SessionStats,
+    pub(crate) today_stats: DailyStats,
+    pub(crate) daily_goal_progress: DailyGoalProgress,
+    pub(crate) weekly_goal_progress: DailyGoalProgress,
+    pub(crate) monthly_goal_progress: DailyGoalProgress,
+    pub(crate) latest_weekly_focus_score: Option<WeeklyFocusScore>,
+    pub(crate) goal_streak: GoalStreak,
+    pub(crate) focus_risk_forecast: FocusRiskForecast,
+    pub(crate) weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
+    pub(crate) latest_session_interruption: Option<SessionInterruptionEvent>,
+    pub(crate) stats_growth_summary: StatsGrowthSummary,
+    pub(crate) stats_retention_config: StatsRetentionConfig,
+    pub(crate) stats_retention_preview: StatsRetentionPruneResult,
+    pub(crate) comparison_filter_summary: String,
+    pub(crate) comparison_rows: Vec<ProductivityComparisonRow>,
+    pub(crate) task_trends: Vec<TaskTrend>,
+    pub(crate) profile_effectiveness: Vec<ProfileEffectiveness>,
+    pub(crate) break_glass_overrides: Vec<BreakGlassOverrideEvent>,
+    pub(crate) monthly_stats: Vec<MonthlyStats>,
+    pub(crate) monthly_heatmap: MonthlyHeatmap,
 }
 
 #[derive(Debug, Clone)]
@@ -87,9 +87,9 @@ pub(super) struct HistoryDashboardComparisonSnapshotKey {
 
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct HistoryDashboardCacheStats {
-    pub static_rebuilds: u64,
-    pub comparison_rebuilds: u64,
+pub(crate) struct HistoryDashboardCacheStats {
+    pub(crate) static_rebuilds: u64,
+    pub(crate) comparison_rebuilds: u64,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -103,7 +103,7 @@ pub(super) struct HistoryDashboardCache {
 }
 
 impl App {
-    pub fn history_dashboard_view_data(&self) -> HistoryDashboardViewData {
+    pub(crate) fn history_dashboard_view_data(&self) -> HistoryDashboardViewData {
         let static_key = self.history_dashboard_static_snapshot_key();
         let comparison_key = self.history_dashboard_comparison_snapshot_key();
         let (rebuild_static, rebuild_comparison) = {
@@ -178,7 +178,7 @@ impl App {
     }
 
     #[cfg(test)]
-    pub fn history_dashboard_cache_stats(&self) -> crate::app::HistoryDashboardCacheStats {
+    pub(crate) fn history_dashboard_cache_stats(&self) -> crate::app::HistoryDashboardCacheStats {
         self.history_dashboard_cache.borrow().cache_stats
     }
 

@@ -26,12 +26,12 @@ fn cycle_optional_selection<T: Clone + PartialEq>(
 }
 
 impl App {
-    pub fn history_comparison_dimension(&self) -> ComparisonDimension {
+    pub(crate) fn history_comparison_dimension(&self) -> ComparisonDimension {
         self.history_comparison_dimension
     }
 
     #[allow(dead_code)]
-    pub fn history_comparison_rows(&self, limit: usize) -> Vec<ProductivityComparisonRow> {
+    pub(crate) fn history_comparison_rows(&self, limit: usize) -> Vec<ProductivityComparisonRow> {
         let filter = ProductivityComparisonFilter {
             task_label: self.history_task_filter.clone(),
             profile: self.history_profile_filter,
@@ -41,7 +41,7 @@ impl App {
             .productivity_comparison(self.history_comparison_dimension, &filter, limit)
     }
 
-    pub fn history_comparison_filter_summary(&self) -> String {
+    pub(crate) fn history_comparison_filter_summary(&self) -> String {
         let task = self
             .history_task_filter
             .as_deref()
@@ -58,15 +58,15 @@ impl App {
         format!("Slices: task {task} · profile {profile} · time {time_of_day}")
     }
 
-    pub fn history_dashboard_card_order(&self) -> &[HistoryKpiCardId] {
+    pub(crate) fn history_dashboard_card_order(&self) -> &[HistoryKpiCardId] {
         &self.history_dashboard_card_order
     }
 
-    pub fn history_dashboard_pinned_cards(&self) -> &[HistoryKpiCardId] {
+    pub(crate) fn history_dashboard_pinned_cards(&self) -> &[HistoryKpiCardId] {
         &self.history_dashboard_pinned_cards
     }
 
-    pub fn history_dashboard_cards(&self) -> Vec<HistoryKpiCardId> {
+    pub(crate) fn history_dashboard_cards(&self) -> Vec<HistoryKpiCardId> {
         let mut cards = self.history_dashboard_pinned_cards.clone();
         for card in &self.history_dashboard_card_order {
             if !cards.contains(card) {
@@ -76,11 +76,11 @@ impl App {
         cards
     }
 
-    pub fn history_dashboard_selected_card(&self) -> HistoryKpiCardId {
+    pub(crate) fn history_dashboard_selected_card(&self) -> HistoryKpiCardId {
         self.history_dashboard_selected_card
     }
 
-    pub fn history_dashboard_card_is_pinned(&self, card: HistoryKpiCardId) -> bool {
+    pub(crate) fn history_dashboard_card_is_pinned(&self, card: HistoryKpiCardId) -> bool {
         self.history_dashboard_pinned_cards.contains(&card)
     }
 
