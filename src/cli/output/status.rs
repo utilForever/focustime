@@ -344,13 +344,11 @@ fn print_status_focus_risk_line(forecast: &crate::stats::FocusRiskForecast) {
         highest_label = "Streak";
         highest_signal = forecast.streak.signals.first();
     }
-    if alert_active {
-        if let Some(signal) = highest_signal {
-            println!(
-                "Focus risk signal: {highest_label} {} ({})",
-                signal.label, signal.value
-            );
-        }
+    if alert_active && let Some(signal) = highest_signal {
+        println!(
+            "Focus risk signal: {highest_label} {} ({})",
+            signal.label, signal.value
+        );
     }
 }
 
