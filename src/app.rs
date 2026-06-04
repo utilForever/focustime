@@ -8,9 +8,8 @@ use chrono::{DateTime, Datelike, Local, NaiveDate};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::blocker::{
-    BlockingBackendKind, BlockingBackendPolicy, BlockingIntent, BlockingPreview,
-    BlockingPreviewAction, BulkAddResult, CommandBlockingBackend, EditSiteResult,
-    HostsFileDiagnostics, InvalidSiteInput, SiteBlocker,
+    BlockingBackendPolicy, BlockingIntent, BlockingPreview, BulkAddResult, CommandBlockingBackend,
+    EditSiteResult, InvalidSiteInput, SiteBlocker,
 };
 use crate::calendar::{CalendarBusyWindow, active_window_at as active_calendar_window_at};
 use crate::config::{
@@ -35,11 +34,10 @@ use crate::schedule::{
 use crate::stats::{
     BreakGlassOverrideEvent, ComparisonDimension, DailyGoalSnapshot, DailyStats,
     ExportedStatsFiles, FocusRiskForecast, FocusSessionMetadata, FocusStats, GoalStreak,
-    MonthlyHeatmap, MonthlyStats, ProductivityComparisonRow, ProfileBucket, ProfileEffectiveness,
-    ProfileTotals, SessionInterruptionEvent, SessionInterruptionReason, SessionStats,
-    StatsGrowthSummary, StatsRetentionPruneResult, TaskGoalProgress, TaskTotals, TaskTrend,
-    TimeOfDayBucket, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target,
-    current_day_key,
+    MonthlyHeatmap, MonthlyStats, ProfileBucket, ProfileEffectiveness, ProfileTotals,
+    SessionInterruptionEvent, SessionInterruptionReason, SessionStats, StatsGrowthSummary,
+    StatsRetentionPruneResult, TaskGoalProgress, TaskTotals, TaskTrend, TimeOfDayBucket,
+    WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::temporary_allowlist::{
@@ -50,10 +48,9 @@ use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
 };
-use crate::wakatime::{
-    WakatimeConfigStatus, WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, WakatimeRuntimeState,
-    WakatimeTracker,
-};
+#[cfg(test)]
+use crate::wakatime::WakatimeTracker;
+use crate::wakatime::{WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, WakatimeRuntimeState};
 
 mod automation_triggers;
 mod break_glass;
@@ -65,121 +62,58 @@ mod history_goals;
 mod mode_keys;
 mod persistence;
 mod planner_labels;
+mod profile_edit;
 mod profile_management;
 mod schedule_editor;
 mod schedule_runtime;
 mod session_planner;
 mod session_templates;
+mod setup_diagnostics;
 mod shortcuts;
 mod site_manager;
 mod temporary_allowlist;
 mod timer_flow;
 mod weekday_rules;
+
+use history_dashboard_cache::HistoryDashboardCache;
+#[cfg(test)]
+pub use history_dashboard_cache::HistoryDashboardCacheStats;
+pub use history_dashboard_cache::HistoryDashboardViewData;
 pub(crate) use history_goals::weekly_daily_goal_allocation_for_context;
+pub(crate) use profile_edit::{
+    CUSTOM_DURATION_STEP_SECS, DAILY_GOAL_MINUTES_STEP,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_BLOCKLIST_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_PROFILE_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_TEMPLATE_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_AT_INDEX,
+    PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX, PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX,
+    PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX, PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX,
+    PROFILE_EDIT_FIELD_LABELS, PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX,
+    PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX,
+    PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX, PROFILE_EDIT_ONE_TIME_DATE_INDEX,
+    PROFILE_EDIT_ONE_TIME_END_INDEX, PROFILE_EDIT_ONE_TIME_START_INDEX,
+    PROFILE_EDIT_ONE_TIME_WINDOW_INDEX, PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX,
+    PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
+    PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
+    PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX,
+    PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
+    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX,
+    PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX, PROFILE_EDIT_WAKATIME_PROJECT_INDEX,
+    PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX, PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX,
+    PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX, PROFILE_EDIT_WEEKDAY_RULE_INDEX,
+    PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX, PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, ProfileEditSnapshot,
+};
+pub use setup_diagnostics::{
+    BlockingPreviewSnapshot, SetupCheck, SetupCheckLevel, SetupDiagnostics,
+};
 use shortcuts::ShortcutBindings;
 pub use shortcuts::{NavigationAction, ShortcutAction};
 
 pub const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
-pub const PROFILE_EDIT_FIELD_LABELS: [&str; 52] = [
-    "Focus",
-    "Short Break",
-    "Long Break",
-    "Long-break cadence",
-    "Phase notifications",
-    "Sound alert",
-    "Auto-start break",
-    "Auto-start focus",
-    "Strict focus mode",
-    "Daily goal minutes",
-    "Daily goal pomodoros",
-    "Daily goal carry-over",
-    "Weekly goal minutes",
-    "Weekly goal pomodoros",
-    "Weekly goal carry-over",
-    "Monthly goal minutes",
-    "Monthly goal pomodoros",
-    "Monthly goal carry-over",
-    "WakaTime project",
-    "WakaTime language",
-    "Schedule window",
-    "Schedule day",
-    "Schedule day enabled",
-    "Schedule start",
-    "Schedule end",
-    "Schedule add/remove",
-    "Schedule exception",
-    "Exception date",
-    "Exception add/remove",
-    "One-time window",
-    "One-time date",
-    "One-time start",
-    "One-time end",
-    "One-time add/remove",
-    "Schedule conflicts",
-    "Weekday rule",
-    "Weekday rule day",
-    "Weekday rule profile",
-    "Weekday rule blocklist",
-    "Weekday rule template",
-    "Weekday rule add/remove",
-    "Theme preset",
-    "Automation trigger",
-    "Trigger condition",
-    "Trigger time day",
-    "Trigger time at",
-    "Trigger action",
-    "Action profile",
-    "Action blocklist",
-    "Action template",
-    "Action delay",
-    "Trigger add/remove",
-];
-const PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX: usize = 9;
-const PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX: usize = 10;
-const PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX: usize = 11;
-const PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX: usize = 12;
-const PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX: usize = 13;
-const PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX: usize = 14;
-const PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX: usize = 15;
-const PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX: usize = 16;
-const PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX: usize = 17;
-const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = 18;
-const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = 19;
-const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 20;
-const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 21;
-const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 22;
-const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 23;
-const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 24;
-const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 25;
-const PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX: usize = 26;
-const PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX: usize = 27;
-const PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX: usize = 28;
-const PROFILE_EDIT_ONE_TIME_WINDOW_INDEX: usize = 29;
-const PROFILE_EDIT_ONE_TIME_DATE_INDEX: usize = 30;
-const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 31;
-const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 32;
-const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 33;
-const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 34;
-const PROFILE_EDIT_WEEKDAY_RULE_INDEX: usize = 35;
-const PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX: usize = 36;
-const PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX: usize = 37;
-const PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX: usize = 38;
-const PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX: usize = 39;
-const PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX: usize = 40;
-const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 41;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX: usize = 42;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX: usize = 43;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX: usize = 44;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_AT_INDEX: usize = 45;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX: usize = 46;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_PROFILE_INDEX: usize = 47;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_BLOCKLIST_INDEX: usize = 48;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_TEMPLATE_INDEX: usize = 49;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX: usize = 50;
-const PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX: usize = 51;
-const CUSTOM_DURATION_STEP_SECS: u64 = 60;
-const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
 const DEFAULT_BLOCKLIST_CATEGORY_NAME: &str = "General";
 #[cfg(not(test))]
@@ -348,23 +282,6 @@ fn load_calendar_busy_windows(
             Some(format!("calendar sync cache unavailable: {error}")),
         ),
     }
-}
-
-#[derive(Debug, Clone)]
-struct ProfileEditSnapshot {
-    custom_profile: CustomProfileConfig,
-    notification_settings: NotificationConfig,
-    auto_start: AutoStartConfig,
-    recurring_schedule: RecurringScheduleConfig,
-    automation_triggers: Vec<AutomationTriggerRuleConfig>,
-    weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
-    strict_mode: bool,
-    daily_goal: DailyGoalConfig,
-    weekly_goal: WeeklyGoalConfig,
-    monthly_goal: MonthlyGoalConfig,
-    goal_carry_over: GoalCarryOverConfig,
-    selected_theme_preset: ThemePreset,
-    wakatime_metadata: WakatimeMetadataConfig,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -557,218 +474,6 @@ impl WeeklyDailyGoalAllocation {
                 pomodoros: target.pomodoros_target,
             })
             .unwrap_or_default()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct HistoryDashboardViewData {
-    pub session_stats: SessionStats,
-    pub today_stats: DailyStats,
-    pub daily_goal_progress: DailyGoalProgress,
-    pub weekly_goal_progress: DailyGoalProgress,
-    pub monthly_goal_progress: DailyGoalProgress,
-    pub latest_weekly_focus_score: Option<WeeklyFocusScore>,
-    pub goal_streak: GoalStreak,
-    pub focus_risk_forecast: FocusRiskForecast,
-    pub weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
-    pub latest_session_interruption: Option<SessionInterruptionEvent>,
-    pub stats_growth_summary: StatsGrowthSummary,
-    pub stats_retention_config: StatsRetentionConfig,
-    pub stats_retention_preview: StatsRetentionPruneResult,
-    pub comparison_filter_summary: String,
-    pub comparison_rows: Vec<ProductivityComparisonRow>,
-    pub task_trends: Vec<TaskTrend>,
-    pub profile_effectiveness: Vec<ProfileEffectiveness>,
-    pub break_glass_overrides: Vec<BreakGlassOverrideEvent>,
-    pub monthly_stats: Vec<MonthlyStats>,
-    pub monthly_heatmap: MonthlyHeatmap,
-}
-
-#[derive(Debug, Clone)]
-struct HistoryDashboardStaticSnapshot {
-    session_stats: SessionStats,
-    today_stats: DailyStats,
-    daily_goal_progress: DailyGoalProgress,
-    weekly_goal_progress: DailyGoalProgress,
-    monthly_goal_progress: DailyGoalProgress,
-    latest_weekly_focus_score: Option<WeeklyFocusScore>,
-    goal_streak: GoalStreak,
-    focus_risk_forecast: FocusRiskForecast,
-    weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
-    latest_session_interruption: Option<SessionInterruptionEvent>,
-    stats_growth_summary: StatsGrowthSummary,
-    stats_retention_config: StatsRetentionConfig,
-    stats_retention_preview: StatsRetentionPruneResult,
-    task_trends: Vec<TaskTrend>,
-    profile_effectiveness: Vec<ProfileEffectiveness>,
-    break_glass_overrides: Vec<BreakGlassOverrideEvent>,
-    monthly_stats: Vec<MonthlyStats>,
-    monthly_heatmap: MonthlyHeatmap,
-}
-
-#[derive(Debug, Clone)]
-struct HistoryDashboardComparisonSnapshot {
-    comparison_filter_summary: String,
-    comparison_rows: Vec<ProductivityComparisonRow>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct HistoryDashboardStaticSnapshotKey {
-    stats_revision: u64,
-    day_key: String,
-    retention: StatsRetentionConfig,
-    recurring_schedule: RecurringScheduleConfig,
-    daily_goal: DailyGoalConfig,
-    weekly_goal: WeeklyGoalConfig,
-    monthly_goal: MonthlyGoalConfig,
-    goal_carry_over: GoalCarryOverConfig,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct HistoryDashboardComparisonSnapshotKey {
-    stats_revision: u64,
-    dimension: ComparisonDimension,
-    task_filter: Option<String>,
-    profile_filter: Option<ProfileBucket>,
-    time_of_day_filter: Option<TimeOfDayBucket>,
-}
-
-#[cfg(test)]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct HistoryDashboardCacheStats {
-    pub static_rebuilds: u64,
-    pub comparison_rebuilds: u64,
-}
-
-#[derive(Debug, Default, Clone)]
-struct HistoryDashboardCache {
-    static_key: Option<HistoryDashboardStaticSnapshotKey>,
-    static_snapshot: Option<HistoryDashboardStaticSnapshot>,
-    comparison_key: Option<HistoryDashboardComparisonSnapshotKey>,
-    comparison_snapshot: Option<HistoryDashboardComparisonSnapshot>,
-    #[cfg(test)]
-    cache_stats: HistoryDashboardCacheStats,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SetupCheckLevel {
-    Ok,
-    Warning,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SetupCheck {
-    pub level: SetupCheckLevel,
-    pub message: String,
-}
-
-impl SetupCheck {
-    fn ok(message: impl Into<String>) -> Self {
-        Self {
-            level: SetupCheckLevel::Ok,
-            message: message.into(),
-        }
-    }
-
-    fn warning(message: impl Into<String>) -> Self {
-        Self {
-            level: SetupCheckLevel::Warning,
-            message: message.into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SetupDiagnostics {
-    pub hosts_file_path: String,
-    pub backend_policy: String,
-    pub backend_order: String,
-    pub backend_selection: SetupCheck,
-    pub blocking_permissions: SetupCheck,
-    pub hosts_write_capability: SetupCheck,
-    pub command_backend: SetupCheck,
-    pub wakatime_config: SetupCheck,
-    pub deprecation_warnings: Vec<String>,
-}
-
-impl SetupDiagnostics {
-    fn collect(
-        blocker: &SiteBlocker,
-        deprecation_warnings: Vec<String>,
-        wakatime_integration_enabled: bool,
-    ) -> Self {
-        let hosts_diagnostics = blocker.hosts_file_diagnostics();
-        let backend_status = blocker.backend_status();
-        let blocking_permissions = blocking_permissions_check(&hosts_diagnostics);
-        let hosts_write_capability = hosts_write_capability_check(&hosts_diagnostics);
-        let hosts_file_path = hosts_diagnostics.path.clone();
-        let backend_policy = backend_status.policy.id().to_string();
-        let backend_order = backend_status
-            .order
-            .iter()
-            .map(|backend| backend.id())
-            .collect::<Vec<_>>()
-            .join(" -> ");
-        let backend_selection = backend_selection_check(
-            backend_status.last_backend,
-            backend_status.fallback_used,
-            backend_status.last_error.as_deref(),
-        );
-        let command_backend = command_backend_check(blocker);
-        let wakatime_config = if wakatime_integration_enabled {
-            let wakatime_diagnostics = WakatimeTracker::config_diagnostics();
-            match wakatime_diagnostics.status {
-                WakatimeConfigStatus::Configured => SetupCheck::ok(wakatime_diagnostics.detail),
-                WakatimeConfigStatus::MissingConfigFile
-                | WakatimeConfigStatus::MissingApiKey
-                | WakatimeConfigStatus::UnreadableConfig
-                | WakatimeConfigStatus::HomeDirectoryUnavailable => {
-                    SetupCheck::warning(wakatime_diagnostics.detail)
-                }
-            }
-        } else {
-            SetupCheck::ok("Disabled by integration framework configuration.".to_string())
-        };
-        Self {
-            hosts_file_path,
-            backend_policy,
-            backend_order,
-            backend_selection,
-            blocking_permissions,
-            hosts_write_capability,
-            command_backend,
-            wakatime_config,
-            deprecation_warnings,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockingPreviewSnapshot {
-    pub backend: Option<BlockingBackendKind>,
-    pub backend_target: Option<String>,
-    pub attempted_backends: Vec<BlockingBackendKind>,
-    pub fallback_used: bool,
-    pub action: BlockingPreviewAction,
-    pub would_change: bool,
-    pub effective_blocked_sites_count: usize,
-    pub section: Option<String>,
-    pub error: Option<String>,
-}
-
-impl Default for BlockingPreviewSnapshot {
-    fn default() -> Self {
-        Self {
-            backend: None,
-            backend_target: None,
-            attempted_backends: Vec::new(),
-            fallback_used: false,
-            action: BlockingPreviewAction::NoChange,
-            would_change: false,
-            effective_blocked_sites_count: 0,
-            section: None,
-            error: None,
-        }
     }
 }
 
@@ -2076,14 +1781,6 @@ fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<
     crate::config::effective_blocked_sites_for_profile(profile)
 }
 
-fn permission_remediation_guidance() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "Run focustime from an Administrator terminal, then open [d] Setup and press [r] Refresh."
-    } else {
-        "Run focustime with elevated privileges (e.g. sudo), verify hosts-file permissions, then press [r] Refresh."
-    }
-}
-
 pub(super) fn setup_deprecation_warnings(
     config_deprecation_warnings: &[String],
     _stats: &FocusStats,
@@ -2136,81 +1833,6 @@ impl Drop for App {
         // Ensure hosts-file block entries are removed on every exit path,
         // including early returns caused by I/O errors in run_app.
         self.blocker.cleanup();
-    }
-}
-
-fn blocking_permissions_check(hosts_diagnostics: &HostsFileDiagnostics) -> SetupCheck {
-    if hosts_diagnostics.can_write() {
-        SetupCheck::ok("Ready: hosts file can be opened for write access")
-    } else {
-        let reason = hosts_diagnostics
-            .write_error
-            .as_deref()
-            .unwrap_or("unknown write error");
-        SetupCheck::warning(format!(
-            "Blocked: write permission unavailable ({reason}). {}",
-            permission_remediation_guidance()
-        ))
-    }
-}
-
-fn backend_selection_check(
-    last_backend: Option<BlockingBackendKind>,
-    fallback_used: bool,
-    last_error: Option<&str>,
-) -> SetupCheck {
-    if let Some(error) = last_error {
-        return SetupCheck::warning(format!("Blocked: backend selection failed ({error})"));
-    }
-    if let Some(backend) = last_backend {
-        if fallback_used {
-            return SetupCheck::warning(format!(
-                "Fallback active: using `{}` backend after primary backend failure",
-                backend.id()
-            ));
-        }
-        return SetupCheck::ok(format!("Ready: using `{}` backend", backend.id()));
-    }
-    SetupCheck::warning(
-        "Awaiting first block/unblock operation to confirm selected backend".to_string(),
-    )
-}
-
-fn command_backend_check(blocker: &SiteBlocker) -> SetupCheck {
-    match blocker.command_backend_diagnostics() {
-        Ok(()) => SetupCheck::ok("Ready: command backend diagnostics passed"),
-        Err(error) => SetupCheck::warning(format!(
-            "Blocked: command backend unavailable ({error}). Configure commands or use hosts backend."
-        )),
-    }
-}
-
-fn hosts_write_capability_check(hosts_diagnostics: &HostsFileDiagnostics) -> SetupCheck {
-    let can_read = hosts_diagnostics.can_read();
-    let can_write = hosts_diagnostics.can_write();
-    match (
-        can_read,
-        can_write,
-        hosts_diagnostics.read_error.as_deref(),
-        hosts_diagnostics.write_error.as_deref(),
-    ) {
-        (true, true, _, _) => SetupCheck::ok("Ready: hosts file is readable and writable"),
-        (false, true, Some(read_error), _) => SetupCheck::warning(format!(
-            "Blocked: cannot read hosts file ({read_error}). {}",
-            permission_remediation_guidance()
-        )),
-        (true, false, _, Some(write_error)) => SetupCheck::warning(format!(
-            "Blocked: cannot write hosts file ({write_error}). {}",
-            permission_remediation_guidance()
-        )),
-        (false, false, Some(read_error), Some(write_error)) => SetupCheck::warning(format!(
-            "Blocked: read error ({read_error}); write error ({write_error}). {}",
-            permission_remediation_guidance()
-        )),
-        _ => SetupCheck::warning(format!(
-            "Blocked: hosts access diagnostics unavailable. {}",
-            permission_remediation_guidance()
-        )),
     }
 }
 
