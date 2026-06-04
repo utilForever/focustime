@@ -8,6 +8,8 @@ mod conflicts;
 mod occurrence;
 mod parsing;
 
+#[allow(unused_imports)]
+pub use conflicts::inspect_schedule_conflicts;
 pub use conflicts::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 pub use occurrence::{
     active_occurrence, active_one_time_occurrence, next_occurrence_after,
