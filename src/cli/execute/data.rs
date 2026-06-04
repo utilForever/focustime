@@ -1,0 +1,478 @@
+use std::{env, fs, path::Path};
+
+use crate::cli::{
+    AppConfig, BackupOutput, CalendarSyncCommandOutput, DailyGoalSnapshot, ExportOutput,
+    FeatureInventoryOutput, FocusStats, OutputMode, PathBuf, RestoreOutput, print_backup_output,
+    print_calendar_sync_command_output, print_export_output, print_feature_inventory_output,
+    print_json, print_restore_output,
+};
+use crate::feature_inventory::{build_feature_inventory_report, export_feature_inventory_report};
+
+const CONFIG_FILE_NAME: &str = "config.toml";
+const STATS_FILE_NAME: &str = "stats.toml";
+pub(super) fn execute_export_command(
+    dir: Option<PathBuf>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let config = AppConfig::load().normalized();
+    let stats = FocusStats::load_with_options(stats_load_options(&config))
+        .map_err(|error| format!("Failed to load stats: {error}"))?;
+    let history_kpi_context = build_history_kpi_export_context(&config);
+    let target_dir = match dir {
+        Some(path) => path,
+        None => env::current_dir()
+            .map_err(|error| format!("Failed to determine current directory: {error}"))?,
+    };
+    let exported = stats
+        .export_to_dir_with_context(&target_dir, &history_kpi_context)
+        .map_err(|error| format!("Export failed: {error}"))?;
+
+    let payload = ExportOutput {
+        export_dir: target_dir,
+        json_path: exported.json_path,
+        csv_path: exported.csv_path,
+    };
+    match output {
+        OutputMode::Text => print_export_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+pub(super) fn execute_feature_inventory_command(
+    dir: Option<PathBuf>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let target_dir = match dir {
+        Some(path) => path,
+        None => env::current_dir()
+            .map_err(|error| format!("Failed to determine current directory: {error}"))?,
+    };
+
+    let report = build_feature_inventory_report();
+    let exported = export_feature_inventory_report(&target_dir, &report)
+        .map_err(|error| format!("Feature inventory export failed: {error}"))?;
+
+    let payload = FeatureInventoryOutput {
+        export_dir: target_dir,
+        json_path: exported.json_path,
+        markdown_path: exported.markdown_path,
+        total_features: report.summary.total_features,
+        keep_count: report.summary.keep_count,
+        merge_count: report.summary.merge_count,
+        remove_count: report.summary.remove_count,
+    };
+    match output {
+        OutputMode::Text => print_feature_inventory_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+fn build_history_kpi_export_context(config: &AppConfig) -> crate::stats::HistoryKpiExportContext {
+    let selected_automation = config.profile_automation_for(config.selected_profile);
+    crate::stats::HistoryKpiExportContext {
+        reference_day: chrono::Local::now().date_naive(),
+        daily_goal: DailyGoalSnapshot {
+            minutes: config.daily_goal.minutes,
+            pomodoros: config.daily_goal.pomodoros,
+        },
+        weekly_goal: DailyGoalSnapshot {
+            minutes: config.weekly_goal.minutes,
+            pomodoros: config.weekly_goal.pomodoros,
+        },
+        monthly_goal: DailyGoalSnapshot {
+            minutes: config.monthly_goal.minutes,
+            pomodoros: config.monthly_goal.pomodoros,
+        },
+        carry_over_daily: config.goal_carry_over.daily,
+        carry_over_weekly: config.goal_carry_over.weekly,
+        carry_over_monthly: config.goal_carry_over.monthly,
+        recurring_schedule: selected_automation.recurring_schedule,
+        stats_retention: config.stats_retention,
+        comparison_dimension: crate::stats::ComparisonDimension::TaskLabel,
+        comparison_task_filter: None,
+        comparison_profile_filter: None,
+        comparison_time_of_day_filter: None,
+    }
+}
+
+pub(super) fn execute_backup_command(
+    dir: Option<PathBuf>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let _config = AppConfig::load().normalized();
+    let backup_dir = match dir {
+        Some(path) => path,
+        None => env::current_dir().map_err(|error| {
+            format!("Backup failed: could not determine current directory: {error}")
+        })?,
+    };
+    fs::create_dir_all(&backup_dir)
+        .map_err(|error| format!("Backup failed: could not create backup directory: {error}"))?;
+
+    let source_config = config_file_path()?;
+    let source_stats = stats_persistence_path()?;
+    ensure_backup_source_file(&source_config, CONFIG_FILE_NAME)?;
+    ensure_backup_source_file(&source_stats, STATS_FILE_NAME)?;
+    let config_backup_path = backup_dir.join(CONFIG_FILE_NAME);
+    let stats_backup_path = backup_dir.join(STATS_FILE_NAME);
+
+    copy_file_with_context(&source_config, &config_backup_path, "backup config.toml")?;
+    copy_file_with_context(&source_stats, &stats_backup_path, "backup stats.toml")?;
+
+    let payload = BackupOutput {
+        backup_dir,
+        config_backup_path,
+        stats_backup_path,
+    };
+    match output {
+        OutputMode::Text => print_backup_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+pub(super) fn execute_restore_command(
+    dir: Option<PathBuf>,
+    output: OutputMode,
+) -> Result<(), String> {
+    let _config = AppConfig::load().normalized();
+    let restore_dir = match dir {
+        Some(path) => path,
+        None => env::current_dir().map_err(|error| {
+            format!("Restore failed: could not determine current directory: {error}")
+        })?,
+    };
+    let source_config = restore_dir.join(CONFIG_FILE_NAME);
+    let source_stats = restore_dir.join(STATS_FILE_NAME);
+    ensure_restore_source_file(&source_config, CONFIG_FILE_NAME)?;
+    ensure_restore_source_file(&source_stats, STATS_FILE_NAME)?;
+
+    let config_restored_path = config_file_path()?;
+    let stats_restored_path = stats_persistence_path()?;
+    let staged_config_path = temp_restore_path(&config_restored_path, "staged");
+    let staged_stats_path = temp_restore_path(&stats_restored_path, "staged");
+    copy_file_with_context(
+        &source_config,
+        &staged_config_path,
+        "stage restore config.toml",
+    )?;
+    copy_file_with_context(
+        &source_stats,
+        &staged_stats_path,
+        "stage restore stats.toml",
+    )?;
+
+    let original_config_snapshot = snapshot_existing_file(
+        &config_restored_path,
+        "snapshot existing config.toml for rollback",
+    )?;
+    let original_stats_snapshot = snapshot_existing_file(
+        &stats_restored_path,
+        "snapshot existing stats.toml for rollback",
+    )?;
+
+    replace_file_atomically(
+        &staged_config_path,
+        &config_restored_path,
+        "restore config.toml",
+    )?;
+    if let Err(error) = replace_file_atomically(
+        &staged_stats_path,
+        &stats_restored_path,
+        "restore stats.toml",
+    ) {
+        rollback_restored_file(
+            original_config_snapshot.as_deref(),
+            &config_restored_path,
+            "roll back restored config.toml",
+        );
+        rollback_restored_file(
+            original_stats_snapshot.as_deref(),
+            &stats_restored_path,
+            "roll back restored stats.toml",
+        );
+        let _ = remove_file_if_exists(&staged_stats_path);
+        return Err(error);
+    }
+    if let Some(snapshot) = original_config_snapshot.as_deref() {
+        let _ = remove_file_if_exists(snapshot);
+    }
+    if let Some(snapshot) = original_stats_snapshot.as_deref() {
+        let _ = remove_file_if_exists(snapshot);
+    }
+
+    let payload = RestoreOutput {
+        restore_dir,
+        config_restored_path,
+        stats_restored_path,
+    };
+    match output {
+        OutputMode::Text => print_restore_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+pub(super) fn execute_calendar_sync_command(output: OutputMode) -> Result<(), String> {
+    let config = AppConfig::load().normalized();
+    let result = crate::calendar::sync_from_config(&config.calendar_sync, chrono::Local::now())?;
+    let errors = result
+        .source_errors
+        .into_iter()
+        .map(redact_calendar_sync_error)
+        .collect::<Vec<_>>();
+    let payload = CalendarSyncCommandOutput {
+        action: "calendar-sync",
+        synced_at_epoch_secs: result.synced_at_epoch_secs,
+        source_count: result.source_count,
+        windows_count: result.windows.len(),
+        error_count: errors.len(),
+        errors,
+    };
+    match output {
+        OutputMode::Text => print_calendar_sync_command_output(&payload),
+        OutputMode::Json => print_json(&payload)?,
+    }
+    Ok(())
+}
+
+pub(super) fn redact_calendar_sync_error(message: String) -> String {
+    message
+        .split_whitespace()
+        .map(redact_calendar_sync_token)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn redact_calendar_sync_token(token: &str) -> String {
+    let core_start = token
+        .char_indices()
+        .find(|(_, ch)| !is_wrapper_punctuation(*ch))
+        .map_or(0, |(index, _)| index);
+    let core_end = token
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| !is_wrapper_punctuation(*ch))
+        .map_or(token.len(), |(index, ch)| index + ch.len_utf8());
+    if core_end <= core_start {
+        return token.to_string();
+    }
+    let prefix = &token[..core_start];
+    let core = &token[core_start..core_end];
+    let suffix = &token[core_end..];
+    let redacted_core = if is_url_like_token(core) {
+        redact_url_like_token(core)
+    } else {
+        core.to_string()
+    };
+    format!("{prefix}{redacted_core}{suffix}")
+}
+
+fn is_url_like_token(token: &str) -> bool {
+    token.contains("://")
+        || token.starts_with("webcal://")
+        || token.starts_with("webcals://")
+        || token.starts_with("http://")
+        || token.starts_with("https://")
+}
+
+fn redact_url_like_token(token: &str) -> String {
+    let without_fragment = token.split_once('#').map_or(token, |(base, _)| base);
+    let without_query = without_fragment
+        .split_once('?')
+        .map_or(without_fragment, |(base, _)| base);
+    let Some((scheme, remainder)) = without_query.split_once("://") else {
+        return without_query.to_string();
+    };
+    let authority = remainder.split('/').next().unwrap_or(remainder);
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, stripped)| stripped);
+    if remainder.contains('/') {
+        format!("{scheme}://{host}/<redacted>")
+    } else {
+        format!("{scheme}://{host}")
+    }
+}
+
+fn is_wrapper_punctuation(ch: char) -> bool {
+    matches!(
+        ch,
+        '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | ',' | ';'
+    )
+}
+
+fn ensure_restore_source_file(path: &Path, file_name: &str) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!(
+            "Restore failed: missing `{file_name}` in `{}`.",
+            path.parent()
+                .map(|parent| parent.display().to_string())
+                .unwrap_or_else(|| ".".to_string())
+        ));
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "Restore failed: `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_backup_source_file(path: &Path, file_name: &str) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!(
+            "Backup failed: missing `{file_name}` in `{}`.",
+            path.parent()
+                .map(|parent| parent.display().to_string())
+                .unwrap_or_else(|| ".".to_string())
+        ));
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "Backup failed: `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn snapshot_existing_file(path: &Path, context: &str) -> Result<Option<PathBuf>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "Failed to {context}: `{}` is not a regular file.",
+            path.display()
+        ));
+    }
+    let snapshot = temp_restore_path(path, "original");
+    fs::copy(path, &snapshot).map_err(|error| {
+        format!(
+            "Failed to {context}: `{}` -> `{}`: {error}",
+            path.display(),
+            snapshot.display()
+        )
+    })?;
+    Ok(Some(snapshot))
+}
+
+fn temp_restore_path(path: &Path, marker: &str) -> PathBuf {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let target_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("focustime-restore");
+    let pid = std::process::id();
+    parent.join(format!(".{target_name}.{pid}.{marker}.tmp"))
+}
+
+fn replace_file_atomically(
+    staged_path: &Path,
+    destination: &Path,
+    context: &str,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        match fs::rename(staged_path, destination) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                fs::remove_file(destination).map_err(|remove_error| {
+                    format!(
+                        "Failed to {context}: could not replace `{}`: {remove_error}",
+                        destination.display()
+                    )
+                })?;
+                fs::rename(staged_path, destination).map_err(|rename_error| {
+                    format!(
+                        "Failed to {context}: `{}` -> `{}`: {rename_error}",
+                        staged_path.display(),
+                        destination.display()
+                    )
+                })
+            }
+            Err(error) => {
+                let _ = remove_file_if_exists(staged_path);
+                Err(format!(
+                    "Failed to {context}: `{}` -> `{}`: {error}",
+                    staged_path.display(),
+                    destination.display()
+                ))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        fs::rename(staged_path, destination).map_err(|error| {
+            let _ = remove_file_if_exists(staged_path);
+            format!(
+                "Failed to {context}: `{}` -> `{}`: {error}",
+                staged_path.display(),
+                destination.display()
+            )
+        })
+    }
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    fs::remove_file(path).map_err(|error| format!("Failed to remove `{}`: {error}", path.display()))
+}
+
+fn rollback_restored_file(snapshot: Option<&Path>, destination: &Path, rollback_context: &str) {
+    if let Some(snapshot) = snapshot {
+        let _ = replace_file_atomically(snapshot, destination, rollback_context);
+    } else {
+        let _ = remove_file_if_exists(destination);
+    }
+}
+
+fn config_file_path() -> Result<PathBuf, String> {
+    crate::config::app_data_path(CONFIG_FILE_NAME).ok_or_else(|| {
+        format!(
+            "could not determine application data path for `{CONFIG_FILE_NAME}` (environment is not configured)"
+        )
+    })
+}
+
+fn stats_persistence_path() -> Result<PathBuf, String> {
+    crate::config::stats_data_path(STATS_FILE_NAME).ok_or_else(|| {
+        format!(
+            "could not determine application data path for `{STATS_FILE_NAME}` (environment is not configured)"
+        )
+    })
+}
+
+pub(super) fn stats_load_options(_config: &AppConfig) -> crate::stats::StatsLoadOptions {
+    crate::stats::StatsLoadOptions::default()
+}
+
+pub(super) fn stats_save_options(_config: &AppConfig) -> crate::stats::StatsSaveOptions {
+    crate::stats::StatsSaveOptions::default()
+}
+
+fn copy_file_with_context(source: &Path, destination: &Path, context: &str) -> Result<(), String> {
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to {context}: could not create `{}`: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    fs::copy(source, destination).map_err(|error| {
+        format!(
+            "Failed to {context}: `{}` -> `{}`: {error}",
+            source.display(),
+            destination.display()
+        )
+    })?;
+    Ok(())
+}
