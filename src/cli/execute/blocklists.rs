@@ -305,7 +305,7 @@ fn handle_rename_blocklist_profile(
     if name.is_empty() {
         return Err("Profile name cannot be empty.".to_string());
     }
-    if current_name == name {
+    if current_name.eq_ignore_ascii_case(&name) {
         return Ok(("blocklist-profile-rename", false));
     }
 
