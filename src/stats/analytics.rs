@@ -25,7 +25,7 @@ use support::{
 };
 
 impl FocusStats {
-    pub fn weekly_for_day(&self, day: chrono::NaiveDate) -> WeeklyStats {
+    pub(crate) fn weekly_for_day(&self, day: chrono::NaiveDate) -> WeeklyStats {
         let week = day.iso_week();
         let mut totals = WeeklyStats {
             year: week.year(),
@@ -48,7 +48,7 @@ impl FocusStats {
         totals
     }
 
-    pub fn monthly_for_day(&self, day: chrono::NaiveDate) -> MonthlyStats {
+    pub(crate) fn monthly_for_day(&self, day: chrono::NaiveDate) -> MonthlyStats {
         let mut totals = MonthlyStats {
             year: day.year(),
             month: day.month(),
@@ -69,7 +69,7 @@ impl FocusStats {
         totals
     }
 
-    pub fn weekly_goal_snapshot_for_day(
+    pub(crate) fn weekly_goal_snapshot_for_day(
         &self,
         day: chrono::NaiveDate,
     ) -> Option<DailyGoalSnapshot> {
@@ -77,7 +77,7 @@ impl FocusStats {
         self.weekly_goal_snapshots.get(&key).copied()
     }
 
-    pub fn monthly_goal_snapshot_for_day(
+    pub(crate) fn monthly_goal_snapshot_for_day(
         &self,
         day: chrono::NaiveDate,
     ) -> Option<DailyGoalSnapshot> {
@@ -85,7 +85,7 @@ impl FocusStats {
         self.monthly_goal_snapshots.get(&key).copied()
     }
 
-    pub fn weekly_focus_score_for_day(&self, day: chrono::NaiveDate) -> WeeklyFocusScore {
+    pub(crate) fn weekly_focus_score_for_day(&self, day: chrono::NaiveDate) -> WeeklyFocusScore {
         let iso_week = day.iso_week();
         let year = iso_week.year();
         let week = iso_week.week();
@@ -115,32 +115,32 @@ impl FocusStats {
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn recent_weekly(&self, limit: usize) -> Vec<WeeklyStats> {
+    pub(crate) fn recent_weekly(&self, limit: usize) -> Vec<WeeklyStats> {
         let mut weekly = self.weekly_stats();
         weekly.reverse();
         weekly.truncate(limit);
         weekly
     }
 
-    pub fn recent_weekly_consistency(&self, limit: usize) -> Vec<WeeklyConsistency> {
+    pub(crate) fn recent_weekly_consistency(&self, limit: usize) -> Vec<WeeklyConsistency> {
         let mut weekly = self.weekly_consistency_stats();
         weekly.reverse();
         weekly.truncate(limit);
         weekly
     }
 
-    pub fn recent_weekly_focus_scores(&self, limit: usize) -> Vec<WeeklyFocusScore> {
+    pub(crate) fn recent_weekly_focus_scores(&self, limit: usize) -> Vec<WeeklyFocusScore> {
         let mut weekly = self.weekly_focus_score_stats();
         weekly.reverse();
         weekly.truncate(limit);
         weekly
     }
 
-    pub fn latest_weekly_focus_score(&self) -> Option<WeeklyFocusScore> {
+    pub(crate) fn latest_weekly_focus_score(&self) -> Option<WeeklyFocusScore> {
         self.recent_weekly_focus_scores(1).into_iter().next()
     }
 
-    pub fn focus_risk_forecast_for_day(
+    pub(crate) fn focus_risk_forecast_for_day(
         &self,
         day: chrono::NaiveDate,
         daily_goal: DailyGoalSnapshot,
@@ -190,7 +190,7 @@ impl FocusStats {
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn focus_risk_calibration_metrics_for_day(
+    pub(crate) fn focus_risk_calibration_metrics_for_day(
         &self,
         day: chrono::NaiveDate,
         daily_goal: DailyGoalSnapshot,
@@ -268,14 +268,14 @@ impl FocusStats {
         }
     }
 
-    pub fn recent_monthly(&self, limit: usize) -> Vec<MonthlyStats> {
+    pub(crate) fn recent_monthly(&self, limit: usize) -> Vec<MonthlyStats> {
         let mut monthly = self.monthly_stats();
         monthly.reverse();
         monthly.truncate(limit);
         monthly
     }
 
-    pub fn latest_monthly_heatmap(&self) -> MonthlyHeatmap {
+    pub(crate) fn latest_monthly_heatmap(&self) -> MonthlyHeatmap {
         let (year, month) = self.latest_recorded_month_key().unwrap_or_else(|| {
             let now = chrono::Local::now().date_naive();
             (now.year(), now.month())
@@ -284,7 +284,7 @@ impl FocusStats {
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn profile_totals(&self) -> Vec<ProfileTotals> {
+    pub(crate) fn profile_totals(&self) -> Vec<ProfileTotals> {
         let mut by_profile: BTreeMap<ProfileBucket, ProfileTotals> = BTreeMap::new();
         for session in &self.focus_sessions {
             let profile = profile_bucket_for(session.profile);
@@ -310,7 +310,7 @@ impl FocusStats {
         totals
     }
 
-    pub fn profile_effectiveness(&self) -> Vec<ProfileEffectiveness> {
+    pub(crate) fn profile_effectiveness(&self) -> Vec<ProfileEffectiveness> {
         let mut by_profile: BTreeMap<ProfileBucket, ProfileEffectivenessAccumulator> =
             BTreeMap::new();
         let mut total_focused_seconds: u64 = 0;
@@ -353,7 +353,7 @@ impl FocusStats {
         effectiveness
     }
 
-    pub fn productivity_comparison(
+    pub(crate) fn productivity_comparison(
         &self,
         dimension: ComparisonDimension,
         filter: &ProductivityComparisonFilter,
@@ -637,7 +637,7 @@ impl FocusStats {
         }
     }
 
-    pub fn growth_summary(&self) -> StatsGrowthSummary {
+    pub(crate) fn growth_summary(&self) -> StatsGrowthSummary {
         let mut sections = vec![
             stats_growth_section("daily", self.daily.len(), &self.daily),
             stats_growth_section(
@@ -723,7 +723,7 @@ impl FocusStats {
         }
     }
 
-    pub fn apply_retention_policy(
+    pub(crate) fn apply_retention_policy(
         &mut self,
         retention: StatsRetentionConfig,
         reference_day: chrono::NaiveDate,
@@ -786,7 +786,7 @@ impl FocusStats {
         result
     }
 
-    pub fn retention_preview(
+    pub(crate) fn retention_preview(
         &self,
         retention: StatsRetentionConfig,
         reference_day: chrono::NaiveDate,
@@ -795,7 +795,7 @@ impl FocusStats {
         cloned.apply_retention_policy(retention, reference_day)
     }
 
-    pub fn usage_signal_summary(&self, limit: usize) -> UsageSignalsSummary {
+    pub(crate) fn usage_signal_summary(&self, limit: usize) -> UsageSignalsSummary {
         let limit = limit.max(1);
         UsageSignalsSummary {
             commands: usage_signal_summary_for_counts(&self.command_usage_counts, limit),

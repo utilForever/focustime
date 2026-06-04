@@ -6,7 +6,7 @@ use crate::stats::{
 };
 
 impl FocusStats {
-    pub fn recent_task_labels(&self, limit: usize) -> Vec<String> {
+    pub(crate) fn recent_task_labels(&self, limit: usize) -> Vec<String> {
         if limit == 0 {
             return Vec::new();
         }
@@ -45,7 +45,7 @@ impl FocusStats {
 
     #[cfg(test)]
     #[allow(dead_code)]
-    pub fn recent_daily(&self, limit: usize) -> Vec<(String, DailyStats)> {
+    pub(crate) fn recent_daily(&self, limit: usize) -> Vec<(String, DailyStats)> {
         self.daily
             .iter()
             .rev()
@@ -54,7 +54,7 @@ impl FocusStats {
             .collect()
     }
 
-    pub fn task_totals(&self, limit: usize) -> Vec<TaskTotals> {
+    pub(crate) fn task_totals(&self, limit: usize) -> Vec<TaskTotals> {
         if limit == 0 {
             return Vec::new();
         }
@@ -90,7 +90,7 @@ impl FocusStats {
         totals
     }
 
-    pub fn recent_task_trends(&self, limit: usize) -> Vec<TaskTrend> {
+    pub(crate) fn recent_task_trends(&self, limit: usize) -> Vec<TaskTrend> {
         if limit == 0 {
             return Vec::new();
         }
@@ -103,7 +103,10 @@ impl FocusStats {
         trends
     }
 
-    pub fn recent_break_glass_overrides(&self, limit: usize) -> Vec<BreakGlassOverrideEvent> {
+    pub(crate) fn recent_break_glass_overrides(
+        &self,
+        limit: usize,
+    ) -> Vec<BreakGlassOverrideEvent> {
         self.break_glass_overrides
             .iter()
             .rev()
@@ -113,7 +116,10 @@ impl FocusStats {
     }
 
     #[cfg(test)]
-    pub fn recent_session_interruptions(&self, limit: usize) -> Vec<SessionInterruptionEvent> {
+    pub(crate) fn recent_session_interruptions(
+        &self,
+        limit: usize,
+    ) -> Vec<SessionInterruptionEvent> {
         self.session_interruptions
             .iter()
             .rev()
@@ -122,7 +128,7 @@ impl FocusStats {
             .collect()
     }
 
-    pub fn latest_session_interruption(&self) -> Option<SessionInterruptionEvent> {
+    pub(crate) fn latest_session_interruption(&self) -> Option<SessionInterruptionEvent> {
         self.session_interruptions
             .iter()
             .max_by_key(|event| event.timestamp_epoch_secs)
@@ -219,12 +225,12 @@ impl FocusStats {
     }
 
     #[cfg(test)]
-    pub fn insert_daily_for_tests(&mut self, day_key: &str, stats: DailyStats) {
+    pub(crate) fn insert_daily_for_tests(&mut self, day_key: &str, stats: DailyStats) {
         self.daily.insert(day_key.to_string(), stats);
     }
 
     #[cfg(test)]
-    pub fn goal_streak(
+    pub(crate) fn goal_streak(
         &self,
         today: chrono::NaiveDate,
         current_goal: DailyGoalSnapshot,

@@ -39,48 +39,48 @@ const EXPORT_SCHEMA_VERSION: u32 = 8;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct StatsLoadOptions {}
+pub(crate) struct StatsLoadOptions {}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct StatsSaveOptions {}
+pub(crate) struct StatsSaveOptions {}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct SessionStats {
-    pub pomodoros_completed: u32,
-    pub focused_seconds: u64,
+pub(crate) struct SessionStats {
+    pub(crate) pomodoros_completed: u32,
+    pub(crate) focused_seconds: u64,
 }
 
 impl SessionStats {
-    pub fn focused_minutes(self) -> u64 {
+    pub(crate) fn focused_minutes(self) -> u64 {
         self.focused_seconds / 60
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
-pub struct DailyGoalSnapshot {
+pub(crate) struct DailyGoalSnapshot {
     #[serde(default)]
-    pub minutes: u64,
+    pub(crate) minutes: u64,
     #[serde(default)]
-    pub pomodoros: u32,
+    pub(crate) pomodoros: u32,
 }
 
 impl DailyGoalSnapshot {
-    pub fn has_any_target(self) -> bool {
+    pub(crate) fn has_any_target(self) -> bool {
         self.minutes > 0 || self.pomodoros > 0
     }
 
-    pub fn is_met_by_totals(self, focused_minutes: u64, pomodoros_completed: u32) -> bool {
+    pub(crate) fn is_met_by_totals(self, focused_minutes: u64, pomodoros_completed: u32) -> bool {
         self.has_any_target()
             && (self.minutes == 0 || focused_minutes >= self.minutes)
             && (self.pomodoros == 0 || pomodoros_completed >= self.pomodoros)
     }
 
-    pub fn is_met_by(self, stats: DailyStats) -> bool {
+    pub(crate) fn is_met_by(self, stats: DailyStats) -> bool {
         self.is_met_by_totals(stats.focused_minutes(), stats.pomodoros_completed)
     }
 }
 
-pub fn carry_over_goal_target(
+pub(crate) fn carry_over_goal_target(
     base: DailyGoalSnapshot,
     carry_enabled: bool,
     previous: Option<(DailyGoalSnapshot, u64, u32)>,
@@ -108,55 +108,55 @@ pub fn carry_over_goal_target(
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct GoalStreak {
-    pub current: u32,
-    pub best: u32,
+pub(crate) struct GoalStreak {
+    pub(crate) current: u32,
+    pub(crate) best: u32,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct WeeklyStats {
-    pub year: i32,
-    pub week: u32,
-    pub pomodoros_completed: u32,
-    pub focused_seconds: u64,
+pub(crate) struct WeeklyStats {
+    pub(crate) year: i32,
+    pub(crate) week: u32,
+    pub(crate) pomodoros_completed: u32,
+    pub(crate) focused_seconds: u64,
 }
 
 impl WeeklyStats {
-    pub fn focused_minutes(self) -> u64 {
+    pub(crate) fn focused_minutes(self) -> u64 {
         self.focused_seconds / 60
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WeeklyConsistency {
-    pub year: i32,
-    pub week: u32,
-    pub week_label: String,
-    pub active_days: u8,
-    pub consistency_score_pct: u8,
+pub(crate) struct WeeklyConsistency {
+    pub(crate) year: i32,
+    pub(crate) week: u32,
+    pub(crate) week_label: String,
+    pub(crate) active_days: u8,
+    pub(crate) consistency_score_pct: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WeeklyFocusScore {
-    pub year: i32,
-    pub week: u32,
-    pub week_label: String,
-    pub active_days: u8,
-    pub consistency_score_pct: u8,
-    pub completion_score_pct: Option<u8>,
-    pub focus_score_pct: Option<u8>,
+pub(crate) struct WeeklyFocusScore {
+    pub(crate) year: i32,
+    pub(crate) week: u32,
+    pub(crate) week_label: String,
+    pub(crate) active_days: u8,
+    pub(crate) consistency_score_pct: u8,
+    pub(crate) completion_score_pct: Option<u8>,
+    pub(crate) focus_score_pct: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FocusRiskLevel {
+pub(crate) enum FocusRiskLevel {
     Low,
     Medium,
     High,
 }
 
 impl FocusRiskLevel {
-    pub fn from_score(score_pct: u8) -> Self {
+    pub(crate) fn from_score(score_pct: u8) -> Self {
         if score_pct >= 70 {
             Self::High
         } else if score_pct >= 40 {
@@ -166,7 +166,7 @@ impl FocusRiskLevel {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Low => "low",
             Self::Medium => "medium",
@@ -174,7 +174,7 @@ impl FocusRiskLevel {
         }
     }
 
-    pub fn triggers_alert(self) -> bool {
+    pub(crate) fn triggers_alert(self) -> bool {
         matches!(self, Self::Medium | Self::High)
     }
 
@@ -189,14 +189,14 @@ impl FocusRiskLevel {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum GoalPeriod {
+pub(crate) enum GoalPeriod {
     Daily,
     Weekly,
     Monthly,
 }
 
 impl GoalPeriod {
-    pub fn short_label(self) -> &'static str {
+    pub(crate) fn short_label(self) -> &'static str {
         match self {
             Self::Daily => "D",
             Self::Weekly => "W",
@@ -206,44 +206,44 @@ impl GoalPeriod {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct FocusRiskSignal {
-    pub label: String,
-    pub value: String,
+pub(crate) struct FocusRiskSignal {
+    pub(crate) label: String,
+    pub(crate) value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct GoalRiskForecast {
-    pub period: GoalPeriod,
-    pub configured: bool,
-    pub met: bool,
-    pub completion_pct: Option<u8>,
-    pub risk_score_pct: u8,
-    pub risk_level: FocusRiskLevel,
-    pub signals: Vec<FocusRiskSignal>,
+pub(crate) struct GoalRiskForecast {
+    pub(crate) period: GoalPeriod,
+    pub(crate) configured: bool,
+    pub(crate) met: bool,
+    pub(crate) completion_pct: Option<u8>,
+    pub(crate) risk_score_pct: u8,
+    pub(crate) risk_level: FocusRiskLevel,
+    pub(crate) signals: Vec<FocusRiskSignal>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct StreakRiskForecast {
-    pub configured: bool,
-    pub current_streak: u32,
-    pub best_streak: u32,
-    pub today_goal_met: bool,
-    pub recent_goal_reliability_pct: u8,
-    pub risk_score_pct: u8,
-    pub risk_level: FocusRiskLevel,
-    pub signals: Vec<FocusRiskSignal>,
+pub(crate) struct StreakRiskForecast {
+    pub(crate) configured: bool,
+    pub(crate) current_streak: u32,
+    pub(crate) best_streak: u32,
+    pub(crate) today_goal_met: bool,
+    pub(crate) recent_goal_reliability_pct: u8,
+    pub(crate) risk_score_pct: u8,
+    pub(crate) risk_level: FocusRiskLevel,
+    pub(crate) signals: Vec<FocusRiskSignal>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct FocusRiskForecast {
-    pub daily_goal: GoalRiskForecast,
-    pub weekly_goal: GoalRiskForecast,
-    pub monthly_goal: GoalRiskForecast,
-    pub streak: StreakRiskForecast,
+pub(crate) struct FocusRiskForecast {
+    pub(crate) daily_goal: GoalRiskForecast,
+    pub(crate) weekly_goal: GoalRiskForecast,
+    pub(crate) monthly_goal: GoalRiskForecast,
+    pub(crate) streak: StreakRiskForecast,
 }
 
 impl FocusRiskForecast {
-    pub fn highest_risk_level(&self) -> FocusRiskLevel {
+    pub(crate) fn highest_risk_level(&self) -> FocusRiskLevel {
         let mut level = self.daily_goal.risk_level;
         for candidate in [
             self.weekly_goal.risk_level,
@@ -257,7 +257,7 @@ impl FocusRiskForecast {
         level
     }
 
-    pub fn alert_active(&self) -> bool {
+    pub(crate) fn alert_active(&self) -> bool {
         let highest_level = self.highest_risk_level();
         if highest_level.triggers_alert() && matches!(highest_level, FocusRiskLevel::High) {
             return true;
@@ -291,90 +291,90 @@ impl FocusRiskForecast {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct FocusRiskCalibrationMetrics {
-    pub sample_count: u32,
-    pub alert_count: u32,
-    pub true_positive_alerts: u32,
-    pub false_positive_alerts: u32,
-    pub precision_pct: u8,
-    pub missed_warning_count: u32,
-    pub missed_warning_rate_pct: u8,
+pub(crate) struct FocusRiskCalibrationMetrics {
+    pub(crate) sample_count: u32,
+    pub(crate) alert_count: u32,
+    pub(crate) true_positive_alerts: u32,
+    pub(crate) false_positive_alerts: u32,
+    pub(crate) precision_pct: u8,
+    pub(crate) missed_warning_count: u32,
+    pub(crate) missed_warning_rate_pct: u8,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct MonthlyStats {
-    pub year: i32,
-    pub month: u32,
-    pub pomodoros_completed: u32,
-    pub focused_seconds: u64,
+pub(crate) struct MonthlyStats {
+    pub(crate) year: i32,
+    pub(crate) month: u32,
+    pub(crate) pomodoros_completed: u32,
+    pub(crate) focused_seconds: u64,
 }
 
 impl MonthlyStats {
-    pub fn focused_minutes(self) -> u64 {
+    pub(crate) fn focused_minutes(self) -> u64 {
         self.focused_seconds / 60
     }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct HeatmapDayStats {
-    pub day: u32,
-    pub pomodoros_completed: u32,
-    pub focused_seconds: u64,
+pub(crate) struct HeatmapDayStats {
+    pub(crate) day: u32,
+    pub(crate) pomodoros_completed: u32,
+    pub(crate) focused_seconds: u64,
 }
 
 impl HeatmapDayStats {
-    pub fn focused_minutes(self) -> u64 {
+    pub(crate) fn focused_minutes(self) -> u64 {
         self.focused_seconds / 60
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MonthlyHeatmap {
-    pub year: i32,
-    pub month: u32,
-    pub first_weekday_monday0: u32,
-    pub days_in_month: u32,
-    pub max_focused_minutes: u64,
-    pub days: Vec<HeatmapDayStats>,
+pub(crate) struct MonthlyHeatmap {
+    pub(crate) year: i32,
+    pub(crate) month: u32,
+    pub(crate) first_weekday_monday0: u32,
+    pub(crate) days_in_month: u32,
+    pub(crate) max_focused_minutes: u64,
+    pub(crate) days: Vec<HeatmapDayStats>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
-pub struct DailyStats {
+pub(crate) struct DailyStats {
     #[serde(default)]
-    pub pomodoros_completed: u32,
+    pub(crate) pomodoros_completed: u32,
     #[serde(default)]
-    pub focused_seconds: u64,
+    pub(crate) focused_seconds: u64,
     #[serde(default)]
-    pub goal: Option<DailyGoalSnapshot>,
+    pub(crate) goal: Option<DailyGoalSnapshot>,
 }
 
 impl DailyStats {
-    pub fn focused_minutes(self) -> u64 {
+    pub(crate) fn focused_minutes(self) -> u64 {
         self.focused_seconds / 60
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExportedStatsFiles {
-    pub json_path: PathBuf,
-    pub csv_path: PathBuf,
+pub(crate) struct ExportedStatsFiles {
+    pub(crate) json_path: PathBuf,
+    pub(crate) csv_path: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HistoryKpiExportContext {
-    pub reference_day: NaiveDate,
-    pub daily_goal: DailyGoalSnapshot,
-    pub weekly_goal: DailyGoalSnapshot,
-    pub monthly_goal: DailyGoalSnapshot,
-    pub carry_over_daily: bool,
-    pub carry_over_weekly: bool,
-    pub carry_over_monthly: bool,
-    pub recurring_schedule: RecurringScheduleConfig,
-    pub stats_retention: StatsRetentionConfig,
-    pub comparison_dimension: ComparisonDimension,
-    pub comparison_task_filter: Option<String>,
-    pub comparison_profile_filter: Option<ProfileBucket>,
-    pub comparison_time_of_day_filter: Option<TimeOfDayBucket>,
+pub(crate) struct HistoryKpiExportContext {
+    pub(crate) reference_day: NaiveDate,
+    pub(crate) daily_goal: DailyGoalSnapshot,
+    pub(crate) weekly_goal: DailyGoalSnapshot,
+    pub(crate) monthly_goal: DailyGoalSnapshot,
+    pub(crate) carry_over_daily: bool,
+    pub(crate) carry_over_weekly: bool,
+    pub(crate) carry_over_monthly: bool,
+    pub(crate) recurring_schedule: RecurringScheduleConfig,
+    pub(crate) stats_retention: StatsRetentionConfig,
+    pub(crate) comparison_dimension: ComparisonDimension,
+    pub(crate) comparison_task_filter: Option<String>,
+    pub(crate) comparison_profile_filter: Option<ProfileBucket>,
+    pub(crate) comparison_time_of_day_filter: Option<TimeOfDayBucket>,
 }
 
 impl Default for HistoryKpiExportContext {
@@ -398,32 +398,32 @@ impl Default for HistoryKpiExportContext {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct StatsGrowthSection {
-    pub name: String,
-    pub record_count: usize,
-    pub estimated_bytes: u64,
+pub(crate) struct StatsGrowthSection {
+    pub(crate) name: String,
+    pub(crate) record_count: usize,
+    pub(crate) estimated_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct StatsGrowthSummary {
-    pub total_record_count: usize,
-    pub estimated_bytes: u64,
-    pub sections: Vec<StatsGrowthSection>,
-    pub high_volume_sections: Vec<StatsGrowthSection>,
+pub(crate) struct StatsGrowthSummary {
+    pub(crate) total_record_count: usize,
+    pub(crate) estimated_bytes: u64,
+    pub(crate) sections: Vec<StatsGrowthSection>,
+    pub(crate) high_volume_sections: Vec<StatsGrowthSection>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
-pub struct StatsRetentionPruneResult {
-    pub daily_removed: usize,
-    pub focus_sessions_removed: usize,
-    pub session_interruptions_removed: usize,
-    pub break_glass_overrides_removed: usize,
-    pub weekly_goal_snapshots_removed: usize,
-    pub monthly_goal_snapshots_removed: usize,
+pub(crate) struct StatsRetentionPruneResult {
+    pub(crate) daily_removed: usize,
+    pub(crate) focus_sessions_removed: usize,
+    pub(crate) session_interruptions_removed: usize,
+    pub(crate) break_glass_overrides_removed: usize,
+    pub(crate) weekly_goal_snapshots_removed: usize,
+    pub(crate) monthly_goal_snapshots_removed: usize,
 }
 
 impl StatsRetentionPruneResult {
-    pub fn total_removed(self) -> usize {
+    pub(crate) fn total_removed(self) -> usize {
         self.daily_removed
             .saturating_add(self.focus_sessions_removed)
             .saturating_add(self.session_interruptions_removed)
@@ -432,65 +432,65 @@ impl StatsRetentionPruneResult {
             .saturating_add(self.monthly_goal_snapshots_removed)
     }
 
-    pub fn any_removed(self) -> bool {
+    pub(crate) fn any_removed(self) -> bool {
         self.total_removed() > 0
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct UsageSignalEntry {
-    pub surface: String,
-    pub count: u64,
-    pub share_pct: u8,
+pub(crate) struct UsageSignalEntry {
+    pub(crate) surface: String,
+    pub(crate) count: u64,
+    pub(crate) share_pct: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct UsageSignalSummary {
-    pub total_events: u64,
-    pub unique_surfaces: usize,
-    pub top: Vec<UsageSignalEntry>,
-    pub rare: Vec<UsageSignalEntry>,
+pub(crate) struct UsageSignalSummary {
+    pub(crate) total_events: u64,
+    pub(crate) unique_surfaces: usize,
+    pub(crate) top: Vec<UsageSignalEntry>,
+    pub(crate) rare: Vec<UsageSignalEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct UsageSignalsSummary {
-    pub commands: UsageSignalSummary,
-    pub screens: UsageSignalSummary,
+pub(crate) struct UsageSignalsSummary {
+    pub(crate) commands: UsageSignalSummary,
+    pub(crate) screens: UsageSignalSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FocusSessionRecord {
-    pub date: String,
-    pub task_label: String,
+pub(crate) struct FocusSessionRecord {
+    pub(crate) date: String,
+    pub(crate) task_label: String,
     #[serde(default)]
-    pub focus_intention: String,
+    pub(crate) focus_intention: String,
     #[serde(default)]
-    pub task_note: String,
-    pub focused_seconds: u64,
+    pub(crate) task_note: String,
+    pub(crate) focused_seconds: u64,
     #[serde(default)]
-    pub profile: Option<ProfileId>,
+    pub(crate) profile: Option<ProfileId>,
     #[serde(default)]
-    pub completion_timestamp_epoch_secs: Option<u64>,
+    pub(crate) completion_timestamp_epoch_secs: Option<u64>,
     #[serde(default)]
-    pub completion_time_of_day_bucket: Option<TimeOfDayBucket>,
+    pub(crate) completion_time_of_day_bucket: Option<TimeOfDayBucket>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FocusSessionMetadata<'a> {
-    pub task_label: Option<&'a str>,
-    pub focus_intention: Option<&'a str>,
-    pub task_note: Option<&'a str>,
+pub(crate) struct FocusSessionMetadata<'a> {
+    pub(crate) task_label: Option<&'a str>,
+    pub(crate) focus_intention: Option<&'a str>,
+    pub(crate) task_note: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum SessionInterruptionReason {
+pub(crate) enum SessionInterruptionReason {
     ManualStop,
     ManualSkip,
 }
 
 impl SessionInterruptionReason {
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::ManualStop => "stop/reset",
             Self::ManualSkip => "skip/next",
@@ -499,24 +499,24 @@ impl SessionInterruptionReason {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SessionInterruptionEvent {
-    pub timestamp_epoch_secs: u64,
-    pub date: String,
-    pub reason: SessionInterruptionReason,
+pub(crate) struct SessionInterruptionEvent {
+    pub(crate) timestamp_epoch_secs: u64,
+    pub(crate) date: String,
+    pub(crate) reason: SessionInterruptionReason,
     #[serde(default)]
-    pub task_label: Option<String>,
+    pub(crate) task_label: Option<String>,
     #[serde(default)]
-    pub focus_intention: Option<String>,
+    pub(crate) focus_intention: Option<String>,
     #[serde(default)]
-    pub task_note: Option<String>,
+    pub(crate) task_note: Option<String>,
     #[serde(default)]
-    pub remaining_secs: u64,
+    pub(crate) remaining_secs: u64,
     #[serde(default)]
-    pub profile: Option<ProfileId>,
+    pub(crate) profile: Option<ProfileId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum ProfileBucket {
+pub(crate) enum ProfileBucket {
     #[serde(rename = "basic", alias = "classic")]
     Classic,
     #[serde(
@@ -533,7 +533,7 @@ pub enum ProfileBucket {
 }
 
 impl ProfileBucket {
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Classic => "Basic",
             Self::DeepWork => "Standard",
@@ -542,7 +542,7 @@ impl ProfileBucket {
         }
     }
 
-    pub fn id(self) -> &'static str {
+    pub(crate) fn id(self) -> &'static str {
         match self {
             Self::Classic => "basic",
             Self::DeepWork => "standard",
@@ -554,7 +554,7 @@ impl ProfileBucket {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum TimeOfDayBucket {
+pub(crate) enum TimeOfDayBucket {
     Morning,
     Afternoon,
     Evening,
@@ -563,7 +563,7 @@ pub enum TimeOfDayBucket {
 }
 
 impl TimeOfDayBucket {
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Morning => "Morning",
             Self::Afternoon => "Afternoon",
@@ -573,7 +573,7 @@ impl TimeOfDayBucket {
         }
     }
 
-    pub fn id(self) -> &'static str {
+    pub(crate) fn id(self) -> &'static str {
         match self {
             Self::Morning => "morning",
             Self::Afternoon => "afternoon",
@@ -583,7 +583,7 @@ impl TimeOfDayBucket {
         }
     }
 
-    pub fn from_hour(hour: u32) -> Self {
+    pub(crate) fn from_hour(hour: u32) -> Self {
         match hour {
             5..=11 => Self::Morning,
             12..=16 => Self::Afternoon,
@@ -596,14 +596,14 @@ impl TimeOfDayBucket {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ComparisonDimension {
+pub(crate) enum ComparisonDimension {
     TaskLabel,
     Profile,
     TimeOfDay,
 }
 
 impl ComparisonDimension {
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::TaskLabel => "Task",
             Self::Profile => "Profile",
@@ -611,7 +611,7 @@ impl ComparisonDimension {
         }
     }
 
-    pub fn id(self) -> &'static str {
+    pub(crate) fn id(self) -> &'static str {
         match self {
             Self::TaskLabel => "task_label",
             Self::Profile => "profile",
@@ -621,30 +621,30 @@ impl ComparisonDimension {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct ProductivityComparisonFilter {
-    pub task_label: Option<String>,
-    pub profile: Option<ProfileBucket>,
-    pub time_of_day: Option<TimeOfDayBucket>,
+pub(crate) struct ProductivityComparisonFilter {
+    pub(crate) task_label: Option<String>,
+    pub(crate) profile: Option<ProfileBucket>,
+    pub(crate) time_of_day: Option<TimeOfDayBucket>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ProductivityComparisonRow {
-    pub dimension: ComparisonDimension,
-    pub label: String,
-    pub task_label: Option<String>,
-    pub profile: Option<ProfileBucket>,
-    pub time_of_day: Option<TimeOfDayBucket>,
-    pub sessions_completed: u32,
-    pub focused_seconds: u64,
-    pub focus_share_pct: u8,
+pub(crate) struct ProductivityComparisonRow {
+    pub(crate) dimension: ComparisonDimension,
+    pub(crate) label: String,
+    pub(crate) task_label: Option<String>,
+    pub(crate) profile: Option<ProfileBucket>,
+    pub(crate) time_of_day: Option<TimeOfDayBucket>,
+    pub(crate) sessions_completed: u32,
+    pub(crate) focused_seconds: u64,
+    pub(crate) focus_share_pct: u8,
 }
 
 impl ProductivityComparisonRow {
-    pub fn focused_minutes(&self) -> u64 {
+    pub(crate) fn focused_minutes(&self) -> u64 {
         self.focused_seconds / 60
     }
 
-    pub fn average_focused_minutes_per_session(&self) -> u64 {
+    pub(crate) fn average_focused_minutes_per_session(&self) -> u64 {
         if self.sessions_completed == 0 {
             return 0;
         }
@@ -654,34 +654,34 @@ impl ProductivityComparisonRow {
 
 #[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ProfileTotals {
-    pub profile: ProfileBucket,
-    pub pomodoros_completed: u32,
-    pub focused_seconds: u64,
+pub(crate) struct ProfileTotals {
+    pub(crate) profile: ProfileBucket,
+    pub(crate) pomodoros_completed: u32,
+    pub(crate) focused_seconds: u64,
 }
 
 impl ProfileTotals {
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn focused_minutes(self) -> u64 {
+    pub(crate) fn focused_minutes(self) -> u64 {
         self.focused_seconds / 60
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ProfileEffectiveness {
-    pub profile: ProfileBucket,
-    pub sessions_completed: u32,
-    pub focused_seconds: u64,
-    pub active_days: u32,
-    pub focus_share_pct: u8,
+pub(crate) struct ProfileEffectiveness {
+    pub(crate) profile: ProfileBucket,
+    pub(crate) sessions_completed: u32,
+    pub(crate) focused_seconds: u64,
+    pub(crate) active_days: u32,
+    pub(crate) focus_share_pct: u8,
 }
 
 impl ProfileEffectiveness {
-    pub fn focused_minutes(self) -> u64 {
+    pub(crate) fn focused_minutes(self) -> u64 {
         self.focused_seconds / 60
     }
 
-    pub fn average_focused_minutes_per_session(self) -> u64 {
+    pub(crate) fn average_focused_minutes_per_session(self) -> u64 {
         if self.sessions_completed == 0 {
             return 0;
         }
@@ -690,58 +690,58 @@ impl ProfileEffectiveness {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskTotals {
-    pub task_label: String,
-    pub pomodoros_completed: u32,
-    pub focused_seconds: u64,
+pub(crate) struct TaskTotals {
+    pub(crate) task_label: String,
+    pub(crate) pomodoros_completed: u32,
+    pub(crate) focused_seconds: u64,
 }
 
 impl TaskTotals {
-    pub fn focused_minutes(&self) -> u64 {
+    pub(crate) fn focused_minutes(&self) -> u64 {
         self.focused_seconds / 60
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskTrend {
-    pub task_label: String,
-    pub recent_pomodoros_completed: u32,
-    pub recent_focused_seconds: u64,
-    pub previous_pomodoros_completed: u32,
-    pub previous_focused_seconds: u64,
+pub(crate) struct TaskTrend {
+    pub(crate) task_label: String,
+    pub(crate) recent_pomodoros_completed: u32,
+    pub(crate) recent_focused_seconds: u64,
+    pub(crate) previous_pomodoros_completed: u32,
+    pub(crate) previous_focused_seconds: u64,
 }
 
 impl TaskTrend {
-    pub fn recent_focused_minutes(&self) -> u64 {
+    pub(crate) fn recent_focused_minutes(&self) -> u64 {
         self.recent_focused_seconds / 60
     }
 
-    pub fn previous_focused_minutes(&self) -> u64 {
+    pub(crate) fn previous_focused_minutes(&self) -> u64 {
         self.previous_focused_seconds / 60
     }
 
-    pub fn delta_focused_seconds(&self) -> i64 {
+    pub(crate) fn delta_focused_seconds(&self) -> i64 {
         let recent = i128::from(self.recent_focused_seconds);
         let previous = i128::from(self.previous_focused_seconds);
         (recent - previous).clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
     }
 
-    pub fn delta_focused_minutes(&self) -> i64 {
+    pub(crate) fn delta_focused_minutes(&self) -> i64 {
         self.delta_focused_seconds() / 60
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskGoalProgress {
-    pub task_label: String,
-    pub target: DailyGoalSnapshot,
-    pub pomodoros_completed: u32,
-    pub focused_seconds: u64,
-    pub met: bool,
+pub(crate) struct TaskGoalProgress {
+    pub(crate) task_label: String,
+    pub(crate) target: DailyGoalSnapshot,
+    pub(crate) pomodoros_completed: u32,
+    pub(crate) focused_seconds: u64,
+    pub(crate) met: bool,
 }
 
 impl TaskGoalProgress {
-    pub fn focused_minutes(&self) -> u64 {
+    pub(crate) fn focused_minutes(&self) -> u64 {
         self.focused_seconds / 60
     }
 }
@@ -770,11 +770,11 @@ struct ProfileEffectivenessAccumulator {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct BreakGlassOverrideEvent {
-    pub timestamp_epoch_secs: u64,
-    pub date: String,
-    pub task_label: Option<String>,
-    pub duration_seconds: u64,
+pub(crate) struct BreakGlassOverrideEvent {
+    pub(crate) timestamp_epoch_secs: u64,
+    pub(crate) date: String,
+    pub(crate) task_label: Option<String>,
+    pub(crate) duration_seconds: u64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -1119,7 +1119,7 @@ struct PersistedStats {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct FocusStats {
+pub(crate) struct FocusStats {
     session: SessionStats,
     daily: BTreeMap<String, DailyStats>,
     weekly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
@@ -1136,7 +1136,7 @@ pub struct FocusStats {
     screen_usage_counts: BTreeMap<String, u64>,
 }
 
-pub fn current_day_key() -> String {
+pub(crate) fn current_day_key() -> String {
     chrono::Local::now()
         .date_naive()
         .format("%Y-%m-%d")
