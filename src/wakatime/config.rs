@@ -56,7 +56,7 @@ impl WakatimeConfig {
                     "api_key" => api_key = Some(value.to_string()),
                     "api_url" => api_url = Some(value.to_string()),
                     _ => {}
-                };
+                }
             }
         }
 
