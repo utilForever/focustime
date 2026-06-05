@@ -25,7 +25,7 @@ use std::{
 use crossterm::{
     event::{
         self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
-        Event,
+        Event, KeyEvent,
     },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
@@ -41,6 +41,70 @@ use cli::{
 /// RAII guard that restores the terminal on drop, ensuring cleanup on any exit path.
 struct TerminalGuard {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
+}
+
+#[derive(Debug)]
+enum RuntimeEvent {
+    Key(KeyEvent),
+    Paste(String),
+    TimerElapsed(TimerElapsed),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TimerElapsed {
+    elapsed_secs: u64,
+    is_catchup: bool,
+}
+
+struct RuntimeClock {
+    tick_rate: Duration,
+    last_tick: Instant,
+    tick_accumulator_ms: u64,
+}
+
+impl RuntimeClock {
+    fn new(tick_rate: Duration) -> Self {
+        Self {
+            tick_rate,
+            last_tick: Instant::now(),
+            tick_accumulator_ms: 0,
+        }
+    }
+
+    fn poll_timeout(&self) -> Duration {
+        self.tick_rate
+            .checked_sub(self.last_tick.elapsed())
+            .unwrap_or(Duration::ZERO)
+    }
+
+    fn timer_elapsed_if_due(&mut self, timer_running: bool) -> Option<TimerElapsed> {
+        if self.last_tick.elapsed() < self.tick_rate {
+            return None;
+        }
+
+        let elapsed_ms = self.last_tick.elapsed().as_millis() as u64;
+        self.last_tick = Instant::now();
+        self.advance_by(timer_running, elapsed_ms)
+    }
+
+    fn advance_by(&mut self, timer_running: bool, elapsed_ms: u64) -> Option<TimerElapsed> {
+        if !timer_running {
+            self.tick_accumulator_ms = 0;
+            return None;
+        }
+
+        self.tick_accumulator_ms += elapsed_ms;
+        let elapsed_secs = self.tick_accumulator_ms / 1000;
+        self.tick_accumulator_ms %= 1000;
+        if elapsed_secs == 0 {
+            return None;
+        }
+
+        Some(TimerElapsed {
+            elapsed_secs,
+            is_catchup: elapsed_secs > 1,
+        })
+    }
 }
 
 impl TerminalGuard {
@@ -126,20 +190,18 @@ fn main() -> io::Result<()> {
 }
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) -> io::Result<()> {
-    let tick_rate = Duration::from_millis(100);
-    let mut last_tick = Instant::now();
-    let mut tick_accumulator: u64 = 0; // milliseconds accumulated towards next second
+    let mut clock = RuntimeClock::new(Duration::from_millis(100));
 
     loop {
         app.poll_wakatime_status();
         terminal.draw(|frame| ui::render(frame, &app))?;
 
-        let timeout = tick_rate
-            .checked_sub(last_tick.elapsed())
-            .unwrap_or(Duration::ZERO);
-
-        handle_terminal_event(&mut app, timeout)?;
-        tick_timer_if_due(&mut app, &mut last_tick, &mut tick_accumulator, tick_rate);
+        if let Some(event) = read_terminal_event(clock.poll_timeout())? {
+            dispatch_runtime_event(&mut app, event);
+        }
+        if let Some(elapsed) = clock.timer_elapsed_if_due(app.is_running()) {
+            dispatch_runtime_event(&mut app, RuntimeEvent::TimerElapsed(elapsed));
+        }
 
         if app.should_quit {
             break;
@@ -149,53 +211,78 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
     Ok(())
 }
 
-fn handle_terminal_event(app: &mut App, timeout: Duration) -> io::Result<()> {
+fn read_terminal_event(timeout: Duration) -> io::Result<Option<RuntimeEvent>> {
     if !event::poll(timeout)? {
-        return Ok(());
+        return Ok(None);
     }
 
-    match event::read()? {
-        Event::Key(key) if should_handle_key(&key) => app.handle_key(key),
-        Event::Paste(text) => app.handle_paste(text),
-        _ => {}
-    }
-    Ok(())
+    let event = match event::read()? {
+        Event::Key(key) if should_handle_key(&key) => Some(RuntimeEvent::Key(key)),
+        Event::Paste(text) => Some(RuntimeEvent::Paste(text)),
+        _ => None,
+    };
+    Ok(event)
 }
 
-fn tick_timer_if_due(
-    app: &mut App,
-    last_tick: &mut Instant,
-    tick_accumulator: &mut u64,
-    tick_rate: Duration,
-) {
-    if last_tick.elapsed() < tick_rate {
-        return;
+fn dispatch_runtime_event(app: &mut App, event: RuntimeEvent) {
+    match event {
+        RuntimeEvent::Key(key) => app.handle_key(key),
+        RuntimeEvent::Paste(text) => app.handle_paste(text),
+        RuntimeEvent::TimerElapsed(elapsed) => advance_running_timer(app, elapsed),
     }
-
-    let elapsed_ms = last_tick.elapsed().as_millis() as u64;
-    *last_tick = Instant::now();
-    if !app.is_running() {
-        *tick_accumulator = 0;
-        return;
-    }
-
-    advance_running_timer(app, tick_accumulator, elapsed_ms);
 }
 
-fn advance_running_timer(app: &mut App, tick_accumulator: &mut u64, elapsed_ms: u64) {
-    *tick_accumulator += elapsed_ms;
-    let mut elapsed_secs: u64 = 0;
-    while *tick_accumulator >= 1000 {
-        *tick_accumulator -= 1000;
-        elapsed_secs += 1;
-    }
-    let is_catchup = elapsed_secs > 1;
-    for _ in 0..elapsed_secs {
-        app.on_tick(is_catchup);
+fn advance_running_timer(app: &mut App, elapsed: TimerElapsed) {
+    for _ in 0..elapsed.elapsed_secs {
+        app.on_tick(elapsed.is_catchup);
     }
     // Advance WakaTime once per UI frame to avoid burst heartbeats
     // after a suspend/resume catch-up.
-    if elapsed_secs > 0 {
-        app.on_wakatime_elapsed(elapsed_secs);
+    app.on_wakatime_elapsed(elapsed.elapsed_secs);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_clock_accumulates_subsecond_ticks() {
+        let mut clock = RuntimeClock::new(Duration::from_millis(100));
+
+        assert_eq!(clock.advance_by(true, 400), None);
+        assert_eq!(
+            clock.advance_by(true, 600),
+            Some(TimerElapsed {
+                elapsed_secs: 1,
+                is_catchup: false,
+            })
+        );
+    }
+
+    #[test]
+    fn runtime_clock_marks_multi_second_catchup() {
+        let mut clock = RuntimeClock::new(Duration::from_millis(100));
+
+        assert_eq!(
+            clock.advance_by(true, 2500),
+            Some(TimerElapsed {
+                elapsed_secs: 2,
+                is_catchup: true,
+            })
+        );
+        assert_eq!(clock.tick_accumulator_ms, 500);
+    }
+
+    #[test]
+    fn runtime_clock_clears_accumulator_when_timer_is_not_running() {
+        let mut clock = RuntimeClock::new(Duration::from_millis(100));
+
+        assert_eq!(clock.advance_by(true, 900), None);
+        assert_eq!(clock.advance_by(false, 500), None);
+        assert_eq!(
+            clock.advance_by(true, 500),
+            None,
+            "stale partial time must not leak into a newly started timer"
+        );
     }
 }
