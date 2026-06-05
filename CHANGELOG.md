@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.4] - 2026-06-05
+
+### Added
+
+- **Shared CLI user message contract (#420):** added reusable CLI-facing message types so runtime errors and command output guidance can stay consistent across command paths.
+
+### Changed
+
+- **Facade and submodule extraction sweep (#417):** split oversized app, CLI, config, schedule, blocker, WakaTime, and stats modules into focused submodules while preserving the public facade boundaries.
+- **Internal API visibility tightening (#418):** narrowed config, blocking, schedule, stats, app, CLI, and UI helper visibility so cross-module APIs stay explicit and implementation details remain private by default.
+- **Typed runtime errors and focus flow cleanup (#420, #421):** introduced typed app runtime errors, clarified the runtime event loop, and centralized focus runtime state for a smaller and more predictable session flow.
+- **Dependency maintenance (#416, #419):** bumped `crate-ci/typos` from `1.47.0` to `1.47.2` and `chrono` from `0.4.44` to `0.4.45`.
+
+### Fixed
+
+- **Split-module regression fixes (#417):** restored schedule conflict inspector re-exports, treated case-only profile renames as no-ops, and removed a redundant WakaTime parser semicolon after the module split.
+
 ## [0.14.3] - 2026-06-02
 
 ### Added
@@ -395,7 +412,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.3...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.4...HEAD
+[0.14.4]: https://github.com/utilForever/focustime/compare/v0.14.3...v0.14.4
 [0.14.3]: https://github.com/utilForever/focustime/compare/v0.14.2...v0.14.3
 [0.14.2]: https://github.com/utilForever/focustime/compare/v0.14.1...v0.14.2
 [0.14.1]: https://github.com/utilForever/focustime/compare/v0.14.0...v0.14.1
