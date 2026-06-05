@@ -17,6 +17,7 @@ use crate::config::{
     RecurringFocusWindowConfig, RecurringScheduleConfig, ThemePreset, WeekdayProfileRuleConfig,
     WeeklyGoalConfig,
 };
+use crate::error::UserMessage;
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 use crate::session_recovery;
 use crate::stats::{
@@ -284,7 +285,9 @@ pub(crate) enum CliErrorKind {
 pub(crate) struct CliError {
     kind: CliErrorKind,
     output: OutputMode,
+    code: &'static str,
     message: String,
+    hint: Option<String>,
 }
 
 impl CliError {
@@ -306,7 +309,10 @@ struct CliErrorEnvelope {
 struct CliErrorPayload {
     kind: CliErrorKind,
     exit_code: i32,
+    code: &'static str,
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1237,11 +1243,14 @@ where
     .map_err(|message| usage_error(output, message))
 }
 
-pub(crate) fn runtime_error(output: OutputMode, message: String) -> CliError {
+pub(crate) fn runtime_error(output: OutputMode, message: impl Into<UserMessage>) -> CliError {
+    let message = message.into();
     CliError {
         kind: CliErrorKind::Runtime,
         output,
-        message,
+        code: message.code,
+        message: message.message,
+        hint: message.hint,
     }
 }
 
@@ -1249,6 +1258,9 @@ pub(crate) fn emit_cli_error(error: &CliError) -> Result<(), String> {
     match error.output {
         OutputMode::Text => {
             eprintln!("{}", error.message);
+            if let Some(hint) = &error.hint {
+                eprintln!("Hint: {hint}");
+            }
             Ok(())
         }
         OutputMode::Json => print_json(&CliErrorEnvelope {
@@ -1256,21 +1268,26 @@ pub(crate) fn emit_cli_error(error: &CliError) -> Result<(), String> {
             error: CliErrorPayload {
                 kind: error.kind,
                 exit_code: error.exit_code(),
+                code: error.code,
                 message: error.message.clone(),
+                hint: error.hint.clone(),
             },
         }),
     }
 }
 
 fn usage_error(output: OutputMode, message: String) -> CliError {
+    let message = UserMessage::usage(message);
     CliError {
         kind: CliErrorKind::Usage,
         output,
-        message,
+        code: message.code,
+        message: message.message,
+        hint: message.hint,
     }
 }
 
-pub(crate) fn execute_command(cli_command: CliCommand) -> Result<(), String> {
+pub(crate) fn execute_command(cli_command: CliCommand) -> Result<(), UserMessage> {
     execute_cli_command(cli_command)
 }
 

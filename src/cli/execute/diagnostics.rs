@@ -7,6 +7,7 @@ use crate::cli::{
     print_usage_signals_command_output,
 };
 use crate::config::{run_config_doctor, run_config_migration_assistant};
+use crate::error::UserMessage;
 
 use super::data::stats_load_options;
 
@@ -44,7 +45,7 @@ pub(super) fn execute_diagnostics_command(output: OutputMode) -> Result<(), Stri
     Ok(())
 }
 
-pub(super) fn execute_blocking_preview_command(output: OutputMode) -> Result<(), String> {
+pub(super) fn execute_blocking_preview_command(output: OutputMode) -> Result<(), UserMessage> {
     let mut app = App::new();
     app.record_command_usage_for_cli("blocking-preview");
     let preview = app.blocking_preview_for_cli()?;
