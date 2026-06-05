@@ -5,31 +5,31 @@ use crate::stats::{
 };
 
 impl FocusStats {
-    pub fn session(&self) -> SessionStats {
+    pub(crate) fn session(&self) -> SessionStats {
         self.session
     }
 
-    pub fn daily_for(&self, day_key: &str) -> DailyStats {
+    pub(crate) fn daily_for(&self, day_key: &str) -> DailyStats {
         self.daily.get(day_key).copied().unwrap_or_default()
     }
 
-    pub fn daily_entry(&self, day_key: &str) -> Option<DailyStats> {
+    pub(crate) fn daily_entry(&self, day_key: &str) -> Option<DailyStats> {
         self.daily.get(day_key).copied()
     }
 
-    pub fn task_planner_state(&self) -> (Vec<String>, Option<String>) {
+    pub(crate) fn task_planner_state(&self) -> (Vec<String>, Option<String>) {
         (self.task_labels.clone(), self.selected_task_label.clone())
     }
 
-    pub fn task_label_favorites(&self) -> Vec<String> {
+    pub(crate) fn task_label_favorites(&self) -> Vec<String> {
         planner_state_labels_for_keys(&self.task_label_favorites, &self.task_labels)
     }
 
-    pub fn task_label_archived(&self) -> Vec<String> {
+    pub(crate) fn task_label_archived(&self) -> Vec<String> {
         planner_state_labels_for_keys(&self.task_label_archived, &self.task_labels)
     }
 
-    pub fn set_task_goal_target(
+    pub(crate) fn set_task_goal_target(
         &mut self,
         label: &str,
         target: DailyGoalSnapshot,
@@ -53,7 +53,7 @@ impl FocusStats {
         Ok(canonical)
     }
 
-    pub fn remove_task_goal_target(&mut self, label: &str) -> bool {
+    pub(crate) fn remove_task_goal_target(&mut self, label: &str) -> bool {
         let Some(normalized) = normalize_task_label(label) else {
             return false;
         };
@@ -63,7 +63,11 @@ impl FocusStats {
             .is_some()
     }
 
-    pub fn rename_task_goal_target(&mut self, previous_label: &str, next_label: &str) -> bool {
+    pub(crate) fn rename_task_goal_target(
+        &mut self,
+        previous_label: &str,
+        next_label: &str,
+    ) -> bool {
         let Some(previous_normalized) = normalize_task_label(previous_label) else {
             return false;
         };
@@ -87,7 +91,7 @@ impl FocusStats {
         true
     }
 
-    pub fn task_goal_progress_for_label(&self, label: &str) -> Option<TaskGoalProgress> {
+    pub(crate) fn task_goal_progress_for_label(&self, label: &str) -> Option<TaskGoalProgress> {
         let normalized = normalize_task_label(label)?;
         let task_label = canonical_task_label(&self.task_labels, &normalized).unwrap_or(normalized);
         let key = task_label.to_ascii_lowercase();
@@ -109,7 +113,7 @@ impl FocusStats {
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn task_goal_progress(&self, limit: usize) -> Vec<TaskGoalProgress> {
+    pub(crate) fn task_goal_progress(&self, limit: usize) -> Vec<TaskGoalProgress> {
         if limit == 0 {
             return Vec::new();
         }
@@ -151,7 +155,7 @@ impl FocusStats {
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn update_task_planner_state(
+    pub(crate) fn update_task_planner_state(
         &mut self,
         labels: Vec<String>,
         selected: Option<String>,
@@ -164,7 +168,7 @@ impl FocusStats {
         )
     }
 
-    pub fn update_task_planner_state_with_label_states(
+    pub(crate) fn update_task_planner_state_with_label_states(
         &mut self,
         labels: Vec<String>,
         selected: Option<String>,

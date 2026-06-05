@@ -14,7 +14,7 @@ struct ScheduleShortcutLabels {
 }
 
 impl App {
-    pub fn recurring_schedule_display_texts(&self) -> (String, String) {
+    pub(crate) fn recurring_schedule_display_texts(&self) -> (String, String) {
         self.recurring_schedule_texts_at(self.current_frame_now)
     }
 

@@ -5,13 +5,13 @@ use crate::app::{
 };
 
 impl App {
-    pub fn record_command_usage_for_cli(&mut self, surface_id: &str) {
+    pub(crate) fn record_command_usage_for_cli(&mut self, surface_id: &str) {
         if self.stats.record_command_usage(surface_id) {
             self.mark_stats_dirty();
         }
     }
 
-    pub fn start_focus_for_cli(&mut self) -> Result<(), String> {
+    pub(crate) fn start_focus_for_cli(&mut self) -> Result<(), String> {
         match self.try_start_focus_session(FocusStartTemplateMode::ApplySelectedTemplate)? {
             FocusStartOutcome::Started => Ok(()),
             FocusStartOutcome::MissingTaskLabel => Err(format!(
@@ -24,7 +24,7 @@ impl App {
         }
     }
 
-    pub fn pause_for_cli(&mut self) -> Result<(), String> {
+    pub(crate) fn pause_for_cli(&mut self) -> Result<(), String> {
         if self.timer.status != TimerStatus::Running {
             return Err("Cannot pause: timer is not running.".to_string());
         }
@@ -32,7 +32,7 @@ impl App {
         Ok(())
     }
 
-    pub fn resume_for_cli(&mut self) -> Result<(), String> {
+    pub(crate) fn resume_for_cli(&mut self) -> Result<(), String> {
         if self.timer.status != TimerStatus::Paused {
             return Err("Cannot resume: timer is not paused.".to_string());
         }
@@ -40,7 +40,7 @@ impl App {
         Ok(())
     }
 
-    pub fn stop_for_cli(&mut self) -> Result<(), String> {
+    pub(crate) fn stop_for_cli(&mut self) -> Result<(), String> {
         if self.strict_mode_enforced_for_focus() {
             return Err("Cannot stop: strict mode is active during focus.".to_string());
         }
@@ -54,7 +54,7 @@ impl App {
         Ok(())
     }
 
-    pub fn next_phase_for_cli(&mut self) -> Result<(), String> {
+    pub(crate) fn next_phase_for_cli(&mut self) -> Result<(), String> {
         if self.strict_mode_enforced_for_focus() {
             return Err(
                 "Cannot skip to next phase: strict mode is active during focus.".to_string(),
@@ -67,7 +67,7 @@ impl App {
         Ok(())
     }
 
-    pub fn schedule_delay_for_cli(&mut self) -> Result<String, String> {
+    pub(crate) fn schedule_delay_for_cli(&mut self) -> Result<String, String> {
         let now = Local::now();
         self.current_frame_now = now;
         let delayed_until = self.delay_active_schedule_start_for_workflow(now)?;
@@ -75,7 +75,7 @@ impl App {
         Ok(delayed_until.format("%H:%M").to_string())
     }
 
-    pub fn trigger_break_glass_for_cli(&mut self) -> Result<(), String> {
+    pub(crate) fn trigger_break_glass_for_cli(&mut self) -> Result<(), String> {
         if self.break_glass_confirmation_pending() {
             let result = self.confirm_break_glass_override_for_workflow();
             self.sync_wakatime_tracking_for_state();
@@ -87,7 +87,7 @@ impl App {
         self.sync_cli_workflow_state()
     }
 
-    pub fn cancel_break_glass_for_cli(&mut self) -> Result<(), String> {
+    pub(crate) fn cancel_break_glass_for_cli(&mut self) -> Result<(), String> {
         if !self.break_glass_confirmation_pending() {
             return Err("Cannot cancel break-glass: no confirmation is pending.".to_string());
         }
@@ -95,19 +95,19 @@ impl App {
         self.sync_cli_workflow_state()
     }
 
-    pub fn add_temporary_allowlist_for_cli(
+    pub(crate) fn add_temporary_allowlist_for_cli(
         &mut self,
         input: &str,
     ) -> Result<(usize, usize), String> {
         self.add_temporary_allowlist_entries_for_active_profile_from_input(input)
     }
 
-    pub fn blocking_preview_for_cli(&self) -> Result<BlockingPreview, String> {
+    pub(crate) fn blocking_preview_for_cli(&self) -> Result<BlockingPreview, String> {
         self.compute_blocking_preview()
             .map_err(|error| format!("Failed to generate blocking preview: {error}"))
     }
 
-    pub fn select_task_label_for_cli(&mut self, label: &str) -> Result<bool, String> {
+    pub(crate) fn select_task_label_for_cli(&mut self, label: &str) -> Result<bool, String> {
         let Some(label) = normalize_task_label(label) else {
             return Err("Cannot select task label: label cannot be empty.".to_string());
         };
@@ -139,33 +139,33 @@ impl App {
         Ok(true)
     }
 
-    pub fn selected_profile_id(&self) -> ProfileId {
+    pub(crate) fn selected_profile_id(&self) -> ProfileId {
         self.selected_profile
     }
 
-    pub fn selected_blocklist_profile_name_for_cli(&self) -> String {
+    pub(crate) fn selected_blocklist_profile_name_for_cli(&self) -> String {
         self.active_blocklist_profile_name().to_string()
     }
 
-    pub fn selected_task_label_for_cli(&self) -> Option<String> {
+    pub(crate) fn selected_task_label_for_cli(&self) -> Option<String> {
         self.selected_task_label.clone()
     }
 
-    pub fn focus_intention_for_cli(&self) -> Option<String> {
+    pub(crate) fn focus_intention_for_cli(&self) -> Option<String> {
         if self.focus_session_active_for_current_state() {
             return self.active_focus_intention.clone();
         }
         None
     }
 
-    pub fn task_note_for_cli(&self) -> Option<String> {
+    pub(crate) fn task_note_for_cli(&self) -> Option<String> {
         if self.focus_session_active_for_current_state() {
             return self.active_focus_task_note.clone();
         }
         None
     }
 
-    pub fn set_focus_intention_for_cli(&mut self, value: &str) -> Result<(), String> {
+    pub(crate) fn set_focus_intention_for_cli(&mut self, value: &str) -> Result<(), String> {
         self.ensure_focus_active_for_cli_metadata_update("--focus-intention")?;
         let value = self.resolve_cli_metadata_value(value)?;
         self.active_focus_intention = Some(value);
@@ -173,7 +173,7 @@ impl App {
         Ok(())
     }
 
-    pub fn set_task_note_for_cli(&mut self, value: &str) -> Result<(), String> {
+    pub(crate) fn set_task_note_for_cli(&mut self, value: &str) -> Result<(), String> {
         self.ensure_focus_active_for_cli_metadata_update("--task-note")?;
         let value = self.resolve_cli_metadata_value(value)?;
         self.active_focus_task_note = Some(value);
@@ -181,7 +181,7 @@ impl App {
         Ok(())
     }
 
-    pub fn timer_state_for_cli(&self) -> (TimerPhase, TimerStatus, u64, u32) {
+    pub(crate) fn timer_state_for_cli(&self) -> (TimerPhase, TimerStatus, u64, u32) {
         (
             self.timer.phase,
             self.timer.status,
@@ -190,23 +190,32 @@ impl App {
         )
     }
 
-    pub fn select_session_template_for_cli(&mut self, name: Option<&str>) -> Result<bool, String> {
+    pub(crate) fn select_session_template_for_cli(
+        &mut self,
+        name: Option<&str>,
+    ) -> Result<bool, String> {
         self.select_session_template(name)
     }
 
-    pub fn apply_session_template_for_cli(&mut self, name: Option<&str>) -> Result<bool, String> {
+    pub(crate) fn apply_session_template_for_cli(
+        &mut self,
+        name: Option<&str>,
+    ) -> Result<bool, String> {
         self.apply_session_template(name)
     }
 
-    pub fn create_session_template_for_cli(&mut self, name: &str) -> Result<bool, String> {
+    pub(crate) fn create_session_template_for_cli(&mut self, name: &str) -> Result<bool, String> {
         self.capture_session_template(name)
     }
 
-    pub fn rename_active_session_template_for_cli(&mut self, name: &str) -> Result<bool, String> {
+    pub(crate) fn rename_active_session_template_for_cli(
+        &mut self,
+        name: &str,
+    ) -> Result<bool, String> {
         self.rename_active_session_template(name)
     }
 
-    pub fn delete_active_session_template_for_cli(&mut self) -> Result<bool, String> {
+    pub(crate) fn delete_active_session_template_for_cli(&mut self) -> Result<bool, String> {
         self.delete_active_session_template()
     }
 

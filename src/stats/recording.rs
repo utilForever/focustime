@@ -7,7 +7,7 @@ use crate::stats::{
 use chrono::Timelike;
 
 impl FocusStats {
-    pub fn record_focus_elapsed(
+    pub(crate) fn record_focus_elapsed(
         &mut self,
         day_key: &str,
         elapsed_secs: u64,
@@ -23,11 +23,11 @@ impl FocusStats {
         daily.goal = Some(goal);
     }
 
-    pub fn record_completed_pomodoro(&mut self, day_key: &str, goal: DailyGoalSnapshot) {
+    pub(crate) fn record_completed_pomodoro(&mut self, day_key: &str, goal: DailyGoalSnapshot) {
         self.record_completed_pomodoro_with_task(day_key, goal, None, 0, None);
     }
 
-    pub fn record_completed_pomodoro_with_task(
+    pub(crate) fn record_completed_pomodoro_with_task(
         &mut self,
         day_key: &str,
         goal: DailyGoalSnapshot,
@@ -48,7 +48,7 @@ impl FocusStats {
         );
     }
 
-    pub fn record_completed_pomodoro_with_metadata(
+    pub(crate) fn record_completed_pomodoro_with_metadata(
         &mut self,
         day_key: &str,
         goal: DailyGoalSnapshot,
@@ -66,7 +66,7 @@ impl FocusStats {
         );
     }
 
-    pub fn record_completed_pomodoro_with_metadata_at(
+    pub(crate) fn record_completed_pomodoro_with_metadata_at(
         &mut self,
         day_key: &str,
         goal: DailyGoalSnapshot,
@@ -108,7 +108,7 @@ impl FocusStats {
         }
     }
 
-    pub fn record_break_glass_override_event(
+    pub(crate) fn record_break_glass_override_event(
         &mut self,
         day_key: &str,
         timestamp_epoch_secs: u64,
@@ -134,7 +134,7 @@ impl FocusStats {
         });
     }
 
-    pub fn record_session_interruption_event(
+    pub(crate) fn record_session_interruption_event(
         &mut self,
         day_key: &str,
         timestamp_epoch_secs: u64,
@@ -164,7 +164,7 @@ impl FocusStats {
         });
     }
 
-    pub fn sync_goal_snapshot(&mut self, day_key: &str, goal: DailyGoalSnapshot) -> bool {
+    pub(crate) fn sync_goal_snapshot(&mut self, day_key: &str, goal: DailyGoalSnapshot) -> bool {
         let daily = self.daily.entry(day_key.to_string()).or_default();
 
         if daily.goal == Some(goal) {
@@ -175,7 +175,7 @@ impl FocusStats {
         true
     }
 
-    pub fn sync_weekly_goal_snapshot(
+    pub(crate) fn sync_weekly_goal_snapshot(
         &mut self,
         day: chrono::NaiveDate,
         goal: DailyGoalSnapshot,
@@ -188,7 +188,7 @@ impl FocusStats {
         true
     }
 
-    pub fn sync_monthly_goal_snapshot(
+    pub(crate) fn sync_monthly_goal_snapshot(
         &mut self,
         day: chrono::NaiveDate,
         goal: DailyGoalSnapshot,
@@ -201,16 +201,16 @@ impl FocusStats {
         true
     }
 
-    pub fn record_command_usage(&mut self, surface_id: &str) -> bool {
+    pub(crate) fn record_command_usage(&mut self, surface_id: &str) -> bool {
         record_usage_count(&mut self.command_usage_counts, surface_id)
     }
 
-    pub fn record_screen_usage(&mut self, surface_id: &str) -> bool {
+    pub(crate) fn record_screen_usage(&mut self, surface_id: &str) -> bool {
         record_usage_count(&mut self.screen_usage_counts, surface_id)
     }
 
     #[cfg(test)]
-    pub fn command_usage_count(&self, surface_id: &str) -> u64 {
+    pub(crate) fn command_usage_count(&self, surface_id: &str) -> u64 {
         let key = surface_id.trim().to_ascii_lowercase();
         if key.is_empty() {
             return 0;

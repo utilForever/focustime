@@ -19,11 +19,11 @@ use crate::stats::{
 
 impl FocusStats {
     #[allow(dead_code)]
-    pub fn export_to_dir(&self, dir: &Path) -> io::Result<ExportedStatsFiles> {
+    pub(crate) fn export_to_dir(&self, dir: &Path) -> io::Result<ExportedStatsFiles> {
         self.export_to_dir_with_context(dir, &HistoryKpiExportContext::default())
     }
 
-    pub fn export_to_dir_with_context(
+    pub(crate) fn export_to_dir_with_context(
         &self,
         dir: &Path,
         context: &HistoryKpiExportContext,

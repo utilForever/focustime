@@ -12,27 +12,27 @@ const WAKATIME_RETRY_BACKOFF_MAX_SECS: u64 = 300;
 const WAKATIME_RETRY_BACKOFF_MAX_ENTRIES: usize = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WakatimeTaskMappingConfig {
+pub(crate) struct WakatimeTaskMappingConfig {
     #[serde(default)]
-    pub task_label: String,
+    pub(crate) task_label: String,
     #[serde(default)]
-    pub project: Option<String>,
+    pub(crate) project: Option<String>,
     #[serde(default)]
-    pub language: Option<String>,
+    pub(crate) language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WakatimeRuntimeConfig {
+pub(crate) struct WakatimeRuntimeConfig {
     #[serde(default = "default_wakatime_retry_backoff_secs")]
-    pub retry_backoff_secs: Vec<u64>,
+    pub(crate) retry_backoff_secs: Vec<u64>,
     #[serde(default = "default_wakatime_queue_capacity")]
-    pub queue_capacity: usize,
+    pub(crate) queue_capacity: usize,
     #[serde(default = "default_wakatime_queue_retry_delay_secs")]
-    pub queue_retry_delay_secs: u64,
+    pub(crate) queue_retry_delay_secs: u64,
 }
 
 impl WakatimeRuntimeConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             retry_backoff_secs: normalize_wakatime_retry_backoff_secs(&self.retry_backoff_secs),
             queue_capacity: self
@@ -56,17 +56,17 @@ impl Default for WakatimeRuntimeConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WakatimeMetadataConfig {
+pub(crate) struct WakatimeMetadataConfig {
     #[serde(default = "default_wakatime_project")]
-    pub project: String,
+    pub(crate) project: String,
     #[serde(default = "default_wakatime_language")]
-    pub language: String,
+    pub(crate) language: String,
     #[serde(default)]
-    pub task_mappings: Vec<WakatimeTaskMappingConfig>,
+    pub(crate) task_mappings: Vec<WakatimeTaskMappingConfig>,
 }
 
 impl WakatimeMetadataConfig {
-    pub fn normalized(&self) -> Self {
+    pub(crate) fn normalized(&self) -> Self {
         Self {
             project: normalize_nonempty_or_default_string(
                 &self.project,
@@ -80,7 +80,10 @@ impl WakatimeMetadataConfig {
         }
     }
 
-    pub fn task_mapping_for_label(&self, task_label: &str) -> Option<&WakatimeTaskMappingConfig> {
+    pub(crate) fn task_mapping_for_label(
+        &self,
+        task_label: &str,
+    ) -> Option<&WakatimeTaskMappingConfig> {
         let task_label = task_label.trim();
         if task_label.is_empty() {
             return None;
@@ -90,7 +93,7 @@ impl WakatimeMetadataConfig {
             .find(|mapping| mapping.task_label.eq_ignore_ascii_case(task_label))
     }
 
-    pub fn resolved_project_language_for_task_label(
+    pub(crate) fn resolved_project_language_for_task_label(
         &self,
         task_label: Option<&str>,
     ) -> (String, String) {

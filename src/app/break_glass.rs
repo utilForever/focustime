@@ -4,11 +4,11 @@ use crate::app::{
 };
 
 impl App {
-    pub fn break_glass_confirmation_pending(&self) -> bool {
+    pub(crate) fn break_glass_confirmation_pending(&self) -> bool {
         self.pending_timer_action == Some(PendingTimerAction::BreakGlassOverride)
     }
 
-    pub fn break_glass_override_remaining_secs(&self) -> Option<u64> {
+    pub(crate) fn break_glass_override_remaining_secs(&self) -> Option<u64> {
         if !self.focus_session_active_for_current_state() {
             return None;
         }
@@ -16,7 +16,7 @@ impl App {
             .map(ceil_duration_secs)
     }
 
-    pub fn break_glass_override_active(&self) -> bool {
+    pub(crate) fn break_glass_override_active(&self) -> bool {
         self.break_glass_override_remaining_secs().is_some()
     }
 

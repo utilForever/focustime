@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SiteValidationError {
+pub(crate) enum SiteValidationError {
     EmptyHostname,
     MissingHostname,
     ContainsWhitespace,
@@ -9,7 +9,7 @@ pub enum SiteValidationError {
 }
 
 impl SiteValidationError {
-    pub fn message(self) -> &'static str {
+    pub(crate) fn message(self) -> &'static str {
         match self {
             SiteValidationError::EmptyHostname => "empty hostname",
             SiteValidationError::MissingHostname => "missing hostname",
@@ -21,15 +21,15 @@ impl SiteValidationError {
     }
 }
 
-pub fn normalize_domain_rule(input: &str) -> Result<String, SiteValidationError> {
+pub(crate) fn normalize_domain_rule(input: &str) -> Result<String, SiteValidationError> {
     normalize_domain_like_input(input, true)
 }
 
-pub fn normalize_domain_host(input: &str) -> Result<String, SiteValidationError> {
+pub(crate) fn normalize_domain_host(input: &str) -> Result<String, SiteValidationError> {
     normalize_domain_like_input(input, false)
 }
 
-pub fn domain_rule_matches_host(rule: &str, host: &str) -> bool {
+pub(crate) fn domain_rule_matches_host(rule: &str, host: &str) -> bool {
     let Ok(rule) = normalize_domain_rule(rule) else {
         return false;
     };

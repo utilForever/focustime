@@ -17,7 +17,7 @@ pub(super) fn normalize_automation_triggers(
         .collect()
 }
 
-pub fn validate_automation_trigger_rules(
+pub(crate) fn validate_automation_trigger_rules(
     rules: &[AutomationTriggerRuleConfig],
     blocklist_profiles: &[BlocklistProfileConfig],
     session_templates: &[SessionTemplateConfig],

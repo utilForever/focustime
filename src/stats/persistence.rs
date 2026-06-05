@@ -13,23 +13,23 @@ use crate::stats::{
 impl FocusStats {
     #[cfg(test)]
     #[allow(dead_code)]
-    pub fn load() -> Result<Self, String> {
+    pub(crate) fn load() -> Result<Self, String> {
         Self::load_with_options(StatsLoadOptions::default())
     }
 
     #[cfg(test)]
-    pub fn load_with_options(_options: StatsLoadOptions) -> Result<Self, String> {
+    pub(crate) fn load_with_options(_options: StatsLoadOptions) -> Result<Self, String> {
         Ok(Self::default())
     }
 
     #[cfg(not(test))]
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn load() -> Result<Self, String> {
+    pub(crate) fn load() -> Result<Self, String> {
         Self::load_with_options(StatsLoadOptions::default())
     }
 
     #[cfg(not(test))]
-    pub fn load_with_options(options: StatsLoadOptions) -> Result<Self, String> {
+    pub(crate) fn load_with_options(options: StatsLoadOptions) -> Result<Self, String> {
         Self::try_load(options)
     }
 
@@ -169,7 +169,7 @@ impl FocusStats {
         }
     }
 
-    pub fn save_with_options(&self, _options: StatsSaveOptions) -> io::Result<()> {
+    pub(crate) fn save_with_options(&self, _options: StatsSaveOptions) -> io::Result<()> {
         let path = stats_path().ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, "cannot determine stats directory")
         })?;

@@ -77,8 +77,8 @@ mod weekday_rules;
 
 use history_dashboard_cache::HistoryDashboardCache;
 #[cfg(test)]
-pub use history_dashboard_cache::HistoryDashboardCacheStats;
-pub use history_dashboard_cache::HistoryDashboardViewData;
+pub(crate) use history_dashboard_cache::HistoryDashboardCacheStats;
+pub(crate) use history_dashboard_cache::HistoryDashboardViewData;
 pub(crate) use history_goals::weekly_daily_goal_allocation_for_context;
 pub(crate) use profile_edit::{
     CUSTOM_DURATION_STEP_SECS, DAILY_GOAL_MINUTES_STEP,
@@ -106,13 +106,13 @@ pub(crate) use profile_edit::{
     PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, ProfileEditSnapshot,
 };
-pub use setup_diagnostics::{
+pub(crate) use setup_diagnostics::{
     BlockingPreviewSnapshot, SetupCheck, SetupCheckLevel, SetupDiagnostics,
 };
 use shortcuts::ShortcutBindings;
-pub use shortcuts::{NavigationAction, ShortcutAction};
+pub(crate) use shortcuts::{NavigationAction, ShortcutAction};
 
-pub const PROFILE_IDS: [ProfileId; 3] =
+pub(crate) const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
 const DEFAULT_BLOCKLIST_CATEGORY_NAME: &str = "General";
@@ -123,7 +123,7 @@ const SCHEDULE_DAY_TOKENS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat"
 const SCHEDULE_DAY_LABELS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppMode {
+pub(crate) enum AppMode {
     Timer,
     SiteManager,
     ProfileManager,
@@ -329,13 +329,13 @@ struct FocusInterruptionContext {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SiteInputMode {
+pub(crate) enum SiteInputMode {
     Add,
     Edit,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SiteListMode {
+pub(crate) enum SiteListMode {
     Blocklist,
     Allowlist,
 }
@@ -348,7 +348,7 @@ impl SiteListMode {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Blocklist => "Blocklist",
             Self::Allowlist => "Allowlist",
@@ -357,7 +357,7 @@ impl SiteListMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlocklistProfileInputMode {
+pub(crate) enum BlocklistProfileInputMode {
     Create,
     Rename,
     CreateCategory,
@@ -365,7 +365,7 @@ pub enum BlocklistProfileInputMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlannerInputMode {
+pub(crate) enum PlannerInputMode {
     Add,
     Rename,
     CreateTemplate,
@@ -373,100 +373,100 @@ pub enum PlannerInputMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlannerPane {
+pub(crate) enum PlannerPane {
     Tasks,
     Templates,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SiteFeedbackLevel {
+pub(crate) enum SiteFeedbackLevel {
     Success,
     Warning,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HistoryFeedbackLevel {
+pub(crate) enum HistoryFeedbackLevel {
     Success,
     Warning,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlannerFeedbackLevel {
+pub(crate) enum PlannerFeedbackLevel {
     Success,
     Warning,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SiteFeedback {
-    pub level: SiteFeedbackLevel,
-    pub message: String,
+pub(crate) struct SiteFeedback {
+    pub(crate) level: SiteFeedbackLevel,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PlannerFeedback {
-    pub level: PlannerFeedbackLevel,
-    pub message: String,
+pub(crate) struct PlannerFeedback {
+    pub(crate) level: PlannerFeedbackLevel,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HistoryFeedback {
-    pub level: HistoryFeedbackLevel,
-    pub message: String,
+pub(crate) struct HistoryFeedback {
+    pub(crate) level: HistoryFeedbackLevel,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GoalProgress {
-    pub completed: u64,
-    pub target: u64,
-    pub ratio: f64,
+pub(crate) struct GoalProgress {
+    pub(crate) completed: u64,
+    pub(crate) target: u64,
+    pub(crate) ratio: f64,
 }
 
 impl GoalProgress {
-    pub fn is_configured(self) -> bool {
+    pub(crate) fn is_configured(self) -> bool {
         self.target > 0
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct DailyGoalProgress {
-    pub minutes: GoalProgress,
-    pub pomodoros: GoalProgress,
+pub(crate) struct DailyGoalProgress {
+    pub(crate) minutes: GoalProgress,
+    pub(crate) pomodoros: GoalProgress,
 }
 
 impl DailyGoalProgress {
-    pub fn has_any_target(self) -> bool {
+    pub(crate) fn has_any_target(self) -> bool {
         self.minutes.is_configured() || self.pomodoros.is_configured()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WeeklyDailyAllocationDay {
-    pub day: NaiveDate,
-    pub minutes_target: u64,
-    pub pomodoros_target: u32,
-    pub allocatable: bool,
-    pub weight_minutes: u64,
+pub(crate) struct WeeklyDailyAllocationDay {
+    pub(crate) day: NaiveDate,
+    pub(crate) minutes_target: u64,
+    pub(crate) pomodoros_target: u32,
+    pub(crate) allocatable: bool,
+    pub(crate) weight_minutes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WeeklyDailyGoalAllocation {
-    pub week_target: DailyGoalSnapshot,
-    pub completed_minutes: u64,
-    pub completed_pomodoros: u32,
-    pub remaining_minutes: u64,
-    pub remaining_pomodoros: u32,
-    pub remaining_days_in_week: usize,
-    pub allocatable_days: usize,
-    pub uses_schedule_weights: bool,
-    pub daily_targets: Vec<WeeklyDailyAllocationDay>,
+pub(crate) struct WeeklyDailyGoalAllocation {
+    pub(crate) week_target: DailyGoalSnapshot,
+    pub(crate) completed_minutes: u64,
+    pub(crate) completed_pomodoros: u32,
+    pub(crate) remaining_minutes: u64,
+    pub(crate) remaining_pomodoros: u32,
+    pub(crate) remaining_days_in_week: usize,
+    pub(crate) allocatable_days: usize,
+    pub(crate) uses_schedule_weights: bool,
+    pub(crate) daily_targets: Vec<WeeklyDailyAllocationDay>,
 }
 
 impl WeeklyDailyGoalAllocation {
-    pub fn has_any_target(&self) -> bool {
+    pub(crate) fn has_any_target(&self) -> bool {
         self.week_target.has_any_target()
     }
 
-    pub fn today_target(&self) -> DailyGoalSnapshot {
+    pub(crate) fn today_target(&self) -> DailyGoalSnapshot {
         self.daily_targets
             .first()
             .map(|target| DailyGoalSnapshot {
@@ -477,35 +477,35 @@ impl WeeklyDailyGoalAllocation {
     }
 }
 
-pub struct App {
-    pub timer: TimerState,
-    pub should_quit: bool,
-    pub mode: AppMode,
-    pub blocker: SiteBlocker,
+pub(crate) struct App {
+    pub(crate) timer: TimerState,
+    pub(crate) should_quit: bool,
+    pub(crate) mode: AppMode,
+    pub(crate) blocker: SiteBlocker,
     /// Text being typed for add/import or edit site input.
-    pub site_input: String,
+    pub(crate) site_input: String,
     /// Whether the user is currently typing a new site.
-    pub site_input_active: bool,
+    pub(crate) site_input_active: bool,
     site_edit_index: Option<usize>,
-    pub blocklist_profiles: Vec<BlocklistProfileConfig>,
+    pub(crate) blocklist_profiles: Vec<BlocklistProfileConfig>,
     active_blocklist_profile: usize,
-    pub session_templates: Vec<SessionTemplateConfig>,
+    pub(crate) session_templates: Vec<SessionTemplateConfig>,
     active_session_template: Option<usize>,
-    pub blocklist_profile_input: String,
-    pub blocklist_profile_input_active: bool,
+    pub(crate) blocklist_profile_input: String,
+    pub(crate) blocklist_profile_input_active: bool,
     blocklist_profile_input_mode: Option<BlocklistProfileInputMode>,
-    pub site_feedback: Option<SiteFeedback>,
-    pub task_labels: Vec<String>,
-    pub selected_task_label: Option<String>,
+    pub(crate) site_feedback: Option<SiteFeedback>,
+    pub(crate) task_labels: Vec<String>,
+    pub(crate) selected_task_label: Option<String>,
     task_label_favorites: BTreeSet<String>,
     task_label_archived: BTreeSet<String>,
-    pub planner_selection_index: usize,
-    pub planner_template_selection_index: usize,
-    pub planner_pane: PlannerPane,
-    pub planner_input: String,
-    pub planner_input_active: bool,
-    pub planner_input_mode: Option<PlannerInputMode>,
-    pub planner_feedback: Option<PlannerFeedback>,
+    pub(crate) planner_selection_index: usize,
+    pub(crate) planner_template_selection_index: usize,
+    pub(crate) planner_pane: PlannerPane,
+    pub(crate) planner_input: String,
+    pub(crate) planner_input_active: bool,
+    pub(crate) planner_input_mode: Option<PlannerInputMode>,
+    pub(crate) planner_feedback: Option<PlannerFeedback>,
     active_focus_task_label: Option<String>,
     active_focus_intention: Option<String>,
     active_focus_task_note: Option<String>,
@@ -514,16 +514,16 @@ pub struct App {
     active_focus_profile: Option<ProfileId>,
     site_list_mode: SiteListMode,
     /// Index of the highlighted site in the SiteManager list.
-    pub selected_site: usize,
+    pub(crate) selected_site: usize,
     /// Last error from a block/unblock operation (e.g. permission denied).
-    pub block_error: Option<String>,
-    pub setup_diagnostics: SetupDiagnostics,
-    pub blocking_preview: BlockingPreviewSnapshot,
+    pub(crate) block_error: Option<String>,
+    pub(crate) setup_diagnostics: SetupDiagnostics,
+    pub(crate) blocking_preview: BlockingPreviewSnapshot,
     /// Last error from persisting timer/site configuration.
-    pub config_error: Option<String>,
+    pub(crate) config_error: Option<String>,
     /// Last error from persisting focus stats.
-    pub stats_error: Option<String>,
-    pub history_feedback: Option<HistoryFeedback>,
+    pub(crate) stats_error: Option<String>,
+    pub(crate) history_feedback: Option<HistoryFeedback>,
     history_comparison_dimension: ComparisonDimension,
     history_task_filter: Option<String>,
     history_profile_filter: Option<ProfileBucket>,
@@ -532,9 +532,9 @@ pub struct App {
     history_dashboard_pinned_cards: Vec<HistoryKpiCardId>,
     history_dashboard_selected_card: HistoryKpiCardId,
     history_dashboard_cache: RefCell<HistoryDashboardCache>,
-    pub phase_notification: Option<String>,
+    pub(crate) phase_notification: Option<String>,
     integrations: IntegrationRuntime,
-    pub selected_profile: ProfileId,
+    pub(crate) selected_profile: ProfileId,
     selected_theme_preset: ThemePreset,
     feature_flags: FeatureFlagsConfig,
     config_deprecation_warnings: Vec<String>,
@@ -542,10 +542,10 @@ pub struct App {
     automation_triggers: Vec<AutomationTriggerRuleConfig>,
     automation_trigger_last_fired_minute: HashMap<usize, i64>,
     weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
-    pub custom_profile: CustomProfileConfig,
-    pub profile_selection_index: usize,
-    pub profile_edit_active: bool,
-    pub profile_edit_field: usize,
+    pub(crate) custom_profile: CustomProfileConfig,
+    pub(crate) profile_selection_index: usize,
+    pub(crate) profile_edit_active: bool,
+    pub(crate) profile_edit_field: usize,
     profile_edit_schedule_window: usize,
     profile_edit_schedule_day: usize,
     profile_edit_schedule_exception: usize,
@@ -570,7 +570,7 @@ pub struct App {
     last_active_schedule_occurrence_key: Option<String>,
     last_weekday_profile_sync_day: Option<NaiveDate>,
     current_frame_now: DateTime<Local>,
-    pub strict_mode: bool,
+    pub(crate) strict_mode: bool,
     break_glass_duration_secs: u64,
     break_glass_expires_at: Option<Instant>,
     temporary_allowlist_entries: Vec<TemporaryAllowlistEntry>,
@@ -591,7 +591,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         #[cfg(test)]
         {
             Self::from_config(AppConfig::default())
@@ -849,7 +849,7 @@ impl App {
     }
 
     #[cfg(test)]
-    pub fn from_config_for_tests(config: AppConfig) -> Self {
+    pub(crate) fn from_config_for_tests(config: AppConfig) -> Self {
         Self::from_config(config)
     }
 
@@ -858,7 +858,7 @@ impl App {
     /// Must be called **once per main-loop UI frame** (not once per catch-up
     /// tick) so that a burst of back-filled timer ticks after a
     /// suspend/resume cannot trigger multiple rapid heartbeats.
-    pub fn on_wakatime_elapsed(&mut self, elapsed_secs: u64) {
+    pub(crate) fn on_wakatime_elapsed(&mut self, elapsed_secs: u64) {
         if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running {
             if let Err(error) = self
                 .integrations
@@ -871,7 +871,7 @@ impl App {
 
     /// Applies any completed async WakaTime heartbeat results to tracker state.
     /// Intended to be called once per UI frame.
-    pub fn poll_wakatime_status(&mut self) {
+    pub(crate) fn poll_wakatime_status(&mut self) {
         let now = Local::now();
         self.current_frame_now = now;
         self.sync_today_goal_snapshot();
@@ -888,19 +888,19 @@ impl App {
         self.sync_time_based_automation_triggers(now);
     }
 
-    pub fn selected_profile_name(&self) -> &'static str {
+    pub(crate) fn selected_profile_name(&self) -> &'static str {
         self.selected_profile.label()
     }
 
-    pub fn selected_theme_preset(&self) -> ThemePreset {
+    pub(crate) fn selected_theme_preset(&self) -> ThemePreset {
         self.selected_theme_preset
     }
 
-    pub fn wakatime_runtime_state(&self) -> WakatimeRuntimeState {
+    pub(crate) fn wakatime_runtime_state(&self) -> WakatimeRuntimeState {
         self.integrations.wakatime_runtime_state()
     }
 
-    pub fn wakatime_last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
+    pub(crate) fn wakatime_last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
         self.integrations
             .wakatime_last_successful_heartbeat_epoch_secs()
     }
@@ -952,7 +952,7 @@ impl App {
         self.calendar_busy_windows = windows;
     }
 
-    pub fn current_task_label(&self) -> Option<&str> {
+    pub(crate) fn current_task_label(&self) -> Option<&str> {
         if self.focus_session_active_for_current_state() {
             self.active_focus_task_label
                 .as_deref()
@@ -962,7 +962,7 @@ impl App {
         }
     }
 
-    pub fn current_task_note(&self) -> Option<&str> {
+    pub(crate) fn current_task_note(&self) -> Option<&str> {
         if !self.focus_session_active_for_current_state() {
             return None;
         }
@@ -972,11 +972,11 @@ impl App {
             .or(self.selected_task_label.as_deref())
     }
 
-    pub fn can_edit_session_note(&self) -> bool {
+    pub(crate) fn can_edit_session_note(&self) -> bool {
         self.focus_session_active_for_current_state()
     }
 
-    pub fn timer_note_input_active(&self) -> bool {
+    pub(crate) fn timer_note_input_active(&self) -> bool {
         self.timer_note_input_active
     }
 
@@ -984,31 +984,31 @@ impl App {
         self.shortcuts.matches(action, key)
     }
 
-    pub fn shortcut_hint(&self, action: ShortcutAction) -> String {
+    pub(crate) fn shortcut_hint(&self, action: ShortcutAction) -> String {
         self.shortcuts.hint(action)
     }
 
-    pub fn shortcut_label(&self, action: ShortcutAction) -> String {
+    pub(crate) fn shortcut_label(&self, action: ShortcutAction) -> String {
         self.shortcuts.label(action)
     }
 
-    pub fn navigation_matches(&self, action: NavigationAction, key: &KeyEvent) -> bool {
+    pub(crate) fn navigation_matches(&self, action: NavigationAction, key: &KeyEvent) -> bool {
         self.shortcuts.navigation_matches(action, key)
     }
 
-    pub fn navigation_hint(&self, action: NavigationAction) -> String {
+    pub(crate) fn navigation_hint(&self, action: NavigationAction) -> String {
         self.shortcuts.navigation_hint(action)
     }
 
-    pub fn navigation_label(&self, action: NavigationAction) -> String {
+    pub(crate) fn navigation_label(&self, action: NavigationAction) -> String {
         self.shortcuts.navigation_label(action)
     }
 
-    pub fn timer_note_input_value(&self) -> &str {
+    pub(crate) fn timer_note_input_value(&self) -> &str {
         &self.timer_note_input
     }
 
-    pub fn profile_values(&self, profile: ProfileId) -> (u64, u64, u64, u32) {
+    pub(crate) fn profile_values(&self, profile: ProfileId) -> (u64, u64, u64, u32) {
         let spec = profile_spec_for(profile, &self.custom_profile);
         (
             spec.focus_secs,
@@ -1018,7 +1018,7 @@ impl App {
         )
     }
 
-    pub fn profile_summary(&self, profile: ProfileId) -> String {
+    pub(crate) fn profile_summary(&self, profile: ProfileId) -> String {
         let (focus, short_break, long_break, cadence) = self.profile_values(profile);
         format!(
             "{}/{}/{} · every {} focus",
@@ -1029,15 +1029,15 @@ impl App {
         )
     }
 
-    pub fn session_stats(&self) -> SessionStats {
+    pub(crate) fn session_stats(&self) -> SessionStats {
         self.stats.session()
     }
 
-    pub fn today_stats(&self) -> DailyStats {
+    pub(crate) fn today_stats(&self) -> DailyStats {
         self.stats.daily_for(&current_day_key())
     }
 
-    pub fn today_goal_progress(&self) -> DailyGoalProgress {
+    pub(crate) fn today_goal_progress(&self) -> DailyGoalProgress {
         let today = Local::now().date_naive();
         let today_key = today.format("%Y-%m-%d").to_string();
         let today_stats = self.stats.daily_for(&today_key);
@@ -1050,7 +1050,7 @@ impl App {
         )
     }
 
-    pub fn current_week_goal_progress(&self) -> DailyGoalProgress {
+    pub(crate) fn current_week_goal_progress(&self) -> DailyGoalProgress {
         let today = Local::now().date_naive();
         let week = self.stats.weekly_for_day(today);
         let target = self.effective_weekly_goal_snapshot_for_day(today);
@@ -1062,7 +1062,7 @@ impl App {
         )
     }
 
-    pub fn current_month_goal_progress(&self) -> DailyGoalProgress {
+    pub(crate) fn current_month_goal_progress(&self) -> DailyGoalProgress {
         let today = Local::now().date_naive();
         let month = self.stats.monthly_for_day(today);
         let target = self.effective_monthly_goal_snapshot_for_day(today);
@@ -1074,7 +1074,7 @@ impl App {
         )
     }
 
-    pub fn goal_streak(&self) -> GoalStreak {
+    pub(crate) fn goal_streak(&self) -> GoalStreak {
         self.goal_streak_for_day_key(&current_day_key())
     }
 
@@ -1093,7 +1093,7 @@ impl App {
     }
 
     #[allow(dead_code)]
-    pub fn daily_goal_progress_for(&self, stats: DailyStats) -> DailyGoalProgress {
+    pub(crate) fn daily_goal_progress_for(&self, stats: DailyStats) -> DailyGoalProgress {
         goal_progress_for_totals(
             stats.focused_minutes(),
             stats.pomodoros_completed,
@@ -1104,27 +1104,27 @@ impl App {
 
     #[cfg(test)]
     #[allow(dead_code)]
-    pub fn recent_daily_stats(&self, limit: usize) -> Vec<(String, DailyStats)> {
+    pub(crate) fn recent_daily_stats(&self, limit: usize) -> Vec<(String, DailyStats)> {
         self.stats.recent_daily(limit)
     }
 
     #[allow(dead_code)]
-    pub fn recent_weekly_stats(&self, limit: usize) -> Vec<WeeklyStats> {
+    pub(crate) fn recent_weekly_stats(&self, limit: usize) -> Vec<WeeklyStats> {
         self.stats.recent_weekly(limit)
     }
 
     #[allow(dead_code)]
-    pub fn recent_weekly_consistency(&self, limit: usize) -> Vec<WeeklyConsistency> {
+    pub(crate) fn recent_weekly_consistency(&self, limit: usize) -> Vec<WeeklyConsistency> {
         self.stats.recent_weekly_consistency(limit)
     }
 
     #[allow(dead_code)]
-    pub fn latest_weekly_focus_score(&self) -> Option<WeeklyFocusScore> {
+    pub(crate) fn latest_weekly_focus_score(&self) -> Option<WeeklyFocusScore> {
         self.stats.latest_weekly_focus_score()
     }
 
     #[allow(dead_code)]
-    pub fn focus_risk_forecast(&self) -> FocusRiskForecast {
+    pub(crate) fn focus_risk_forecast(&self) -> FocusRiskForecast {
         let today = Local::now().date_naive();
         self.stats.focus_risk_forecast_for_day(
             today,
@@ -1135,62 +1135,62 @@ impl App {
     }
 
     #[allow(dead_code)]
-    pub fn recent_monthly_stats(&self, limit: usize) -> Vec<MonthlyStats> {
+    pub(crate) fn recent_monthly_stats(&self, limit: usize) -> Vec<MonthlyStats> {
         self.stats.recent_monthly(limit)
     }
 
     #[allow(dead_code)]
-    pub fn latest_monthly_heatmap(&self) -> MonthlyHeatmap {
+    pub(crate) fn latest_monthly_heatmap(&self) -> MonthlyHeatmap {
         self.stats.latest_monthly_heatmap()
     }
 
     #[allow(dead_code)]
-    pub fn stats_growth_summary(&self) -> StatsGrowthSummary {
+    pub(crate) fn stats_growth_summary(&self) -> StatsGrowthSummary {
         self.stats.growth_summary()
     }
 
     #[allow(dead_code)]
-    pub fn stats_retention_config(&self) -> StatsRetentionConfig {
+    pub(crate) fn stats_retention_config(&self) -> StatsRetentionConfig {
         self.stats_retention
     }
 
     #[allow(dead_code)]
-    pub fn stats_retention_preview(&self) -> StatsRetentionPruneResult {
+    pub(crate) fn stats_retention_preview(&self) -> StatsRetentionPruneResult {
         self.stats
             .retention_preview(self.stats_retention, Local::now().date_naive())
     }
 
     #[allow(dead_code)]
-    pub fn profile_focus_totals(&self) -> Vec<ProfileTotals> {
+    pub(crate) fn profile_focus_totals(&self) -> Vec<ProfileTotals> {
         self.stats.profile_totals()
     }
 
     #[allow(dead_code)]
-    pub fn profile_effectiveness(&self) -> Vec<ProfileEffectiveness> {
+    pub(crate) fn profile_effectiveness(&self) -> Vec<ProfileEffectiveness> {
         self.stats.profile_effectiveness()
     }
 
     #[allow(dead_code)]
-    pub fn task_focus_totals(&self, limit: usize) -> Vec<TaskTotals> {
+    pub(crate) fn task_focus_totals(&self, limit: usize) -> Vec<TaskTotals> {
         self.stats.task_totals(limit)
     }
 
     #[allow(dead_code)]
-    pub fn task_goal_progress_for_label(&self, label: &str) -> Option<TaskGoalProgress> {
+    pub(crate) fn task_goal_progress_for_label(&self, label: &str) -> Option<TaskGoalProgress> {
         self.stats.task_goal_progress_for_label(label)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn recent_task_trends(&self, limit: usize) -> Vec<TaskTrend> {
+    pub(crate) fn recent_task_trends(&self, limit: usize) -> Vec<TaskTrend> {
         self.stats.recent_task_trends(limit)
     }
 
     #[cfg(test)]
-    pub fn insert_daily_stats_for_tests(&mut self, day_key: &str, stats: DailyStats) {
+    pub(crate) fn insert_daily_stats_for_tests(&mut self, day_key: &str, stats: DailyStats) {
         self.stats.insert_daily_for_tests(day_key, stats);
     }
 
-    pub fn profile_edit_field_value(&self, field_index: usize) -> String {
+    pub(crate) fn profile_edit_field_value(&self, field_index: usize) -> String {
         if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX)
             .contains(&field_index)
             || (PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX
@@ -1281,15 +1281,15 @@ impl App {
         }
     }
 
-    pub fn strict_mode_enforced_for_focus(&self) -> bool {
+    pub(crate) fn strict_mode_enforced_for_focus(&self) -> bool {
         self.strict_mode && self.focus_session_active_for_current_state()
     }
 
-    pub fn strict_reset_confirmation_pending(&self) -> bool {
+    pub(crate) fn strict_reset_confirmation_pending(&self) -> bool {
         self.pending_timer_action == Some(PendingTimerAction::Reset)
     }
 
-    pub fn site_input_mode(&self) -> SiteInputMode {
+    pub(crate) fn site_input_mode(&self) -> SiteInputMode {
         if self.site_edit_index.is_some() {
             SiteInputMode::Edit
         } else {
@@ -1297,23 +1297,23 @@ impl App {
         }
     }
 
-    pub fn site_list_mode(&self) -> SiteListMode {
+    pub(crate) fn site_list_mode(&self) -> SiteListMode {
         self.site_list_mode
     }
 
-    pub fn active_policy_sites(&self) -> &[String] {
+    pub(crate) fn active_policy_sites(&self) -> &[String] {
         self.active_profile_sites_for_mode(self.site_list_mode)
     }
 
-    pub fn active_policy_site_count(&self) -> usize {
+    pub(crate) fn active_policy_site_count(&self) -> usize {
         self.active_policy_sites().len()
     }
 
-    pub fn effective_blocked_site_count(&self) -> usize {
+    pub(crate) fn effective_blocked_site_count(&self) -> usize {
         self.blocker.sites.len()
     }
 
-    pub fn active_temporary_allowlist_entries(&self) -> Vec<ActiveTemporaryAllowlistEntry> {
+    pub(crate) fn active_temporary_allowlist_entries(&self) -> Vec<ActiveTemporaryAllowlistEntry> {
         active_temporary_allowlist_status_entries_for_profile(
             &self.temporary_allowlist_entries,
             self.active_blocklist_profile_name(),
@@ -1321,36 +1321,36 @@ impl App {
         )
     }
 
-    pub fn active_temporary_allowlist_count(&self) -> usize {
+    pub(crate) fn active_temporary_allowlist_count(&self) -> usize {
         self.active_temporary_allowlist_entries().len()
     }
 
-    pub fn next_temporary_allowlist_expiry_remaining_secs(&self) -> Option<u64> {
+    pub(crate) fn next_temporary_allowlist_expiry_remaining_secs(&self) -> Option<u64> {
         self.active_temporary_allowlist_entries()
             .first()
             .map(|entry| entry.remaining_secs)
     }
 
-    pub fn blocklist_profile_input_mode(&self) -> Option<BlocklistProfileInputMode> {
+    pub(crate) fn blocklist_profile_input_mode(&self) -> Option<BlocklistProfileInputMode> {
         self.blocklist_profile_input_mode
     }
 
-    pub fn active_blocklist_profile_name(&self) -> &str {
+    pub(crate) fn active_blocklist_profile_name(&self) -> &str {
         self.blocklist_profiles
             .get(self.active_blocklist_profile)
             .map(|profile| profile.name.as_str())
             .unwrap_or(DEFAULT_BLOCKLIST_PROFILE_NAME)
     }
 
-    pub fn active_blocklist_profile_position(&self) -> usize {
+    pub(crate) fn active_blocklist_profile_position(&self) -> usize {
         self.active_blocklist_profile.saturating_add(1)
     }
 
-    pub fn blocklist_profile_count(&self) -> usize {
+    pub(crate) fn blocklist_profile_count(&self) -> usize {
         self.blocklist_profiles.len()
     }
 
-    pub fn active_blocklist_category_name(&self) -> &str {
+    pub(crate) fn active_blocklist_category_name(&self) -> &str {
         let Some(profile) = self.blocklist_profiles.get(self.active_blocklist_profile) else {
             return DEFAULT_BLOCKLIST_CATEGORY_NAME;
         };
@@ -1369,7 +1369,7 @@ impl App {
             .unwrap_or(DEFAULT_BLOCKLIST_CATEGORY_NAME)
     }
 
-    pub fn active_blocklist_category_position(&self) -> usize {
+    pub(crate) fn active_blocklist_category_position(&self) -> usize {
         let Some(profile) = self.blocklist_profiles.get(self.active_blocklist_profile) else {
             return 1;
         };
@@ -1379,20 +1379,20 @@ impl App {
         blocklist_category_index(&profile.categories, &profile.selected_category).saturating_add(1)
     }
 
-    pub fn blocklist_category_count(&self) -> usize {
+    pub(crate) fn blocklist_category_count(&self) -> usize {
         self.blocklist_profiles
             .get(self.active_blocklist_profile)
             .map(|profile| profile.categories.len().max(1))
             .unwrap_or(1)
     }
 
-    pub fn active_session_template_name(&self) -> Option<&str> {
+    pub(crate) fn active_session_template_name(&self) -> Option<&str> {
         self.active_session_template
             .and_then(|index| self.session_templates.get(index))
             .map(|template| template.name.as_str())
     }
 
-    pub fn session_template_count(&self) -> usize {
+    pub(crate) fn session_template_count(&self) -> usize {
         self.session_templates.len()
     }
 
@@ -1403,7 +1403,7 @@ impl App {
             .unwrap_or_default()
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) {
+    pub(crate) fn handle_key(&mut self, key: KeyEvent) {
         match self.mode {
             AppMode::Timer => self.handle_key_timer(key),
             AppMode::SiteManager => self.handle_key_site_manager(key),
@@ -1414,7 +1414,7 @@ impl App {
         }
     }
 
-    pub fn handle_paste(&mut self, text: String) {
+    pub(crate) fn handle_paste(&mut self, text: String) {
         if self.mode == AppMode::Timer && self.timer_note_input_active {
             let sanitized = normalize_timer_note_paste(&text);
             if !sanitized.is_empty() {
@@ -1441,7 +1441,7 @@ impl App {
         self.site_input.push_str(&text);
     }
 
-    pub fn is_running(&self) -> bool {
+    pub(crate) fn is_running(&self) -> bool {
         self.timer.status == TimerStatus::Running
     }
 

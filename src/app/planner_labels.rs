@@ -3,15 +3,15 @@ use std::collections::BTreeSet;
 use crate::app::{App, task_label_index, task_label_key};
 
 impl App {
-    pub fn is_task_label_favorite(&self, label: &str) -> bool {
+    pub(crate) fn is_task_label_favorite(&self, label: &str) -> bool {
         self.task_label_favorites.contains(&task_label_key(label))
     }
 
-    pub fn is_task_label_archived(&self, label: &str) -> bool {
+    pub(crate) fn is_task_label_archived(&self, label: &str) -> bool {
         self.task_label_archived.contains(&task_label_key(label))
     }
 
-    pub fn planner_labels_for_display(&self) -> Vec<String> {
+    pub(crate) fn planner_labels_for_display(&self) -> Vec<String> {
         let mut favorites = Vec::new();
         let mut others = Vec::new();
         for label in &self.task_labels {
@@ -78,7 +78,7 @@ impl App {
         self.clamp_planner_selection();
     }
 
-    pub fn planner_recent_labels(&self, limit: usize) -> Vec<String> {
+    pub(crate) fn planner_recent_labels(&self, limit: usize) -> Vec<String> {
         if limit == 0 || self.task_labels.is_empty() {
             return Vec::new();
         }

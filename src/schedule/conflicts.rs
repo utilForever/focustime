@@ -9,7 +9,7 @@ use super::{
     WindowOccurrenceKind, compile_exception_dates, compile_one_time_windows, compile_windows,
 };
 
-pub fn inspect_schedule_conflicts_from_config(
+pub(crate) fn inspect_schedule_conflicts_from_config(
     schedule: &RecurringScheduleConfig,
 ) -> Vec<ScheduleConflict> {
     let recurring_windows = compile_windows(&schedule.windows);
@@ -22,7 +22,7 @@ pub fn inspect_schedule_conflicts_from_config(
     )
 }
 
-pub fn inspect_schedule_conflicts(
+pub(crate) fn inspect_schedule_conflicts(
     recurring_windows: &[RecurringWindow],
     one_time_windows: &[OneTimeWindow],
     recurring_exception_dates: &HashSet<NaiveDate>,
@@ -40,7 +40,7 @@ pub fn inspect_schedule_conflicts(
     conflicts
 }
 
-pub fn format_schedule_conflict(conflict: &ScheduleConflict) -> String {
+pub(crate) fn format_schedule_conflict(conflict: &ScheduleConflict) -> String {
     let context = match conflict.context {
         ScheduleConflictContext::Weekday(day) => day_token(day).to_uppercase(),
         ScheduleConflictContext::Date(date) => date.format("%Y-%m-%d").to_string(),

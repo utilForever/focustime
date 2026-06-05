@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::config::ShortcutConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ShortcutAction {
+pub(crate) enum ShortcutAction {
     Quit,
     TimerTogglePause,
     TimerStopReset,
@@ -49,7 +49,7 @@ pub enum ShortcutAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum NavigationAction {
+pub(crate) enum NavigationAction {
     MoveUp,
     MoveDown,
     MoveLeft,
@@ -193,18 +193,18 @@ const ALL_NAVIGATION_ACTIONS: [NavigationAction; 8] = [
 ];
 
 #[derive(Debug, Clone)]
-pub struct ShortcutBindings {
+pub(crate) struct ShortcutBindings {
     command_keys: BTreeMap<ShortcutAction, char>,
     navigation_keys: BTreeMap<NavigationAction, ShortcutKey>,
 }
 
 impl ShortcutBindings {
     #[cfg(test)]
-    pub fn from_config(config: &ShortcutConfig) -> Self {
+    pub(crate) fn from_config(config: &ShortcutConfig) -> Self {
         Self::from_config_with_diagnostics(config).0
     }
 
-    pub fn from_config_with_diagnostics(config: &ShortcutConfig) -> (Self, Vec<String>) {
+    pub(crate) fn from_config_with_diagnostics(config: &ShortcutConfig) -> (Self, Vec<String>) {
         let mut diagnostics = Vec::new();
         let quit_key = requested_shortcut_char(config, ShortcutAction::Quit);
         let mut command_keys = BTreeMap::new();
@@ -324,7 +324,7 @@ impl ShortcutBindings {
         )
     }
 
-    pub fn to_config(&self) -> ShortcutConfig {
+    pub(crate) fn to_config(&self) -> ShortcutConfig {
         ShortcutConfig {
             quit: key_token(self.key(ShortcutAction::Quit)),
             timer_toggle_pause: key_token(self.key(ShortcutAction::TimerTogglePause)),
@@ -391,23 +391,23 @@ impl ShortcutBindings {
         }
     }
 
-    pub fn matches(&self, action: ShortcutAction, key: &KeyEvent) -> bool {
+    pub(crate) fn matches(&self, action: ShortcutAction, key: &KeyEvent) -> bool {
         matches!(key.code, KeyCode::Char(code) if code == self.key(action))
     }
 
-    pub fn navigation_matches(&self, action: NavigationAction, key: &KeyEvent) -> bool {
+    pub(crate) fn navigation_matches(&self, action: NavigationAction, key: &KeyEvent) -> bool {
         matches_navigation_key(self.navigation_key(action), key)
     }
 
-    pub fn hint(&self, action: ShortcutAction) -> String {
+    pub(crate) fn hint(&self, action: ShortcutAction) -> String {
         format!("[{}]", self.label(action))
     }
 
-    pub fn navigation_hint(&self, action: NavigationAction) -> String {
+    pub(crate) fn navigation_hint(&self, action: NavigationAction) -> String {
         format!("[{}]", self.navigation_label(action))
     }
 
-    pub fn label(&self, action: ShortcutAction) -> String {
+    pub(crate) fn label(&self, action: ShortcutAction) -> String {
         let key = self.key(action);
         if key == ' ' {
             "Space".to_string()
@@ -416,7 +416,7 @@ impl ShortcutBindings {
         }
     }
 
-    pub fn navigation_label(&self, action: NavigationAction) -> String {
+    pub(crate) fn navigation_label(&self, action: NavigationAction) -> String {
         navigation_key_label(self.navigation_key(action))
     }
 

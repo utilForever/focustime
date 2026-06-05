@@ -20,19 +20,19 @@ type PropertyFieldMap = HashMap<String, Vec<(PropertyParams, String)>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct CalendarBusyWindow {
-    pub source_name: String,
-    pub provider: CalendarProviderConfig,
-    pub summary: String,
-    pub start_epoch_secs: i64,
-    pub end_epoch_secs: i64,
+    pub(crate) source_name: String,
+    pub(crate) provider: CalendarProviderConfig,
+    pub(crate) summary: String,
+    pub(crate) start_epoch_secs: i64,
+    pub(crate) end_epoch_secs: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CalendarSyncResult {
-    pub synced_at_epoch_secs: i64,
-    pub source_count: usize,
-    pub windows: Vec<CalendarBusyWindow>,
-    pub source_errors: Vec<String>,
+    pub(crate) synced_at_epoch_secs: i64,
+    pub(crate) source_count: usize,
+    pub(crate) windows: Vec<CalendarBusyWindow>,
+    pub(crate) source_errors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

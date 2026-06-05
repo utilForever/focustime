@@ -1,17 +1,17 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TimerPhase {
+pub(crate) enum TimerPhase {
     Focus,
     ShortBreak,
     LongBreak,
 }
 
-pub const DEFAULT_FOCUS_SECS: u64 = 25 * 60;
-pub const DEFAULT_SHORT_BREAK_SECS: u64 = 5 * 60;
-pub const DEFAULT_LONG_BREAK_SECS: u64 = 15 * 60;
-pub const DEFAULT_LONG_BREAK_INTERVAL: u32 = 4;
+pub(crate) const DEFAULT_FOCUS_SECS: u64 = 25 * 60;
+pub(crate) const DEFAULT_SHORT_BREAK_SECS: u64 = 5 * 60;
+pub(crate) const DEFAULT_LONG_BREAK_SECS: u64 = 15 * 60;
+pub(crate) const DEFAULT_LONG_BREAK_INTERVAL: u32 = 4;
 
 impl TimerPhase {
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             TimerPhase::Focus => "Focus",
             TimerPhase::ShortBreak => "Short Break",
@@ -20,7 +20,7 @@ impl TimerPhase {
     }
 
     /// Duration of the phase in seconds.
-    pub fn duration_secs(self) -> u64 {
+    pub(crate) fn duration_secs(self) -> u64 {
         match self {
             TimerPhase::Focus => DEFAULT_FOCUS_SECS,
             TimerPhase::ShortBreak => DEFAULT_SHORT_BREAK_SECS,
@@ -30,32 +30,32 @@ impl TimerPhase {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TimerStatus {
+pub(crate) enum TimerStatus {
     Idle,
     Running,
     Paused,
 }
 
 #[derive(Debug)]
-pub struct TimerState {
-    pub phase: TimerPhase,
-    pub status: TimerStatus,
+pub(crate) struct TimerState {
+    pub(crate) phase: TimerPhase,
+    pub(crate) status: TimerStatus,
     /// Seconds remaining in the current phase.
-    pub remaining_secs: u64,
+    pub(crate) remaining_secs: u64,
     /// Number of completed focus sessions.
-    pub pomodoros_completed: u32,
+    pub(crate) pomodoros_completed: u32,
     /// Configured duration for the focus phase.
-    pub focus_secs: u64,
+    pub(crate) focus_secs: u64,
     /// Configured duration for the short-break phase.
-    pub short_break_secs: u64,
+    pub(crate) short_break_secs: u64,
     /// Configured duration for the long-break phase.
-    pub long_break_secs: u64,
+    pub(crate) long_break_secs: u64,
     /// Number of completed focus sessions before a long break.
-    pub long_break_interval: u32,
+    pub(crate) long_break_interval: u32,
 }
 
 impl TimerState {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::with_profile(
             TimerPhase::Focus.duration_secs(),
             TimerPhase::ShortBreak.duration_secs(),
@@ -66,7 +66,11 @@ impl TimerState {
 
     /// Create a timer with custom phase durations (all in seconds).
     #[cfg(test)]
-    pub fn with_durations(focus_secs: u64, short_break_secs: u64, long_break_secs: u64) -> Self {
+    pub(crate) fn with_durations(
+        focus_secs: u64,
+        short_break_secs: u64,
+        long_break_secs: u64,
+    ) -> Self {
         Self::with_profile(
             focus_secs,
             short_break_secs,
@@ -76,7 +80,7 @@ impl TimerState {
     }
 
     /// Create a timer with custom phase durations and long-break cadence.
-    pub fn with_profile(
+    pub(crate) fn with_profile(
         focus_secs: u64,
         short_break_secs: u64,
         long_break_secs: u64,
@@ -128,7 +132,7 @@ impl TimerState {
     }
 
     /// Advance the timer by one second. Returns true if the phase just ended.
-    pub fn tick(&mut self) -> bool {
+    pub(crate) fn tick(&mut self) -> bool {
         if self.status != TimerStatus::Running {
             return false;
         }
@@ -155,7 +159,7 @@ impl TimerState {
     }
 
     /// Skip to the next phase immediately (does not count as a completed session).
-    pub fn next_phase(&mut self) {
+    pub(crate) fn next_phase(&mut self) {
         let next_phase = if self.phase == TimerPhase::Focus {
             let next_focus_count = self.pomodoros_completed.saturating_add(1);
             self.break_phase_for_focus_count(next_focus_count)
@@ -166,11 +170,11 @@ impl TimerState {
     }
 
     /// Reset the current phase back to its full duration and stop.
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.set_phase_idle(self.phase);
     }
 
-    pub fn toggle_pause(&mut self) {
+    pub(crate) fn toggle_pause(&mut self) {
         self.status = match self.status {
             TimerStatus::Idle | TimerStatus::Paused => TimerStatus::Running,
             TimerStatus::Running => TimerStatus::Paused,
@@ -178,7 +182,7 @@ impl TimerState {
     }
 
     /// Progress as a value in [0.0, 1.0] where 1.0 means full time remaining.
-    pub fn progress(&self) -> f64 {
+    pub(crate) fn progress(&self) -> f64 {
         let total_secs = self.phase_duration(self.phase);
         if total_secs == 0 {
             return 0.0;

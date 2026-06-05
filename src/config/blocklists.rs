@@ -5,15 +5,15 @@ use crate::blocker::{domain_rule_matches_host, normalize_domain_rule};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct BlocklistProfileConfig {
+pub(crate) struct BlocklistProfileConfig {
     #[serde(default = "default_blocklist_profile_name")]
-    pub name: String,
+    pub(crate) name: String,
     /// Deprecated flat mirror of categorized blocklist rules.
     ///
     /// Canonical rules live in `categories[*].sites`; this field is maintained
     /// for load-time compatibility and helper surfaces still reading flat lists.
     #[serde(default)]
-    pub sites: Vec<String>,
+    pub(crate) sites: Vec<String>,
     /// Deprecated flat mirror of categorized allowlist rules.
     ///
     /// Canonical rules live in `categories[*].allowlist_sites`.
@@ -21,23 +21,23 @@ pub struct BlocklistProfileConfig {
     ///
     /// Effective focus blocking is computed as `sites - allowlist_sites`.
     #[serde(default)]
-    pub allowlist_sites: Vec<String>,
+    pub(crate) allowlist_sites: Vec<String>,
     /// Category-organized block/allow rules.
     #[serde(default)]
-    pub categories: Vec<BlocklistCategoryConfig>,
+    pub(crate) categories: Vec<BlocklistCategoryConfig>,
     /// Name of the selected category inside this profile.
     #[serde(default = "default_blocklist_category_name")]
-    pub selected_category: String,
+    pub(crate) selected_category: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct BlocklistCategoryConfig {
+pub(crate) struct BlocklistCategoryConfig {
     #[serde(default = "default_blocklist_category_name")]
-    pub name: String,
+    pub(crate) name: String,
     #[serde(default)]
-    pub sites: Vec<String>,
+    pub(crate) sites: Vec<String>,
     #[serde(default)]
-    pub allowlist_sites: Vec<String>,
+    pub(crate) allowlist_sites: Vec<String>,
 }
 
 impl Default for BlocklistProfileConfig {
@@ -62,7 +62,7 @@ impl Default for BlocklistCategoryConfig {
     }
 }
 
-pub fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
+pub(crate) fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
     let allowlist_rules: Vec<String> = all_allowlist_rules_for_profile(profile)
         .iter()
         .filter_map(|rule| normalize_domain_rule(rule).ok())

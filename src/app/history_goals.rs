@@ -179,7 +179,7 @@ impl App {
         carry_over_goal_target(base, self.goal_carry_over.monthly, previous)
     }
 
-    pub fn weekly_daily_goal_allocation(&self) -> WeeklyDailyGoalAllocation {
+    pub(crate) fn weekly_daily_goal_allocation(&self) -> WeeklyDailyGoalAllocation {
         let today = Local::now().date_naive();
         self.weekly_daily_goal_allocation_for_day(today)
     }
@@ -220,17 +220,23 @@ impl App {
     }
 
     #[allow(dead_code)]
-    pub fn recent_break_glass_overrides(&self, limit: usize) -> Vec<BreakGlassOverrideEvent> {
+    pub(crate) fn recent_break_glass_overrides(
+        &self,
+        limit: usize,
+    ) -> Vec<BreakGlassOverrideEvent> {
         self.stats.recent_break_glass_overrides(limit)
     }
 
     #[cfg(test)]
-    pub fn recent_session_interruptions(&self, limit: usize) -> Vec<SessionInterruptionEvent> {
+    pub(crate) fn recent_session_interruptions(
+        &self,
+        limit: usize,
+    ) -> Vec<SessionInterruptionEvent> {
         self.stats.recent_session_interruptions(limit)
     }
 
     #[allow(dead_code)]
-    pub fn latest_session_interruption(&self) -> Option<SessionInterruptionEvent> {
+    pub(crate) fn latest_session_interruption(&self) -> Option<SessionInterruptionEvent> {
         self.stats.latest_session_interruption()
     }
 }

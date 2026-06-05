@@ -65,7 +65,7 @@ const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 6] = [
     ("Appearance", &PROFILE_EDIT_GROUP_APPEARANCE),
 ];
 
-pub fn render(frame: &mut Frame, app: &App) {
+pub(crate) fn render(frame: &mut Frame, app: &App) {
     match app.mode {
         AppMode::Timer => render_timer(frame, app),
         AppMode::SiteManager => render_site_manager(frame, app),
