@@ -1,7 +1,7 @@
 use crate::app::automation_triggers::AutomationTriggerEvent;
 use crate::app::{
     App, FocusStartOutcome, FocusStartTemplateMode, Local, SessionInterruptionReason,
-    ShortcutAction, TimerPhase, TimerState, TimerStatus, current_day_key,
+    ShortcutAction, TimerActivity, TimerPhase, TimerState, TimerStatus, current_day_key,
 };
 
 impl App {
@@ -46,14 +46,10 @@ impl App {
         completed_focus_secs: u64,
         is_catchup: bool,
     ) {
+        let previous_activity = TimerActivity::from_parts(completed_phase, TimerStatus::Running);
         self.pending_timer_action = None;
         if self.should_record_completed_focus_session(completed_phase, is_catchup) {
             self.record_completed_focus_session(completed_focus_secs);
-            self.active_focus_task_label = None;
-            self.active_focus_intention = None;
-            self.active_focus_task_note = None;
-            self.clear_timer_note_input();
-            self.active_focus_profile = None;
         }
 
         let blocked_focus_autostart =
@@ -67,14 +63,7 @@ impl App {
             self.fire_timer_lifecycle_automation_events(completed_phase, TimerStatus::Running);
         }
 
-        if self.timer.phase != TimerPhase::Focus {
-            self.active_focus_task_label = None;
-            self.active_focus_intention = None;
-            self.active_focus_task_note = None;
-            self.clear_timer_note_input();
-            self.active_focus_profile = None;
-            self.break_glass_expires_at = None;
-        }
+        self.sync_focus_runtime_for_activity_change(previous_activity);
         self.apply_blocking_for_phase();
     }
 
@@ -92,12 +81,6 @@ impl App {
         }
 
         self.timer.status = TimerStatus::Running;
-        if self.timer.phase == TimerPhase::Focus {
-            self.active_focus_task_label = self.selected_task_label.clone();
-            self.active_focus_intention = self.selected_task_label.clone();
-            self.active_focus_task_note = self.selected_task_label.clone();
-            self.active_focus_profile = Some(self.selected_profile);
-        }
         false
     }
 
@@ -154,28 +137,18 @@ impl App {
         let previous_status = self.timer.status;
         self.pending_timer_action = None;
         action(&mut self.timer);
+        let previous_activity = TimerActivity {
+            focus_active: was_focus_active,
+            focus_running: previous_phase == TimerPhase::Focus
+                && previous_status == TimerStatus::Running,
+        };
         let is_focus_active = self.focus_session_active_for_current_state();
         if let Some(context) = interruption_context
             && !is_focus_active
         {
             self.record_session_interruption_event(context);
         }
-        if !was_focus_active && is_focus_active {
-            self.active_focus_task_label = self.selected_task_label.clone();
-            self.active_focus_intention = self.selected_task_label.clone();
-            self.active_focus_task_note = self.selected_task_label.clone();
-            self.clear_timer_note_input();
-            self.active_focus_profile = Some(self.selected_profile);
-            self.schedule_armed_occurrence_key = None;
-            self.clear_schedule_delay_state();
-        } else if was_focus_active && !is_focus_active {
-            self.active_focus_task_label = None;
-            self.active_focus_intention = None;
-            self.active_focus_task_note = None;
-            self.clear_timer_note_input();
-            self.active_focus_profile = None;
-            self.break_glass_expires_at = None;
-        }
+        self.sync_focus_runtime_for_activity_change(previous_activity);
         self.fire_timer_lifecycle_automation_events(previous_phase, previous_status);
         self.apply_blocking_for_phase();
         self.sync_recovery_snapshot();
@@ -220,6 +193,39 @@ impl App {
                 }
             }
         }
+    }
+
+    fn sync_focus_runtime_for_activity_change(&mut self, previous_activity: TimerActivity) {
+        let current_activity = self.timer_activity();
+        match (
+            previous_activity.focus_active,
+            current_activity.focus_active,
+        ) {
+            (false, true) => self.start_focus_runtime(),
+            (true, false) => {
+                self.clear_focus_runtime();
+                self.break_glass_expires_at = None;
+            }
+            _ => {}
+        }
+    }
+
+    fn start_focus_runtime(&mut self) {
+        self.active_focus_task_label = self.selected_task_label.clone();
+        self.active_focus_intention = self.selected_task_label.clone();
+        self.active_focus_task_note = self.selected_task_label.clone();
+        self.clear_timer_note_input();
+        self.active_focus_profile = Some(self.selected_profile);
+        self.schedule_armed_occurrence_key = None;
+        self.clear_schedule_delay_state();
+    }
+
+    pub(super) fn clear_focus_runtime(&mut self) {
+        self.active_focus_task_label = None;
+        self.active_focus_intention = None;
+        self.active_focus_task_note = None;
+        self.clear_timer_note_input();
+        self.active_focus_profile = None;
     }
 
     pub(super) fn record_focus_elapsed(&mut self, elapsed_secs: u64) {

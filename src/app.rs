@@ -190,6 +190,28 @@ fn profile_for_index(index: usize) -> ProfileId {
         .unwrap_or(PROFILE_IDS[PROFILE_IDS.len() - 1])
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TimerActivity {
+    focus_active: bool,
+    focus_running: bool,
+}
+
+impl TimerActivity {
+    fn from_timer(timer: &TimerState) -> Self {
+        Self::from_parts(timer.phase, timer.status)
+    }
+
+    fn from_parts(phase: TimerPhase, status: TimerStatus) -> Self {
+        let focus_active = phase == TimerPhase::Focus && status != TimerStatus::Idle;
+        let focus_running = phase == TimerPhase::Focus && status == TimerStatus::Running;
+        debug_assert!(!focus_running || focus_active);
+        Self {
+            focus_active,
+            focus_running,
+        }
+    }
+}
+
 fn blocklist_profile_index(profiles: &[BlocklistProfileConfig], selected_name: &str) -> usize {
     profiles
         .iter()
@@ -1512,12 +1534,16 @@ impl App {
         self.focus_session_active_for_current_state() && !self.break_glass_override_active_now()
     }
 
+    fn timer_activity(&self) -> TimerActivity {
+        TimerActivity::from_timer(&self.timer)
+    }
+
     fn focus_running_for_current_state(&self) -> bool {
-        self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running
+        self.timer_activity().focus_running
     }
 
     fn focus_session_active_for_current_state(&self) -> bool {
-        self.timer.phase == TimerPhase::Focus && self.timer.status != TimerStatus::Idle
+        self.timer_activity().focus_active
     }
 
     fn should_auto_start_transition(
