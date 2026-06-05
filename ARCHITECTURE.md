@@ -148,5 +148,5 @@ sequenceDiagram
   owns it.
 - For release docs updates, keep architecture-facing terminology aligned with the
   module names and responsibility language used in `README.md`, `CHANGELOG.md`,
-  and release tag examples in contributor-facing docs (for example, `v0.14.3`
+  and release tag examples in contributor-facing docs (for example, `v0.14.4`
   for this release cycle).
