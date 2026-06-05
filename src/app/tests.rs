@@ -6,6 +6,7 @@ use crate::config::{
     CalendarProviderConfig, FeatureFlagsConfig, HistoryDashboardConfig, HistoryKpiCardId,
     ShortcutConfig, StatsRetentionConfig, WeekdayProfileRuleConfig,
 };
+use crate::error::UserFacingError;
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
@@ -5134,6 +5135,12 @@ fn cli_pause_requires_running_timer() {
     let error = app.pause_for_cli().unwrap_err();
 
     assert_eq!(error, "Cannot pause: timer is not running.");
+    let message = error.user_message();
+    assert_eq!(message.code, "app.timer.not_running");
+    assert_eq!(
+        message.hint.as_deref(),
+        Some("Start a focus session first with `focustime --start`.")
+    );
 }
 
 #[test]
