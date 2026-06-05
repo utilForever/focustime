@@ -2097,6 +2097,7 @@ fn parse_with_contract_marks_json_usage_errors() {
     assert_eq!(error.kind, CliErrorKind::Usage);
     assert_eq!(error.output, OutputMode::Json);
     assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert_eq!(error.code, "cli.usage");
     assert!(error.message.contains("Unknown option"));
 }
 
@@ -2106,6 +2107,7 @@ fn parse_with_contract_detects_json_on_early_parse_failures() {
     assert_eq!(error.kind, CliErrorKind::Usage);
     assert_eq!(error.output, OutputMode::Json);
     assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert_eq!(error.code, "cli.usage");
     assert!(
         error
             .message
@@ -2119,6 +2121,7 @@ fn parse_with_contract_marks_json_usage_errors_from_key_value_parsing() {
     assert_eq!(error.kind, CliErrorKind::Usage);
     assert_eq!(error.output, OutputMode::Json);
     assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert_eq!(error.code, "cli.usage");
     assert!(error.message.contains("Invalid goal"));
 }
 
@@ -2128,10 +2131,33 @@ fn parse_with_contract_marks_json_usage_errors_from_finalize_step() {
     assert_eq!(error.kind, CliErrorKind::Usage);
     assert_eq!(error.output, OutputMode::Json);
     assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert_eq!(error.code, "cli.usage");
     assert!(
         error
             .message
             .contains("`--watch` is only valid with `--status`.")
+    );
+}
+
+#[test]
+fn runtime_error_preserves_user_message_code_and_hint() {
+    let error = runtime_error(
+        OutputMode::Json,
+        crate::error::UserMessage::with_hint(
+            "app.timer.not_running",
+            "Cannot pause: timer is not running.",
+            "Start a focus session first with `focustime --start`.",
+        ),
+    );
+
+    assert_eq!(error.kind, CliErrorKind::Runtime);
+    assert_eq!(error.output, OutputMode::Json);
+    assert_eq!(error.exit_code(), EXIT_CODE_RUNTIME_ERROR);
+    assert_eq!(error.code, "app.timer.not_running");
+    assert_eq!(error.message, "Cannot pause: timer is not running.");
+    assert_eq!(
+        error.hint.as_deref(),
+        Some("Start a focus session first with `focustime --start`.")
     );
 }
 

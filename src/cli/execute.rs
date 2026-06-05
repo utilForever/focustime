@@ -6,6 +6,7 @@ use std::{
 
 use crate::app::App;
 use crate::config::validate_automation_trigger_rules;
+use crate::error::UserMessage;
 
 #[cfg(test)]
 use crate::cli::StatusComparisonOptions;
@@ -67,7 +68,9 @@ use status::execute_status_command;
 #[cfg(test)]
 use status::{WATCH_INTERRUPTED, next_watch_deadline, wait_for_next_watch_tick};
 
-pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String> {
+type CliExecuteResult<T> = Result<T, UserMessage>;
+
+pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<()> {
     if let Some(surface_id) = command_usage_surface_id(&cli_command.kind)
         && !command_usage_records_via_app(&cli_command.kind)
     {
@@ -81,9 +84,15 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::Resume => execute_resume_command(cli_command.output),
         CommandKind::Stop => execute_stop_command(cli_command.output),
         CommandKind::Next => execute_next_command(cli_command.output),
-        CommandKind::DaemonStart { port } => execute_daemon_start_command(port, cli_command.output),
-        CommandKind::DaemonStatus => execute_daemon_status_command(cli_command.output),
-        CommandKind::DaemonStop => execute_daemon_stop_command(cli_command.output),
+        CommandKind::DaemonStart { port } => {
+            execute_daemon_start_command(port, cli_command.output).map_err(UserMessage::from)
+        }
+        CommandKind::DaemonStatus => {
+            execute_daemon_status_command(cli_command.output).map_err(UserMessage::from)
+        }
+        CommandKind::DaemonStop => {
+            execute_daemon_stop_command(cli_command.output).map_err(UserMessage::from)
+        }
         CommandKind::Task { label } => execute_task_command(label, cli_command.output),
         CommandKind::TaskGoal { label, goal } => {
             execute_task_goal_command(label, goal, cli_command.output)
@@ -119,32 +128,50 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         CommandKind::ScheduleDelay => execute_schedule_delay_command(cli_command.output),
         CommandKind::BreakGlassTrigger => execute_break_glass_trigger_command(cli_command.output),
         CommandKind::BreakGlassCancel => execute_break_glass_cancel_command(cli_command.output),
-        CommandKind::ConfigDoctor => execute_config_doctor_command(cli_command.output),
-        CommandKind::ConfigMigrate { apply } => {
-            execute_config_migrate_command(apply, cli_command.output)
+        CommandKind::ConfigDoctor => {
+            execute_config_doctor_command(cli_command.output).map_err(UserMessage::from)
         }
-        CommandKind::Diagnostics => execute_diagnostics_command(cli_command.output),
+        CommandKind::ConfigMigrate { apply } => {
+            execute_config_migrate_command(apply, cli_command.output).map_err(UserMessage::from)
+        }
+        CommandKind::Diagnostics => {
+            execute_diagnostics_command(cli_command.output).map_err(UserMessage::from)
+        }
         CommandKind::BlockingPreview => execute_blocking_preview_command(cli_command.output),
-        CommandKind::UsageSignals => execute_usage_signals_command(cli_command.output),
+        CommandKind::UsageSignals => {
+            execute_usage_signals_command(cli_command.output).map_err(UserMessage::from)
+        }
         CommandKind::Status {
             watch_interval_secs,
             comparison,
-        } => execute_status_command(cli_command.output, watch_interval_secs, comparison),
-        CommandKind::Backup { dir } => execute_backup_command(dir, cli_command.output),
-        CommandKind::Restore { dir } => execute_restore_command(dir, cli_command.output),
-        CommandKind::CalendarSync => execute_calendar_sync_command(cli_command.output),
-        CommandKind::Export { dir } => execute_export_command(dir, cli_command.output),
+        } => execute_status_command(cli_command.output, watch_interval_secs, comparison)
+            .map_err(UserMessage::from),
+        CommandKind::Backup { dir } => {
+            execute_backup_command(dir, cli_command.output).map_err(UserMessage::from)
+        }
+        CommandKind::Restore { dir } => {
+            execute_restore_command(dir, cli_command.output).map_err(UserMessage::from)
+        }
+        CommandKind::CalendarSync => {
+            execute_calendar_sync_command(cli_command.output).map_err(UserMessage::from)
+        }
+        CommandKind::Export { dir } => {
+            execute_export_command(dir, cli_command.output).map_err(UserMessage::from)
+        }
         CommandKind::FeatureInventory { dir } => {
-            execute_feature_inventory_command(dir, cli_command.output)
+            execute_feature_inventory_command(dir, cli_command.output).map_err(UserMessage::from)
         }
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
+                .map_err(UserMessage::from)
         }
         CommandKind::BlocklistCategory { command } => {
             execute_blocklist_category_command(command, cli_command.output)
+                .map_err(UserMessage::from)
         }
         CommandKind::BlocklistSites { target, command } => {
             execute_blocklist_sites_command(target, command, cli_command.output)
+                .map_err(UserMessage::from)
         }
         CommandKind::AllowlistSiteAddTemporary { input } => {
             execute_allowlist_site_add_temporary_command(input, cli_command.output)
@@ -154,6 +181,7 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> Result<(), String>
         }
         CommandKind::HistoryDashboard { command } => {
             execute_history_dashboard_command(command, cli_command.output)
+                .map_err(UserMessage::from)
         }
     }
 }
@@ -239,42 +267,47 @@ fn record_command_usage_direct(surface_id: &str) -> Result<(), String> {
         .map_err(|error| format!("Failed to save usage signals: {error}"))
 }
 
-fn execute_start_command(output: OutputMode) -> Result<(), String> {
+fn execute_start_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("start");
     app.start_focus_for_cli()?;
-    emit_timer_command_output("start", &app, output)
+    emit_timer_command_output("start", &app, output)?;
+    Ok(())
 }
 
-fn execute_pause_command(output: OutputMode) -> Result<(), String> {
+fn execute_pause_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("pause");
     app.pause_for_cli()?;
-    emit_timer_command_output("pause", &app, output)
+    emit_timer_command_output("pause", &app, output)?;
+    Ok(())
 }
 
-fn execute_resume_command(output: OutputMode) -> Result<(), String> {
+fn execute_resume_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("resume");
     app.resume_for_cli()?;
-    emit_timer_command_output("resume", &app, output)
+    emit_timer_command_output("resume", &app, output)?;
+    Ok(())
 }
 
-fn execute_stop_command(output: OutputMode) -> Result<(), String> {
+fn execute_stop_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("stop");
     app.stop_for_cli()?;
-    emit_timer_command_output("stop", &app, output)
+    emit_timer_command_output("stop", &app, output)?;
+    Ok(())
 }
 
-fn execute_next_command(output: OutputMode) -> Result<(), String> {
+fn execute_next_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("next");
     app.next_phase_for_cli()?;
-    emit_timer_command_output("next", &app, output)
+    emit_timer_command_output("next", &app, output)?;
+    Ok(())
 }
 
-fn execute_task_command(label: String, output: OutputMode) -> Result<(), String> {
+fn execute_task_command(label: String, output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("task");
     let created = app.select_task_label_for_cli(&label)?;
@@ -309,7 +342,7 @@ fn execute_task_goal_command(
     label: Option<String>,
     goal: Option<DailyGoalConfig>,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let config = AppConfig::load().normalized();
     let mut stats = FocusStats::load_with_options(stats_load_options(&config))?;
     let selected_task_label = stats.task_planner_state().1;
@@ -363,7 +396,7 @@ fn execute_task_goal_command(
 fn execute_focus_intention_command(
     value: Option<String>,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("focus-intention");
     let mut updated = false;
@@ -371,10 +404,11 @@ fn execute_focus_intention_command(
         app.set_focus_intention_for_cli(&value)?;
         updated = true;
     }
-    emit_session_metadata_command_output("focus-intention", updated, &app, output)
+    emit_session_metadata_command_output("focus-intention", updated, &app, output)?;
+    Ok(())
 }
 
-fn execute_task_note_command(value: Option<String>, output: OutputMode) -> Result<(), String> {
+fn execute_task_note_command(value: Option<String>, output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("task-note");
     let mut updated = false;
@@ -382,13 +416,14 @@ fn execute_task_note_command(value: Option<String>, output: OutputMode) -> Resul
         app.set_task_note_for_cli(&value)?;
         updated = true;
     }
-    emit_session_metadata_command_output("task-note", updated, &app, output)
+    emit_session_metadata_command_output("task-note", updated, &app, output)?;
+    Ok(())
 }
 
 fn execute_allowlist_site_add_temporary_command(
     input: String,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("allowlist-site-add-temporary");
     let (added, refreshed) = app.add_temporary_allowlist_for_cli(&input)?;
@@ -418,7 +453,7 @@ fn execute_allowlist_site_add_temporary_command(
 fn execute_session_template_command(
     command: SessionTemplateCommandKind,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("session-template");
     let (action, updated) = match command {
@@ -479,7 +514,7 @@ fn build_session_template_command_output(
     }
 }
 
-fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Result<(), String> {
+fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(profile) = profile {
@@ -513,7 +548,7 @@ fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> Re
     Ok(())
 }
 
-fn execute_theme_command(preset: Option<ThemePreset>, output: OutputMode) -> Result<(), String> {
+fn execute_theme_command(preset: Option<ThemePreset>, output: OutputMode) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(preset) = preset {
@@ -537,7 +572,7 @@ fn execute_theme_command(preset: Option<ThemePreset>, output: OutputMode) -> Res
     Ok(())
 }
 
-fn execute_goal_command(goal: Option<DailyGoalConfig>, output: OutputMode) -> Result<(), String> {
+fn execute_goal_command(goal: Option<DailyGoalConfig>, output: OutputMode) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(goal) = goal {
@@ -565,7 +600,7 @@ fn execute_goal_command(goal: Option<DailyGoalConfig>, output: OutputMode) -> Re
 fn execute_weekly_goal_command(
     goal: Option<WeeklyGoalConfig>,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(goal) = goal {
@@ -593,7 +628,7 @@ fn execute_weekly_goal_command(
 fn execute_monthly_goal_command(
     goal: Option<MonthlyGoalConfig>,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(goal) = goal {
@@ -618,7 +653,7 @@ fn execute_monthly_goal_command(
     Ok(())
 }
 
-fn execute_goal_carry_command(enabled: Option<bool>, output: OutputMode) -> Result<(), String> {
+fn execute_goal_carry_command(enabled: Option<bool>, output: OutputMode) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(enabled) = enabled {
@@ -643,7 +678,7 @@ fn execute_goal_carry_command(enabled: Option<bool>, output: OutputMode) -> Resu
 fn execute_weekly_goal_carry_command(
     enabled: Option<bool>,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(enabled) = enabled {
@@ -668,7 +703,7 @@ fn execute_weekly_goal_carry_command(
 fn execute_monthly_goal_carry_command(
     enabled: Option<bool>,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(enabled) = enabled {
@@ -690,7 +725,7 @@ fn execute_monthly_goal_carry_command(
     Ok(())
 }
 
-fn execute_strict_command(enabled: Option<bool>, output: OutputMode) -> Result<(), String> {
+fn execute_strict_command(enabled: Option<bool>, output: OutputMode) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(enabled) = enabled {
@@ -720,7 +755,7 @@ fn execute_strict_command(enabled: Option<bool>, output: OutputMode) -> Result<(
 fn execute_schedule_command(
     schedule: Option<RecurringScheduleConfig>,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(schedule) = schedule {
@@ -750,7 +785,7 @@ fn execute_schedule_command(
 fn execute_weekday_rules_command(
     rules: Option<Vec<WeekdayProfileRuleConfig>>,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(rules) = rules {
@@ -777,7 +812,7 @@ fn execute_weekday_rules_command(
 fn execute_automation_triggers_command(
     rules: Option<Vec<AutomationTriggerRuleConfig>>,
     output: OutputMode,
-) -> Result<(), String> {
+) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(rules) = rules {
@@ -816,25 +851,28 @@ fn validate_and_normalize_automation_triggers(
     Ok(normalized.normalized().automation_triggers)
 }
 
-fn execute_schedule_delay_command(output: OutputMode) -> Result<(), String> {
+fn execute_schedule_delay_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("schedule-delay");
     let delayed_until = app.schedule_delay_for_cli()?;
-    emit_schedule_delay_command_output("schedule-delay", delayed_until, &app, output)
+    emit_schedule_delay_command_output("schedule-delay", delayed_until, &app, output)?;
+    Ok(())
 }
 
-fn execute_break_glass_trigger_command(output: OutputMode) -> Result<(), String> {
+fn execute_break_glass_trigger_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("break-glass-trigger");
     app.trigger_break_glass_for_cli()?;
-    emit_break_glass_command_output("break-glass-trigger", &app, output)
+    emit_break_glass_command_output("break-glass-trigger", &app, output)?;
+    Ok(())
 }
 
-fn execute_break_glass_cancel_command(output: OutputMode) -> Result<(), String> {
+fn execute_break_glass_cancel_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("break-glass-cancel");
     app.cancel_break_glass_for_cli()?;
-    emit_break_glass_command_output("break-glass-cancel", &app, output)
+    emit_break_glass_command_output("break-glass-cancel", &app, output)?;
+    Ok(())
 }
 
 fn emit_timer_command_output(

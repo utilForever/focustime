@@ -55,6 +55,7 @@ use crate::wakatime::{WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, Wakatim
 mod automation_triggers;
 mod break_glass;
 mod cli_api;
+mod error;
 mod feedback_diagnostics;
 mod history_comparison;
 mod history_dashboard_cache;
@@ -75,6 +76,7 @@ mod temporary_allowlist;
 mod timer_flow;
 mod weekday_rules;
 
+pub(crate) use error::{AppError, AppResult};
 use history_dashboard_cache::HistoryDashboardCache;
 #[cfg(test)]
 pub(crate) use history_dashboard_cache::HistoryDashboardCacheStats;

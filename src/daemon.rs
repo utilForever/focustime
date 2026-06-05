@@ -14,8 +14,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
-use crate::app::App;
+use crate::app::{App, AppResult};
 use crate::config::app_data_path;
+use crate::error::{UserFacingError, UserMessage};
 use crate::timer::{TimerPhase, TimerStatus};
 
 const DAEMON_STATE_FILE_NAME: &str = "daemon-state.toml";
@@ -439,7 +440,7 @@ fn handle_api_request(mut request: Request, app: &mut App, token: &str) -> Resul
                     }),
                 )?,
                 Err(error) => {
-                    respond_error(request, 400, "invalid_request", error)?;
+                    respond_user_message_error(request, 400, error.user_message())?;
                 }
             }
             Ok(false)
@@ -454,7 +455,7 @@ fn handle_api_request(mut request: Request, app: &mut App, token: &str) -> Resul
                         "state": api_timer_state(app)
                     }),
                 )?,
-                Err(error) => respond_error(request, 400, "invalid_request", error)?,
+                Err(error) => respond_user_message_error(request, 400, error.user_message())?,
             }
             Ok(false)
         }
@@ -468,7 +469,7 @@ fn handle_api_request(mut request: Request, app: &mut App, token: &str) -> Resul
                         "state": api_timer_state(app)
                     }),
                 )?,
-                Err(error) => respond_error(request, 400, "invalid_request", error)?,
+                Err(error) => respond_user_message_error(request, 400, error.user_message())?,
             }
             Ok(false)
         }
@@ -481,7 +482,7 @@ fn handle_api_request(mut request: Request, app: &mut App, token: &str) -> Resul
                         "state": api_timer_state(app)
                     }),
                 )?,
-                Err(error) => respond_error(request, 400, "invalid_request", error)?,
+                Err(error) => respond_user_message_error(request, 400, error.user_message())?,
             }
             Ok(false)
         }
@@ -517,22 +518,22 @@ fn handle_api_request(mut request: Request, app: &mut App, token: &str) -> Resul
 fn run_timer_action(
     request: Request,
     app: &mut App,
-    action: fn(&mut App) -> Result<(), String>,
+    action: fn(&mut App) -> AppResult<()>,
 ) -> Result<(), String> {
     match action(app) {
         Ok(()) => respond_ok(request, api_timer_state(app)),
-        Err(error) => respond_error(request, 400, "invalid_request", error),
+        Err(error) => respond_user_message_error(request, 400, error.user_message()),
     }
 }
 
 fn run_workflow_action(
     request: Request,
     app: &mut App,
-    action: fn(&mut App) -> Result<(), String>,
+    action: fn(&mut App) -> AppResult<()>,
 ) -> Result<(), String> {
     match action(app) {
         Ok(()) => respond_ok(request, json!({ "state": api_timer_state(app) })),
-        Err(error) => respond_error(request, 400, "invalid_request", error),
+        Err(error) => respond_user_message_error(request, 400, error.user_message()),
     }
 }
 
@@ -597,16 +598,35 @@ fn respond_ok(request: Request, data: serde_json::Value) -> Result<(), String> {
     respond_json(request, 200, json!({ "ok": true, "data": data }))
 }
 
-fn respond_error(request: Request, status: u16, code: &str, message: String) -> Result<(), String> {
+fn respond_error(
+    request: Request,
+    status: u16,
+    code: &'static str,
+    message: String,
+) -> Result<(), String> {
+    respond_user_message_error(request, status, UserMessage::new(code, message))
+}
+
+fn respond_user_message_error(
+    request: Request,
+    status: u16,
+    message: UserMessage,
+) -> Result<(), String> {
+    let mut error = json!({
+        "code": message.code,
+        "message": message.message,
+    });
+    if let Some(hint) = message.hint
+        && let Some(error) = error.as_object_mut()
+    {
+        error.insert("hint".to_string(), json!(hint));
+    }
     respond_json(
         request,
         status,
         json!({
             "ok": false,
-            "error": {
-                "code": code,
-                "message": message
-            }
+            "error": error
         }),
     )
 }
