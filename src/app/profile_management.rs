@@ -93,10 +93,7 @@ impl App {
             profile_spec.long_break_secs,
             profile_spec.long_break_interval,
         );
-        self.active_focus_task_label = None;
-        self.active_focus_intention = None;
-        self.active_focus_task_note = None;
-        self.active_focus_profile = None;
+        self.clear_focus_runtime();
         self.selected_profile = profile;
         self.profile_selection_index = profile_index(profile);
         self.apply_automation_for_profile(profile);
