@@ -7,6 +7,7 @@ use crate::ui::{
 const DEPRECATION_WARNING_PANEL_LINES: usize = 4;
 const MAX_VISIBLE_DEPRECATION_WARNINGS: usize = DEPRECATION_WARNING_PANEL_LINES - 2;
 
+/// Renders the setup diagnostics panel with blocking and WakaTime health checks.
 pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let outer = centered_rect(72, 68, area);

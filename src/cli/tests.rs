@@ -892,6 +892,7 @@ fn diagnostics_output_includes_deprecation_warnings_field() {
 }
 
 #[test]
+/// Verifies diagnostics JSON/text payloads retain WakaTime runtime status.
 fn diagnostics_output_includes_wakatime_runtime_status() {
     let mut app = App::default();
     app.setup_diagnostics.wakatime_runtime = SetupCheck {

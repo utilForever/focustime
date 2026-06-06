@@ -4876,6 +4876,7 @@ fn poll_wakatime_status_transitions_queued_backlog_to_replaying() {
 }
 
 #[test]
+/// Verifies setup diagnostics expose queued WakaTime heartbeats as a warning.
 fn setup_diagnostics_reports_wakatime_offline_queue_status() {
     let mut app = App::default();
     app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());

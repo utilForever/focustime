@@ -46,6 +46,7 @@ pub(crate) struct SetupDiagnostics {
 }
 
 impl SetupDiagnostics {
+    /// Collects setup diagnostics, including WakaTime queue/retry runtime status.
     pub(super) fn collect(
         blocker: &SiteBlocker,
         deprecation_warnings: Vec<String>,
@@ -184,6 +185,7 @@ fn command_backend_check(blocker: &SiteBlocker) -> SetupCheck {
     }
 }
 
+/// Converts the current WakaTime runtime state into a user-facing setup check.
 fn wakatime_runtime_check(
     wakatime_integration_enabled: bool,
     state: &WakatimeRuntimeState,
@@ -218,6 +220,7 @@ fn wakatime_runtime_check(
     }
 }
 
+/// Returns the suffix needed to pluralize heartbeat status messages.
 fn plural_suffix(count: usize) -> &'static str {
     if count == 1 { "" } else { "s" }
 }

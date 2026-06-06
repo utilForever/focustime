@@ -134,6 +134,7 @@ fn config_health_severity_id(severity: crate::config::ConfigHealthSeverity) -> &
     }
 }
 
+/// Prints setup diagnostics checks, including WakaTime config and runtime status.
 pub(in crate::cli) fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutput) {
     println!("Hosts file: {}", payload.hosts_file_path);
     println!(
@@ -160,6 +161,7 @@ fn print_diagnostics_check(label: &str, check: &SetupCheckOutput) {
     println!("{label}: {} ({})", check.message, check.level);
 }
 
+/// Builds the serializable diagnostics payload used by text and JSON output.
 pub(in crate::cli) fn build_diagnostics_command_output(
     diagnostics: &SetupDiagnostics,
 ) -> DiagnosticsCommandOutput {
