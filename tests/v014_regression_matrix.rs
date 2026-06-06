@@ -176,9 +176,7 @@ fn v014_removed_cli_surfaces_stay_retired_with_json_usage_errors() {
 #[test]
 fn v014_config_migration_preview_and_apply_cover_merged_profile_presets() {
     let env = TestEnv::new("config-migration");
-    write_config(
-        &env,
-        r#"
+    let original_config = r#"
 schema_version = 1
 selected_profile = "deep_work"
 
@@ -203,8 +201,8 @@ strict_mode = false
 [profile_automation.deep_work.notifications]
 enabled = true
 sound = true
-"#,
-    );
+"#;
+    write_config(&env, original_config);
 
     let preview = env.run(&["--config-migrate", "--json"]);
     assert_eq!(preview.status.code(), Some(0));
@@ -229,10 +227,9 @@ sound = true
             .iter()
             .any(|finding| finding["code"] == "config.legacy_profile_token")
     );
-    assert!(
-        fs::read_to_string(env.config_path())
-            .expect("config should still exist")
-            .contains("deep_work"),
+    let preview_config = fs::read_to_string(env.config_path()).expect("config should still exist");
+    assert_eq!(
+        preview_config, original_config,
         "preview mode must not rewrite config.toml"
     );
 
