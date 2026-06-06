@@ -748,6 +748,7 @@ impl App {
             &blocker,
             setup_deprecation_warnings.clone(),
             feature_flags.integrations.is_enabled("wakatime"),
+            integrations.wakatime_runtime_state(),
         );
         let history_dashboard_selected_card = history_dashboard
             .card_order
