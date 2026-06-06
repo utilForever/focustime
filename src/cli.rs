@@ -1039,6 +1039,7 @@ struct DiagnosticsCommandOutput {
     blocking_permissions: SetupCheckOutput,
     hosts_write_capability: SetupCheckOutput,
     wakatime_config: SetupCheckOutput,
+    wakatime_runtime: SetupCheckOutput,
     deprecation_warnings: Vec<String>,
 }
 

@@ -738,6 +738,9 @@ The diagnostics screen reports:
 - blocking preview summary and backend target details
 - remediation guidance when hosts or command backend readiness is insufficient
 - WakaTime config status (`~/.wakatime.cfg` and `api_key` availability)
+- WakaTime runtime queue/retry status (`not configured`, `idle`,
+  `tracking`, `sending`, `queued`, `replaying`, `retrying`, `error`, and
+  related pending counts/backoff details)
 
 Blocking backend policy is deterministic:
 

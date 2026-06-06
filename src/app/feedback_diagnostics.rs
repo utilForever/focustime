@@ -134,13 +134,16 @@ impl App {
         );
     }
 
+    /// Refreshes setup diagnostics and preserves the current WakaTime runtime state.
     pub(super) fn refresh_setup_diagnostics(&mut self) {
         let deprecation_warnings =
             crate::app::setup_deprecation_warnings(&self.config_deprecation_warnings, &self.stats);
+        let wakatime_runtime_state = self.wakatime_runtime_state();
         self.setup_diagnostics = SetupDiagnostics::collect(
             &self.blocker,
             deprecation_warnings,
             self.feature_flags.integrations.is_enabled("wakatime"),
+            wakatime_runtime_state,
         );
         self.refresh_blocking_preview();
     }

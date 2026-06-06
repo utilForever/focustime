@@ -134,6 +134,7 @@ fn config_health_severity_id(severity: crate::config::ConfigHealthSeverity) -> &
     }
 }
 
+/// Prints setup diagnostics checks, including WakaTime config and runtime status.
 pub(in crate::cli) fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutput) {
     println!("Hosts file: {}", payload.hosts_file_path);
     println!(
@@ -145,6 +146,7 @@ pub(in crate::cli) fn print_diagnostics_command_output(payload: &DiagnosticsComm
     print_diagnostics_check("Blocking permissions", &payload.blocking_permissions);
     print_diagnostics_check("Hosts write capability", &payload.hosts_write_capability);
     print_diagnostics_check("WakaTime config", &payload.wakatime_config);
+    print_diagnostics_check("WakaTime runtime", &payload.wakatime_runtime);
     if payload.deprecation_warnings.is_empty() {
         println!("Deprecation warnings: none");
     } else {
@@ -159,6 +161,7 @@ fn print_diagnostics_check(label: &str, check: &SetupCheckOutput) {
     println!("{label}: {} ({})", check.message, check.level);
 }
 
+/// Builds the serializable diagnostics payload used by text and JSON output.
 pub(in crate::cli) fn build_diagnostics_command_output(
     diagnostics: &SetupDiagnostics,
 ) -> DiagnosticsCommandOutput {
@@ -171,6 +174,7 @@ pub(in crate::cli) fn build_diagnostics_command_output(
         blocking_permissions: setup_check_output(&diagnostics.blocking_permissions),
         hosts_write_capability: setup_check_output(&diagnostics.hosts_write_capability),
         wakatime_config: setup_check_output(&diagnostics.wakatime_config),
+        wakatime_runtime: setup_check_output(&diagnostics.wakatime_runtime),
         deprecation_warnings: diagnostics.deprecation_warnings.clone(),
     }
 }
