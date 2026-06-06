@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-06-06
+
+### Added
+
+- **WakaTime runtime diagnostics (#426):** added setup/CLI diagnostics for runtime queue and retry states, including pending heartbeat counts, replay/backoff status, and error visibility.
+- **Focused v0.14 regression matrix (#427):** added a release-readiness regression matrix and dedicated gate for merged, deprecated, and removed v0.14.x feature paths.
+
+### Changed
+
+- **Dependency maintenance (#424):** bumped `ratatui` from `0.30.0` to `0.30.1`.
+
+### Fixed
+
+- **Session recovery hardening (#425):** made interrupted timer transition recovery deterministic and wrapped recovery snapshots in an integrity-checked persistence envelope to avoid restoring corrupted or partial state.
+- **Removed CLI option guidance (#427):** improved errors for retired command surfaces so removed options point users to supported replacement workflows.
+
 ## [0.14.4] - 2026-06-05
 
 ### Added
@@ -412,7 +428,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.14.4...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/utilForever/focustime/compare/v0.14.4...v0.15.0
 [0.14.4]: https://github.com/utilForever/focustime/compare/v0.14.3...v0.14.4
 [0.14.3]: https://github.com/utilForever/focustime/compare/v0.14.2...v0.14.3
 [0.14.2]: https://github.com/utilForever/focustime/compare/v0.14.1...v0.14.2
