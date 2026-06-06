@@ -156,18 +156,19 @@ fn v014_removed_cli_surfaces_stay_retired_with_json_usage_errors() {
         assert_eq!(payload["ok"], false);
         assert_eq!(payload["error"]["kind"], "usage");
         assert_eq!(payload["error"]["exit_code"], 2);
+        let error_message = payload["error"]["message"]
+            .as_str()
+            .expect("error message should be a string");
         assert!(
-            payload["error"]["message"]
-                .as_str()
-                .expect("error message should be a string")
-                .contains(case.removed_flag),
+            error_message.contains(case.removed_flag),
             "removed flag {} should be named in its error",
             case.removed_flag
         );
         assert!(
-            !case.replacement_hint.trim().is_empty(),
-            "matrix case {} should document release-note replacement guidance",
-            case.removed_flag
+            error_message.contains(case.replacement_hint),
+            "removed flag {} should include replacement guidance `{}`",
+            case.removed_flag,
+            case.replacement_hint
         );
     }
 }
