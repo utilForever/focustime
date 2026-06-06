@@ -196,10 +196,22 @@ impl InProgressSessionSnapshot {
         }
 
         let phase_duration_secs = phase_duration_secs(timer, self.phase());
-        if self.remaining_secs == 0 || self.remaining_secs > phase_duration_secs {
+        if self.remaining_secs > phase_duration_secs {
             return Err(format!(
                 "saved remaining time {}s is out of range for {} phase",
                 self.remaining_secs,
+                self.phase().label()
+            ));
+        }
+        if self.remaining_secs == 0 && self.status != RecoveryTimerStatus::Running {
+            return Err(format!(
+                "saved remaining time 0s is only recoverable for running {} phase",
+                self.phase().label()
+            ));
+        }
+        if self.remaining_secs == 0 && self.captured_at_epoch_secs.is_none() {
+            return Err(format!(
+                "saved remaining time 0s is missing a capture timestamp for {} phase",
                 self.phase().label()
             ));
         }
@@ -223,6 +235,9 @@ impl InProgressSessionSnapshot {
         if self.status != RecoveryTimerStatus::Running {
             return self.clone();
         }
+        if self.remaining_secs == 0 {
+            return self.advance_completed_running_phase(timer);
+        }
         let Some(captured_at_epoch_secs) = self.captured_at_epoch_secs else {
             return self.clone();
         };
@@ -241,6 +256,11 @@ impl InProgressSessionSnapshot {
             return reconciled;
         }
 
+        reconciled.advance_completed_running_phase(timer)
+    }
+
+    fn advance_completed_running_phase(&self, timer: &TimerState) -> Self {
+        let mut reconciled = self.clone();
         match reconciled.phase() {
             TimerPhase::Focus => {
                 reconciled.pomodoros_completed = reconciled.pomodoros_completed.saturating_add(1);
@@ -666,6 +686,48 @@ mod tests {
         assert!(reconciled.focus_intention.is_none());
         assert!(reconciled.task_note.is_none());
         assert_eq!(reconciled.selected_task_label.as_deref(), Some("Docs"));
+    }
+
+    #[test]
+    fn running_snapshot_reconciliation_advances_zero_remaining_transition_snapshot() {
+        let timer = TimerState::with_profile(60, 30, 90, 2);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::ShortBreak,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 0,
+            pomodoros_completed: 1,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: None,
+            task_note: None,
+            selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: Some(100),
+        };
+
+        assert!(snapshot.validate_for_timer(&timer).is_ok());
+        let reconciled = snapshot.reconcile_elapsed_for_timer_at_epoch_secs(&timer, 100);
+
+        assert_eq!(reconciled.phase, RecoveryTimerPhase::Focus);
+        assert_eq!(reconciled.status, RecoveryTimerStatus::Idle);
+        assert_eq!(reconciled.remaining_secs, 60);
+        assert_eq!(reconciled.pomodoros_completed, 1);
+    }
+
+    #[test]
+    fn snapshot_validation_rejects_zero_remaining_paused_snapshot() {
+        let timer = TimerState::with_profile(60, 30, 90, 2);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Paused,
+            remaining_secs: 0,
+            pomodoros_completed: 0,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Docs".to_string()),
+            task_note: Some("Docs".to_string()),
+            selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: Some(100),
+        };
+
+        assert!(snapshot.validate_for_timer(&timer).is_err());
     }
 
     #[test]
