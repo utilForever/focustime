@@ -84,6 +84,15 @@ The project uses Conventional Commit-style release commits:
 - Update [CHANGELOG.md](CHANGELOG.md) with release notes before creating a release commit/tag.
 
 Before preparing a release commit, make sure all CI jobs pass for the release changes.
+For cleanup, deprecation, migration, or facade/submodule work, also run the
+focused v0.14.x regression gate:
+
+```sh
+cargo test --test v014_regression_matrix
+```
+
+Keep [REGRESSION_MATRIX.md](REGRESSION_MATRIX.md) aligned with any feature path
+that is merged, deprecated, or removed during release preparation.
 
 To publish a release artifact set, create and push a `v*` tag (for example, `v0.14.4`).
 The release workflow will:
