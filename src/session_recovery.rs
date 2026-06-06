@@ -9,6 +9,7 @@ use std::{fs, path::Path};
 #[cfg(test)]
 use std::cell::RefCell;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -24,6 +25,9 @@ use crate::config::app_data_path;
 const RECOVERY_FILE_NAME: &str = "session-recovery.toml";
 #[cfg(not(test))]
 const WORKFLOW_STATE_FILE_NAME: &str = "workflow-state.toml";
+
+const RECOVERY_SNAPSHOT_SCHEMA_VERSION: u16 = 2;
+const RECOVERY_CHECKSUM_ALGORITHM: &str = "fnv1a64-toml-v1";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -124,6 +128,14 @@ pub(crate) struct WorkflowTemporaryAllowlistEntrySnapshot {
     pub(crate) expires_at_epoch_secs: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct PersistedRecoverySnapshot<T> {
+    schema_version: u16,
+    checksum_algorithm: String,
+    checksum: String,
+    snapshot: T,
+}
+
 impl InProgressSessionSnapshot {
     #[allow(dead_code)]
     pub(crate) fn from_timer_state_with_metadata(
@@ -196,10 +208,22 @@ impl InProgressSessionSnapshot {
         }
 
         let phase_duration_secs = phase_duration_secs(timer, self.phase());
-        if self.remaining_secs == 0 || self.remaining_secs > phase_duration_secs {
+        if self.remaining_secs > phase_duration_secs {
             return Err(format!(
                 "saved remaining time {}s is out of range for {} phase",
                 self.remaining_secs,
+                self.phase().label()
+            ));
+        }
+        if self.remaining_secs == 0 && self.status != RecoveryTimerStatus::Running {
+            return Err(format!(
+                "saved remaining time 0s is only recoverable for running {} phase",
+                self.phase().label()
+            ));
+        }
+        if self.remaining_secs == 0 && self.captured_at_epoch_secs.is_none() {
+            return Err(format!(
+                "saved remaining time 0s is missing a capture timestamp for {} phase",
                 self.phase().label()
             ));
         }
@@ -223,6 +247,9 @@ impl InProgressSessionSnapshot {
         if self.status != RecoveryTimerStatus::Running {
             return self.clone();
         }
+        if self.remaining_secs == 0 {
+            return self.advance_completed_running_phase(timer);
+        }
         let Some(captured_at_epoch_secs) = self.captured_at_epoch_secs else {
             return self.clone();
         };
@@ -241,6 +268,11 @@ impl InProgressSessionSnapshot {
             return reconciled;
         }
 
+        reconciled.advance_completed_running_phase(timer)
+    }
+
+    fn advance_completed_running_phase(&self, timer: &TimerState) -> Self {
+        let mut reconciled = self.clone();
         match reconciled.phase() {
             TimerPhase::Focus => {
                 reconciled.pomodoros_completed = reconciled.pomodoros_completed.saturating_add(1);
@@ -264,61 +296,43 @@ impl InProgressSessionSnapshot {
 #[cfg(not(test))]
 pub(crate) fn load() -> Result<Option<InProgressSessionSnapshot>, String> {
     let path = recovery_path().map_err(|e| format!("session recovery path failed: {e}"))?;
-    match fs::read_to_string(path) {
-        Ok(content) => toml::from_str(&content)
-            .map(Some)
-            .map_err(|e| format!("session recovery parse failed: {e}")),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(format!("session recovery read failed: {e}")),
-    }
+    load_recovery_file(
+        &path,
+        "session recovery",
+        parse_in_progress_session_snapshot,
+    )
 }
 
 #[cfg(not(test))]
 pub(crate) fn save(snapshot: &InProgressSessionSnapshot) -> io::Result<()> {
     let path = recovery_path()?;
-    let content = toml::to_string_pretty(snapshot)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let content = serialize_recovery_snapshot(snapshot)?;
     write_atomic_text(&path, &content)
 }
 
 #[cfg(not(test))]
 pub(crate) fn clear() -> io::Result<()> {
     let path = recovery_path()?;
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
+    remove_recovery_file_and_tmp(&path)
 }
 
 #[cfg(not(test))]
 pub(crate) fn load_workflow_state() -> Result<Option<WorkflowStateSnapshot>, String> {
     let path = workflow_state_path().map_err(|e| format!("workflow state path failed: {e}"))?;
-    match fs::read_to_string(path) {
-        Ok(content) => toml::from_str(&content)
-            .map(Some)
-            .map_err(|e| format!("workflow state parse failed: {e}")),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(format!("workflow state read failed: {e}")),
-    }
+    load_recovery_file(&path, "workflow state", parse_workflow_state_snapshot)
 }
 
 #[cfg(not(test))]
 pub(crate) fn save_workflow_state(snapshot: &WorkflowStateSnapshot) -> io::Result<()> {
     let path = workflow_state_path()?;
-    let content = toml::to_string_pretty(snapshot)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let content = serialize_recovery_snapshot(snapshot)?;
     write_atomic_text(&path, &content)
 }
 
 #[cfg(not(test))]
 pub(crate) fn clear_workflow_state() -> io::Result<()> {
     let path = workflow_state_path()?;
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
+    remove_recovery_file_and_tmp(&path)
 }
 
 #[cfg(not(test))]
@@ -347,7 +361,7 @@ fn write_atomic_text(path: &Path, content: &str) -> io::Result<()> {
         fs::create_dir_all(parent)?;
     }
 
-    let tmp_path = path.with_extension("toml.tmp");
+    let tmp_path = recovery_tmp_path(path);
     fs::write(&tmp_path, content)?;
 
     #[cfg(target_os = "windows")]
@@ -375,6 +389,158 @@ fn write_atomic_text(path: &Path, content: &str) -> io::Result<()> {
             }
         }
     }
+}
+
+#[cfg(not(test))]
+fn load_recovery_file<T>(
+    path: &Path,
+    artifact_label: &str,
+    parse: fn(&str) -> Result<T, String>,
+) -> Result<Option<T>, String>
+where
+    T: Clone,
+{
+    let tmp_path = recovery_tmp_path(path);
+    match read_and_parse_recovery_file(path, artifact_label, parse) {
+        Ok(Some(snapshot)) => {
+            let _ = fs::remove_file(&tmp_path);
+            Ok(Some(snapshot))
+        }
+        Ok(None) => read_and_parse_recovery_file(&tmp_path, artifact_label, parse),
+        Err(primary_error) => {
+            match read_and_parse_recovery_file(&tmp_path, artifact_label, parse) {
+                Ok(Some(snapshot)) => Ok(Some(snapshot)),
+                Ok(None) => Err(primary_error),
+                Err(tmp_error) => Err(format!("{primary_error}; fallback tmp failed: {tmp_error}")),
+            }
+        }
+    }
+}
+
+#[cfg(not(test))]
+fn read_and_parse_recovery_file<T>(
+    path: &Path,
+    artifact_label: &str,
+    parse: fn(&str) -> Result<T, String>,
+) -> Result<Option<T>, String> {
+    match fs::read_to_string(path) {
+        Ok(content) => parse(&content).map(Some),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("{artifact_label} read failed: {e}")),
+    }
+}
+
+#[cfg(not(test))]
+fn remove_recovery_file_and_tmp(path: &Path) -> io::Result<()> {
+    remove_file_if_exists(path)?;
+    remove_file_if_exists(&recovery_tmp_path(path))
+}
+
+#[cfg(not(test))]
+fn remove_file_if_exists(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+#[cfg(not(test))]
+fn recovery_tmp_path(path: &Path) -> std::path::PathBuf {
+    path.with_extension("toml.tmp")
+}
+
+fn parse_in_progress_session_snapshot(content: &str) -> Result<InProgressSessionSnapshot, String> {
+    parse_recovery_snapshot(content, "session recovery")
+}
+
+fn parse_workflow_state_snapshot(content: &str) -> Result<WorkflowStateSnapshot, String> {
+    parse_recovery_snapshot(content, "workflow state")
+}
+
+fn parse_recovery_snapshot<T>(content: &str, artifact_label: &str) -> Result<T, String>
+where
+    T: DeserializeOwned + Serialize,
+{
+    if content.trim().is_empty() {
+        return Err(format!("{artifact_label} is empty"));
+    }
+
+    match toml::from_str::<PersistedRecoverySnapshot<T>>(content) {
+        Ok(persisted) => validate_persisted_recovery_snapshot(persisted, artifact_label),
+        Err(envelope_error) if looks_like_recovery_envelope(content) => Err(format!(
+            "{artifact_label} integrity envelope parse failed: {envelope_error}"
+        )),
+        Err(_) => toml::from_str(content)
+            .map_err(|error| format!("{artifact_label} parse failed: {error}")),
+    }
+}
+
+fn validate_persisted_recovery_snapshot<T>(
+    persisted: PersistedRecoverySnapshot<T>,
+    artifact_label: &str,
+) -> Result<T, String>
+where
+    T: Serialize,
+{
+    if persisted.schema_version != RECOVERY_SNAPSHOT_SCHEMA_VERSION {
+        return Err(format!(
+            "{artifact_label} schema version {} is unsupported",
+            persisted.schema_version
+        ));
+    }
+    if persisted.checksum_algorithm != RECOVERY_CHECKSUM_ALGORITHM {
+        return Err(format!(
+            "{artifact_label} checksum algorithm '{}' is unsupported",
+            persisted.checksum_algorithm
+        ));
+    }
+
+    let snapshot_payload = canonical_snapshot_payload(&persisted.snapshot)
+        .map_err(|error| format!("{artifact_label} payload serialization failed: {error}"))?;
+    let expected_checksum = integrity_checksum(&snapshot_payload);
+    if persisted.checksum != expected_checksum {
+        return Err(format!("{artifact_label} integrity check failed"));
+    }
+
+    Ok(persisted.snapshot)
+}
+
+fn serialize_recovery_snapshot<T>(snapshot: &T) -> io::Result<String>
+where
+    T: Clone + Serialize,
+{
+    let snapshot_payload = canonical_snapshot_payload(snapshot)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let persisted = PersistedRecoverySnapshot {
+        schema_version: RECOVERY_SNAPSHOT_SCHEMA_VERSION,
+        checksum_algorithm: RECOVERY_CHECKSUM_ALGORITHM.to_string(),
+        checksum: integrity_checksum(&snapshot_payload),
+        snapshot: snapshot.clone(),
+    };
+    toml::to_string_pretty(&persisted).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+fn canonical_snapshot_payload<T>(snapshot: &T) -> Result<String, toml::ser::Error>
+where
+    T: Serialize,
+{
+    toml::to_string_pretty(snapshot)
+}
+
+fn looks_like_recovery_envelope(content: &str) -> bool {
+    content.contains("schema_version")
+        || content.contains("checksum")
+        || content.contains("[snapshot]")
+}
+
+fn integrity_checksum(content: &str) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for byte in content.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
 }
 
 fn phase_duration_secs(timer: &TimerState, phase: TimerPhase) -> u64 {
@@ -669,6 +835,48 @@ mod tests {
     }
 
     #[test]
+    fn running_snapshot_reconciliation_advances_zero_remaining_transition_snapshot() {
+        let timer = TimerState::with_profile(60, 30, 90, 2);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::ShortBreak,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 0,
+            pomodoros_completed: 1,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: None,
+            task_note: None,
+            selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: Some(100),
+        };
+
+        assert!(snapshot.validate_for_timer(&timer).is_ok());
+        let reconciled = snapshot.reconcile_elapsed_for_timer_at_epoch_secs(&timer, 100);
+
+        assert_eq!(reconciled.phase, RecoveryTimerPhase::Focus);
+        assert_eq!(reconciled.status, RecoveryTimerStatus::Idle);
+        assert_eq!(reconciled.remaining_secs, 60);
+        assert_eq!(reconciled.pomodoros_completed, 1);
+    }
+
+    #[test]
+    fn snapshot_validation_rejects_zero_remaining_paused_snapshot() {
+        let timer = TimerState::with_profile(60, 30, 90, 2);
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Paused,
+            remaining_secs: 0,
+            pomodoros_completed: 0,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Docs".to_string()),
+            task_note: Some("Docs".to_string()),
+            selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: Some(100),
+        };
+
+        assert!(snapshot.validate_for_timer(&timer).is_err());
+    }
+
+    #[test]
     fn paused_snapshot_reconciliation_does_not_change_state() {
         let timer = TimerState::with_profile(60, 30, 90, 4);
         let snapshot = InProgressSessionSnapshot {
@@ -705,6 +913,69 @@ selected_profile = "classic"
         .expect("legacy payload should deserialize");
 
         assert!(snapshot.captured_at_epoch_secs.is_none());
+    }
+
+    #[test]
+    fn in_progress_snapshot_round_trips_with_integrity_envelope() {
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 120,
+            pomodoros_completed: 2,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Write docs".to_string()),
+            task_note: Some("API section".to_string()),
+            selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: Some(1_700_000_000),
+        };
+
+        let content = serialize_recovery_snapshot(&snapshot)
+            .expect("snapshot should serialize with envelope");
+        assert!(content.contains("schema_version = 2"));
+        assert!(content.contains("[snapshot]"));
+
+        let parsed =
+            parse_in_progress_session_snapshot(&content).expect("enveloped snapshot should parse");
+        assert_eq!(parsed, snapshot);
+    }
+
+    #[test]
+    fn in_progress_snapshot_rejects_checksum_mismatch() {
+        let snapshot = InProgressSessionSnapshot {
+            phase: RecoveryTimerPhase::Focus,
+            status: RecoveryTimerStatus::Running,
+            remaining_secs: 120,
+            pomodoros_completed: 2,
+            selected_task_label: Some("Docs".to_string()),
+            focus_intention: Some("Write docs".to_string()),
+            task_note: Some("API section".to_string()),
+            selected_profile: ProfileId::Classic,
+            captured_at_epoch_secs: Some(1_700_000_000),
+        };
+        let content = serialize_recovery_snapshot(&snapshot)
+            .expect("snapshot should serialize with envelope");
+        let corrupted = content.replace("remaining_secs = 120", "remaining_secs = 119");
+
+        let error = parse_in_progress_session_snapshot(&corrupted)
+            .expect_err("corrupted snapshot should fail integrity check");
+
+        assert!(error.contains("integrity check failed"));
+    }
+
+    #[test]
+    fn workflow_state_partial_envelope_does_not_fall_back_to_empty_legacy_state() {
+        let content = r#"
+schema_version = 2
+checksum_algorithm = "fnv1a64-toml-v1"
+checksum = "deadbeef"
+
+[snapshot]
+"#;
+
+        let error = parse_workflow_state_snapshot(content)
+            .expect_err("partial workflow envelope should fail integrity parsing");
+
+        assert!(error.contains("integrity"));
     }
 
     #[test]
