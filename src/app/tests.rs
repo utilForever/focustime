@@ -4876,6 +4876,28 @@ fn poll_wakatime_status_transitions_queued_backlog_to_replaying() {
 }
 
 #[test]
+fn setup_diagnostics_reports_wakatime_offline_queue_status() {
+    let mut app = App::default();
+    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
+    app.wakatime_tracker_mut_for_tests()
+        .expect("wakatime tracker should be available")
+        .set_pending_heartbeats_for_tests(3);
+
+    app.refresh_setup_diagnostics();
+
+    assert_eq!(
+        app.setup_diagnostics.wakatime_runtime.level,
+        SetupCheckLevel::Warning
+    );
+    assert!(
+        app.setup_diagnostics
+            .wakatime_runtime
+            .message
+            .contains("Queued: 3 WakaTime heartbeats pending replay")
+    );
+}
+
+#[test]
 fn focus_does_not_start_without_selected_task_label() {
     let mut app = App::default();
 
