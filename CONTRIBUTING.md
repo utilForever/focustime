@@ -94,7 +94,7 @@ cargo test --test v014_regression_matrix
 Keep [REGRESSION_MATRIX.md](REGRESSION_MATRIX.md) aligned with any feature path
 that is merged, deprecated, or removed during release preparation.
 
-To publish a release artifact set, create and push a `v*` tag (for example, `v0.14.4`).
+To publish a release artifact set, create and push a `v*` tag (for example, `v0.15.0`).
 The release workflow will:
 
 - run `cargo check --all --locked`, `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and `cargo test --all --locked`
