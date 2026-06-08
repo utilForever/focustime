@@ -311,6 +311,33 @@ Milestone policy:
 - **Unreleased/main branch:** config migration assistant + doctor commands are available (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
+### v0.15.x cleanup roadmap
+
+The v0.15.x line continues the cleanup work started in v0.14.x by reducing
+overlapping command and config paths while keeping supported behavior available
+through canonical surfaces. The guiding rule is that a path is only retired when
+release notes and diagnostics name the replacement behavior.
+
+Roadmap direction:
+
+- Keep profile-oriented timer settings as the primary timer configuration path.
+- Keep one focus-entry runtime path for scheduled, templated, and manual starts.
+- Keep config migration and doctor commands as the supported way to inspect and
+  repair stale configuration.
+- Keep local backup/restore workflows as the supported portable recovery path.
+- Keep cleanup candidates tracked in the feature inventory before they are
+  merged or retired.
+
+Early deprecation notices:
+
+| Deprecated or overlapping path | Supported replacement behavior |
+| --- | --- |
+| Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
+| Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
+| Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
+| Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
+| Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
+
 ### Low-value feature retirements
 
 Retired low-value command surfaces and replacements:
