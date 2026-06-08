@@ -1,7 +1,7 @@
-# v0.14.x Regression Matrix
+# Cleanup Regression Matrix
 
 This matrix protects feature paths that were merged, deprecated, or removed during
-the v0.14.x cleanup cycle. The focused gate is:
+the v0.14.x and v0.15.x cleanup cycles. The focused gate is:
 
 ```sh
 cargo test --test v014_regression_matrix
@@ -22,6 +22,7 @@ the normal release readiness command set.
 | v0.14.3 | Retired encrypted sync flags stay unavailable and point users to local backup/restore guidance in release notes. | Removed command | `v014_removed_cli_surfaces_stay_retired_with_json_usage_errors` |
 | v0.14.4 | Facade/submodule splits preserve public command, config, and runtime contracts. | Command/config/runtime | `cargo test --all` plus the focused matrix gate |
 | v0.15.0 | Config migration previews preserve exact output and removed command guidance remains targeted to supported replacements. | Command/config | `v014_config_migration_preview_and_apply_cover_merged_profile_presets` plus `v014_removed_cli_surfaces_stay_retired_with_json_usage_errors` |
+| v0.15.x | Cleanup roadmap documentation names supported replacements before additional overlapping paths are merged or retired. | Release docs | README roadmap, CHANGELOG entry, and contributor release checklist review plus the focused matrix gate when behavior changes |
 
 ## Release Readiness
 
@@ -41,5 +42,8 @@ cargo clippy --all-targets -- -D warnings
 cargo test --all
 ```
 
-When a v0.14.x feature is merged, deprecated, or removed, add a row here and add
-or update the matching focused test before preparing the release commit.
+When a v0.14.x or v0.15.x feature is merged, deprecated, or removed, add a row
+here and add or update the matching focused test before preparing the release
+commit. Documentation-only roadmap updates should still keep README,
+CHANGELOG.md, CONTRIBUTING.md, and this matrix aligned with supported
+replacement behavior.
