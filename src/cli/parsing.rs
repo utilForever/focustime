@@ -124,29 +124,48 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
     Ok((show_help, output))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct RemovedOptionGuidance {
+    pub(super) summary: &'static str,
+    pub(super) replacement: &'static str,
+}
+
+pub(super) fn first_removed_option_guidance(
+    tokens: &[ParsedToken],
+) -> Option<RemovedOptionGuidance> {
+    tokens.iter().find_map(|token| match token {
+        ParsedToken::UnknownOption(option) => removed_option_replacement_guidance(option),
+        _ => None,
+    })
+}
+
 fn unknown_option_message(option: &str) -> String {
     let guidance = removed_option_replacement_guidance(option);
     match guidance {
-        Some(guidance) => format!("Unknown option `{option}`. {guidance}"),
+        Some(guidance) => format!("Unknown option `{option}`. {}", guidance.summary),
         None => format!("Unknown option `{option}`."),
     }
 }
 
-fn removed_option_replacement_guidance(option: &str) -> Option<&'static str> {
+fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuidance> {
     let flag = option.split('=').next().unwrap_or(option);
     match flag {
-        "--migrate" | "--dry-run" => Some(
-            "This migration-window flag was removed; use `--config-migrate` to preview config migrations.",
-        ),
-        "--sync-backup" => Some(
-            "Encrypted sync backups were removed; use `--backup` for local portable recovery workflows.",
-        ),
-        "--sync-restore" => Some(
-            "Encrypted sync restores were removed; use `--restore` for local portable recovery workflows.",
-        ),
-        "--sync-passphrase" => {
-            Some("Encrypted sync passphrases were removed and have no direct replacement.")
-        }
+        "--migrate" | "--dry-run" => Some(RemovedOptionGuidance {
+            summary: "This migration-window flag was removed.",
+            replacement: "Use `--config-migrate` to preview config migrations or `--config-migrate-apply` to write migrated config with a backup.",
+        }),
+        "--sync-backup" => Some(RemovedOptionGuidance {
+            summary: "Encrypted sync backups were removed.",
+            replacement: "Use `--backup` for local portable recovery workflows.",
+        }),
+        "--sync-restore" => Some(RemovedOptionGuidance {
+            summary: "Encrypted sync restores were removed.",
+            replacement: "Use `--restore` for local portable recovery workflows.",
+        }),
+        "--sync-passphrase" => Some(RemovedOptionGuidance {
+            summary: "Encrypted sync passphrases were removed.",
+            replacement: "no direct replacement is available because encrypted sync/backups are no longer supported.",
+        }),
         _ => None,
     }
 }
