@@ -209,15 +209,16 @@ cargo run -- --break-glass-trigger --json
 # Cancel a pending break-glass confirmation
 cargo run -- --break-glass-cancel
 
-# Show setup diagnostics checks (backend selection, hosts/command readiness, WakaTime)
+# Show the consolidated diagnostics workflow:
+# setup checks, config health, and config migration guidance
 cargo run -- --diagnostics
 cargo run -- --diagnostics --json
 
-# Run config doctor checks (invalid/conflicting/stale config with remediation)
+# Run only the config-health section (invalid/conflicting/stale config remediation)
 cargo run -- --config-doctor
 cargo run -- --config-doctor --json
 
-# Preview/apply config migration assistant changes for deprecated/renamed keys
+# Preview/apply only config migration assistant changes for deprecated/renamed keys
 cargo run -- --config-migrate
 cargo run -- --config-migrate --json
 # Apply mode writes migrated config.toml and creates a backup first
@@ -294,8 +295,11 @@ Set `enabled = []` to disable all built-in integrations.
 
 ### Legacy compatibility deprecation milestones
 
-`focustime --diagnostics`, `focustime --config-doctor`, and the TUI Setup
-Diagnostics screen report targeted deprecation warnings when legacy
+`focustime --diagnostics` is the canonical diagnostics workflow for setup
+checks, config health, and migration guidance. `focustime --config-doctor`,
+`focustime --config-migrate`, and `focustime --config-migrate-apply` remain
+available when you need to run only one config section. The TUI Setup
+Diagnostics screen reports targeted setup deprecation warnings when legacy
 compatibility fields are detected.
 
 | Legacy field/path                                                                    | Canonical replacement                                                                                                                             | Removal milestone |
@@ -308,7 +312,7 @@ Milestone policy:
 
 - **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
-- **Unreleased/main branch:** config migration assistant + doctor commands are available (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
+- **Unreleased/main branch:** consolidated diagnostics are available through `--diagnostics`; config migration assistant + doctor commands remain available for focused config checks (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
 ### v0.15.x cleanup roadmap
@@ -322,8 +326,9 @@ Roadmap direction:
 
 - Keep profile-oriented timer settings as the primary timer configuration path.
 - Keep one focus-entry runtime path for scheduled, templated, and manual starts.
-- Keep config migration and doctor commands as the supported way to inspect and
-  repair stale configuration.
+- Keep `--diagnostics` as the supported way to inspect setup health, config
+  health, and migration guidance together; keep config migration and doctor
+  commands for focused repair workflows.
 - Keep local backup/restore workflows as the supported portable recovery path.
 - Keep cleanup candidates tracked in the feature inventory before they are
   merged or retired.
@@ -769,6 +774,14 @@ The diagnostics screen reports:
 - WakaTime runtime queue/retry status (`not configured`, `idle`,
   `tracking`, `sending`, `queued`, `replaying`, `retrying`, `error`, and
   related pending counts/backoff details)
+
+The CLI diagnostics command adds config health findings and migration preview
+guidance to the same workflow:
+
+```sh
+focustime --diagnostics
+focustime --diagnostics --json
+```
 
 Blocking backend policy is deterministic:
 
