@@ -33,10 +33,10 @@
     ]
   },
   "summary": {
-    "total_features": 27,
+    "total_features": 28,
     "keep_count": 13,
     "merge_count": 14,
-    "remove_count": 0,
+    "remove_count": 1,
     "by_surface": [
       {
         "surface": "timer",
@@ -56,7 +56,7 @@
       },
       {
         "surface": "integration",
-        "feature_count": 4
+        "feature_count": 5
       }
     ],
     "covered_cli_flags": [
@@ -97,6 +97,7 @@
       "--daemon-status",
       "--daemon-stop",
       "--diagnostics",
+      "--dry-run",
       "--export",
       "--feature-inventory",
       "--focus-intention",
@@ -110,6 +111,7 @@
       "--history-dashboard-order",
       "--history-dashboard-pin",
       "--history-dashboard-unpin",
+      "--migrate",
       "--next",
       "--pause",
       "--profile",
@@ -127,6 +129,9 @@
       "--status",
       "--stop",
       "--strict",
+      "--sync-backup",
+      "--sync-passphrase",
+      "--sync-restore",
       "--task",
       "--task-goal",
       "--task-note",
@@ -583,6 +588,26 @@
       "maintenance_cost": 4.25,
       "value_to_maintenance_ratio": 0.71,
       "recommendation": "merge"
+    },
+    {
+      "feature_id": "retired-low-value-command-guidance",
+      "name": "Retired low-value command guidance",
+      "surface": "integration",
+      "description": "Keep retired migration-window and encrypted sync command paths mapped to supported replacement workflows.",
+      "cli_flags": [
+        "--migrate",
+        "--dry-run",
+        "--sync-backup",
+        "--sync-restore",
+        "--sync-passphrase"
+      ],
+      "value": 1,
+      "complexity": 4,
+      "support_burden": 4,
+      "failure_impact": 2,
+      "maintenance_cost": 3.5,
+      "value_to_maintenance_ratio": 0.29,
+      "recommendation": "remove"
     },
     {
       "feature_id": "setup-diagnostics-and-health-signals",

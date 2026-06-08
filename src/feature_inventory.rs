@@ -464,6 +464,23 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         failure_impact: 5,
     },
     FeatureSeed {
+        feature_id: "retired-low-value-command-guidance",
+        name: "Retired low-value command guidance",
+        surface: FeatureSurface::Integration,
+        description: "Keep retired migration-window and encrypted sync command paths mapped to supported replacement workflows.",
+        cli_flags: &[
+            "--migrate",
+            "--dry-run",
+            "--sync-backup",
+            "--sync-restore",
+            "--sync-passphrase",
+        ],
+        value: 1,
+        complexity: 4,
+        support_burden: 4,
+        failure_impact: 2,
+    },
+    FeatureSeed {
         feature_id: "daemon-api-lifecycle",
         name: "Daemon API lifecycle",
         surface: FeatureSurface::Integration,
@@ -1015,15 +1032,24 @@ mod tests {
     fn collect_usage_option_flags() -> HashSet<String> {
         crate::cli::usage_text()
             .lines()
-            .filter_map(|line| {
+            .flat_map(|line| {
                 let trimmed = line.trim_start();
                 if !trimmed.starts_with("--") {
-                    return None;
+                    return Vec::new();
                 }
 
-                let raw_flag = trimmed.split_whitespace().next()?;
-                let normalized = raw_flag.split('=').next().unwrap_or(raw_flag);
-                Some(normalized.to_string())
+                trimmed
+                    .split_whitespace()
+                    .take_while(|token| token.starts_with("--"))
+                    .map(|raw_flag| {
+                        raw_flag
+                            .trim_end_matches(',')
+                            .split('=')
+                            .next()
+                            .unwrap_or(raw_flag)
+                            .to_string()
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect::<HashSet<_>>()
     }

@@ -344,13 +344,14 @@ Retired low-value command surfaces and replacements:
 
 | Retired commands | Replacement behavior |
 | --- | --- |
+| `--migrate`, `--dry-run` | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
 | `--sync-backup`, `--sync-restore` | Use `--backup` and `--restore` for portable recovery and migration workflows. |
 | `--sync-passphrase` | No direct replacement; encrypted sync/backups are no longer supported. |
 
 ### CLI JSON/error contract
 
 - `--json` success responses are emitted to `stdout` as JSON and exit with code `0`.
-- `--json` failures are emitted to `stdout` as JSON (no mixed human text) and exit with a non-zero code.
+- `--json` failures are emitted to `stdout` as JSON (no mixed human text) and exit with a non-zero code; removed command paths include replacement guidance in `error.hint`.
 - `--status --watch --json` emits newline-delimited compact JSON snapshots continuously until interrupted, then exits cleanly after the current snapshot.
 - Text-mode failures are emitted to `stderr` for interactive readability.
 

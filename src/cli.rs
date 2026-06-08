@@ -65,15 +65,15 @@ use output::{
     print_usage_signals_command_output, print_weekday_rules_command_output,
 };
 use parsing::{
-    finalize_cli_action, invalid_usage, parse_automation_triggers_value, parse_compare_by_value,
-    parse_compare_limit_value, parse_compare_profile_value, parse_compare_time_of_day_value,
-    parse_daemon_port, parse_daemon_port_option, parse_global_tokens, parse_goal_carry_value,
-    parse_goal_value, parse_history_dashboard_order_value, parse_history_kpi_card_id,
-    parse_monthly_goal_value, parse_primary_command, parse_profile_id, parse_schedule_value,
-    parse_site_edit_value, parse_status_comparison_options, parse_strict_value,
-    parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
-    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
-    require_nonempty_key_value,
+    finalize_cli_action, first_removed_option_guidance, invalid_usage,
+    parse_automation_triggers_value, parse_compare_by_value, parse_compare_limit_value,
+    parse_compare_profile_value, parse_compare_time_of_day_value, parse_daemon_port,
+    parse_daemon_port_option, parse_global_tokens, parse_goal_carry_value, parse_goal_value,
+    parse_history_dashboard_order_value, parse_history_kpi_card_id, parse_monthly_goal_value,
+    parse_primary_command, parse_profile_id, parse_schedule_value, parse_site_edit_value,
+    parse_status_comparison_options, parse_strict_value, parse_task_goal_value, parse_theme_preset,
+    parse_watch_interval_option, parse_watch_interval_secs, parse_weekday_rules_value,
+    parse_weekly_goal_value, require_nonempty_key_value,
 };
 #[cfg(test)]
 use status::build_status_output;
@@ -239,6 +239,13 @@ Options:
   --calendar-sync  Refresh calendar busy-window cache from configured ICS feeds
   --export        Export stats to current directory or DIR
   --feature-inventory  Export feature inventory scoring report to current directory or DIR
+
+Retired/legacy command guidance:
+  --migrate, --dry-run       Use --config-migrate to preview config migrations or --config-migrate-apply to write a migrated config with backup
+  --sync-backup              Use --backup for local portable recovery workflows
+  --sync-restore             Use --restore for local portable recovery workflows
+  --sync-passphrase          No direct replacement; encrypted sync/backups are no longer supported
+
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
 
@@ -1223,8 +1230,13 @@ where
         })
         .collect::<Result<_, _>>()?;
     let tokens = classify_args(&args).map_err(|message| usage_error(output_hint, message))?;
-    let (show_help, output) =
-        parse_global_tokens(&tokens).map_err(|message| usage_error(output_hint, message))?;
+    let (show_help, output) = parse_global_tokens(&tokens).map_err(|message| {
+        if let Some(guidance) = first_removed_option_guidance(&tokens) {
+            usage_error_with_hint(output_hint, message, guidance.replacement)
+        } else {
+            usage_error(output_hint, message)
+        }
+    })?;
     let primary = parse_primary_command(&tokens).map_err(|message| usage_error(output, message))?;
     let daemon_port =
         parse_daemon_port_option(&tokens).map_err(|message| usage_error(output, message))?;
@@ -1279,6 +1291,17 @@ pub(crate) fn emit_cli_error(error: &CliError) -> Result<(), String> {
 
 fn usage_error(output: OutputMode, message: String) -> CliError {
     let message = UserMessage::usage(message);
+    CliError {
+        kind: CliErrorKind::Usage,
+        output,
+        code: message.code,
+        message: message.message,
+        hint: message.hint,
+    }
+}
+
+fn usage_error_with_hint(output: OutputMode, message: String, hint: impl Into<String>) -> CliError {
+    let message = UserMessage::with_hint("cli.usage", message, hint);
     CliError {
         kind: CliErrorKind::Usage,
         output,

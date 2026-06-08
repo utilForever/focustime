@@ -14,16 +14,16 @@
 
 ## Summary
 
-- Total features: 27
+- Total features: 28
 - Keep: 13
 - Merge: 14
-- Remove: 0
+- Remove: 1
 - Surface coverage:
   - Timer: 6
   - Schedule: 5
   - Blocker: 5
   - Stats: 7
-  - Integration: 4
+  - Integration: 5
 
 ## Release phase mapping (v0.14.x)
 
@@ -60,5 +60,6 @@
 | `usage-signal-inspection` | Stats | 3 | 2.00 | 1.50 | merge | --usage-signals |
 | `calendar-busy-window-sync` | Integration | 3 | 3.75 | 0.80 | merge | --calendar-sync |
 | `daemon-api-lifecycle` | Integration | 3 | 4.25 | 0.71 | merge | --daemon-start, --daemon-status, --daemon-stop, --daemon-port |
+| `retired-low-value-command-guidance` | Integration | 1 | 3.50 | 0.29 | remove | --migrate, --dry-run, --sync-backup, --sync-restore, --sync-passphrase |
 | `setup-diagnostics-and-health-signals` | Integration | 3 | 2.75 | 1.09 | merge | --diagnostics, --config-doctor, --config-migrate, --config-migrate-apply |
 | `wakatime-heartbeat-pipeline` | Integration | 4 | 3.00 | 1.33 | keep | (none) |

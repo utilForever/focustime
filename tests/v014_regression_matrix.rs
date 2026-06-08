@@ -159,14 +159,17 @@ fn v014_removed_cli_surfaces_stay_retired_with_json_usage_errors() {
         let error_message = payload["error"]["message"]
             .as_str()
             .expect("error message should be a string");
+        let error_hint = payload["error"]["hint"]
+            .as_str()
+            .expect("removed flag error should include a replacement hint");
         assert!(
             error_message.contains(case.removed_flag),
             "removed flag {} should be named in its error",
             case.removed_flag
         );
         assert!(
-            error_message.contains(case.replacement_hint),
-            "removed flag {} should include replacement guidance `{}`",
+            error_hint.contains(case.replacement_hint),
+            "removed flag {} should include replacement hint `{}`",
             case.removed_flag,
             case.replacement_hint
         );
