@@ -89,6 +89,7 @@ focused cleanup regression gate:
 
 ```sh
 cargo test --test v014_regression_matrix
+cargo test --test v015_cleanup_regression
 ```
 
 Keep [REGRESSION_MATRIX.md](REGRESSION_MATRIX.md) aligned with any feature path
