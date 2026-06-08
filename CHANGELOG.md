@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-06-08
+
 ### Added
 
 - **v0.15.x cleanup roadmap and deprecation notices (#436):** documented the release-facing cleanup direction for overlapping feature paths and named the supported replacement behavior for deprecated or retired surfaces.
 - **v0.15.x cleanup regression coverage (#437):** added focused matrix coverage for cleanup docs, deprecated config diagnostics, merged profile migrations, and removed command guidance.
+- **Replacement guidance for low-value feature paths (#438):** surfaced supported alternatives for retired command surfaces in text errors, JSON `error.hint`, CLI help, and cleanup documentation.
 
 ## [0.15.0] - 2026-06-06
 
@@ -433,7 +436,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/utilForever/focustime/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/utilForever/focustime/compare/v0.14.4...v0.15.0
 [0.14.4]: https://github.com/utilForever/focustime/compare/v0.14.3...v0.14.4
 [0.14.3]: https://github.com/utilForever/focustime/compare/v0.14.2...v0.14.3

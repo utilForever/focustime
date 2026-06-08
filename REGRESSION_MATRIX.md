@@ -23,10 +23,10 @@ in the normal release readiness command set.
 | v0.14.3 | Retired encrypted sync flags stay unavailable and point users to local backup/restore guidance in release notes. | Removed command | `v014_removed_cli_surfaces_stay_retired_with_json_usage_errors` |
 | v0.14.4 | Facade/submodule splits preserve public command, config, and runtime contracts. | Command/config/runtime | `cargo test --all` plus the focused matrix gate |
 | v0.15.0 | Config migration previews preserve exact output and removed command guidance remains targeted to supported replacements. | Command/config | `v014_config_migration_preview_and_apply_cover_merged_profile_presets` plus `v014_removed_cli_surfaces_stay_retired_with_json_usage_errors` |
-| v0.15.x | Cleanup roadmap documentation names supported replacements before additional overlapping paths are merged or retired. | Release docs | `v015_cleanup_docs_keep_matrix_and_release_guidance_aligned` |
-| v0.15.x | Deprecated config compatibility fields stay visible in diagnostics with canonical replacement guidance. | Config diagnostics | `v015_deprecated_config_paths_report_supported_replacements` |
-| v0.15.x | Merged legacy profile names continue to migrate to canonical presets (`basic`, `standard`, `advanced`). | Config migration | `v015_merged_profile_paths_keep_migration_guidance` |
-| v0.15.x | Removed migration-window and encrypted sync flags stay unavailable and emit targeted JSON `error.hint` replacement guidance. | Removed command | `v015_removed_command_paths_keep_targeted_json_guidance` |
+| v0.15.1 | Cleanup roadmap documentation names supported replacements before additional overlapping paths are merged or retired. | Release docs | `v015_cleanup_docs_keep_matrix_and_release_guidance_aligned` |
+| v0.15.1 | Deprecated config compatibility fields stay visible in diagnostics with canonical replacement guidance. | Config diagnostics | `v015_deprecated_config_paths_report_supported_replacements` |
+| v0.15.1 | Merged legacy profile names continue to migrate to canonical presets (`basic`, `standard`, `advanced`). | Config migration | `v015_merged_profile_paths_keep_migration_guidance` |
+| v0.15.1 | Removed migration-window and encrypted sync flags stay unavailable and emit targeted JSON `error.hint` replacement guidance. | Removed command | `v015_removed_command_paths_keep_targeted_json_guidance` |
 
 ## Release Readiness
 
