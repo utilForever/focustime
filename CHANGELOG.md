@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **v0.15.x cleanup roadmap and deprecation notices (#436):** documented the release-facing cleanup direction for overlapping feature paths and named the supported replacement behavior for deprecated or retired surfaces.
+- **v0.15.x cleanup regression coverage (#437):** added focused matrix coverage for cleanup docs, deprecated config diagnostics, merged profile migrations, and removed command guidance.
 
 ## [0.15.0] - 2026-06-06
 
