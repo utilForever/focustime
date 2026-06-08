@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Consolidated diagnostics workflow (#439):** expanded `--diagnostics` into the canonical setup/config health/migration guidance workflow while keeping focused config doctor and migration commands available.
+
 ## [0.15.1] - 2026-06-08
 
 ### Added
