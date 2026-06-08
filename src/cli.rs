@@ -12,10 +12,10 @@ use crate::app::App;
 use crate::app::{SetupCheck, SetupCheckLevel, SetupDiagnostics};
 use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, SiteBlocker};
 use crate::config::{
-    AppConfig, AutomationTriggerRuleConfig, BlocklistProfileConfig, CustomProfileConfig,
-    DailyGoalConfig, HistoryKpiCardId, MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, ThemePreset, WeekdayProfileRuleConfig,
-    WeeklyGoalConfig,
+    AppConfig, AutomationTriggerRuleConfig, BlocklistProfileConfig, ConfigDoctorReport,
+    ConfigMigrationReport, CustomProfileConfig, DailyGoalConfig, HistoryKpiCardId,
+    MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, ThemePreset, WeekdayProfileRuleConfig, WeeklyGoalConfig,
 };
 use crate::error::UserMessage;
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
@@ -224,7 +224,7 @@ Options:
   --config-doctor  Run config diagnostics (invalid/conflicting/stale settings) with remediation guidance
   --config-migrate  Preview config migration assistant changes for deprecated/renamed keys
   --config-migrate-apply  Apply config migration assistant changes and write migrated config.toml
-  --diagnostics   Show setup diagnostics checks
+  --diagnostics   Show setup diagnostics, config health, and migration guidance
   --blocking-preview  Preview backend-selected blocking changes without writing
   --usage-signals  Show local command/screen usage summary (top + rare surfaces)
   --status        Print status summary (includes live timer/session fields and latest interruption)
@@ -1037,7 +1037,7 @@ struct SetupCheckOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct DiagnosticsCommandOutput {
+struct DiagnosticsSetupOutput {
     hosts_file_path: String,
     backend_policy: String,
     backend_order: String,
@@ -1048,6 +1048,14 @@ struct DiagnosticsCommandOutput {
     wakatime_config: SetupCheckOutput,
     wakatime_runtime: SetupCheckOutput,
     deprecation_warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct DiagnosticsCommandOutput {
+    action: &'static str,
+    setup: DiagnosticsSetupOutput,
+    config_doctor: ConfigDoctorReport,
+    config_migration: ConfigMigrationReport,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

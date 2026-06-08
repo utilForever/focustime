@@ -1,7 +1,7 @@
 use crate::cli::{
     BlockingPreviewAction, BlockingPreviewCommandOutput, DiagnosticsCommandOutput,
-    RecurringScheduleConfig, ScheduleInspectionOutput, SetupCheck, SetupCheckLevel,
-    SetupCheckOutput, SetupDiagnostics, format_schedule_conflict,
+    DiagnosticsSetupOutput, RecurringScheduleConfig, ScheduleInspectionOutput, SetupCheck,
+    SetupCheckLevel, SetupCheckOutput, SetupDiagnostics, format_schedule_conflict,
     inspect_schedule_conflicts_from_config,
 };
 use crate::config::{
@@ -22,10 +22,13 @@ pub(in crate::cli) fn build_schedule_inspection_output(
 }
 
 pub(in crate::cli) fn print_config_doctor_output(payload: &ConfigDoctorReport) {
-    println!(
-        "Config doctor status: {}",
-        config_health_status_id(payload.status)
-    );
+    println!("Diagnostics workflow: {}", payload.action);
+    print_config_health_section(payload);
+    print_canonical_diagnostics_hint();
+}
+
+fn print_config_health_section(payload: &ConfigDoctorReport) {
+    println!("Config health: {}", config_health_status_id(payload.status));
     println!(
         "Config path: {}",
         payload
@@ -47,7 +50,13 @@ pub(in crate::cli) fn print_config_doctor_output(payload: &ConfigDoctorReport) {
 }
 
 pub(in crate::cli) fn print_config_migration_output(payload: &ConfigMigrationReport) {
-    println!("Config migration command: {}", payload.action);
+    println!("Diagnostics workflow: {}", payload.action);
+    print_config_migration_section(payload);
+    print_canonical_diagnostics_hint();
+}
+
+fn print_config_migration_section(payload: &ConfigMigrationReport) {
+    println!("Config migration guidance: {}", payload.action);
     println!(
         "Config path: {}",
         payload
@@ -136,6 +145,14 @@ fn config_health_severity_id(severity: crate::config::ConfigHealthSeverity) -> &
 
 /// Prints setup diagnostics checks, including WakaTime config and runtime status.
 pub(in crate::cli) fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutput) {
+    println!("Diagnostics workflow: {}", payload.action);
+    print_setup_diagnostics_section(&payload.setup);
+    print_config_health_section(&payload.config_doctor);
+    print_config_migration_section(&payload.config_migration);
+}
+
+fn print_setup_diagnostics_section(payload: &DiagnosticsSetupOutput) {
+    println!("Setup diagnostics:");
     println!("Hosts file: {}", payload.hosts_file_path);
     println!(
         "Backend policy: {} (order: {})",
@@ -157,6 +174,12 @@ pub(in crate::cli) fn print_diagnostics_command_output(payload: &DiagnosticsComm
     }
 }
 
+fn print_canonical_diagnostics_hint() {
+    println!(
+        "Canonical diagnostics: run `focustime --diagnostics` for setup, config health, and migration guidance."
+    );
+}
+
 fn print_diagnostics_check(label: &str, check: &SetupCheckOutput) {
     println!("{label}: {} ({})", check.message, check.level);
 }
@@ -164,18 +187,25 @@ fn print_diagnostics_check(label: &str, check: &SetupCheckOutput) {
 /// Builds the serializable diagnostics payload used by text and JSON output.
 pub(in crate::cli) fn build_diagnostics_command_output(
     diagnostics: &SetupDiagnostics,
+    config_doctor: ConfigDoctorReport,
+    config_migration: ConfigMigrationReport,
 ) -> DiagnosticsCommandOutput {
     DiagnosticsCommandOutput {
-        hosts_file_path: diagnostics.hosts_file_path.clone(),
-        backend_policy: diagnostics.backend_policy.clone(),
-        backend_order: diagnostics.backend_order.clone(),
-        backend_selection: setup_check_output(&diagnostics.backend_selection),
-        command_backend: setup_check_output(&diagnostics.command_backend),
-        blocking_permissions: setup_check_output(&diagnostics.blocking_permissions),
-        hosts_write_capability: setup_check_output(&diagnostics.hosts_write_capability),
-        wakatime_config: setup_check_output(&diagnostics.wakatime_config),
-        wakatime_runtime: setup_check_output(&diagnostics.wakatime_runtime),
-        deprecation_warnings: diagnostics.deprecation_warnings.clone(),
+        action: "diagnostics",
+        setup: DiagnosticsSetupOutput {
+            hosts_file_path: diagnostics.hosts_file_path.clone(),
+            backend_policy: diagnostics.backend_policy.clone(),
+            backend_order: diagnostics.backend_order.clone(),
+            backend_selection: setup_check_output(&diagnostics.backend_selection),
+            command_backend: setup_check_output(&diagnostics.command_backend),
+            blocking_permissions: setup_check_output(&diagnostics.blocking_permissions),
+            hosts_write_capability: setup_check_output(&diagnostics.hosts_write_capability),
+            wakatime_config: setup_check_output(&diagnostics.wakatime_config),
+            wakatime_runtime: setup_check_output(&diagnostics.wakatime_runtime),
+            deprecation_warnings: diagnostics.deprecation_warnings.clone(),
+        },
+        config_doctor,
+        config_migration,
     }
 }
 

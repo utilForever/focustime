@@ -36,7 +36,10 @@ pub(super) fn execute_config_migrate_command(
 pub(super) fn execute_diagnostics_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();
     app.record_command_usage_for_cli("diagnostics");
-    let payload = build_diagnostics_command_output(&app.setup_diagnostics);
+    let config_doctor = run_config_doctor();
+    let config_migration = run_config_migration_assistant(false);
+    let payload =
+        build_diagnostics_command_output(&app.setup_diagnostics, config_doctor, config_migration);
 
     match output {
         OutputMode::Text => print_diagnostics_command_output(&payload),
