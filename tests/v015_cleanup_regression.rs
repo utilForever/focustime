@@ -251,15 +251,31 @@ fn v015_removed_command_paths_keep_targeted_json_guidance() {
         let message = payload["error"]["message"]
             .as_str()
             .expect("error message should be a string");
+        let hint = payload["error"]["hint"]
+            .as_str()
+            .expect("removed flag should include a replacement hint");
         assert!(
             message.contains(flag.split('=').next().unwrap_or(flag)),
             "removed flag should be named in its error: {message}"
         );
         assert!(
-            message.contains(replacement),
-            "removed flag should include replacement `{replacement}`: {message}"
+            hint.contains(replacement),
+            "removed flag should include replacement hint `{replacement}`: {hint}"
         );
     }
+}
+
+#[test]
+fn v015_removed_command_text_errors_keep_the_same_replacement_guidance() {
+    let env = TestEnv::new("removed-commands-text");
+
+    let output = env.run(&["--sync-backup"]);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
+    let stderr = stderr_text(&output);
+    assert!(stderr.contains("Unknown option `--sync-backup`"));
+    assert!(stderr.contains("Hint: Use `--backup` for local portable recovery workflows."));
 }
 
 fn focustime_bin_path() -> PathBuf {
