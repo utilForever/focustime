@@ -133,10 +133,16 @@ pub(super) struct RemovedOptionGuidance {
 pub(super) fn first_removed_option_guidance(
     tokens: &[ParsedToken],
 ) -> Option<RemovedOptionGuidance> {
-    tokens.iter().find_map(|token| match token {
-        ParsedToken::UnknownOption(option) => removed_option_replacement_guidance(option),
-        _ => None,
-    })
+    for token in tokens {
+        match token {
+            ParsedToken::UnknownOption(option) => {
+                return removed_option_replacement_guidance(option);
+            }
+            ParsedToken::Positional(_) => return None,
+            _ => {}
+        }
+    }
+    None
 }
 
 fn unknown_option_message(option: &str) -> String {
