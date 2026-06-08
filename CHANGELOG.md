@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **v0.15.x cleanup roadmap and deprecation notices (#436):** documented the release-facing cleanup direction for overlapping feature paths and named the supported replacement behavior for deprecated or retired surfaces.
+
 ## [0.15.0] - 2026-06-06
 
 ### Added
