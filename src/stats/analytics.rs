@@ -795,6 +795,7 @@ impl FocusStats {
         cloned.apply_retention_policy(retention, reference_day)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn usage_signal_summary(&self, limit: usize) -> UsageSignalsSummary {
         let limit = limit.max(1);
         UsageSignalsSummary {

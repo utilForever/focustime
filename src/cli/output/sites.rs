@@ -109,38 +109,8 @@ pub(in crate::cli) fn print_history_dashboard_command_output(
 }
 
 pub(in crate::cli) fn print_usage_signals_command_output(payload: &UsageSignalsCommandOutput) {
-    println!("Usage signals summary:");
-    print_usage_signal_summary("Commands", &payload.summary.commands);
-    print_usage_signal_summary("Screens", &payload.summary.screens);
-}
-
-fn print_usage_signal_summary(label: &str, summary: &crate::stats::UsageSignalSummary) {
-    println!(
-        "{label}: {} events across {} surface(s)",
-        summary.total_events, summary.unique_surfaces
-    );
-    if summary.top.is_empty() {
-        println!("  Top: none");
-    } else {
-        println!("  Top:");
-        for entry in &summary.top {
-            println!(
-                "    - {}: {} ({}%)",
-                entry.surface, entry.count, entry.share_pct
-            );
-        }
-    }
-    if summary.rare.is_empty() {
-        println!("  Rare: none");
-    } else {
-        println!("  Rare:");
-        for entry in &summary.rare {
-            println!(
-                "    - {}: {} ({}%)",
-                entry.surface, entry.count, entry.share_pct
-            );
-        }
-    }
+    println!("Deprecated command: --usage-signals");
+    println!("Replacement: {}", payload.replacement);
 }
 
 pub(in crate::cli) fn print_site_list_command_output(payload: &SiteListCommandOutput) {

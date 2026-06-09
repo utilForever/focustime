@@ -437,6 +437,7 @@ impl StatsRetentionPruneResult {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct UsageSignalEntry {
     pub(crate) surface: String,
@@ -444,6 +445,7 @@ pub(crate) struct UsageSignalEntry {
     pub(crate) share_pct: u8,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct UsageSignalSummary {
     pub(crate) total_events: u64,
@@ -452,6 +454,7 @@ pub(crate) struct UsageSignalSummary {
     pub(crate) rare: Vec<UsageSignalEntry>,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct UsageSignalsSummary {
     pub(crate) commands: UsageSignalSummary,
