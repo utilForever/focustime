@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use crate::cli::{
     BlocklistCategoryCommandOutput, BlocklistProfileCommandOutput, HistoryDashboardCommandOutput,
     SessionTemplateCommandOutput, SiteAddCommandOutput, SiteDeleteCommandOutput,
@@ -109,38 +111,17 @@ pub(in crate::cli) fn print_history_dashboard_command_output(
 }
 
 pub(in crate::cli) fn print_usage_signals_command_output(payload: &UsageSignalsCommandOutput) {
-    println!("Usage signals summary:");
-    print_usage_signal_summary("Commands", &payload.summary.commands);
-    print_usage_signal_summary("Screens", &payload.summary.screens);
+    let mut stdout = io::stdout().lock();
+    write_usage_signals_command_output(&mut stdout, payload)
+        .expect("failed to write usage-signals command output");
 }
 
-fn print_usage_signal_summary(label: &str, summary: &crate::stats::UsageSignalSummary) {
-    println!(
-        "{label}: {} events across {} surface(s)",
-        summary.total_events, summary.unique_surfaces
-    );
-    if summary.top.is_empty() {
-        println!("  Top: none");
-    } else {
-        println!("  Top:");
-        for entry in &summary.top {
-            println!(
-                "    - {}: {} ({}%)",
-                entry.surface, entry.count, entry.share_pct
-            );
-        }
-    }
-    if summary.rare.is_empty() {
-        println!("  Rare: none");
-    } else {
-        println!("  Rare:");
-        for entry in &summary.rare {
-            println!(
-                "    - {}: {} ({}%)",
-                entry.surface, entry.count, entry.share_pct
-            );
-        }
-    }
+fn write_usage_signals_command_output(
+    writer: &mut impl Write,
+    payload: &UsageSignalsCommandOutput,
+) -> io::Result<()> {
+    writeln!(writer, "Deprecated command: --usage-signals")?;
+    writeln!(writer, "Replacement: {}", payload.replacement)
 }
 
 pub(in crate::cli) fn print_site_list_command_output(payload: &SiteListCommandOutput) {
@@ -276,4 +257,27 @@ pub(in crate::cli) fn print_site_delete_command_output(payload: &SiteDeleteComma
         "Effective blocked sites: {}",
         payload.effective_blocked_sites_count
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::cli::{USAGE_SIGNALS_REPLACEMENT, UsageSignalsCommandOutput};
+
+    use super::write_usage_signals_command_output;
+
+    #[test]
+    fn usage_signals_text_output_includes_deprecation_replacement_lines() {
+        let payload = UsageSignalsCommandOutput {
+            action: "usage-signals",
+            deprecated: true,
+            replacement: USAGE_SIGNALS_REPLACEMENT,
+        };
+        let mut output = Vec::new();
+
+        write_usage_signals_command_output(&mut output, &payload).unwrap();
+
+        let text = String::from_utf8(output).unwrap();
+        assert!(text.contains("Deprecated command: --usage-signals\n"));
+        assert!(text.contains(&format!("Replacement: {}\n", USAGE_SIGNALS_REPLACEMENT)));
+    }
 }

@@ -23,8 +23,7 @@ use crate::session_recovery;
 use crate::stats::{
     ComparisonDimension, DailyGoalSnapshot, FocusRiskForecast, FocusStats,
     ProductivityComparisonRow, ProfileBucket, SessionInterruptionEvent, StatsGrowthSummary,
-    StatsRetentionPruneResult, TimeOfDayBucket, UsageSignalsSummary, carry_over_goal_target,
-    current_day_key,
+    StatsRetentionPruneResult, TimeOfDayBucket, carry_over_goal_target, current_day_key,
 };
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -156,7 +155,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --config-migrate-apply [--json]
   focustime --diagnostics [--json]
   focustime --blocking-preview [--json]
-  focustime --usage-signals [--json]
   focustime --status [--watch[=SECONDS]] [--compare-by=task|profile|time-of-day] [--compare-task=LABEL|all] [--compare-profile=basic|standard|advanced|unknown|all] [--compare-time=morning|afternoon|evening|night|unknown|all] [--compare-limit=N] [--json]
   focustime --backup[=DIR] [--json]
   focustime --restore[=DIR] [--json]
@@ -227,7 +225,6 @@ Options:
   --config-migrate-apply  Apply config migration assistant changes and write migrated config.toml
   --diagnostics   Show setup diagnostics, blocking preview details, config health, and migration guidance
   --blocking-preview  Deprecated: use --diagnostics to preview backend-selected blocking changes without writing
-  --usage-signals  Show local command/screen usage summary (top + rare surfaces)
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
   --compare-by    Status comparison dimension: task | profile | time-of-day
@@ -243,12 +240,15 @@ Options:
 
 Retired/legacy command guidance:
   --migrate, --dry-run       Use --config-migrate to preview config migrations or --config-migrate-apply to write a migrated config with backup
+  --usage-signals            Deprecated: use --feature-inventory for cleanup reporting; raw usage-signal inspection is no longer a standalone workflow
   --sync-backup              Use --backup for local portable recovery workflows
   --sync-restore             Use --restore for local portable recovery workflows
   --sync-passphrase          No direct replacement; encrypted sync/backups are no longer supported
 
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
+
+const USAGE_SIGNALS_REPLACEMENT: &str = "Use `focustime --feature-inventory` for cleanup reporting; raw usage-signal inspection is no longer a standalone workflow.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OutputMode {
@@ -1157,7 +1157,8 @@ struct HistoryDashboardCommandOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct UsageSignalsCommandOutput {
     action: &'static str,
-    summary: UsageSignalsSummary,
+    deprecated: bool,
+    replacement: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

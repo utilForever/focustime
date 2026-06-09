@@ -9,7 +9,7 @@ use serde::Serialize;
 pub(crate) const FEATURE_INVENTORY_JSON_FILE_NAME: &str = "FEATURE_INVENTORY.json";
 pub(crate) const FEATURE_INVENTORY_MARKDOWN_FILE_NAME: &str = "FEATURE_INVENTORY.md";
 
-const SCHEMA_VERSION: u8 = 4;
+const SCHEMA_VERSION: u8 = 5;
 const COMPLEXITY_WEIGHT: f64 = 0.40;
 const SUPPORT_BURDEN_WEIGHT: f64 = 0.35;
 const FAILURE_IMPACT_WEIGHT: f64 = 0.25;
@@ -77,6 +77,7 @@ pub(crate) struct FeatureInventoryReport {
     pub(crate) schema_version: u8,
     pub(crate) scoring_model: FeatureScoringModel,
     pub(crate) summary: FeatureInventorySummary,
+    pub(crate) cleanup_signal_support: UsageSignalCleanupSupport,
     pub(crate) features: Vec<FeatureInventoryEntry>,
 }
 
@@ -122,6 +123,14 @@ pub(crate) struct FeatureInventorySummary {
 pub(crate) struct SurfaceSummary {
     pub(crate) surface: FeatureSurface,
     pub(crate) feature_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct UsageSignalCleanupSupport {
+    pub(crate) retained_dimensions: Vec<&'static str>,
+    pub(crate) retained_summary_fields: Vec<&'static str>,
+    pub(crate) deprecated_cli_flag: &'static str,
+    pub(crate) replacement_cli_flag: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -420,15 +429,15 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         failure_impact: 2,
     },
     FeatureSeed {
-        feature_id: "usage-signal-inspection",
-        name: "Usage signal inspection",
+        feature_id: "usage-signal-cleanup-support",
+        name: "Usage signal cleanup support",
         surface: FeatureSurface::Stats,
-        description: "Review command and screen frequency summaries to guide feature cleanup decisions.",
+        description: "Keep command and screen frequency summaries available as internal inputs for feature cleanup and inventory decisions.",
         cli_flags: &["--usage-signals"],
         value: 3,
         complexity: 2,
-        support_burden: 2,
-        failure_impact: 2,
+        support_burden: 1,
+        failure_impact: 1,
     },
     FeatureSeed {
         feature_id: "stats-export-artifacts",
@@ -574,7 +583,17 @@ pub(crate) fn build_feature_inventory_report_for_version(
             release_phase_mapping: build_release_phase_mapping(),
         },
         summary,
+        cleanup_signal_support: build_usage_signal_cleanup_support(),
         features,
+    }
+}
+
+fn build_usage_signal_cleanup_support() -> UsageSignalCleanupSupport {
+    UsageSignalCleanupSupport {
+        retained_dimensions: vec!["commands", "screens"],
+        retained_summary_fields: vec!["total_events", "unique_surfaces", "top", "rare"],
+        deprecated_cli_flag: "--usage-signals",
+        replacement_cli_flag: "--feature-inventory",
     }
 }
 
@@ -653,6 +672,25 @@ pub(crate) fn render_markdown_report(report: &FeatureInventoryReport) -> String 
         ));
     }
     markdown.push('\n');
+
+    let cleanup = &report.cleanup_signal_support;
+    markdown.push_str("## Cleanup signal support\n\n");
+    markdown.push_str(&format!(
+        "- Usage-signal dimensions retained: {}\n",
+        cleanup.retained_dimensions.join(", ")
+    ));
+    markdown.push_str(&format!(
+        "- Usage-signal summary fields retained: {}\n",
+        cleanup.retained_summary_fields.join(", ")
+    ));
+    markdown.push_str(&format!(
+        "- Deprecated standalone access: `{}`\n",
+        cleanup.deprecated_cli_flag
+    ));
+    markdown.push_str(&format!(
+        "- Supported reporting workflow: `{}`\n\n",
+        cleanup.replacement_cli_flag
+    ));
 
     markdown.push_str("## Release phase mapping (v0.14.x)\n\n");
     for mapping in &report.scoring_model.release_phase_mapping {
@@ -846,7 +884,7 @@ mod tests {
 
     #[test]
     fn schema_version_tracks_rubric_contract() {
-        assert_eq!(SCHEMA_VERSION, 4);
+        assert_eq!(SCHEMA_VERSION, 5);
     }
 
     #[test]

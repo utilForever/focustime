@@ -3,6 +3,7 @@ use crate::stats::{
     parse_week_label, percentage_round_nearest,
 };
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn usage_signal_summary_for_counts(
     counts: &BTreeMap<String, u64>,
     limit: usize,
@@ -29,6 +30,7 @@ pub(super) fn usage_signal_summary_for_counts(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn usage_signal_rows(entries: Vec<(String, u64)>, total_events: u64) -> Vec<UsageSignalEntry> {
     entries
         .into_iter()

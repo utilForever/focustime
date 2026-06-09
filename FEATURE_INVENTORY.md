@@ -25,6 +25,13 @@
   - Stats: 7
   - Integration: 5
 
+## Cleanup signal support
+
+- Usage-signal dimensions retained: commands, screens
+- Usage-signal summary fields retained: total_events, unique_surfaces, top, rare
+- Deprecated standalone access: `--usage-signals`
+- Supported reporting workflow: `--feature-inventory`
+
 ## Release phase mapping (v0.14.x)
 
 - keep: Phase 1: Stabilize — Preserve and harden high-confidence capabilities throughout v0.14.x.
@@ -57,7 +64,7 @@
 | `stats-export-artifacts` | Stats | 4 | 2.65 | 1.51 | keep | --export |
 | `status-comparison-slicing` | Stats | 3 | 3.35 | 0.90 | merge | --compare-by, --compare-task, --compare-profile, --compare-time, --compare-limit |
 | `status-snapshot-and-streaming` | Stats | 5 | 3.65 | 1.37 | keep | --status, --watch |
-| `usage-signal-inspection` | Stats | 3 | 2.00 | 1.50 | merge | --usage-signals |
+| `usage-signal-cleanup-support` | Stats | 3 | 1.40 | 2.14 | merge | --usage-signals |
 | `calendar-busy-window-sync` | Integration | 3 | 3.75 | 0.80 | merge | --calendar-sync |
 | `daemon-api-lifecycle` | Integration | 3 | 4.25 | 0.71 | merge | --daemon-start, --daemon-status, --daemon-stop, --daemon-port |
 | `retired-low-value-command-guidance` | Integration | 1 | 3.50 | 0.29 | remove | --migrate, --dry-run, --sync-backup, --sync-restore, --sync-passphrase |

@@ -125,6 +125,26 @@ fn parse_usage_signals_supports_json_mode() {
 }
 
 #[test]
+fn usage_signals_json_emits_deprecated_replacement_payload() {
+    let payload = UsageSignalsCommandOutput {
+        action: "usage-signals",
+        deprecated: true,
+        replacement: USAGE_SIGNALS_REPLACEMENT,
+    };
+
+    assert_eq!(payload.action, "usage-signals");
+    assert!(payload.deprecated);
+    assert_eq!(
+        payload.replacement,
+        "Use `focustime --feature-inventory` for cleanup reporting; raw usage-signal inspection is no longer a standalone workflow."
+    );
+    let json = serde_json::to_value(&payload).unwrap();
+    assert_eq!(json["deprecated"], true);
+    assert_eq!(json["replacement"], payload.replacement);
+    assert!(json.get("summary").is_none());
+}
+
+#[test]
 fn parse_status_watch_without_interval_uses_default_cadence() {
     let parsed = parse(&["--status", "--watch"]).unwrap();
     assert_eq!(
