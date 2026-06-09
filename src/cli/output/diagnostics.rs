@@ -1,12 +1,15 @@
 use crate::cli::{
-    BlockingPreviewAction, BlockingPreviewCommandOutput, DiagnosticsCommandOutput,
-    DiagnosticsSetupOutput, RecurringScheduleConfig, ScheduleInspectionOutput, SetupCheck,
-    SetupCheckLevel, SetupCheckOutput, SetupDiagnostics, format_schedule_conflict,
-    inspect_schedule_conflicts_from_config,
+    BlockingPreviewAction, BlockingPreviewCommandOutput, DiagnosticsBlockingPreviewOutput,
+    DiagnosticsCommandOutput, DiagnosticsSetupOutput, RecurringScheduleConfig,
+    ScheduleInspectionOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
+    format_schedule_conflict, inspect_schedule_conflicts_from_config,
 };
 use crate::config::{
     ConfigDoctorReport, ConfigHealthFinding, ConfigHealthStatus, ConfigMigrationReport,
 };
+
+const BLOCKING_PREVIEW_REPLACEMENT: &str =
+    "Use `focustime --diagnostics` for blocking preview details plus setup/config health.";
 
 pub(in crate::cli) fn build_schedule_inspection_output(
     schedule: &RecurringScheduleConfig,
@@ -147,6 +150,7 @@ fn config_health_severity_id(severity: crate::config::ConfigHealthSeverity) -> &
 pub(in crate::cli) fn print_diagnostics_command_output(payload: &DiagnosticsCommandOutput) {
     println!("Diagnostics workflow: {}", payload.action);
     print_setup_diagnostics_section(&payload.setup);
+    print_diagnostics_blocking_preview_section(&payload.blocking_preview);
     print_config_health_section(&payload.config_doctor);
     print_config_migration_section(&payload.config_migration);
 }
@@ -174,9 +178,20 @@ fn print_setup_diagnostics_section(payload: &DiagnosticsSetupOutput) {
     }
 }
 
+fn print_diagnostics_blocking_preview_section(payload: &DiagnosticsBlockingPreviewOutput) {
+    println!("Blocking preview: {}", payload.status);
+    if let Some(error) = payload.error.as_deref() {
+        println!("Preview error: {error}");
+        return;
+    }
+    if let Some(preview) = payload.preview.as_ref() {
+        print_blocking_preview_fields(preview);
+    }
+}
+
 fn print_canonical_diagnostics_hint() {
     println!(
-        "Canonical diagnostics: run `focustime --diagnostics` for setup, config health, and migration guidance."
+        "Canonical diagnostics: run `focustime --diagnostics` for setup, blocking preview, config health, and migration guidance."
     );
 }
 
@@ -189,6 +204,7 @@ pub(in crate::cli) fn build_diagnostics_command_output(
     diagnostics: &SetupDiagnostics,
     config_doctor: ConfigDoctorReport,
     config_migration: ConfigMigrationReport,
+    blocking_preview: DiagnosticsBlockingPreviewOutput,
 ) -> DiagnosticsCommandOutput {
     DiagnosticsCommandOutput {
         action: "diagnostics",
@@ -204,14 +220,45 @@ pub(in crate::cli) fn build_diagnostics_command_output(
             wakatime_runtime: setup_check_output(&diagnostics.wakatime_runtime),
             deprecation_warnings: diagnostics.deprecation_warnings.clone(),
         },
+        blocking_preview,
         config_doctor,
         config_migration,
+    }
+}
+
+pub(in crate::cli) fn build_diagnostics_blocking_preview_output(
+    preview: &crate::blocker::BlockingPreview,
+) -> DiagnosticsBlockingPreviewOutput {
+    DiagnosticsBlockingPreviewOutput {
+        status: "ok",
+        error: None,
+        preview: Some(build_blocking_preview_output(preview, false)),
+    }
+}
+
+pub(in crate::cli) fn build_diagnostics_blocking_preview_error(
+    error: impl Into<String>,
+) -> DiagnosticsBlockingPreviewOutput {
+    DiagnosticsBlockingPreviewOutput {
+        status: "error",
+        error: Some(error.into()),
+        preview: None,
     }
 }
 
 pub(in crate::cli) fn print_blocking_preview_command_output(
     payload: &BlockingPreviewCommandOutput,
 ) {
+    if payload.deprecated {
+        println!("Deprecated command: --blocking-preview");
+        if let Some(replacement) = payload.replacement {
+            println!("Replacement: {replacement}");
+        }
+    }
+    print_blocking_preview_fields(payload);
+}
+
+fn print_blocking_preview_fields(payload: &BlockingPreviewCommandOutput) {
     println!(
         "Backend: {} (target: {})",
         payload.backend, payload.backend_target
@@ -250,12 +297,21 @@ pub(in crate::cli) fn print_blocking_preview_command_output(
 pub(in crate::cli) fn build_blocking_preview_command_output(
     preview: &crate::blocker::BlockingPreview,
 ) -> BlockingPreviewCommandOutput {
+    build_blocking_preview_output(preview, true)
+}
+
+fn build_blocking_preview_output(
+    preview: &crate::blocker::BlockingPreview,
+    deprecated: bool,
+) -> BlockingPreviewCommandOutput {
     let action = match preview.action {
         BlockingPreviewAction::Block => "block",
         BlockingPreviewAction::Unblock => "unblock",
         BlockingPreviewAction::NoChange => "no_change",
     };
     BlockingPreviewCommandOutput {
+        deprecated,
+        replacement: deprecated.then_some(BLOCKING_PREVIEW_REPLACEMENT),
         backend: preview.backend.id(),
         backend_target: preview.backend_target.clone(),
         attempted_backends: preview

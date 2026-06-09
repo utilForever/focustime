@@ -46,7 +46,8 @@ use execute::{
     apply_site_delete_command, apply_site_edit_command,
 };
 use output::{
-    build_blocking_preview_command_output, build_diagnostics_command_output,
+    build_blocking_preview_command_output, build_diagnostics_blocking_preview_error,
+    build_diagnostics_blocking_preview_output, build_diagnostics_command_output,
     build_schedule_inspection_output, display_input_value, effective_blocked_sites_for_profile,
     flush_stdout, print_automation_triggers_command_output, print_backup_output,
     print_blocking_preview_command_output, print_blocklist_category_command_output,
@@ -224,8 +225,8 @@ Options:
   --config-doctor  Run config diagnostics (invalid/conflicting/stale settings) with remediation guidance
   --config-migrate  Preview config migration assistant changes for deprecated/renamed keys
   --config-migrate-apply  Apply config migration assistant changes and write migrated config.toml
-  --diagnostics   Show setup diagnostics, config health, and migration guidance
-  --blocking-preview  Preview backend-selected blocking changes without writing
+  --diagnostics   Show setup diagnostics, blocking preview details, config health, and migration guidance
+  --blocking-preview  Deprecated: use --diagnostics to preview backend-selected blocking changes without writing
   --usage-signals  Show local command/screen usage summary (top + rare surfaces)
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
@@ -1054,12 +1055,16 @@ struct DiagnosticsSetupOutput {
 struct DiagnosticsCommandOutput {
     action: &'static str,
     setup: DiagnosticsSetupOutput,
+    blocking_preview: DiagnosticsBlockingPreviewOutput,
     config_doctor: ConfigDoctorReport,
     config_migration: ConfigMigrationReport,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct BlockingPreviewCommandOutput {
+    deprecated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    replacement: Option<&'static str>,
     backend: &'static str,
     backend_target: String,
     attempted_backends: Vec<&'static str>,
@@ -1070,6 +1075,15 @@ struct BlockingPreviewCommandOutput {
     effective_blocked_sites_count: usize,
     effective_blocked_sites: Vec<String>,
     section: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct DiagnosticsBlockingPreviewOutput {
+    status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preview: Option<BlockingPreviewCommandOutput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
