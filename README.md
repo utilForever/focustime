@@ -229,6 +229,10 @@ cargo run -- --config-migrate-apply --json
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
 
+# Deprecated standalone usage-signal path; use --feature-inventory for cleanup reporting
+cargo run -- --usage-signals
+cargo run -- --usage-signals --json
+
 # Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary allowlist entries, latest interruption summary, and `selected_task_goal` in JSON)
 cargo run -- --status
 cargo run -- --status --json
@@ -340,6 +344,7 @@ Early deprecation notices:
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
+| Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
 | Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
 | Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
@@ -787,6 +792,11 @@ focustime --diagnostics --json
 The standalone `focustime --blocking-preview` path remains as deprecated
 replacement-guided output for older automation; new scripts should read the
 `blocking_preview` section from `focustime --diagnostics --json`.
+
+The standalone `focustime --usage-signals` path remains as deprecated
+replacement-guided output for older automation; cleanup scripts should use
+`focustime --feature-inventory --json` and treat raw usage-signal summaries as
+internal cleanup inputs.
 
 Blocking backend policy is deterministic:
 
