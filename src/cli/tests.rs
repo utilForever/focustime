@@ -46,6 +46,27 @@ fn test_config_migration_report() -> ConfigMigrationReport {
     }
 }
 
+fn test_diagnostics_blocking_preview_output() -> DiagnosticsBlockingPreviewOutput {
+    DiagnosticsBlockingPreviewOutput {
+        status: "ok",
+        error: None,
+        preview: Some(BlockingPreviewCommandOutput {
+            deprecated: false,
+            replacement: None,
+            backend: "hosts",
+            backend_target: "hosts".to_string(),
+            attempted_backends: vec!["hosts"],
+            fallback_used: false,
+            hosts_file_path: "hosts".to_string(),
+            action: "block",
+            would_change: true,
+            effective_blocked_sites_count: 1,
+            effective_blocked_sites: vec!["example.com".to_string()],
+            section: Some("127.0.0.1 example.com\n".to_string()),
+        }),
+    }
+}
+
 #[test]
 fn parse_without_arguments_runs_default_tui() {
     let parsed = parse(&[]).unwrap();
@@ -920,10 +941,23 @@ fn diagnostics_output_includes_config_health_and_migration_guidance() {
         &app.setup_diagnostics,
         test_config_doctor_report(),
         test_config_migration_report(),
+        test_diagnostics_blocking_preview_output(),
     );
 
     assert_eq!(payload.action, "diagnostics");
     assert!(payload.setup.deprecation_warnings.is_empty());
+    assert_eq!(payload.blocking_preview.status, "ok");
+    let preview = payload
+        .blocking_preview
+        .preview
+        .as_ref()
+        .expect("diagnostics should include blocking preview details");
+    assert!(!preview.deprecated);
+    assert_eq!(preview.backend, "hosts");
+    assert_eq!(preview.action, "block");
+    assert!(preview.would_change);
+    assert_eq!(preview.effective_blocked_sites, vec!["example.com"]);
+    assert!(preview.replacement.is_none());
     assert_eq!(payload.config_doctor.action, "config-doctor");
     assert_eq!(payload.config_doctor.status, ConfigHealthStatus::Ok);
     assert_eq!(payload.config_migration.action, "config-migrate");
@@ -942,6 +976,7 @@ fn diagnostics_output_includes_wakatime_runtime_status() {
         &app.setup_diagnostics,
         test_config_doctor_report(),
         test_config_migration_report(),
+        test_diagnostics_blocking_preview_output(),
     );
 
     assert_eq!(payload.setup.wakatime_runtime.level, "warning");
@@ -963,6 +998,7 @@ fn diagnostics_output_includes_deprecation_warnings() {
         &app.setup_diagnostics,
         test_config_doctor_report(),
         test_config_migration_report(),
+        test_diagnostics_blocking_preview_output(),
     );
 
     assert_eq!(

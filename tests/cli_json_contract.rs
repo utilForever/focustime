@@ -982,12 +982,41 @@ fn blocking_preview_json_emits_payload_on_stdout() {
     assert!(stderr_text(&output).trim().is_empty());
 
     let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(payload["deprecated"], true);
+    assert!(
+        payload["replacement"]
+            .as_str()
+            .is_some_and(|replacement| replacement.contains("--diagnostics"))
+    );
     assert!(payload.get("hosts_file_path").is_some());
     assert!(payload.get("action").is_some());
     assert!(payload.get("would_change").is_some());
     assert!(payload.get("effective_blocked_sites_count").is_some());
     assert!(payload.get("effective_blocked_sites").is_some());
     assert!(payload.get("section").is_some());
+}
+
+#[test]
+fn diagnostics_json_includes_blocking_preview_payload() {
+    let env = TestEnv::new("diagnostics-blocking-preview-json");
+    let output = env.run(&["--diagnostics", "--json"]);
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(stderr_text(&output).trim().is_empty());
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(payload["action"], "diagnostics");
+    assert!(payload.get("setup").is_some());
+    assert!(payload.get("config_doctor").is_some());
+    assert!(payload.get("config_migration").is_some());
+    assert_eq!(payload["blocking_preview"]["status"], "ok");
+    let preview = &payload["blocking_preview"]["preview"];
+    assert_eq!(preview["deprecated"], false);
+    assert!(preview.get("replacement").is_none());
+    assert!(preview.get("backend").is_some());
+    assert!(preview.get("action").is_some());
+    assert!(preview.get("would_change").is_some());
+    assert!(preview.get("effective_blocked_sites_count").is_some());
 }
 
 #[test]
