@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Blocking preview diagnostics merge (#440):** moved backend-selected blocking preview details into the canonical `--diagnostics` output model and marked the standalone `--blocking-preview` path with replacement guidance.
 - **Consolidated diagnostics workflow (#439):** expanded `--diagnostics` into the canonical setup/config health/migration guidance workflow while keeping focused config doctor and migration commands available.
 
 ## [0.15.1] - 2026-06-08

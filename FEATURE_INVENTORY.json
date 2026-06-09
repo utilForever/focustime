@@ -344,8 +344,9 @@
       "feature_id": "blocking-preview-diagnostics",
       "name": "Blocking preview diagnostics",
       "surface": "blocker",
-      "description": "Preview effective blocker resolution and inspect command/backend actions.",
+      "description": "Preview effective blocker resolution through diagnostics and inspect command/backend actions.",
       "cli_flags": [
+        "--diagnostics",
         "--blocking-preview"
       ],
       "value": 3,
