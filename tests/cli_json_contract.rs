@@ -655,7 +655,20 @@ fn feature_inventory_json_exports_scored_report_artifacts() {
             .expect("failed to read exported feature inventory JSON"),
     )
     .expect("feature inventory export JSON should parse");
-    assert_eq!(inventory_payload["schema_version"], 4);
+    assert_eq!(inventory_payload["schema_version"], 5);
+    assert_eq!(
+        inventory_payload["cleanup_signal_support"]["deprecated_cli_flag"],
+        "--usage-signals"
+    );
+    assert_eq!(
+        inventory_payload["cleanup_signal_support"]["replacement_cli_flag"],
+        "--feature-inventory"
+    );
+    assert!(
+        inventory_payload["cleanup_signal_support"]["retained_dimensions"]
+            .as_array()
+            .is_some_and(|dimensions| dimensions.iter().any(|dimension| dimension == "commands"))
+    );
 }
 
 #[test]

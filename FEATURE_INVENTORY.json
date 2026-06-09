@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "scoring_model": {
     "score_min": 1,
     "score_max": 5,
@@ -141,6 +141,20 @@
       "--weekday-rules",
       "--weekday-rules-set"
     ]
+  },
+  "cleanup_signal_support": {
+    "retained_dimensions": [
+      "commands",
+      "screens"
+    ],
+    "retained_summary_fields": [
+      "total_events",
+      "unique_surfaces",
+      "top",
+      "rare"
+    ],
+    "deprecated_cli_flag": "--usage-signals",
+    "replacement_cli_flag": "--feature-inventory"
   },
   "features": [
     {
@@ -540,19 +554,19 @@
       "recommendation": "keep"
     },
     {
-      "feature_id": "usage-signal-inspection",
-      "name": "Usage signal inspection",
+      "feature_id": "usage-signal-cleanup-support",
+      "name": "Usage signal cleanup support",
       "surface": "stats",
-      "description": "Review command and screen frequency summaries to guide feature cleanup decisions.",
+      "description": "Keep command and screen frequency summaries available as internal inputs for feature cleanup and inventory decisions.",
       "cli_flags": [
         "--usage-signals"
       ],
       "value": 3,
       "complexity": 2,
-      "support_burden": 2,
-      "failure_impact": 2,
-      "maintenance_cost": 2.0,
-      "value_to_maintenance_ratio": 1.5,
+      "support_burden": 1,
+      "failure_impact": 1,
+      "maintenance_cost": 1.4,
+      "value_to_maintenance_ratio": 2.14,
       "recommendation": "merge"
     },
     {
