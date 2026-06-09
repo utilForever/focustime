@@ -1,5 +1,8 @@
 use crate::cli::*;
-use crate::config::{AutomationTriggerActionConfig, AutomationTriggerConditionConfig};
+use crate::config::{
+    AutomationTriggerActionConfig, AutomationTriggerConditionConfig, ConfigDoctorReport,
+    ConfigHealthStatus, ConfigMigrationReport,
+};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
     WorkflowStateSnapshot, WorkflowTemporaryAllowlistEntrySnapshot,
@@ -14,6 +17,33 @@ fn parse(values: &[&str]) -> Result<CliAction, String> {
 
 fn parse_with_contract(values: &[&str]) -> Result<CliAction, CliError> {
     parse_args_with_contract(values.iter().map(OsString::from))
+}
+
+fn test_config_doctor_report() -> ConfigDoctorReport {
+    ConfigDoctorReport {
+        action: "config-doctor",
+        config_path: None,
+        detected_schema_version: None,
+        current_schema_version: 2,
+        status: ConfigHealthStatus::Ok,
+        migration_steps: Vec::new(),
+        findings: Vec::new(),
+    }
+}
+
+fn test_config_migration_report() -> ConfigMigrationReport {
+    ConfigMigrationReport {
+        action: "config-migrate",
+        applied: false,
+        config_path: None,
+        backup_path: None,
+        detected_schema_version: None,
+        target_schema_version: 2,
+        changed: false,
+        status: ConfigHealthStatus::Ok,
+        steps: Vec::new(),
+        findings: Vec::new(),
+    }
 }
 
 #[test]
@@ -884,11 +914,20 @@ fn parse_rejects_config_migrate_and_apply_combination() {
 }
 
 #[test]
-fn diagnostics_output_includes_deprecation_warnings_field() {
+fn diagnostics_output_includes_config_health_and_migration_guidance() {
     let app = App::default();
-    let payload = build_diagnostics_command_output(&app.setup_diagnostics);
+    let payload = build_diagnostics_command_output(
+        &app.setup_diagnostics,
+        test_config_doctor_report(),
+        test_config_migration_report(),
+    );
 
-    assert!(payload.deprecation_warnings.is_empty());
+    assert_eq!(payload.action, "diagnostics");
+    assert!(payload.setup.deprecation_warnings.is_empty());
+    assert_eq!(payload.config_doctor.action, "config-doctor");
+    assert_eq!(payload.config_doctor.status, ConfigHealthStatus::Ok);
+    assert_eq!(payload.config_migration.action, "config-migrate");
+    assert!(!payload.config_migration.applied);
 }
 
 #[test]
@@ -899,11 +938,15 @@ fn diagnostics_output_includes_wakatime_runtime_status() {
         level: SetupCheckLevel::Warning,
         message: "Queued: 2 WakaTime heartbeats pending replay".to_string(),
     };
-    let payload = build_diagnostics_command_output(&app.setup_diagnostics);
+    let payload = build_diagnostics_command_output(
+        &app.setup_diagnostics,
+        test_config_doctor_report(),
+        test_config_migration_report(),
+    );
 
-    assert_eq!(payload.wakatime_runtime.level, "warning");
+    assert_eq!(payload.setup.wakatime_runtime.level, "warning");
     assert_eq!(
-        payload.wakatime_runtime.message,
+        payload.setup.wakatime_runtime.message,
         "Queued: 2 WakaTime heartbeats pending replay"
     );
 }
@@ -916,10 +959,14 @@ fn diagnostics_output_includes_deprecation_warnings() {
         "Deprecated top-level automation fields are in use.".to_string(),
     ];
 
-    let payload = build_diagnostics_command_output(&app.setup_diagnostics);
+    let payload = build_diagnostics_command_output(
+        &app.setup_diagnostics,
+        test_config_doctor_report(),
+        test_config_migration_report(),
+    );
 
     assert_eq!(
-        payload.deprecation_warnings,
+        payload.setup.deprecation_warnings,
         vec![
             "Deprecated top-level timer fields are in use.".to_string(),
             "Deprecated top-level automation fields are in use.".to_string()
