@@ -210,7 +210,7 @@ cargo run -- --break-glass-trigger --json
 cargo run -- --break-glass-cancel
 
 # Show the consolidated diagnostics workflow:
-# setup checks, config health, and config migration guidance
+# setup checks, blocking preview details, config health, and config migration guidance
 cargo run -- --diagnostics
 cargo run -- --diagnostics --json
 
@@ -225,7 +225,7 @@ cargo run -- --config-migrate --json
 cargo run -- --config-migrate-apply
 cargo run -- --config-migrate-apply --json
 
-# Preview backend-selected blocking changes without writing
+# Deprecated standalone preview path; use --diagnostics for the canonical workflow
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
 
@@ -339,6 +339,7 @@ Early deprecation notices:
 | --- | --- |
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
+| Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
 | Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
@@ -775,13 +776,17 @@ The diagnostics screen reports:
   `tracking`, `sending`, `queued`, `replaying`, `retrying`, `error`, and
   related pending counts/backoff details)
 
-The CLI diagnostics command adds config health findings and migration preview
-guidance to the same workflow:
+The CLI diagnostics command adds blocking preview details, config health
+findings, and migration preview guidance to the same workflow:
 
 ```sh
 focustime --diagnostics
 focustime --diagnostics --json
 ```
+
+The standalone `focustime --blocking-preview` path remains as deprecated
+replacement-guided output for older automation; new scripts should read the
+`blocking_preview` section from `focustime --diagnostics --json`.
 
 Blocking backend policy is deterministic:
 
