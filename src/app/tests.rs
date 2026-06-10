@@ -3554,7 +3554,7 @@ fn recurring_schedule_does_not_retrigger_within_same_overlapping_occurrence() {
 }
 
 #[test]
-fn schedule_window_end_trigger_delays_next_window_start() {
+fn deprecated_schedule_window_end_trigger_does_not_delay_schedule_runtime() {
     let first_tick = local_datetime_today(10, 15);
     let overlap_transition_tick = local_datetime_today(10, 20);
     let config = AppConfig {
@@ -3590,18 +3590,15 @@ fn schedule_window_end_trigger_delays_next_window_start() {
     app.phase_notification = None;
     app.sync_recurring_schedule(overlap_transition_tick);
 
-    assert_eq!(app.timer.status, TimerStatus::Idle);
-    assert_eq!(
-        app.schedule_delay_until,
-        Some(overlap_transition_tick + ChronoDuration::seconds(120))
-    );
+    assert_eq!(app.timer.status, TimerStatus::Running);
+    assert_eq!(app.schedule_delay_until, None);
     assert!(app.phase_notification.as_deref().is_some_and(|message| {
-        message.contains("Automation trigger delayed schedule start until")
+        message.contains("Scheduled window started. Focus auto-started.")
     }));
 }
 
 #[test]
-fn focus_completed_trigger_applies_profile_defaults() {
+fn deprecated_focus_completed_trigger_does_not_apply_profile_defaults() {
     let config = AppConfig {
         automation_triggers: vec![AutomationTriggerRuleConfig {
             trigger: AutomationTriggerConditionConfig::FocusCompleted,
@@ -3622,57 +3619,7 @@ fn focus_completed_trigger_applies_profile_defaults() {
 
     app.on_tick(false);
 
-    assert_eq!(app.selected_profile, ProfileId::DeepWork);
-}
-
-#[test]
-fn time_trigger_fires_once_per_minute() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        automation_triggers: vec![AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                at: now.format("%H:%M").to_string(),
-            },
-            action: AutomationTriggerActionConfig::StartFocus,
-        }],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-
-    app.sync_time_based_automation_triggers(now);
-    assert_eq!(app.timer.status, TimerStatus::Running);
-
-    app.timer.status = TimerStatus::Idle;
-    app.sync_time_based_automation_triggers(now + ChronoDuration::seconds(30));
-    assert_eq!(app.timer.status, TimerStatus::Idle);
-}
-
-#[test]
-fn automation_start_focus_keeps_selected_task_without_template_reapply() {
-    let now = local_datetime_today(10, 15);
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string(), "Writing".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.capture_session_template("Deep Flow")
-        .expect("template should be created");
-    app.selected_task_label = Some("Writing".to_string());
-    app.automation_triggers = vec![AutomationTriggerRuleConfig {
-        trigger: AutomationTriggerConditionConfig::Time {
-            days: vec![weekday_token(now.weekday()).to_string()],
-            at: now.format("%H:%M").to_string(),
-        },
-        action: AutomationTriggerActionConfig::StartFocus,
-    }];
-
-    app.sync_time_based_automation_triggers(now);
-
-    assert_eq!(app.timer.phase, TimerPhase::Focus);
-    assert_eq!(app.timer.status, TimerStatus::Running);
-    assert_eq!(app.active_focus_task_label.as_deref(), Some("Writing"));
-    assert_eq!(app.active_focus_intention.as_deref(), Some("Writing"));
+    assert_ne!(app.selected_profile, ProfileId::DeepWork);
 }
 
 #[test]

@@ -1,6 +1,6 @@
 use crate::app::{
-    App, AppMode, FocusStartOutcome, FocusStartTemplateMode, KeyCode, KeyEvent, KeyModifiers,
-    NavigationAction, PendingTimerAction, SessionInterruptionReason, ShortcutAction, TimerState,
+    App, AppMode, FocusStartOutcome, KeyCode, KeyEvent, KeyModifiers, NavigationAction,
+    PendingTimerAction, SessionInterruptionReason, ShortcutAction, TimerState,
     format_duration_label,
 };
 
@@ -91,7 +91,7 @@ impl App {
     }
 
     fn handle_timer_toggle_pause_key(&mut self) {
-        match self.try_start_focus_session(FocusStartTemplateMode::ApplySelectedTemplate) {
+        match self.try_start_focus_session() {
             Ok(FocusStartOutcome::Started) => {}
             Ok(FocusStartOutcome::MissingTaskLabel) => {
                 self.phase_notification = Some(format!(

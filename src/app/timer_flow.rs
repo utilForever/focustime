@@ -1,7 +1,6 @@
-use crate::app::automation_triggers::AutomationTriggerEvent;
 use crate::app::{
-    App, FocusStartOutcome, FocusStartTemplateMode, Local, SessionInterruptionReason,
-    ShortcutAction, TimerActivity, TimerPhase, TimerState, TimerStatus, current_day_key,
+    App, FocusStartOutcome, SessionInterruptionReason, ShortcutAction, TimerActivity, TimerPhase,
+    TimerState, TimerStatus, current_day_key,
 };
 
 impl App {
@@ -59,10 +58,6 @@ impl App {
             is_catchup,
             blocked_focus_autostart,
         );
-        if !is_catchup {
-            self.fire_timer_lifecycle_automation_events(completed_phase, TimerStatus::Running);
-        }
-
         self.sync_focus_runtime_for_activity_change(previous_activity);
         self.apply_blocking_for_phase();
     }
@@ -103,16 +98,11 @@ impl App {
         }
     }
 
-    pub(super) fn try_start_focus_session(
-        &mut self,
-        template_mode: FocusStartTemplateMode,
-    ) -> Result<FocusStartOutcome, String> {
+    pub(super) fn try_start_focus_session(&mut self) -> Result<FocusStartOutcome, String> {
         if self.timer.phase != TimerPhase::Focus || self.timer.status != TimerStatus::Idle {
             return Ok(FocusStartOutcome::NotIdleFocusPhase);
         }
-        if matches!(template_mode, FocusStartTemplateMode::ApplySelectedTemplate) {
-            self.apply_selected_session_template_before_start()?;
-        }
+        self.apply_selected_session_template_before_start()?;
         if !self.has_selectable_task_label_for_focus() {
             return Ok(FocusStartOutcome::MissingTaskLabel);
         }
@@ -149,49 +139,10 @@ impl App {
             self.record_session_interruption_event(context);
         }
         self.sync_focus_runtime_for_activity_change(previous_activity);
-        self.fire_timer_lifecycle_automation_events(previous_phase, previous_status);
         self.apply_blocking_for_phase();
         self.sync_recovery_snapshot();
         if let Err(error) = self.sync_cli_workflow_state() {
             self.config_error = Some(error);
-        }
-    }
-
-    fn fire_timer_lifecycle_automation_events(
-        &mut self,
-        previous_phase: TimerPhase,
-        previous_status: TimerStatus,
-    ) {
-        let now = Local::now();
-        if previous_phase != self.timer.phase {
-            match previous_phase {
-                TimerPhase::Focus => {
-                    self.fire_automation_trigger_event(AutomationTriggerEvent::FocusCompleted, now)
-                }
-                TimerPhase::ShortBreak | TimerPhase::LongBreak => {
-                    self.fire_automation_trigger_event(AutomationTriggerEvent::BreakCompleted, now)
-                }
-            }
-            match self.timer.phase {
-                TimerPhase::Focus => {
-                    self.fire_automation_trigger_event(AutomationTriggerEvent::FocusStarted, now)
-                }
-                TimerPhase::ShortBreak | TimerPhase::LongBreak => {
-                    self.fire_automation_trigger_event(AutomationTriggerEvent::BreakStarted, now)
-                }
-            }
-            return;
-        }
-
-        if previous_status != TimerStatus::Running && self.timer.status == TimerStatus::Running {
-            match self.timer.phase {
-                TimerPhase::Focus => {
-                    self.fire_automation_trigger_event(AutomationTriggerEvent::FocusStarted, now)
-                }
-                TimerPhase::ShortBreak | TimerPhase::LongBreak => {
-                    self.fire_automation_trigger_event(AutomationTriggerEvent::BreakStarted, now)
-                }
-            }
         }
     }
 

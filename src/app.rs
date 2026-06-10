@@ -53,7 +53,6 @@ use crate::timer::{
 use crate::wakatime::WakatimeTracker;
 use crate::wakatime::{WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, WakatimeRuntimeState};
 
-mod automation_triggers;
 mod break_glass;
 mod cli_api;
 mod error;
@@ -313,12 +312,6 @@ fn load_calendar_busy_windows(
 enum PendingTimerAction {
     Reset,
     BreakGlassOverride,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FocusStartTemplateMode {
-    ApplySelectedTemplate,
-    SkipSelectedTemplate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -911,7 +904,6 @@ impl App {
         self.sync_break_glass_override();
         self.sync_weekday_profile_rules(now);
         self.sync_recurring_schedule(now);
-        self.sync_time_based_automation_triggers(now);
     }
 
     pub(crate) fn selected_profile_name(&self) -> &'static str {
