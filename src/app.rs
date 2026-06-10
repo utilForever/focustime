@@ -21,7 +21,8 @@ use crate::config::{
     ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
     RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
     ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeekdayProfileRuleConfig,
-    WeeklyGoalConfig, validate_automation_trigger_rules,
+    WeeklyGoalConfig, replace_weekday_profile_rule_automation_triggers,
+    validate_automation_trigger_rules,
 };
 use crate::integration::{IntegrationLifecycleEvent, IntegrationRuntime};
 use crate::notifications::PhaseNotifier;

@@ -2,7 +2,8 @@ use crate::app::{
     App, AppConfig, BlocklistCategoryConfig, BlocklistProfileConfig,
     DEFAULT_BLOCKLIST_PROFILE_NAME, HistoryDashboardConfig, Local, PendingTimerAction, TimerPhase,
     TimerState, TimerStatus, blocking_backend_config_for_persistence, format_duration_label,
-    occurrence_key, profile_index, profile_spec_for, task_label_index,
+    occurrence_key, profile_index, profile_spec_for,
+    replace_weekday_profile_rule_automation_triggers, task_label_index,
 };
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, WorkflowStateSnapshot, WorkflowTemporaryAllowlistEntrySnapshot,
@@ -525,6 +526,14 @@ impl App {
         let (backend_policy, command_backend) = self.blocker.backend_config();
         let blocking_backend =
             blocking_backend_config_for_persistence(backend_policy, &command_backend);
+        let automation_triggers = if self.weekday_profile_rules.is_empty() {
+            self.automation_triggers.clone()
+        } else {
+            replace_weekday_profile_rule_automation_triggers(
+                &self.automation_triggers,
+                &self.weekday_profile_rules,
+            )
+        };
         AppConfig {
             // Keep legacy fields aligned with the editable custom profile so
             // older releases retain user-configured values.
@@ -538,10 +547,10 @@ impl App {
             blocking_backend,
             selected_profile: self.selected_profile,
             custom_profile: Some(custom_profile),
-            weekday_profile_rules: self.weekday_profile_rules.clone(),
+            weekday_profile_rules: Vec::new(),
             session_templates: self.session_templates.clone(),
             selected_session_template: self.selected_session_template_for_persistence(),
-            automation_triggers: self.automation_triggers.clone(),
+            automation_triggers,
             selected_theme_preset: self.selected_theme_preset,
             notifications: self.notification_settings,
             auto_start: self.auto_start,

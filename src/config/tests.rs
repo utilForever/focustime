@@ -318,6 +318,7 @@ fn round_trip_full_config() {
     assert!(!root.contains_key("auto_start"));
     assert!(!root.contains_key("strict_mode"));
     assert!(!root.contains_key("recurring_schedule"));
+    assert!(!root.contains_key("weekday_profile_rules"));
 
     let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
     assert_eq!(parsed.focus_secs, default_focus_secs());
@@ -924,6 +925,52 @@ fn normalize_automation_trigger_apply_defaults_resolves_references() {
                 session_template: Some("Deep Flow".to_string()),
             },
         }
+    );
+}
+
+#[test]
+fn normalize_moves_weekday_profile_rules_to_canonical_automation_triggers() {
+    let cfg = AppConfig {
+        blocklist_profiles: vec![
+            BlocklistProfileConfig::default(),
+            BlocklistProfileConfig {
+                name: "Work".to_string(),
+                sites: Vec::new(),
+                allowlist_sites: Vec::new(),
+                ..BlocklistProfileConfig::default()
+            },
+        ],
+        session_templates: vec![SessionTemplateConfig {
+            name: "Deep Flow".to_string(),
+            task_label: "Docs".to_string(),
+            profile: ProfileId::DeepWork,
+            blocklist_profile: "Work".to_string(),
+            schedule: RecurringScheduleConfig::default(),
+        }],
+        weekday_profile_rules: vec![WeekdayProfileRuleConfig {
+            day: "monday".to_string(),
+            profile: ProfileId::DeepWork,
+            blocklist_profile: "work".to_string(),
+            session_template: Some("deep flow".to_string()),
+        }],
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert!(cfg.weekday_profile_rules.is_empty());
+    assert_eq!(
+        cfg.automation_triggers,
+        vec![AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time {
+                days: vec!["mon".to_string()],
+                at: "00:00".to_string(),
+            },
+            action: AutomationTriggerActionConfig::ApplyDefaults {
+                profile: ProfileId::DeepWork,
+                blocklist_profile: "Work".to_string(),
+                session_template: Some("Deep Flow".to_string()),
+            },
+        }]
     );
 }
 
@@ -1558,14 +1605,7 @@ strict_mode = false
         .and_then(toml::Value::as_str);
     assert_eq!(session_template_profile, Some("advanced"));
 
-    let weekday_rule_profile = root
-        .get("weekday_profile_rules")
-        .and_then(toml::Value::as_array)
-        .and_then(|array| array.first())
-        .and_then(toml::Value::as_table)
-        .and_then(|rule| rule.get("profile"))
-        .and_then(toml::Value::as_str);
-    assert_eq!(weekday_rule_profile, Some("basic"));
+    assert!(root.get("weekday_profile_rules").is_none());
 
     let automation_trigger_profile = root
         .get("automation_triggers")
@@ -1577,6 +1617,34 @@ strict_mode = false
         .and_then(|action| action.get("profile"))
         .and_then(toml::Value::as_str);
     assert_eq!(automation_trigger_profile, Some("standard"));
+
+    let weekday_replacement = root
+        .get("automation_triggers")
+        .and_then(toml::Value::as_array)
+        .and_then(|array| {
+            array.iter().find(|entry| {
+                entry
+                    .get("trigger")
+                    .and_then(|trigger| trigger.get("type"))
+                    .and_then(toml::Value::as_str)
+                    == Some("time")
+            })
+        })
+        .expect("weekday rule should migrate to a time automation trigger");
+    assert_eq!(
+        weekday_replacement
+            .get("trigger")
+            .and_then(|trigger| trigger.get("at"))
+            .and_then(toml::Value::as_str),
+        Some("00:00")
+    );
+    assert_eq!(
+        weekday_replacement
+            .get("action")
+            .and_then(|action| action.get("profile"))
+            .and_then(toml::Value::as_str),
+        Some("basic")
+    );
 }
 
 #[test]
