@@ -9,6 +9,12 @@ impl App {
             return;
         }
 
+        self.apply_weekday_profile_rule_for_current_day(now);
+    }
+
+    pub(super) fn apply_weekday_profile_rule_for_current_day(&mut self, now: DateTime<Local>) {
+        let today = now.date_naive();
+
         // Avoid resetting an in-progress timer session at day rollover.
         if self.timer.status != TimerStatus::Idle {
             return;

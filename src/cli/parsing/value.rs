@@ -188,7 +188,7 @@ pub(in crate::cli) fn parse_weekday_rules_value(
 ) -> Result<Vec<WeekdayProfileRuleConfig>, String> {
     let rules = serde_json::from_str::<Vec<WeekdayProfileRuleConfig>>(value).map_err(|error| {
         invalid_usage(&format!(
-            "Invalid weekday-rules JSON payload: {error}. Use `--weekday-rules-set='[{{\"day\":\"mon\",\"profile\":\"standard\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}}]'`."
+            "Invalid weekday-rules JSON payload: {error}. This compatibility payload maps to automation time triggers; use `--weekday-rules-set='[{{\"day\":\"mon\",\"profile\":\"standard\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}}]'`."
         ))
     })?;
     validate_weekday_rules_value(&rules)?;

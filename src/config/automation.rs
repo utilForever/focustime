@@ -6,6 +6,8 @@ use super::{
     SessionTemplateConfig, WeekdayProfileRuleConfig, parse_schedule_time_minutes,
 };
 
+pub(crate) const WEEKDAY_PROFILE_RULE_REPLACEMENT_AT: &str = "00:00";
+
 pub(super) fn normalize_automation_triggers(
     rules: &[AutomationTriggerRuleConfig],
     blocklist_profiles: &[BlocklistProfileConfig],
@@ -260,6 +262,85 @@ pub(super) fn normalize_weekday_profile_rules(
         normalized_by_day[day_index] = Some(normalized);
     }
     normalized_by_day.into_iter().flatten().collect()
+}
+
+pub(crate) fn replace_weekday_profile_rule_automation_triggers(
+    automation_triggers: &[AutomationTriggerRuleConfig],
+    weekday_rules: &[WeekdayProfileRuleConfig],
+) -> Vec<AutomationTriggerRuleConfig> {
+    let mut merged = automation_triggers
+        .iter()
+        .filter(|rule| !is_weekday_profile_rule_replacement_trigger(rule))
+        .cloned()
+        .collect::<Vec<_>>();
+    merged.extend(
+        weekday_rules
+            .iter()
+            .map(weekday_profile_rule_to_automation_trigger),
+    );
+    merged
+}
+
+pub(crate) fn automation_triggers_to_weekday_profile_rules(
+    automation_triggers: &[AutomationTriggerRuleConfig],
+) -> Vec<WeekdayProfileRuleConfig> {
+    let mut normalized_by_day: [Option<WeekdayProfileRuleConfig>; 7] =
+        std::array::from_fn(|_| None);
+    for trigger in automation_triggers {
+        let AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time { days, at },
+            action:
+                AutomationTriggerActionConfig::ApplyDefaults {
+                    profile,
+                    blocklist_profile,
+                    session_template,
+                },
+        } = trigger
+        else {
+            continue;
+        };
+        if at != WEEKDAY_PROFILE_RULE_REPLACEMENT_AT {
+            continue;
+        }
+        for day in days {
+            let Some(day_index) = weekday_token_to_index(day) else {
+                continue;
+            };
+            normalized_by_day[day_index] = Some(WeekdayProfileRuleConfig {
+                day: weekday_token_from_index(day_index).to_string(),
+                profile: *profile,
+                blocklist_profile: blocklist_profile.clone(),
+                session_template: session_template.clone(),
+            });
+        }
+    }
+    normalized_by_day.into_iter().flatten().collect()
+}
+
+fn weekday_profile_rule_to_automation_trigger(
+    rule: &WeekdayProfileRuleConfig,
+) -> AutomationTriggerRuleConfig {
+    AutomationTriggerRuleConfig {
+        trigger: AutomationTriggerConditionConfig::Time {
+            days: vec![rule.day.clone()],
+            at: WEEKDAY_PROFILE_RULE_REPLACEMENT_AT.to_string(),
+        },
+        action: AutomationTriggerActionConfig::ApplyDefaults {
+            profile: rule.profile,
+            blocklist_profile: rule.blocklist_profile.clone(),
+            session_template: rule.session_template.clone(),
+        },
+    }
+}
+
+fn is_weekday_profile_rule_replacement_trigger(rule: &AutomationTriggerRuleConfig) -> bool {
+    matches!(
+        rule,
+        AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::Time { at, .. },
+            action: AutomationTriggerActionConfig::ApplyDefaults { .. },
+        } if at == WEEKDAY_PROFILE_RULE_REPLACEMENT_AT
+    )
 }
 
 pub(super) fn normalize_weekday_token(value: &str) -> Option<String> {

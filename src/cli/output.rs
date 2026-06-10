@@ -231,6 +231,9 @@ pub(super) fn print_weekday_rules_command_output(payload: &WeekdayRulesCommandOu
     if payload.updated {
         println!("Weekday rules updated.");
     }
+    if payload.deprecated {
+        println!("Weekday rules are deprecated. {}", payload.replacement);
+    }
     if payload.rules.is_empty() {
         println!("Weekday rules: none");
         return;

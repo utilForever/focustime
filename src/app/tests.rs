@@ -3783,6 +3783,37 @@ fn commit_profile_edit_rejects_conflicting_automation_trigger_rules() {
 }
 
 #[test]
+fn commit_profile_edit_applies_changed_weekday_rule_for_today_before_clearing_legacy_rules() {
+    let mut app = App::default();
+    let today = weekday_token(Local::now().weekday()).to_string();
+
+    app.begin_profile_edit();
+    app.weekday_profile_rules = vec![WeekdayProfileRuleConfig {
+        day: today.clone(),
+        profile: ProfileId::Classic,
+        blocklist_profile: "Default".to_string(),
+        session_template: None,
+    }];
+
+    app.commit_profile_edit();
+
+    assert_eq!(app.selected_profile, ProfileId::Classic);
+    assert!(app.weekday_profile_rules.is_empty());
+    assert!(app.automation_triggers.iter().any(|rule| {
+        matches!(
+            rule,
+            AutomationTriggerRuleConfig {
+                trigger: AutomationTriggerConditionConfig::Time { days, at },
+                action: AutomationTriggerActionConfig::ApplyDefaults {
+                    profile: ProfileId::Classic,
+                    ..
+                },
+            } if days == std::slice::from_ref(&today) && at == "00:00"
+        )
+    }));
+}
+
+#[test]
 fn profile_edit_stages_automation_trigger_changes_until_commit() {
     let mut app = App::default();
     let initial_rule = AutomationTriggerRuleConfig {

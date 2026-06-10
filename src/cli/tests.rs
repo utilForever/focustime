@@ -1,7 +1,8 @@
 use crate::cli::*;
 use crate::config::{
     AutomationTriggerActionConfig, AutomationTriggerConditionConfig, ConfigDoctorReport,
-    ConfigHealthStatus, ConfigMigrationReport,
+    ConfigHealthStatus, ConfigMigrationReport, WEEKDAY_PROFILE_RULE_REPLACEMENT_AT,
+    WeekdayProfileRuleConfig,
 };
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
@@ -142,6 +143,47 @@ fn usage_signals_json_emits_deprecated_replacement_payload() {
     assert_eq!(json["deprecated"], true);
     assert_eq!(json["replacement"], payload.replacement);
     assert!(json.get("summary").is_none());
+}
+
+#[test]
+fn weekday_rules_json_emits_deprecated_replacement_payload() {
+    let canonical_rule = AutomationTriggerRuleConfig {
+        trigger: AutomationTriggerConditionConfig::Time {
+            days: vec!["mon".to_string()],
+            at: WEEKDAY_PROFILE_RULE_REPLACEMENT_AT.to_string(),
+        },
+        action: AutomationTriggerActionConfig::ApplyDefaults {
+            profile: crate::config::ProfileId::DeepWork,
+            blocklist_profile: "Work".to_string(),
+            session_template: Some("Deep Flow".to_string()),
+        },
+    };
+    let payload = WeekdayRulesCommandOutput {
+        updated: false,
+        deprecated: true,
+        replacement: "Use `--automation-triggers` with `time` triggers at 00:00 and `apply_defaults` actions.",
+        rules: vec![WeekdayProfileRuleConfig {
+            day: "mon".to_string(),
+            profile: crate::config::ProfileId::DeepWork,
+            blocklist_profile: "Work".to_string(),
+            session_template: Some("Deep Flow".to_string()),
+        }],
+        canonical_rules: vec![canonical_rule],
+    };
+
+    let json = serde_json::to_value(&payload).unwrap();
+    assert_eq!(json["deprecated"], true);
+    assert_eq!(json["replacement"], payload.replacement);
+    assert_eq!(json["rules"][0]["day"], "mon");
+    assert_eq!(json["canonical_rules"][0]["trigger"]["type"], "time");
+    assert_eq!(
+        json["canonical_rules"][0]["trigger"]["at"],
+        WEEKDAY_PROFILE_RULE_REPLACEMENT_AT
+    );
+    assert_eq!(
+        json["canonical_rules"][0]["action"]["type"],
+        "apply_defaults"
+    );
 }
 
 #[test]

@@ -26,6 +26,7 @@ use crate::app::{
     WakatimeHeartbeatMetadata, adjust_daily_goal_minutes, adjust_daily_goal_pomodoros,
     adjust_duration_minutes, compile_exception_dates, compile_one_time_windows, compile_windows,
     profile_for_index, profile_index, profile_spec_for,
+    replace_weekday_profile_rule_automation_triggers,
 };
 use crate::config::validate_automation_trigger_rules;
 
@@ -300,28 +301,20 @@ impl App {
             .profile_edit_snapshot
             .as_ref()
             .is_some_and(|snapshot| snapshot.automation_triggers != edited_automation_triggers);
-        let daily_goal_changed = self
-            .profile_edit_snapshot
-            .as_ref()
-            .is_some_and(|snapshot| snapshot.daily_goal != self.daily_goal);
-        let weekly_goal_changed = self
-            .profile_edit_snapshot
-            .as_ref()
-            .is_some_and(|snapshot| snapshot.weekly_goal != self.weekly_goal);
-        let monthly_goal_changed = self
-            .profile_edit_snapshot
-            .as_ref()
-            .is_some_and(|snapshot| snapshot.monthly_goal != self.monthly_goal);
-        let goal_carry_over_changed = self
-            .profile_edit_snapshot
-            .as_ref()
-            .is_some_and(|snapshot| snapshot.goal_carry_over != self.goal_carry_over);
+        let goals_changed = self.profile_edit_goals_changed();
         self.custom_profile = self.custom_profile.normalized();
         self.recurring_schedule = normalized_schedule;
         self.wakatime_metadata = self.wakatime_metadata.normalized();
-        if automation_triggers_changed
+        let mut next_automation_triggers = edited_automation_triggers;
+        if weekday_rules_changed {
+            next_automation_triggers = replace_weekday_profile_rule_automation_triggers(
+                &next_automation_triggers,
+                &self.weekday_profile_rules,
+            );
+        }
+        if (automation_triggers_changed || weekday_rules_changed)
             && let Err(error) = validate_automation_trigger_rules(
-                &edited_automation_triggers,
+                &next_automation_triggers,
                 &self.blocklist_profiles,
                 &self.session_templates,
             )
@@ -329,52 +322,26 @@ impl App {
             self.config_error = Some(format!("Invalid automation trigger rules: {error}"));
             return;
         }
-        if automation_triggers_changed {
-            self.automation_triggers = edited_automation_triggers;
+        if weekday_rules_changed {
+            let now = Local::now();
+            self.current_frame_now = now;
+            self.apply_weekday_profile_rule_for_current_day(now);
         }
-        if self.selected_profile == ProfileId::Custom {
-            if custom_profile_changed {
-                let original_profile_automation = self.profile_automation.clone();
-                self.update_selected_profile_automation();
-                if !self.apply_profile(ProfileId::Custom) {
-                    self.profile_automation = original_profile_automation;
-                    return;
-                }
-            } else {
-                self.update_selected_profile_automation();
-                self.save_config();
-            }
-        } else {
-            self.update_selected_profile_automation();
-            self.save_config();
+        if automation_triggers_changed || weekday_rules_changed {
+            self.automation_triggers = next_automation_triggers;
+            self.weekday_profile_rules.clear();
+        }
+        if !self.commit_profile_edit_profile_settings(custom_profile_changed) {
+            return;
         }
         self.sync_wakatime_metadata_to_tracker();
         self.rebuild_notifier();
         self.rebuild_recurring_schedule_runtime();
-        if schedule_changed {
-            self.schedule_armed_occurrence_key = None;
-            self.clear_schedule_delay_state();
-            self.last_schedule_occurrence_key = None;
-            let now = Local::now();
-            self.current_frame_now = now;
-            self.sync_recurring_schedule(now);
-        }
-        if weekday_rules_changed {
-            self.last_weekday_profile_sync_day = None;
-            let now = Local::now();
-            self.current_frame_now = now;
-            self.sync_weekday_profile_rules(now);
-        }
-        if automation_triggers_changed {
-            self.automation_trigger_last_fired_minute.clear();
-        }
-        if daily_goal_changed
-            || weekly_goal_changed
-            || monthly_goal_changed
-            || goal_carry_over_changed
-        {
-            self.sync_today_goal_snapshot();
-        }
+        self.sync_profile_edit_commit_side_effects(
+            schedule_changed,
+            automation_triggers_changed || weekday_rules_changed,
+            goals_changed,
+        );
         self.profile_edit_active = false;
         self.profile_edit_field = 0;
         self.profile_edit_schedule_window = 0;
@@ -386,6 +353,59 @@ impl App {
         self.profile_edit_automation_triggers.clear();
         self.clamp_profile_edit_schedule_selection();
         self.profile_edit_snapshot = None;
+    }
+
+    fn profile_edit_goals_changed(&self) -> bool {
+        self.profile_edit_snapshot.as_ref().is_some_and(|snapshot| {
+            snapshot.daily_goal != self.daily_goal
+                || snapshot.weekly_goal != self.weekly_goal
+                || snapshot.monthly_goal != self.monthly_goal
+                || snapshot.goal_carry_over != self.goal_carry_over
+        })
+    }
+
+    fn commit_profile_edit_profile_settings(&mut self, custom_profile_changed: bool) -> bool {
+        if self.selected_profile != ProfileId::Custom {
+            self.update_selected_profile_automation();
+            self.save_config();
+            return true;
+        }
+
+        if !custom_profile_changed {
+            self.update_selected_profile_automation();
+            self.save_config();
+            return true;
+        }
+
+        let original_profile_automation = self.profile_automation.clone();
+        self.update_selected_profile_automation();
+        if self.apply_profile(ProfileId::Custom) {
+            return true;
+        }
+        self.profile_automation = original_profile_automation;
+        false
+    }
+
+    fn sync_profile_edit_commit_side_effects(
+        &mut self,
+        schedule_changed: bool,
+        automation_triggers_changed: bool,
+        goals_changed: bool,
+    ) {
+        if schedule_changed {
+            self.schedule_armed_occurrence_key = None;
+            self.clear_schedule_delay_state();
+            self.last_schedule_occurrence_key = None;
+            let now = Local::now();
+            self.current_frame_now = now;
+            self.sync_recurring_schedule(now);
+        }
+        if automation_triggers_changed {
+            self.automation_trigger_last_fired_minute.clear();
+        }
+        if goals_changed {
+            self.sync_today_goal_snapshot();
+        }
     }
 
     fn adjust_profile_edit_field(&mut self, increase: bool) {
