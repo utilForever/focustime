@@ -5,7 +5,10 @@ use std::{
 };
 
 use crate::app::App;
-use crate::config::validate_automation_trigger_rules;
+use crate::config::{
+    automation_triggers_to_weekday_profile_rules, replace_weekday_profile_rule_automation_triggers,
+    validate_automation_trigger_rules,
+};
 use crate::error::UserMessage;
 
 #[cfg(test)]
@@ -69,6 +72,9 @@ use status::execute_status_command;
 use status::{WATCH_INTERRUPTED, next_watch_deadline, wait_for_next_watch_tick};
 
 type CliExecuteResult<T> = Result<T, UserMessage>;
+
+pub(super) const WEEKDAY_RULES_REPLACEMENT: &str =
+    "Use `--automation-triggers` with `time` triggers at 00:00 and `apply_defaults` actions.";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<()> {
     if let Some(surface_id) = command_usage_surface_id(&cli_command.kind)
@@ -789,17 +795,25 @@ fn execute_weekday_rules_command(
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
     if let Some(rules) = rules {
-        config.weekday_profile_rules = rules;
-        config = config.normalized();
+        let merged_rules =
+            replace_weekday_profile_rule_automation_triggers(&config.automation_triggers, &rules);
+        config.automation_triggers =
+            validate_and_normalize_automation_triggers(merged_rules, &config)
+                .map_err(UserMessage::from)?;
+        config.weekday_profile_rules.clear();
         config
             .save()
             .map_err(|error| format!("Failed to save weekday rules: {error}"))?;
         updated = true;
     }
 
+    let canonical_rules = config.automation_triggers.clone();
     let payload = WeekdayRulesCommandOutput {
         updated,
-        rules: config.weekday_profile_rules.clone(),
+        deprecated: true,
+        replacement: WEEKDAY_RULES_REPLACEMENT,
+        rules: automation_triggers_to_weekday_profile_rules(&canonical_rules),
+        canonical_rules,
     };
 
     match output {

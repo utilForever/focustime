@@ -183,8 +183,8 @@ Options:
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
   --schedule-set  Replace selected profile schedule (recurring + one-time) from JSON payload
-  --weekday-rules      Show weekday smart-switch rules
-  --weekday-rules-set  Replace weekday smart-switch rules from JSON payload
+  --weekday-rules      Deprecated: show weekday defaults mapped from automation triggers
+  --weekday-rules-set  Deprecated: replace weekday defaults via automation triggers
   --automation-triggers      Show automation trigger rules
   --automation-triggers-set  Replace automation trigger rules from JSON payload
   --schedule-delay  Delay the current active schedule window start by 10 minutes
@@ -1022,7 +1022,10 @@ struct ScheduleInspectionOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct WeekdayRulesCommandOutput {
     updated: bool,
+    deprecated: bool,
+    replacement: &'static str,
     rules: Vec<WeekdayProfileRuleConfig>,
+    canonical_rules: Vec<AutomationTriggerRuleConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

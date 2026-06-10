@@ -915,7 +915,7 @@ fn classify_weekday_rules_set_arg(
         ));
     }
     Err(invalid_usage(
-        "`--weekday-rules-set` requires a JSON payload. Use `--weekday-rules-set='[{\"day\":\"mon\",\"profile\":\"standard\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}]'`.",
+        "`--weekday-rules-set` requires a JSON payload. This compatibility command maps to `--automation-triggers-set`; use `--weekday-rules-set='[{\"day\":\"mon\",\"profile\":\"standard\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}]'`.",
     ))
 }
 
