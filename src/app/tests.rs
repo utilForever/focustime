@@ -3808,7 +3808,7 @@ fn commit_profile_edit_applies_changed_weekday_rule_for_today_before_clearing_le
                     profile: ProfileId::Classic,
                     ..
                 },
-            } if days == &[today.clone()] && at == "00:00"
+            } if days == std::slice::from_ref(&today) && at == "00:00"
         )
     }));
 }
