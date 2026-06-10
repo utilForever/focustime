@@ -339,19 +339,19 @@
     },
     {
       "feature_id": "weekday-profile-rules",
-      "name": "Weekday profile rules",
+      "name": "Deprecated weekday profile rule shims",
       "surface": "schedule",
-      "description": "Map weekdays to profile selection rules for context-sensitive defaults.",
+      "description": "Compatibility CLI shims that map weekday defaults into automation time triggers.",
       "cli_flags": [
         "--weekday-rules",
         "--weekday-rules-set"
       ],
-      "value": 4,
-      "complexity": 4,
+      "value": 2,
+      "complexity": 2,
       "support_burden": 4,
       "failure_impact": 3,
-      "maintenance_cost": 3.75,
-      "value_to_maintenance_ratio": 1.07,
+      "maintenance_cost": 2.95,
+      "value_to_maintenance_ratio": 0.68,
       "recommendation": "merge"
     },
     {

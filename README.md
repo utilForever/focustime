@@ -193,11 +193,11 @@ cargo run -- --allowlist-site-delete reddit.com
 # Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"16:00"}]}'
-cargo run -- --weekday-rules
-cargo run -- --weekday-rules-set='[{"day":"mon","profile":"standard","blocklist_profile":"Work","session_template":"Deep Flow"}]'
+cargo run -- --automation-triggers
+cargo run -- --automation-triggers-set='[{"trigger":{"type":"time","days":["mon"],"at":"00:00"},"action":{"type":"apply_defaults","profile":"standard","blocklist_profile":"Work","session_template":"Deep Flow"}}]'
 cargo run -- --schedule-delay
 cargo run -- --schedule --json
-cargo run -- --weekday-rules --json
+cargo run -- --automation-triggers --json
 
 # Refresh calendar busy-window cache from configured ICS feeds
 cargo run -- --calendar-sync
@@ -526,7 +526,7 @@ Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
 CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`, `--calendar-sync`,
-`--weekday-rules*`, `--session-template*`, `--history-dashboard*`,
+`--automation-triggers*`, `--session-template*`, `--history-dashboard*`,
 `--feature-inventory`, `--break-glass-trigger`, and `--break-glass-cancel` for non-interactive
 inspection and in-session workflow control.
 
@@ -837,8 +837,8 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
-- `weekday_profile_rules[]` can bind weekday (`day`) to a profile (`profile`), blocklist profile (`blocklist_profile`), and optional session template (`session_template`)
-- weekday profile rules apply at startup and day boundaries; they do not continuously re-assert during the same day
+- weekday default switching now uses canonical `automation_triggers[]`: add `time` triggers with weekday `days`, `at = "00:00"`, and an `apply_defaults` action with the target profile/blocklist/session template
+- deprecated `weekday_profile_rules[]` config entries are migrated into the canonical automation trigger form; `--weekday-rules*` commands remain available only as compatibility guidance/read-write shims
 - the timer session overview shows the current/next scheduled window
 - when calendar sync cache is available, schedule text adds `calendar busy` for active calendar events and a `calendar overlap` warning for upcoming schedule collisions
 - `--calendar-sync` refreshes the cache from configured ICS feeds (including Google/Outlook ICS feed URLs)
@@ -863,9 +863,9 @@ You can configure notification and auto-start settings directly from the TUI:
   - **One-time date**: `←/→` moves selected one-time window date backward/forward by 1 day
   - **One-time start/end**: adjust one-time window times in `[schedule_runtime].time_step_minutes` steps (default `15`, clamped `1..60`)
   - **One-time add/remove**: `→` adds a one-time window (starting from today), `←` removes selected window
-  - **Weekday rule**: `←/→` changes which weekday rule entry is selected
-  - **Weekday day/profile/blocklist/template**: tune target weekday and linked profile/blocklist/session-template values
-  - **Weekday add/remove**: `→` adds a rule for an unused day, `←` removes selected rule
+  - **Automation trigger**: `←/→` changes which trigger entry is selected
+  - **Automation condition/time/action**: tune event/time conditions and linked profile/blocklist/session-template defaults
+  - **Automation add/remove**: `→` adds a trigger, `←` removes selected trigger
   - **Conflict inspector**: read-only summary of detected schedule overlaps/conflicts
 
 ## Session recovery

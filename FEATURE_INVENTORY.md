@@ -52,7 +52,7 @@
 | `break-glass-workflow` | Schedule | 4 | 3.15 | 1.27 | keep | --break-glass-trigger, --break-glass-cancel |
 | `schedule-definition-and-inspection` | Schedule | 5 | 3.65 | 1.37 | keep | --schedule, --schedule-set |
 | `schedule-delay-controls` | Schedule | 3 | 2.25 | 1.33 | merge | --schedule-delay |
-| `weekday-profile-rules` | Schedule | 4 | 3.75 | 1.07 | merge | --weekday-rules, --weekday-rules-set |
+| `weekday-profile-rules` | Schedule | 2 | 2.95 | 0.68 | merge | --weekday-rules, --weekday-rules-set |
 | `blocking-preview-diagnostics` | Blocker | 3 | 2.25 | 1.33 | merge | --diagnostics, --blocking-preview |
 | `blocklist-category-management` | Blocker | 3 | 3.00 | 1.00 | merge | --blocklist-category, --blocklist-category-create, --blocklist-category-rename, --blocklist-category-delete |
 | `blocklist-profile-management` | Blocker | 4 | 3.25 | 1.23 | keep | --blocklist-profile, --blocklist-profile-create, --blocklist-profile-rename, --blocklist-profile-delete |
