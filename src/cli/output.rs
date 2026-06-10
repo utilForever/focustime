@@ -255,6 +255,12 @@ pub(super) fn print_automation_triggers_command_output(payload: &AutomationTrigg
     if payload.updated {
         println!("Automation triggers updated.");
     }
+    if payload.deprecated {
+        println!(
+            "Automation triggers are deprecated. {}",
+            payload.replacement
+        );
+    }
     if payload.rules.is_empty() {
         println!("Automation triggers: none");
         return;

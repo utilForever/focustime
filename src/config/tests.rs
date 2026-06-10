@@ -1356,6 +1356,10 @@ long_break_secs = 900
 long_break_interval = 3
 strict_mode = true
 blocked_sites = ["youtube.com", "reddit.com"]
+
+[[automation_triggers]]
+trigger = { type = "schedule_window_start" }
+action = { type = "start_focus" }
 "#,
     )
     .unwrap();
@@ -1383,6 +1387,11 @@ blocked_sites = ["youtube.com", "reddit.com"]
         warnings
             .iter()
             .any(|warning| warning.contains("Deprecated `blocked_sites` is in use"))
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("Deprecated `automation_triggers` is in use"))
     );
 }
 
