@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Weekday rule schedule merge (#442):** migrated deprecated weekday profile rules into canonical automation time triggers, kept `--weekday-rules*` as guidance/read-write shims, and removed `weekday_profile_rules` from persisted config output.
+- **Automation trigger deprecation (#443):** marked standalone `automation_triggers` and `--automation-triggers*` as deprecated compatibility surfaces, routed guidance to schedule windows, schedule delay, and session templates, and removed standalone trigger execution from schedule/timer runtime paths.
+- **Weekday rule schedule merge (#442):** migrated deprecated weekday profile rules into compatibility automation time triggers, kept `--weekday-rules*` as guidance/read-write shims, and removed `weekday_profile_rules` from persisted config output.
 
 ## [0.15.2] - 2026-06-10
 
