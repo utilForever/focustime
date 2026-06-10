@@ -27,9 +27,9 @@ in the normal release readiness command set.
 | v0.15.1 | Deprecated config compatibility fields stay visible in diagnostics with canonical replacement guidance. | Config diagnostics | `v015_deprecated_config_paths_report_supported_replacements` |
 | v0.15.1 | Merged legacy profile names continue to migrate to canonical presets (`basic`, `standard`, `advanced`). | Config migration | `v015_merged_profile_paths_keep_migration_guidance` |
 | v0.15.1 | Removed migration-window and encrypted sync flags stay unavailable and emit targeted JSON `error.hint` replacement guidance. | Removed command | `v015_removed_command_paths_keep_targeted_json_guidance` |
-| Unreleased | Setup diagnostics, config doctor, and migration preview guidance stay available from one canonical CLI diagnostics workflow. | Config diagnostics | `diagnostics_output_includes_config_health_and_migration_guidance` |
-| Unreleased | Backend-selected blocking preview details are available from `--diagnostics`, while standalone preview output points to the canonical replacement. | Blocking diagnostics | `diagnostics_json_includes_blocking_preview_payload` plus `blocking_preview_json_emits_payload_on_stdout` |
-| Unreleased | Raw usage-signal inspection stays deprecated and points cleanup/reporting workflows to feature inventory output. | Usage cleanup | `usage_signals_json_emits_deprecated_replacement_payload` plus committed feature inventory coverage |
+| v0.15.2 | Setup diagnostics, config doctor, and migration preview guidance stay available from one canonical CLI diagnostics workflow. | Config diagnostics | `diagnostics_output_includes_config_health_and_migration_guidance` |
+| v0.15.2 | Backend-selected blocking preview details are available from `--diagnostics`, while standalone preview output points to the canonical replacement. | Blocking diagnostics | `diagnostics_json_includes_blocking_preview_payload` plus `blocking_preview_json_emits_payload_on_stdout` |
+| v0.15.2 | Raw usage-signal inspection stays deprecated and points cleanup/reporting workflows to feature inventory output. | Usage cleanup | `usage_signals_json_emits_deprecated_replacement_payload` plus committed feature inventory coverage |
 
 ## Release Readiness
 

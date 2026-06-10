@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-06-10
+
 ### Changed
 
 - **Blocking preview diagnostics merge (#440):** moved backend-selected blocking preview details into the canonical `--diagnostics` output model and marked the standalone `--blocking-preview` path with replacement guidance.
@@ -442,7 +444,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.2...HEAD
+[0.15.2]: https://github.com/utilForever/focustime/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/utilForever/focustime/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/utilForever/focustime/compare/v0.14.4...v0.15.0
 [0.14.4]: https://github.com/utilForever/focustime/compare/v0.14.3...v0.14.4
