@@ -99,6 +99,9 @@ pub(super) fn migrate_weekday_profile_rules_to_automation_triggers(config_toml: 
         return;
     }
     table.remove("weekday_profile_rules");
+    if weekday_rules.is_empty() {
+        return;
+    }
 
     let triggers = table
         .entry("automation_triggers")

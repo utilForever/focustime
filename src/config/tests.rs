@@ -1648,6 +1648,44 @@ strict_mode = false
 }
 
 #[test]
+fn migrate_empty_weekday_rules_preserves_existing_canonical_midnight_triggers() {
+    let v2: toml::Value = toml::from_str(
+        r#"
+schema_version = 2
+weekday_profile_rules = []
+
+[[automation_triggers]]
+trigger = { type = "time", days = ["mon"], at = "00:00" }
+action = { type = "apply_defaults", profile = "standard", blocklist_profile = "Default" }
+"#,
+    )
+    .unwrap();
+    let migrated = migrate_config_toml_to_current(v2).expect("v2 payload should migrate");
+    let root = migrated.as_table().expect("root should be a table");
+
+    assert!(root.get("weekday_profile_rules").is_none());
+    let triggers = root
+        .get("automation_triggers")
+        .and_then(toml::Value::as_array)
+        .expect("automation triggers should remain");
+    assert_eq!(triggers.len(), 1);
+    assert_eq!(
+        triggers[0]
+            .get("trigger")
+            .and_then(|trigger| trigger.get("at"))
+            .and_then(toml::Value::as_str),
+        Some("00:00")
+    );
+    assert_eq!(
+        triggers[0]
+            .get("action")
+            .and_then(|action| action.get("profile"))
+            .and_then(toml::Value::as_str),
+        Some("standard")
+    );
+}
+
+#[test]
 fn migrate_config_toml_v1_to_v2_merges_legacy_profile_automation_into_existing_preset_key() {
     let v1: toml::Value = toml::from_str(
         r#"
