@@ -337,6 +337,11 @@ impl App {
             self.config_error = Some(format!("Invalid automation trigger rules: {error}"));
             return;
         }
+        if weekday_rules_changed {
+            let now = Local::now();
+            self.current_frame_now = now;
+            self.apply_weekday_profile_rule_for_current_day(now);
+        }
         if automation_triggers_changed || weekday_rules_changed {
             self.automation_triggers = next_automation_triggers;
             self.weekday_profile_rules.clear();
