@@ -186,7 +186,7 @@ Options:
   --weekday-rules      Deprecated: show weekday defaults mapped from automation triggers
   --weekday-rules-set  Deprecated: replace weekday defaults via automation triggers
   --automation-triggers      Deprecated: show automation trigger rules with schedule replacement guidance
-  --automation-triggers-set  Deprecated: replace automation trigger rules from JSON payload
+  --automation-triggers-set  Deprecated: use --schedule-set and session templates for replacement behavior
   --schedule-delay  Delay the current active schedule window start by 10 minutes
   --break-glass-trigger  Trigger break-glass workflow (first call arms, second confirms)
   --break-glass-cancel   Cancel a pending break-glass confirmation
