@@ -23,7 +23,7 @@ flowchart LR
     WK["wakatime.rs<br/>heartbeat tracking"]
     NT["notifications.rs<br/>phase notifications"]
     SCH["schedule.rs<br/>window compilation/selection"]
-    CAL["calendar.rs<br/>ICS sync/cache + busy-window helpers"]
+    CAL["calendar.rs<br/>ICS cache + schedule annotation helpers"]
     REC["session_recovery.rs<br/>runtime snapshot I/O"]
     TL["task_labels.rs<br/>task label normalization/indexing"]
     OS["OS / filesystem / hosts / notifications"]
@@ -72,7 +72,7 @@ flowchart LR
 | `blocker.rs`                    | Blocking backend orchestration (hosts + command), deterministic fallback selection, preview generation, and backend diagnostics                                                                                                                                                                 | `app`, `cli`, OS/filesystem                                                                   |
 | `integration.rs`                | Plugin/integration framework foundation: typed lifecycle hooks, capability boundaries, config-driven loading of built-in integrations, and runtime dispatch/error surfaces                                                                                                                      | `app`, `config`, `wakatime`                                                                   |
 | `schedule.rs`                   | Recurring/one-time schedule compile and conflict/occurrence logic                                                                                                                                                                                                                               | `app`, `cli`, `config`                                                                        |
-| `calendar.rs`                   | Calendar ICS fetch/parse/recurrence expansion, timezone normalization, busy-window cache persistence, and overlap helpers for schedule surfaces                                                                                                                                                 | `app`, `cli`, HTTP (`ureq`), `config`, filesystem                                             |
+| `calendar.rs`                   | Optional calendar ICS fetch/parse/recurrence expansion, timezone normalization, busy-window cache persistence, and overlap helpers used only as schedule annotations                                                                                                                               | `app`, `cli`, HTTP (`ureq`), `config`, filesystem                                             |
 | `session_recovery.rs`           | Runtime recovery snapshot read/write, transient runtime artifact reconciliation, and startup warning notices for dropped invalid fragments                                                                                                                                                      | `app`, `cli`, filesystem                                                                      |
 | `task_labels.rs`                | Task-label normalization, canonicalization, and index helpers                                                                                                                                                                                                                                   | `app`, `stats`, `cli`                                                                         |
 | `wakatime.rs`                   | WakaTime config parsing and heartbeat scheduling/sending with retry, bounded offline queueing, and replay orchestration                                                                                                                                                                         | `app`, HTTP (`ureq`)                                                                          |
@@ -118,7 +118,7 @@ sequenceDiagram
    processes keyboard/paste input through `App` key handlers.
 3. A 100ms cadence accumulates elapsed time; each elapsed second advances
    `App::on_tick()` and applies phase-driven side effects.
-4. `App` keeps blocking, notifications, scheduling (including calendar busy/overlap overlays), and integration lifecycle dispatch in sync with
+4. `App` keeps blocking, notifications, scheduling (including optional calendar busy/overlap annotations), and integration lifecycle dispatch in sync with
    timer state; side effects are isolated in dedicated modules.
 5. Daemon mode reuses the same `App` tick/update behavior in a headless loop,
    then serves loopback-authenticated `/v1/*` API endpoints for automation.

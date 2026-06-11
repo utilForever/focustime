@@ -200,7 +200,7 @@ cargo run -- --schedule --json
 cargo run -- --automation-triggers
 cargo run -- --automation-triggers --json
 
-# Refresh calendar busy-window cache from configured ICS feeds
+# Deprecated compatibility surface; refresh opt-in calendar annotations for schedules
 cargo run -- --calendar-sync
 cargo run -- --calendar-sync --json
 
@@ -527,7 +527,7 @@ quick session note.
 Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
-CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`, `--calendar-sync`,
+CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`,
 `--automation-triggers*`, `--session-template*`, `--history-dashboard*`,
 `--feature-inventory`, `--break-glass-trigger`, and `--break-glass-cancel` for non-interactive
 inspection and in-session workflow control.
@@ -713,11 +713,16 @@ schedule runtime defaults (`time_step_minutes = 15`, `delay_secs = 600`).
 `time_step_minutes` is clamped to `1..60`; `delay_secs` is clamped to
 `60..43200`.
 
-`[calendar_sync]` is optional. When omitted, calendar sync defaults to disabled
-with `refresh_secs = 1800`, `lookahead_days = 14`, and no sources. Runtime
-normalization clamps `refresh_secs` to `300..86400` and `lookahead_days` to
-`1..90`, trims source names/URLs, auto-fills blank source names
-(`calendar-source-N`), and removes duplicate provider+URL sources.
+`[calendar_sync]` is optional and remains a narrow opt-in cache for schedule
+annotations only. When omitted or disabled, schedule behavior stays
+deterministic without calendar data; no calendar busy/overlap annotations are
+loaded. If enabled, `--calendar-sync` can refresh the local cache from configured
+ICS feeds, but the standalone command is deprecated in favor of treating
+calendar data as optional schedule context and checking setup/config guidance
+with `--diagnostics`. Runtime normalization clamps `refresh_secs` to
+`300..86400` and `lookahead_days` to `1..90`, trims source names/URLs,
+auto-fills blank source names (`calendar-source-N`), and removes duplicate
+provider+URL sources.
 
 `[wakatime_runtime]` is optional. When omitted, focustime keeps existing
 WakaTime runtime defaults (`retry_backoff_secs = [2, 5, 10]`,
@@ -848,8 +853,8 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - standalone `automation_triggers[]` are deprecated; schedule windows now provide automatic focus starts, `--schedule-delay` handles postponed active windows, and session templates carry task/profile/blocklist defaults
 - deprecated `weekday_profile_rules[]` config entries are accepted for compatibility; `--weekday-rules*` commands remain available only as guidance/read-write shims
 - the timer session overview shows the current/next scheduled window
-- when calendar sync cache is available, schedule text adds `calendar busy` for active calendar events and a `calendar overlap` warning for upcoming schedule collisions
-- `--calendar-sync` refreshes the cache from configured ICS feeds (including Google/Outlook ICS feed URLs)
+- when the opt-in calendar annotation cache is enabled and available, schedule text adds `calendar busy` for active calendar events and a `calendar overlap` warning for upcoming schedule collisions
+- `--calendar-sync` is a deprecated compatibility command that refreshes that optional cache from configured ICS feeds (including Google/Outlook ICS feed URLs)
 
 You can configure notification and auto-start settings directly from the TUI:
 

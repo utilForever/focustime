@@ -1463,6 +1463,46 @@ fn load_with_env_defaults_do_not_emit_deprecation_warnings() {
 }
 
 #[test]
+fn load_with_env_reports_calendar_sync_annotation_cache_guidance() {
+    let temp_base = unique_temp_base("calendar-sync-deprecation-guidance");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(
+        app_dir.join("config.toml"),
+        r#"
+[calendar_sync]
+enabled = true
+
+[[calendar_sync.sources]]
+name = "Work"
+provider = "ics"
+url = "https://example.com/work.ics"
+"#,
+    )
+    .unwrap();
+
+    let (_, warnings) = AppConfig::load_with_env_and_deprecation_warnings(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("opt-in schedule annotation cache"))
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("disabled or absent"))
+    );
+}
+
+#[test]
 fn load_with_env_reports_automation_deprecation_when_profile_automation_is_partial() {
     let temp_base = unique_temp_base("legacy-automation-partial-profile");
     let app_dir = temp_base.join("focustime");
