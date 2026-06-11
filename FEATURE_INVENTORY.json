@@ -573,16 +573,16 @@
       "feature_id": "calendar-busy-window-sync",
       "name": "Calendar busy window sync",
       "surface": "integration",
-      "description": "Sync active focus sessions into calendar busy windows to reduce interruptions.",
+      "description": "Refresh an opt-in external calendar busy-window cache used only as schedule annotations.",
       "cli_flags": [
         "--calendar-sync"
       ],
-      "value": 3,
-      "complexity": 4,
+      "value": 2,
+      "complexity": 3,
       "support_burden": 4,
-      "failure_impact": 3,
-      "maintenance_cost": 3.75,
-      "value_to_maintenance_ratio": 0.8,
+      "failure_impact": 2,
+      "maintenance_cost": 3.1,
+      "value_to_maintenance_ratio": 0.65,
       "recommendation": "merge"
     },
     {
