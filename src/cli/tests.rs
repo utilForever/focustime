@@ -209,6 +209,29 @@ fn automation_triggers_json_emits_deprecated_replacement_payload() {
 }
 
 #[test]
+fn calendar_sync_json_emits_deprecated_schedule_annotation_guidance() {
+    let payload = CalendarSyncCommandOutput {
+        action: "calendar-sync",
+        deprecated: true,
+        replacement: CALENDAR_SYNC_REPLACEMENT,
+        behavior_model: "opt_in_schedule_annotation_cache",
+        synced_at_epoch_secs: 1_779_000_000,
+        source_count: 0,
+        windows_count: 0,
+        error_count: 0,
+        errors: Vec::new(),
+    };
+
+    let json = serde_json::to_value(&payload).unwrap();
+
+    assert_eq!(json["deprecated"], true);
+    assert_eq!(json["replacement"], CALENDAR_SYNC_REPLACEMENT);
+    assert_eq!(json["behavior_model"], "opt_in_schedule_annotation_cache");
+    assert!(payload.replacement.contains("disabled or absent"));
+    assert!(payload.replacement.contains("--diagnostics"));
+}
+
+#[test]
 fn parse_status_watch_without_interval_uses_default_cadence() {
     let parsed = parse(&["--status", "--watch"]).unwrap();
     assert_eq!(

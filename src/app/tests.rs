@@ -2895,6 +2895,28 @@ fn recurring_schedule_next_window_text_flags_calendar_overlap() {
 }
 
 #[test]
+fn recurring_schedule_text_omits_calendar_annotations_when_disabled_or_absent() {
+    let now = local_datetime_today(10, 15);
+    let config = AppConfig {
+        recurring_schedule: RecurringScheduleConfig {
+            windows: vec![crate::config::RecurringFocusWindowConfig {
+                days: vec![weekday_token(now.weekday()).to_string()],
+                start: "11:00".to_string(),
+                end: "12:00".to_string(),
+            }],
+            ..RecurringScheduleConfig::default()
+        },
+        ..AppConfig::default()
+    };
+    let app = App::from_config(config);
+
+    let (next_text, status_text) = app.recurring_schedule_texts_at(now);
+
+    assert!(!next_text.contains("calendar"));
+    assert!(!status_text.contains("calendar"));
+}
+
+#[test]
 fn recurring_schedule_status_text_mentions_active_calendar_busy_window() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {

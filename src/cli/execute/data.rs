@@ -1,10 +1,10 @@
 use std::{env, fs, path::Path};
 
 use crate::cli::{
-    AppConfig, BackupOutput, CalendarSyncCommandOutput, DailyGoalSnapshot, ExportOutput,
-    FeatureInventoryOutput, FocusStats, OutputMode, PathBuf, RestoreOutput, print_backup_output,
-    print_calendar_sync_command_output, print_export_output, print_feature_inventory_output,
-    print_json, print_restore_output,
+    AppConfig, BackupOutput, CALENDAR_SYNC_REPLACEMENT, CalendarSyncCommandOutput,
+    DailyGoalSnapshot, ExportOutput, FeatureInventoryOutput, FocusStats, OutputMode, PathBuf,
+    RestoreOutput, print_backup_output, print_calendar_sync_command_output, print_export_output,
+    print_feature_inventory_output, print_json, print_restore_output,
 };
 use crate::feature_inventory::{build_feature_inventory_report, export_feature_inventory_report};
 
@@ -225,6 +225,9 @@ pub(super) fn execute_calendar_sync_command(output: OutputMode) -> Result<(), St
         .collect::<Vec<_>>();
     let payload = CalendarSyncCommandOutput {
         action: "calendar-sync",
+        deprecated: true,
+        replacement: CALENDAR_SYNC_REPLACEMENT,
+        behavior_model: "opt_in_schedule_annotation_cache",
         synced_at_epoch_secs: result.synced_at_epoch_secs,
         source_count: result.source_count,
         windows_count: result.windows.len(),

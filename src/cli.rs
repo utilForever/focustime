@@ -234,7 +234,7 @@ Options:
   --compare-limit Status comparison row limit (positive integer)
   --backup        Back up config.toml and stats.toml to current directory or DIR
   --restore       Restore config.toml and stats.toml from current directory or DIR
-  --calendar-sync  Refresh calendar busy-window cache from configured ICS feeds
+  --calendar-sync  Deprecated: refresh opt-in calendar busy-window cache for schedule annotations; schedule behavior is unchanged when disabled or absent
   --export        Export stats to current directory or DIR
   --feature-inventory  Export feature inventory scoring report to current directory or DIR
 
@@ -249,6 +249,7 @@ Retired/legacy command guidance:
   -h, --help      Show this help"#;
 
 const USAGE_SIGNALS_REPLACEMENT: &str = "Use `focustime --feature-inventory` for cleanup reporting; raw usage-signal inspection is no longer a standalone workflow.";
+const CALENDAR_SYNC_REPLACEMENT: &str = "Calendar sync is now a narrow opt-in schedule annotation cache. Keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data, and use `focustime --diagnostics` to review setup/config guidance.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OutputMode {
@@ -879,6 +880,9 @@ struct RestoreOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct CalendarSyncCommandOutput {
     action: &'static str,
+    deprecated: bool,
+    replacement: &'static str,
+    behavior_model: &'static str,
     synced_at_epoch_secs: i64,
     source_count: usize,
     windows_count: usize,
