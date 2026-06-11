@@ -193,10 +193,11 @@ cargo run -- --allowlist-site-delete reddit.com
 # Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"16:00"}]}'
-cargo run -- --automation-triggers
-cargo run -- --automation-triggers-set='[{"trigger":{"type":"time","days":["mon"],"at":"00:00"},"action":{"type":"apply_defaults","profile":"standard","blocklist_profile":"Work","session_template":"Deep Flow"}}]'
 cargo run -- --schedule-delay
 cargo run -- --schedule --json
+
+# Deprecated compatibility surface; use --schedule/--schedule-set for new automation
+cargo run -- --automation-triggers
 cargo run -- --automation-triggers --json
 
 # Refresh calendar busy-window cache from configured ICS feeds
@@ -343,6 +344,7 @@ Early deprecation notices:
 | --- | --- |
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
+| Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
 | Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
@@ -798,6 +800,12 @@ replacement-guided output for older automation; cleanup scripts should use
 `focustime --feature-inventory --json` and treat raw usage-signal summaries as
 internal cleanup inputs.
 
+The standalone `focustime --automation-triggers*` path remains as deprecated
+replacement-guided output for older automation. New scripts should configure
+profile schedules with `focustime --schedule-set`, delay active windows with
+`focustime --schedule-delay`, and store task/profile/blocklist defaults in
+session templates.
+
 Blocking backend policy is deterministic:
 
 - `hosts_then_command` (default): try hosts first, then command backend fallback
@@ -837,8 +845,8 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
-- weekday default switching now uses canonical `automation_triggers[]`: add `time` triggers with weekday `days`, `at = "00:00"`, and an `apply_defaults` action with the target profile/blocklist/session template
-- deprecated `weekday_profile_rules[]` config entries are migrated into the canonical automation trigger form; `--weekday-rules*` commands remain available only as compatibility guidance/read-write shims
+- standalone `automation_triggers[]` are deprecated; schedule windows now provide automatic focus starts, `--schedule-delay` handles postponed active windows, and session templates carry task/profile/blocklist defaults
+- deprecated `weekday_profile_rules[]` config entries are accepted for compatibility; `--weekday-rules*` commands remain available only as guidance/read-write shims
 - the timer session overview shows the current/next scheduled window
 - when calendar sync cache is available, schedule text adds `calendar busy` for active calendar events and a `calendar overlap` warning for upcoming schedule collisions
 - `--calendar-sync` refreshes the cache from configured ICS feeds (including Google/Outlook ICS feed URLs)
@@ -863,9 +871,9 @@ You can configure notification and auto-start settings directly from the TUI:
   - **One-time date**: `←/→` moves selected one-time window date backward/forward by 1 day
   - **One-time start/end**: adjust one-time window times in `[schedule_runtime].time_step_minutes` steps (default `15`, clamped `1..60`)
   - **One-time add/remove**: `→` adds a one-time window (starting from today), `←` removes selected window
-  - **Automation trigger**: `←/→` changes which trigger entry is selected
-  - **Automation condition/time/action**: tune event/time conditions and linked profile/blocklist/session-template defaults
-  - **Automation add/remove**: `→` adds a trigger, `←` removes selected trigger
+  - **Automation trigger**: deprecated compatibility fields for older trigger rules
+  - **Automation condition/time/action**: deprecated compatibility fields for older event/time rules
+  - **Automation add/remove**: deprecated compatibility controls for older trigger rules
   - **Conflict inspector**: read-only summary of detected schedule overlaps/conflicts
 
 ## Session recovery

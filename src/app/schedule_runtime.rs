@@ -1,9 +1,8 @@
-use crate::app::automation_triggers::AutomationTriggerEvent;
 use crate::app::{
-    App, DateTime, FocusStartOutcome, FocusStartTemplateMode, Local, ScheduleDisplayState,
-    ShortcutAction, TimerPhase, TimerState, TimerStatus, WindowOccurrence, active_occurrence,
-    active_one_time_occurrence, format_duration_label, next_occurrence_after,
-    next_one_time_occurrence_after, occurrence_key, pick_active_occurrence, pick_next_occurrence,
+    App, DateTime, FocusStartOutcome, Local, ScheduleDisplayState, ShortcutAction, TimerPhase,
+    TimerState, TimerStatus, WindowOccurrence, active_occurrence, active_one_time_occurrence,
+    format_duration_label, next_occurrence_after, next_one_time_occurrence_after, occurrence_key,
+    pick_active_occurrence, pick_next_occurrence,
 };
 
 struct ScheduleShortcutLabels {
@@ -88,11 +87,6 @@ impl App {
     pub(super) fn sync_recurring_schedule(&mut self, now: DateTime<Local>) {
         let active_window = self.active_schedule_occurrence_at(now);
         let active_occurrence_key = active_window.as_ref().map(occurrence_key);
-        if self.last_active_schedule_occurrence_key.as_deref() != active_occurrence_key.as_deref()
-            && self.last_active_schedule_occurrence_key.is_some()
-        {
-            self.fire_automation_trigger_event(AutomationTriggerEvent::ScheduleWindowEnd, now);
-        }
         self.last_active_schedule_occurrence_key = active_occurrence_key.clone();
 
         if self.recurring_windows.is_empty() && self.one_time_windows.is_empty() {
@@ -118,7 +112,7 @@ impl App {
         }
         if self.last_schedule_occurrence_key.as_deref() != Some(active_occurrence_key.as_str()) {
             self.last_schedule_occurrence_key = Some(active_occurrence_key.clone());
-            self.handle_schedule_window_start(&active_occurrence_key, now);
+            self.handle_schedule_window_start(&active_occurrence_key);
         } else if self.focus_session_active_for_current_state() {
             self.schedule_armed_occurrence_key = None;
         }
@@ -212,8 +206,7 @@ impl App {
         false
     }
 
-    fn handle_schedule_window_start(&mut self, active_occurrence_key: &str, now: DateTime<Local>) {
-        self.fire_automation_trigger_event(AutomationTriggerEvent::ScheduleWindowStart, now);
+    fn handle_schedule_window_start(&mut self, active_occurrence_key: &str) {
         if self.focus_session_active_for_current_state() {
             self.schedule_armed_occurrence_key = None;
             return;
@@ -226,7 +219,7 @@ impl App {
             self.update_timer_and_sync(TimerState::next_phase);
         }
 
-        match self.try_start_focus_session(FocusStartTemplateMode::ApplySelectedTemplate) {
+        match self.try_start_focus_session() {
             Ok(FocusStartOutcome::Started) => {
                 self.phase_notification =
                     Some("Scheduled window started. Focus auto-started.".to_string());

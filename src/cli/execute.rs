@@ -74,7 +74,8 @@ use status::{WATCH_INTERRUPTED, next_watch_deadline, wait_for_next_watch_tick};
 type CliExecuteResult<T> = Result<T, UserMessage>;
 
 pub(super) const WEEKDAY_RULES_REPLACEMENT: &str =
-    "Use `--automation-triggers` with `time` triggers at 00:00 and `apply_defaults` actions.";
+    "Use `--schedule`/`--schedule-set` with session templates for weekday focus defaults.";
+pub(super) const AUTOMATION_TRIGGERS_REPLACEMENT: &str = "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults.";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<()> {
     if let Some(surface_id) = command_usage_surface_id(&cli_command.kind)
@@ -839,6 +840,8 @@ fn execute_automation_triggers_command(
 
     let payload = AutomationTriggersCommandOutput {
         updated,
+        deprecated: true,
+        replacement: AUTOMATION_TRIGGERS_REPLACEMENT,
         rules: config.automation_triggers.clone(),
     };
 

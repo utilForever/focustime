@@ -107,8 +107,8 @@ pub(crate) struct AppConfig {
     pub(crate) custom_profile: Option<CustomProfileConfig>,
     /// Deprecated weekday smart-switch rules for profile and planning defaults.
     ///
-    /// Canonical replacement rules live in `automation_triggers` as time
-    /// triggers with `apply_defaults` actions.
+    /// Replacement behavior should be modeled with profile schedules and
+    /// session templates.
     #[serde(default, skip_serializing)]
     pub(crate) weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     /// Reusable session templates bundling task/profile/blocklist/schedule settings.
@@ -117,7 +117,10 @@ pub(crate) struct AppConfig {
     /// Name of the active session template (empty = none selected).
     #[serde(default)]
     pub(crate) selected_session_template: String,
-    /// Rule-based automation triggers for time/schedule/runtime events.
+    /// Deprecated rule-based automation triggers for time/schedule/runtime events.
+    ///
+    /// Kept as a load/save compatibility surface while schedule-driven focus
+    /// behavior replaces standalone trigger execution.
     #[serde(default)]
     pub(crate) automation_triggers: Vec<AutomationTriggerRuleConfig>,
     /// Selected UI theme preset.

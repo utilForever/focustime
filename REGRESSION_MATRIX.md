@@ -30,7 +30,8 @@ in the normal release readiness command set.
 | v0.15.2 | Setup diagnostics, config doctor, and migration preview guidance stay available from one canonical CLI diagnostics workflow. | Config diagnostics | `diagnostics_output_includes_config_health_and_migration_guidance` |
 | v0.15.2 | Backend-selected blocking preview details are available from `--diagnostics`, while standalone preview output points to the canonical replacement. | Blocking diagnostics | `diagnostics_json_includes_blocking_preview_payload` plus `blocking_preview_json_emits_payload_on_stdout` |
 | v0.15.2 | Raw usage-signal inspection stays deprecated and points cleanup/reporting workflows to feature inventory output. | Usage cleanup | `usage_signals_json_emits_deprecated_replacement_payload` plus committed feature inventory coverage |
-| Unreleased | Deprecated weekday profile rules migrate into canonical automation time triggers, while `--weekday-rules*` keeps replacement guidance and avoids persisted orphan config paths. | Schedule/config cleanup | `normalize_moves_weekday_profile_rules_to_canonical_automation_triggers` plus `weekday_rules_json_emits_deprecated_replacement_payload` |
+| Unreleased | Deprecated weekday profile rules migrate into compatibility automation time triggers, while `--weekday-rules*` keeps replacement guidance and avoids persisted orphan config paths. | Schedule/config cleanup | `normalize_moves_weekday_profile_rules_to_canonical_automation_triggers` plus `weekday_rules_json_emits_deprecated_replacement_payload` |
+| Unreleased | Standalone automation trigger rules stay readable as deprecated compatibility data, while runtime focus behavior uses schedule windows, schedule delay, and session templates. | Schedule/runtime cleanup | `automation_triggers_json_emits_deprecated_replacement_payload` plus `deprecated_schedule_window_end_trigger_does_not_delay_schedule_runtime` |
 
 ## Release Readiness
 

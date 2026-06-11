@@ -1,6 +1,6 @@
 use crate::app::{
-    App, AppError, AppResult, BlockingPreview, FocusStartOutcome, FocusStartTemplateMode, Local,
-    ProfileId, SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
+    App, AppError, AppResult, BlockingPreview, FocusStartOutcome, Local, ProfileId,
+    SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
     normalize_task_label, task_label_index,
 };
 
@@ -12,10 +12,7 @@ impl App {
     }
 
     pub(crate) fn start_focus_for_cli(&mut self) -> AppResult<()> {
-        match self
-            .try_start_focus_session(FocusStartTemplateMode::ApplySelectedTemplate)
-            .map_err(AppError::workflow)?
-        {
+        match self.try_start_focus_session().map_err(AppError::workflow)? {
             FocusStartOutcome::Started => Ok(()),
             FocusStartOutcome::MissingTaskLabel => Err(AppError::MissingTaskLabel {
                 shortcut_hint: self.shortcut_hint(ShortcutAction::OpenSessionPlanner),

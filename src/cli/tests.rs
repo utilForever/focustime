@@ -161,7 +161,7 @@ fn weekday_rules_json_emits_deprecated_replacement_payload() {
     let payload = WeekdayRulesCommandOutput {
         updated: false,
         deprecated: true,
-        replacement: "Use `--automation-triggers` with `time` triggers at 00:00 and `apply_defaults` actions.",
+        replacement: "Use `--schedule`/`--schedule-set` with session templates for weekday focus defaults.",
         rules: vec![WeekdayProfileRuleConfig {
             day: "mon".to_string(),
             profile: crate::config::ProfileId::DeepWork,
@@ -184,6 +184,28 @@ fn weekday_rules_json_emits_deprecated_replacement_payload() {
         json["canonical_rules"][0]["action"]["type"],
         "apply_defaults"
     );
+}
+
+#[test]
+fn automation_triggers_json_emits_deprecated_replacement_payload() {
+    let payload = AutomationTriggersCommandOutput {
+        updated: false,
+        deprecated: true,
+        replacement: "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults.",
+        rules: vec![AutomationTriggerRuleConfig {
+            trigger: AutomationTriggerConditionConfig::ScheduleWindowStart,
+            action: AutomationTriggerActionConfig::StartFocus,
+        }],
+    };
+
+    let json = serde_json::to_value(&payload).unwrap();
+    assert_eq!(json["deprecated"], true);
+    assert_eq!(json["replacement"], payload.replacement);
+    assert_eq!(json["rules"][0]["trigger"]["type"], "schedule_window_start");
+
+    let text = output::format_automation_triggers_command_output(&payload);
+    assert!(text.contains("Automation triggers are deprecated."));
+    assert!(text.contains(payload.replacement));
 }
 
 #[test]

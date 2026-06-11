@@ -417,7 +417,13 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
 
     if !config.weekday_profile_rules.is_empty() {
         warnings.push(
-            "Deprecated `weekday_profile_rules` is in use. Move weekday defaults to `[[automation_triggers]]` time triggers at 00:00 with `apply_defaults` actions.".to_string(),
+            "Deprecated `weekday_profile_rules` is in use. Move weekday defaults to profile schedules and session templates.".to_string(),
+        );
+    }
+
+    if !config.automation_triggers.is_empty() {
+        warnings.push(
+            "Deprecated `automation_triggers` is in use. Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active schedule windows, and session templates for task/profile/blocklist defaults.".to_string(),
         );
     }
 
