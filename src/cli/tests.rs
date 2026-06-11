@@ -202,6 +202,10 @@ fn automation_triggers_json_emits_deprecated_replacement_payload() {
     assert_eq!(json["deprecated"], true);
     assert_eq!(json["replacement"], payload.replacement);
     assert_eq!(json["rules"][0]["trigger"]["type"], "schedule_window_start");
+
+    let text = output::format_automation_triggers_command_output(&payload);
+    assert!(text.contains("Automation triggers are deprecated."));
+    assert!(text.contains(payload.replacement));
 }
 
 #[test]

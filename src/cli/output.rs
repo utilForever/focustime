@@ -252,25 +252,34 @@ pub(super) fn print_weekday_rules_command_output(payload: &WeekdayRulesCommandOu
 }
 
 pub(super) fn print_automation_triggers_command_output(payload: &AutomationTriggersCommandOutput) {
+    print!("{}", format_automation_triggers_command_output(payload));
+}
+
+pub(super) fn format_automation_triggers_command_output(
+    payload: &AutomationTriggersCommandOutput,
+) -> String {
+    let mut output = String::new();
     if payload.updated {
-        println!("Automation triggers updated.");
+        output.push_str("Automation triggers updated.\n");
     }
     if payload.deprecated {
-        println!(
+        output.push_str(&format!(
             "Automation triggers are deprecated. {}",
             payload.replacement
-        );
+        ));
+        output.push('\n');
     }
     if payload.rules.is_empty() {
-        println!("Automation triggers: none");
-        return;
+        output.push_str("Automation triggers: none\n");
+        return output;
     }
-    println!("Automation triggers:");
+    output.push_str("Automation triggers:\n");
     for rule in &payload.rules {
         let formatted = serde_json::to_string(rule)
             .unwrap_or_else(|_| "<failed to serialize automation trigger>".to_string());
-        println!("  - {formatted}");
+        output.push_str(&format!("  - {formatted}\n"));
     }
+    output
 }
 
 pub(super) fn print_json<T: Serialize>(payload: &T) -> Result<(), String> {
