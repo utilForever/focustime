@@ -1393,6 +1393,16 @@ action = { type = "start_focus" }
             .iter()
             .any(|warning| warning.contains("Deprecated `automation_triggers` is in use"))
     );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("--schedule-delay"))
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("session templates"))
+    );
 }
 
 #[test]
