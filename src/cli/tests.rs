@@ -6,7 +6,7 @@ use crate::config::{
 };
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
-    WorkflowStateSnapshot, WorkflowTemporaryAllowlistEntrySnapshot,
+    WorkflowStateSnapshot, WorkflowTemporaryOverrideSnapshot,
 };
 use chrono::{Datelike, Duration};
 #[cfg(unix)]
@@ -2856,22 +2856,22 @@ fn build_status_output_excludes_allowlist_from_blocked_sites_count() {
 fn build_status_output_includes_active_temporary_allowlist_entries() {
     let now_epoch_secs = chrono::Local::now().timestamp();
     session_recovery::set_test_load_workflow_state(Some(WorkflowStateSnapshot {
-        temporary_allowlist_entries: vec![
-            WorkflowTemporaryAllowlistEntrySnapshot {
-                profile: "Work".to_string(),
-                site: "reddit.com".to_string(),
-                expires_at_epoch_secs: now_epoch_secs + 120,
-            },
-            WorkflowTemporaryAllowlistEntrySnapshot {
-                profile: "Work".to_string(),
-                site: "expired.com".to_string(),
-                expires_at_epoch_secs: now_epoch_secs - 1,
-            },
-            WorkflowTemporaryAllowlistEntrySnapshot {
-                profile: "Personal".to_string(),
-                site: "youtube.com".to_string(),
-                expires_at_epoch_secs: now_epoch_secs + 120,
-            },
+        temporary_overrides: vec![
+            WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
+                "Work",
+                "reddit.com",
+                now_epoch_secs + 120,
+            ),
+            WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
+                "Work",
+                "expired.com",
+                now_epoch_secs - 1,
+            ),
+            WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
+                "Personal",
+                "youtube.com",
+                now_epoch_secs + 120,
+            ),
         ],
         ..WorkflowStateSnapshot::default()
     }));
@@ -2895,6 +2895,37 @@ fn build_status_output_includes_active_temporary_allowlist_entries() {
     assert_eq!(output.temporary_allowlist_active[0].site, "reddit.com");
     assert!(output.temporary_allowlist_active[0].remaining_secs <= 120);
     assert!(output.temporary_allowlist_active[0].remaining_secs > 0);
+    assert_eq!(output.temporary_overrides_active_count, 1);
+    assert_eq!(output.temporary_overrides[0].kind, "allowlist-site");
+}
+
+#[test]
+fn build_status_output_includes_break_glass_temporary_override() {
+    let now_epoch_secs = chrono::Local::now().timestamp();
+    session_recovery::set_test_load_workflow_state(Some(WorkflowStateSnapshot {
+        temporary_overrides: vec![
+            WorkflowTemporaryOverrideSnapshot::break_glass_active(now_epoch_secs + 90),
+            WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
+        ],
+        ..WorkflowStateSnapshot::default()
+    }));
+
+    let output = build_status_output(&AppConfig::default(), &FocusStats::default());
+    session_recovery::set_test_load_workflow_state(None);
+
+    assert_eq!(output.temporary_overrides_active_count, 1);
+    assert!(
+        output
+            .temporary_overrides
+            .iter()
+            .any(|entry| entry.kind == "break-glass" && entry.remaining_secs.is_some())
+    );
+    assert!(
+        output
+            .temporary_overrides
+            .iter()
+            .any(|entry| entry.kind == "break-glass" && entry.pending_confirmation)
+    );
 }
 
 #[test]

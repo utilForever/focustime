@@ -34,6 +34,7 @@ in the normal release readiness command set.
 | v0.15.3 | Deprecated weekday profile rules migrate into compatibility automation time triggers, while `--weekday-rules*` keeps replacement guidance and avoids persisted orphan config paths. | Schedule/config cleanup | `normalize_moves_weekday_profile_rules_to_canonical_automation_triggers` plus `weekday_rules_json_emits_deprecated_replacement_payload` |
 | v0.15.3 | Standalone automation trigger rules stay readable as deprecated compatibility data, while runtime focus behavior uses schedule windows, schedule delay, and session templates. | Schedule/runtime cleanup | `automation_triggers_json_emits_deprecated_replacement_payload` plus `deprecated_schedule_window_end_trigger_does_not_delay_schedule_runtime` |
 | v0.15.3 | Blocklist category workflows stay compatibility-only with replacement guidance, while profile-level blocklist/allowlist site management remains the supported path. | Blocking cleanup | `blocklist_category_json_emits_deprecated_replacement_payload` plus `config_doctor_reports_deprecated_blocklist_categories` |
+| v0.15.4 | Temporary allowlist and break-glass workflows share one temporary override runtime model while legacy fields remain readable for compatibility. | Blocking/runtime cleanup | `app_restores_temporary_overrides_from_canonical_snapshot` plus `build_status_output_includes_break_glass_temporary_override` |
 
 ## Release Readiness
 

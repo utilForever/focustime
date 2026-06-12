@@ -188,7 +188,7 @@ Options:
   --automation-triggers      Deprecated: show automation trigger rules with schedule replacement guidance
   --automation-triggers-set  Deprecated: use --schedule-set and session templates for replacement behavior
   --schedule-delay  Delay the current active schedule window start by 10 minutes
-  --break-glass-trigger  Trigger break-glass workflow (first call arms, second confirms)
+  --break-glass-trigger  Trigger temporary override workflow for break-glass (first call arms, second confirms)
   --break-glass-cancel   Cancel a pending break-glass confirmation
   --blocklist-profile         Show active blocklist profile, or set active profile
   --blocklist-profile-create  Create a blocklist profile and select it
@@ -211,7 +211,7 @@ Options:
   --allowlist-sites           List allowlist sites for the active blocklist profile
   --blocklist-site-add        Add/import blocklist hostnames for the active blocklist profile
   --allowlist-site-add        Add/import allowlist hostnames for the active blocklist profile
-  --allowlist-site-add-temporary  Add temporary allowlist hostnames with inline duration (HOST=30m,HOST=45s)
+  --allowlist-site-add-temporary  Add temporary override host exceptions with inline duration (HOST=30m,HOST=45s)
   --blocklist-site-edit       Replace blocklist hostname for the active blocklist profile using OLD=NEW
   --allowlist-site-edit       Replace allowlist hostname for the active blocklist profile using OLD=NEW
   --blocklist-site-delete     Delete blocklist hostname from the active blocklist profile
@@ -773,6 +773,16 @@ struct TemporaryAllowlistStatusOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct TemporaryOverrideStatusOutput {
+    kind: &'static str,
+    profile: Option<String>,
+    site: Option<String>,
+    remaining_secs: Option<u64>,
+    expires_at_epoch_secs: Option<i64>,
+    pending_confirmation: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct WeeklyAllocationDayOutput {
     date: String,
     minutes_target: u64,
@@ -819,6 +829,8 @@ struct StatusOutput {
     temporary_allowlist_next_expiry_remaining_secs: Option<u64>,
     temporary_allowlist_next_expiry_epoch_secs: Option<i64>,
     temporary_allowlist_active: Vec<TemporaryAllowlistStatusOutput>,
+    temporary_overrides_active_count: usize,
+    temporary_overrides: Vec<TemporaryOverrideStatusOutput>,
     strict_mode: bool,
     goal: GoalOutput,
     weekly_goal: GoalOutput,

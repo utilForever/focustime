@@ -178,6 +178,7 @@ cargo run -- --blocklist-sites
 cargo run -- --allowlist-sites --json
 cargo run -- --blocklist-site-add="youtube.com, *.facebook.com"
 cargo run -- --allowlist-site-add "reddit.com"
+# Add a temporary override for selected allowlist exceptions
 cargo run -- --allowlist-site-add-temporary "reddit.com=30m,news.ycombinator.com=10m"
 cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
 cargo run -- --allowlist-site-delete reddit.com
@@ -200,7 +201,7 @@ cargo run -- --automation-triggers --json
 cargo run -- --calendar-sync
 cargo run -- --calendar-sync --json
 
-# Break-glass workflow controls from CLI (first call arms, second confirms)
+# Break-glass temporary override controls from CLI (first call arms, second confirms)
 cargo run -- --break-glass-trigger
 cargo run -- --break-glass-trigger --json
 # Cancel a pending break-glass confirmation
@@ -230,7 +231,7 @@ cargo run -- --blocking-preview --json
 cargo run -- --usage-signals
 cargo run -- --usage-signals --json
 
-# Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary allowlist entries, latest interruption summary, and `selected_task_goal` in JSON)
+# Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary overrides, latest interruption summary, and `selected_task_goal` in JSON)
 cargo run -- --status
 cargo run -- --status --json
 cargo run -- --status --compare-by=profile --compare-limit=5
@@ -892,6 +893,16 @@ When strict mode is enabled during an active focus session:
 - `p` (profile manager) is disabled, so profile switching is locked
 - quit shortcuts (`q`, `Esc`, `Ctrl-C`) are disabled until focus is no longer active
 
+## Temporary override workflows
+
+Temporary allowlist exceptions and break-glass both use the same runtime override model:
+
+- `--allowlist-site-add-temporary HOST=30m` grants selected host exceptions without changing profile config
+- `--break-glass-trigger` temporarily pauses all effective blocking for the active focus session after a second confirmation
+- `--status --json` includes the canonical `temporary_overrides` list while keeping the legacy `temporary_allowlist_*` fields for automation compatibility
+
+Existing temporary allowlist commands remain supported as compatibility entry points into this shared model.
+
 ## Break-glass override for site blocking
 
 During an active focus session, you can temporarily pause site blocking with an explicit two-step confirm:
@@ -899,7 +910,7 @@ During an active focus session, you can temporarily pause site blocking with an 
 - press `u` to arm break-glass
 - press `u` again to confirm and temporarily unblock
 
-The same workflow is available in CLI mode using `--break-glass-trigger` (arm/confirm) and
+The same temporary override workflow is available in CLI mode using `--break-glass-trigger` (arm/confirm) and
 `--break-glass-cancel` (cancel pending confirmation).
 
 While active, timer status shows a live countdown. When the countdown expires, blocking resumes automatically if focus is still active.

@@ -93,40 +93,8 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
         "Blocklist profile: {} ({} sites)",
         payload.selected_blocklist_profile, payload.blocked_sites_count
     );
-    if payload.temporary_allowlist_active.is_empty() {
-        println!("Temporary allowlist: off");
-    } else {
-        let next_expiry_text = match (
-            payload.temporary_allowlist_next_expiry_remaining_secs,
-            payload.temporary_allowlist_next_expiry_epoch_secs,
-        ) {
-            (Some(remaining_secs), Some(epoch_secs)) => format!(
-                " (next expiry in {}{})",
-                format_duration(remaining_secs),
-                format_expiry_clock_suffix(epoch_secs)
-            ),
-            (Some(remaining_secs), None) => {
-                format!(" (next expiry in {})", format_duration(remaining_secs))
-            }
-            (None, Some(epoch_secs)) => {
-                format!(" (next expiry{})", format_expiry_clock_suffix(epoch_secs))
-            }
-            (None, None) => String::new(),
-        };
-        println!(
-            "Temporary allowlist: {} active{}",
-            payload.temporary_allowlist_active_count, next_expiry_text
-        );
-        println!("Active temporary exceptions:");
-        for entry in &payload.temporary_allowlist_active {
-            println!(
-                "  - {} (expires in {}{})",
-                entry.site,
-                format_duration(entry.remaining_secs),
-                format_expiry_clock_suffix(entry.expires_at_epoch_secs)
-            );
-        }
-    }
+    print_temporary_allowlist_status(payload);
+    print_temporary_overrides_status(payload);
     println!(
         "Strict mode: {}",
         if payload.strict_mode { "on" } else { "off" }
@@ -177,6 +145,89 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
     );
     if let Some(error) = payload.live.recovery_error.as_deref() {
         println!("Live timer warning: {error}");
+    }
+}
+
+fn print_temporary_allowlist_status(payload: &StatusOutput) {
+    let allowlist_rendered_by_temporary_overrides = payload
+        .temporary_overrides
+        .iter()
+        .any(|entry| entry.kind == "allowlist-site");
+    if !allowlist_rendered_by_temporary_overrides {
+        if payload.temporary_allowlist_active.is_empty() {
+            println!("Temporary allowlist: off");
+        } else {
+            let next_expiry_text = match (
+                payload.temporary_allowlist_next_expiry_remaining_secs,
+                payload.temporary_allowlist_next_expiry_epoch_secs,
+            ) {
+                (Some(remaining_secs), Some(epoch_secs)) => format!(
+                    " (next expiry in {}{})",
+                    format_duration(remaining_secs),
+                    format_expiry_clock_suffix(epoch_secs)
+                ),
+                (Some(remaining_secs), None) => {
+                    format!(" (next expiry in {})", format_duration(remaining_secs))
+                }
+                (None, Some(epoch_secs)) => {
+                    format!(" (next expiry{})", format_expiry_clock_suffix(epoch_secs))
+                }
+                (None, None) => String::new(),
+            };
+            println!(
+                "Temporary allowlist: {} active{}",
+                payload.temporary_allowlist_active_count, next_expiry_text
+            );
+            println!("Active temporary exceptions:");
+            for entry in &payload.temporary_allowlist_active {
+                println!(
+                    "  - {} (expires in {}{})",
+                    entry.site,
+                    format_duration(entry.remaining_secs),
+                    format_expiry_clock_suffix(entry.expires_at_epoch_secs)
+                );
+            }
+        }
+    }
+}
+
+fn print_temporary_overrides_status(payload: &StatusOutput) {
+    if payload.temporary_overrides.is_empty() {
+        println!("Temporary overrides: off");
+    } else {
+        println!(
+            "Temporary overrides: {} active",
+            payload.temporary_overrides_active_count
+        );
+        for entry in &payload.temporary_overrides {
+            match (
+                entry.kind,
+                entry.site.as_deref(),
+                entry.remaining_secs,
+                entry.expires_at_epoch_secs,
+                entry.pending_confirmation,
+            ) {
+                ("break-glass", _, _, _, true) => {
+                    println!("  - break-glass (pending confirmation)");
+                }
+                ("break-glass", _, Some(remaining_secs), Some(epoch_secs), false) => {
+                    println!(
+                        "  - break-glass (expires in {}{})",
+                        format_duration(remaining_secs),
+                        format_expiry_clock_suffix(epoch_secs)
+                    );
+                }
+                ("allowlist-site", Some(site), Some(remaining_secs), Some(epoch_secs), false) => {
+                    println!(
+                        "  - allowlist site {} (expires in {}{})",
+                        site,
+                        format_duration(remaining_secs),
+                        format_expiry_clock_suffix(epoch_secs)
+                    );
+                }
+                _ => {}
+            }
+        }
     }
 }
 
