@@ -8,21 +8,19 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct BlocklistProfileConfig {
     #[serde(default = "default_blocklist_profile_name")]
     pub(crate) name: String,
-    /// Deprecated flat mirror of categorized blocklist rules.
+    /// Profile-level blocklist rules.
     ///
-    /// Canonical rules live in `categories[*].sites`; this field is maintained
-    /// for load-time compatibility and helper surfaces still reading flat lists.
+    /// Category data is folded into this list during normalization for
+    /// compatibility with older grouped configs.
     #[serde(default)]
     pub(crate) sites: Vec<String>,
-    /// Deprecated flat mirror of categorized allowlist rules.
+    /// Profile-level allowlist rules.
     ///
-    /// Canonical rules live in `categories[*].allowlist_sites`.
-    /// Sites that are explicitly excluded from blocking.
-    ///
-    /// Effective focus blocking is computed as `sites - allowlist_sites`.
+    /// Category data is folded into this list during normalization. Effective
+    /// focus blocking is computed as `sites - allowlist_sites`.
     #[serde(default)]
     pub(crate) allowlist_sites: Vec<String>,
-    /// Category-organized block/allow rules.
+    /// Deprecated category-organized block/allow rules kept for compatibility.
     #[serde(default)]
     pub(crate) categories: Vec<BlocklistCategoryConfig>,
     /// Name of the selected category inside this profile.
@@ -97,7 +95,7 @@ fn block_rule_excluded_by_allowlist(block_rule: &str, allowlist_rules: &[String]
 }
 
 fn all_blocklist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    if profile.categories.is_empty() {
+    if !profile.sites.is_empty() || profile.categories.is_empty() {
         return dedup_case_insensitive(profile.sites.iter().cloned());
     }
     dedup_case_insensitive(
@@ -109,7 +107,7 @@ fn all_blocklist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<Stri
 }
 
 fn all_allowlist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    if profile.categories.is_empty() {
+    if !profile.allowlist_sites.is_empty() || profile.categories.is_empty() {
         return dedup_case_insensitive(profile.allowlist_sites.iter().cloned());
     }
     dedup_case_insensitive(
