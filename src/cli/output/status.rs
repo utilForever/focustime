@@ -93,38 +93,44 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
         "Blocklist profile: {} ({} sites)",
         payload.selected_blocklist_profile, payload.blocked_sites_count
     );
-    if payload.temporary_allowlist_active.is_empty() {
-        println!("Temporary allowlist: off");
-    } else {
-        let next_expiry_text = match (
-            payload.temporary_allowlist_next_expiry_remaining_secs,
-            payload.temporary_allowlist_next_expiry_epoch_secs,
-        ) {
-            (Some(remaining_secs), Some(epoch_secs)) => format!(
-                " (next expiry in {}{})",
-                format_duration(remaining_secs),
-                format_expiry_clock_suffix(epoch_secs)
-            ),
-            (Some(remaining_secs), None) => {
-                format!(" (next expiry in {})", format_duration(remaining_secs))
-            }
-            (None, Some(epoch_secs)) => {
-                format!(" (next expiry{})", format_expiry_clock_suffix(epoch_secs))
-            }
-            (None, None) => String::new(),
-        };
-        println!(
-            "Temporary allowlist: {} active{}",
-            payload.temporary_allowlist_active_count, next_expiry_text
-        );
-        println!("Active temporary exceptions:");
-        for entry in &payload.temporary_allowlist_active {
+    let allowlist_rendered_by_temporary_overrides = payload
+        .temporary_overrides
+        .iter()
+        .any(|entry| entry.kind == "allowlist-site");
+    if !allowlist_rendered_by_temporary_overrides {
+        if payload.temporary_allowlist_active.is_empty() {
+            println!("Temporary allowlist: off");
+        } else {
+            let next_expiry_text = match (
+                payload.temporary_allowlist_next_expiry_remaining_secs,
+                payload.temporary_allowlist_next_expiry_epoch_secs,
+            ) {
+                (Some(remaining_secs), Some(epoch_secs)) => format!(
+                    " (next expiry in {}{})",
+                    format_duration(remaining_secs),
+                    format_expiry_clock_suffix(epoch_secs)
+                ),
+                (Some(remaining_secs), None) => {
+                    format!(" (next expiry in {})", format_duration(remaining_secs))
+                }
+                (None, Some(epoch_secs)) => {
+                    format!(" (next expiry{})", format_expiry_clock_suffix(epoch_secs))
+                }
+                (None, None) => String::new(),
+            };
             println!(
-                "  - {} (expires in {}{})",
-                entry.site,
-                format_duration(entry.remaining_secs),
-                format_expiry_clock_suffix(entry.expires_at_epoch_secs)
+                "Temporary allowlist: {} active{}",
+                payload.temporary_allowlist_active_count, next_expiry_text
             );
+            println!("Active temporary exceptions:");
+            for entry in &payload.temporary_allowlist_active {
+                println!(
+                    "  - {} (expires in {}{})",
+                    entry.site,
+                    format_duration(entry.remaining_secs),
+                    format_expiry_clock_suffix(entry.expires_at_epoch_secs)
+                );
+            }
         }
     }
     if payload.temporary_overrides.is_empty() {
