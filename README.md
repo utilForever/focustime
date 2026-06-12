@@ -157,13 +157,6 @@ cargo run -- --blocklist-profile-create Study
 cargo run -- --blocklist-profile-rename "Deep Work"
 cargo run -- --blocklist-profile-delete --json
 
-# Manage categories within the active blocklist profile
-cargo run -- --blocklist-category
-cargo run -- --blocklist-category Social
-cargo run -- --blocklist-category-create "Work Chat"
-cargo run -- --blocklist-category-rename "Deep Focus"
-cargo run -- --blocklist-category-delete --json
-
 # Manage session templates (task/profile/blocklist/schedule bundles)
 cargo run -- --session-template
 cargo run -- --session-template "Deep Flow"
@@ -183,12 +176,15 @@ cargo run -- --history-dashboard --json
 # Manage blocklist/allowlist sites for the active blocklist profile
 cargo run -- --blocklist-sites
 cargo run -- --allowlist-sites --json
-cargo run -- --blocklist-category Social
 cargo run -- --blocklist-site-add="youtube.com, *.facebook.com"
 cargo run -- --allowlist-site-add "reddit.com"
 cargo run -- --allowlist-site-add-temporary "reddit.com=30m,news.ycombinator.com=10m"
 cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
 cargo run -- --allowlist-site-delete reddit.com
+
+# Deprecated compatibility surface; manage sites directly on blocklist profiles
+cargo run -- --blocklist-category
+cargo run -- --blocklist-category Social --json
 
 # Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
@@ -345,6 +341,7 @@ Early deprecation notices:
 | --- | --- |
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
+| Blocklist category workflows (`--blocklist-category*`, `blocklist_profiles.categories`) | Manage blocklist/allowlist hostnames directly on blocklist profiles with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; `--config-doctor` reports category configs that should be folded into profile-level lists. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
@@ -575,24 +572,11 @@ pinned_cards = ["session_summary", "focus_score"]
 
 [[blocklist_profiles]]
 name = "Work"
-selected_category = "Social"
-
-[[blocklist_profiles.categories]]
-name = "Social"
 sites = ["youtube.com", "*.facebook.com", "reddit.com"]
 allowlist_sites = ["reddit.com"]
 
-[[blocklist_profiles.categories]]
-name = "News"
-sites = ["news.ycombinator.com"]
-allowlist_sites = []
-
 [[blocklist_profiles]]
 name = "Study"
-selected_category = "General"
-
-[[blocklist_profiles.categories]]
-name = "General"
 sites = ["x.com", "news.ycombinator.com"]
 allowlist_sites = []
 
@@ -741,13 +725,11 @@ Open the site manager from timer view with **`b`**.
 - `d` or `Delete`: remove the selected hostname
 - `m`: toggle between editing blocklist sites and allowlist exceptions
 - `[` / `]`: switch active blocklist profile
-- `←` / `→`: switch active category in the current profile
+- `←` / `→`: switch deprecated compatibility categories when present
 - `n`: create a blocklist profile
 - `r`: rename the active blocklist profile
 - `x`: delete the active blocklist profile
-- `Ctrl+n`: create a blocklist category
-- `Ctrl+r`: rename the active blocklist category
-- `Ctrl+x`: delete the active blocklist category
+- `Ctrl+n` / `Ctrl+r` / `Ctrl+x`: deprecated category create/rename/delete compatibility controls
 - `↑/↓` (default `navigate_up`/`navigate_down`): move selection
 - `b`: return to timer view
 - `Esc` (default `cancel`): return to timer view only when add/edit mode is not active
@@ -765,6 +747,11 @@ Invalid and duplicate entries are reported inline so you can fix them without le
 Allowlist entries act as explicit exceptions: effective focus blocking is computed as
 **blocklist sites minus allowlist sites** for the active profile, using exact and
 wildcard rule matching.
+
+Blocklist categories are deprecated compatibility grouping. New configurations
+should keep `sites` and `allowlist_sites` directly on each `[[blocklist_profiles]]`
+entry; `--config-doctor` reports category configs that should be folded into
+profile-level lists.
 
 For hosts-based blocking to apply reliably, keep DNS-over-HTTPS disabled in your browser.
 If you configure the command backend, ensure your custom commands enforce equivalent restrictions.

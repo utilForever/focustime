@@ -328,18 +328,18 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
     },
     FeatureSeed {
         feature_id: "blocklist-category-management",
-        name: "Blocklist category management",
+        name: "Blocklist category compatibility",
         surface: FeatureSurface::Blocker,
-        description: "Manage blocker categories nested under each blocklist profile.",
+        description: "Compatibility-only category grouping under blocklist profiles; replacement is profile-level site rule management.",
         cli_flags: &[
             "--blocklist-category",
             "--blocklist-category-create",
             "--blocklist-category-rename",
             "--blocklist-category-delete",
         ],
-        value: 3,
+        value: 2,
         complexity: 3,
-        support_burden: 3,
+        support_burden: 4,
         failure_impact: 3,
     },
     FeatureSeed {
