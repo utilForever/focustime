@@ -60,7 +60,10 @@ pub(super) fn build_status_output_with_comparison(
         .first()
         .map(|entry| entry.expires_at_epoch_secs);
     let temporary_overrides = active_temporary_override_status(config, workflow_state.as_ref());
-    let temporary_overrides_active_count = temporary_overrides.len();
+    let temporary_overrides_active_count = temporary_overrides
+        .iter()
+        .filter(|entry| !entry.pending_confirmation)
+        .count();
     let live = build_live_status_output(config, selected_task_label.clone());
     let session = build_session_output(&live);
     let latest_interruption = stats.latest_session_interruption();

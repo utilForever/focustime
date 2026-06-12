@@ -2913,7 +2913,7 @@ fn build_status_output_includes_break_glass_temporary_override() {
     let output = build_status_output(&AppConfig::default(), &FocusStats::default());
     session_recovery::set_test_load_workflow_state(None);
 
-    assert_eq!(output.temporary_overrides_active_count, 2);
+    assert_eq!(output.temporary_overrides_active_count, 1);
     assert!(
         output
             .temporary_overrides
