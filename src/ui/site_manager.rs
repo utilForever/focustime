@@ -51,13 +51,10 @@ pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
 
     let site_list_mode = app.site_list_mode();
     let profile_text = format!(
-        "Profile: {} ({}/{}) · Category: {} ({}/{}) · List: {} · Effective blocks: {}",
+        "Profile: {} ({}/{}) · List: {} · Effective blocks: {}",
         app.active_blocklist_profile_name(),
         app.active_blocklist_profile_position(),
         app.blocklist_profile_count(),
-        app.active_blocklist_category_name(),
-        app.active_blocklist_category_position(),
-        app.blocklist_category_count(),
         site_list_mode.label(),
         app.effective_blocked_site_count()
     );
@@ -182,9 +179,8 @@ fn render_site_manager_site_list(
     empty_text: &str,
 ) {
     let list_title = format!(
-        " {list_title_label} · {} / {} ({}) ",
+        " {list_title_label} · {} ({}) ",
         app.active_blocklist_profile_name(),
-        app.active_blocklist_category_name(),
         app.active_policy_site_count()
     );
     let list_block = Block::default()
@@ -270,8 +266,6 @@ fn render_site_manager_profile_input(
     let profile_input_title = match profile_input_mode {
         Some(BlocklistProfileInputMode::Create) => " New Blocklist Profile ",
         Some(BlocklistProfileInputMode::Rename) => " Rename Blocklist Profile ",
-        Some(BlocklistProfileInputMode::CreateCategory) => " Deprecated Blocklist Category ",
-        Some(BlocklistProfileInputMode::RenameCategory) => " Deprecated Blocklist Category ",
         None => " Blocklist Profiles ",
     };
     let active_style = if app.blocklist_profile_input_active {
@@ -283,14 +277,12 @@ fn render_site_manager_profile_input(
         format!("{}_", app.blocklist_profile_input)
     } else {
         format!(
-            "Profiles [{} {}] switch · {} create/{} rename/{} delete · Categories deprecated [{} {}] switch",
+            "Profiles [{} {}] switch · {} create/{} rename/{} delete",
             app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
             app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
             app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
             app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
             app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
-            app.navigation_label(NavigationAction::MoveLeft),
-            app.navigation_label(NavigationAction::MoveRight),
         )
     };
     frame.render_widget(
@@ -376,22 +368,13 @@ fn site_manager_hint_lines(
     }
 
     if app.blocklist_profile_input_active {
-        let target = match app.blocklist_profile_input_mode() {
-            Some(
-                BlocklistProfileInputMode::CreateCategory
-                | BlocklistProfileInputMode::RenameCategory,
-            ) => "Category",
-            _ => "Profile",
-        };
         return vec![
             Line::from(format!(
-                "{target}: {} Save  {} Cancel",
+                "Profile: {} Save  {} Cancel",
                 app.navigation_hint(NavigationAction::Confirm),
                 app.navigation_hint(NavigationAction::Cancel)
             )),
-            Line::from(
-                "Tip: categories are deprecated; manage blocklist/allowlist sites on profiles",
-            ),
+            Line::from("Tip: manage blocklist/allowlist sites directly on profiles"),
             Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
         ];
     }
@@ -410,14 +393,12 @@ fn site_manager_hint_lines(
                 app.navigation_hint(NavigationAction::MoveDown),
             )),
             Line::from(format!(
-                "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  Categories (deprecated): [{}/{}] Switch  [{}/{}] Back  [{}] Quit (Locked)",
+                "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/{}] Back  [{}] Quit (Locked)",
                 app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
                 app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
                 app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
                 app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
                 app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
-                app.navigation_label(NavigationAction::MoveLeft),
-                app.navigation_label(NavigationAction::MoveRight),
                 app.shortcut_label(ShortcutAction::BackSiteManager),
                 app.navigation_label(NavigationAction::Cancel),
                 app.shortcut_label(ShortcutAction::Quit),
@@ -439,14 +420,12 @@ fn site_manager_hint_lines(
             app.navigation_hint(NavigationAction::MoveDown),
         )),
         Line::from(format!(
-            "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  Categories (deprecated): [{}/{}] Switch  [{}/{}] Back",
+            "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/{}] Back",
             app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
             app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
             app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
             app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
             app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
-            app.navigation_label(NavigationAction::MoveLeft),
-            app.navigation_label(NavigationAction::MoveRight),
             app.shortcut_label(ShortcutAction::BackSiteManager),
             app.navigation_label(NavigationAction::Cancel),
         )),

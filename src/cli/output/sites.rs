@@ -135,10 +135,6 @@ pub(in crate::cli) fn print_site_list_command_output(payload: &SiteListCommandOu
         payload.target.id(),
         payload.sites.len()
     );
-    println!(
-        "Compatibility category: `{}` (profile-level site management is recommended)",
-        payload.category
-    );
     for site in &payload.sites {
         println!("  - {site}");
     }
