@@ -1964,6 +1964,53 @@ sound = true
 }
 
 #[test]
+fn config_doctor_reports_deprecated_blocklist_categories() {
+    let temp_base = unique_temp_base("doctor-blocklist-categories");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    let config_path = app_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+schema_version = 2
+selected_blocklist_profile = "Work"
+
+[[blocklist_profiles]]
+name = "Work"
+selected_category = "Social"
+
+[[blocklist_profiles.categories]]
+name = "General"
+sites = ["docs.rs"]
+allowlist_sites = []
+
+[[blocklist_profiles.categories]]
+name = "Social"
+sites = ["youtube.com"]
+allowlist_sites = ["reddit.com"]
+"#,
+    )
+    .unwrap();
+
+    let report = run_config_doctor_with_path(Some(config_path.clone()));
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert!(
+        report.findings.iter().any(|finding| {
+            finding.code == "config.deprecated_field_in_use"
+                && finding
+                    .message
+                    .contains("Deprecated blocklist category configuration")
+                && finding
+                    .message
+                    .contains("profile-level blocklist/allowlist")
+        }),
+        "expected deprecation warning for blocklist categories: {:#?}",
+        report.findings
+    );
+}
+
+#[test]
 fn config_migration_assistant_preview_reports_changes_without_writing() {
     let temp_base = unique_temp_base("migration-preview");
     let app_dir = temp_base.join("focustime");

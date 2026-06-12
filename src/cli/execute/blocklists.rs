@@ -1,10 +1,10 @@
 use crate::cli::{
-    AppConfig, BlocklistCategoryCommandKind, BlocklistCategoryCommandOutput,
-    BlocklistCategorySummaryOutput, BlocklistProfileCommandKind, BlocklistProfileCommandOutput,
-    BlocklistProfileConfig, BlocklistProfileSummaryOutput, BlocklistSiteCommandKind,
-    EditSiteResult, InvalidSiteEntryOutput, InvalidSiteInput, OutputMode, SiteAddCommandOutput,
-    SiteBlocker, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue,
-    SiteListCommandOutput, SiteListTarget, display_input_value,
+    AppConfig, BLOCKLIST_CATEGORY_REPLACEMENT, BlocklistCategoryCommandKind,
+    BlocklistCategoryCommandOutput, BlocklistCategorySummaryOutput, BlocklistProfileCommandKind,
+    BlocklistProfileCommandOutput, BlocklistProfileConfig, BlocklistProfileSummaryOutput,
+    BlocklistSiteCommandKind, EditSiteResult, InvalidSiteEntryOutput, InvalidSiteInput, OutputMode,
+    SiteAddCommandOutput, SiteBlocker, SiteDeleteCommandOutput, SiteEditCommandOutput,
+    SiteEditValue, SiteListCommandOutput, SiteListTarget, display_input_value,
     effective_blocked_sites_for_profile, print_blocklist_category_command_output,
     print_blocklist_profile_command_output, print_json, print_site_add_command_output,
     print_site_delete_command_output, print_site_edit_command_output,
@@ -605,6 +605,8 @@ fn build_blocklist_category_command_output(
         .collect();
     BlocklistCategoryCommandOutput {
         action,
+        deprecated: true,
+        replacement: BLOCKLIST_CATEGORY_REPLACEMENT,
         updated,
         selected_blocklist_profile: profile.name.clone(),
         selected_blocklist_category: selected_category,
