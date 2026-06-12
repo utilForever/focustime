@@ -1113,4 +1113,61 @@ break_glass_confirmation_pending = true
         assert!(snapshot.break_glass_confirmation_pending);
         assert!(!snapshot.strict_reset_confirmation_pending);
     }
+
+    #[test]
+    fn workflow_state_legacy_fields_synthesize_temporary_overrides() {
+        let snapshot = WorkflowStateSnapshot {
+            break_glass_expires_at_epoch_secs: Some(1_700_000_100),
+            break_glass_confirmation_pending: true,
+            temporary_allowlist_entries: vec![WorkflowTemporaryAllowlistEntrySnapshot {
+                profile: "Work".to_string(),
+                site: "reddit.com".to_string(),
+                expires_at_epoch_secs: 1_700_000_200,
+            }],
+            ..WorkflowStateSnapshot::default()
+        };
+
+        let overrides = snapshot.temporary_overrides_with_legacy_fallback();
+
+        assert!(
+            overrides.contains(&WorkflowTemporaryOverrideSnapshot::break_glass_active(
+                1_700_000_100
+            ))
+        );
+        assert!(
+            overrides
+                .contains(&WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation())
+        );
+        assert!(
+            overrides.contains(&WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
+                "Work",
+                "reddit.com",
+                1_700_000_200
+            ))
+        );
+    }
+
+    #[test]
+    fn workflow_state_explicit_temporary_overrides_take_precedence_over_legacy_fields() {
+        let explicit = vec![WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
+            "Work",
+            "news.ycombinator.com",
+            1_700_000_300,
+        )];
+        let snapshot = WorkflowStateSnapshot {
+            break_glass_expires_at_epoch_secs: Some(1_700_000_100),
+            break_glass_confirmation_pending: true,
+            temporary_allowlist_entries: vec![WorkflowTemporaryAllowlistEntrySnapshot {
+                profile: "Work".to_string(),
+                site: "reddit.com".to_string(),
+                expires_at_epoch_secs: 1_700_000_200,
+            }],
+            temporary_overrides: explicit.clone(),
+            ..WorkflowStateSnapshot::default()
+        };
+
+        let overrides = snapshot.temporary_overrides_with_legacy_fallback();
+
+        assert_eq!(overrides, explicit);
+    }
 }
