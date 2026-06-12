@@ -301,9 +301,9 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
     },
     FeatureSeed {
         feature_id: "break-glass-workflow",
-        name: "Break-glass workflow",
+        name: "Break-glass temporary override",
         surface: FeatureSurface::Schedule,
-        description: "Temporarily suspend enforcement and explicitly cancel active break-glass windows.",
+        description: "Temporarily suspend enforcement through the shared temporary override model.",
         cli_flags: &["--break-glass-trigger", "--break-glass-cancel"],
         value: 4,
         complexity: 3,
@@ -364,9 +364,9 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
     },
     FeatureSeed {
         feature_id: "temporary-allowlist-overrides",
-        name: "Temporary allowlist overrides",
+        name: "Temporary allowlist override entry point",
         surface: FeatureSurface::Blocker,
-        description: "Grant temporary unblock windows for selected hosts without removing baseline rules.",
+        description: "Grant selected-host temporary override windows without removing baseline rules.",
         cli_flags: &["--allowlist-site-add-temporary"],
         value: 3,
         complexity: 3,
