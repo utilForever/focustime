@@ -116,6 +116,8 @@ pub(crate) struct WorkflowStateSnapshot {
     pub(crate) strict_reset_confirmation_pending: bool,
     #[serde(default)]
     pub(crate) temporary_allowlist_entries: Vec<WorkflowTemporaryAllowlistEntrySnapshot>,
+    #[serde(default)]
+    pub(crate) temporary_overrides: Vec<WorkflowTemporaryOverrideSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -126,6 +128,90 @@ pub(crate) struct WorkflowTemporaryAllowlistEntrySnapshot {
     pub(crate) site: String,
     #[serde(default)]
     pub(crate) expires_at_epoch_secs: i64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum WorkflowTemporaryOverrideKind {
+    AllowlistSite,
+    BreakGlass,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct WorkflowTemporaryOverrideSnapshot {
+    pub(crate) kind: WorkflowTemporaryOverrideKind,
+    #[serde(default)]
+    pub(crate) profile: Option<String>,
+    #[serde(default)]
+    pub(crate) site: Option<String>,
+    #[serde(default)]
+    pub(crate) expires_at_epoch_secs: Option<i64>,
+    #[serde(default)]
+    pub(crate) confirmation_pending: bool,
+}
+
+impl WorkflowTemporaryOverrideSnapshot {
+    pub(crate) fn temporary_allowlist(
+        profile: impl Into<String>,
+        site: impl Into<String>,
+        expires_at_epoch_secs: i64,
+    ) -> Self {
+        Self {
+            kind: WorkflowTemporaryOverrideKind::AllowlistSite,
+            profile: Some(profile.into()),
+            site: Some(site.into()),
+            expires_at_epoch_secs: Some(expires_at_epoch_secs),
+            confirmation_pending: false,
+        }
+    }
+
+    pub(crate) fn break_glass_active(expires_at_epoch_secs: i64) -> Self {
+        Self {
+            kind: WorkflowTemporaryOverrideKind::BreakGlass,
+            profile: None,
+            site: None,
+            expires_at_epoch_secs: Some(expires_at_epoch_secs),
+            confirmation_pending: false,
+        }
+    }
+
+    pub(crate) fn break_glass_pending_confirmation() -> Self {
+        Self {
+            kind: WorkflowTemporaryOverrideKind::BreakGlass,
+            profile: None,
+            site: None,
+            expires_at_epoch_secs: None,
+            confirmation_pending: true,
+        }
+    }
+}
+
+impl WorkflowStateSnapshot {
+    pub(crate) fn temporary_overrides_with_legacy_fallback(
+        &self,
+    ) -> Vec<WorkflowTemporaryOverrideSnapshot> {
+        if !self.temporary_overrides.is_empty() {
+            return self.temporary_overrides.clone();
+        }
+
+        let mut overrides = Vec::new();
+        if let Some(expires_at_epoch_secs) = self.break_glass_expires_at_epoch_secs {
+            overrides.push(WorkflowTemporaryOverrideSnapshot::break_glass_active(
+                expires_at_epoch_secs,
+            ));
+        }
+        if self.break_glass_confirmation_pending {
+            overrides.push(WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation());
+        }
+        overrides.extend(self.temporary_allowlist_entries.iter().map(|entry| {
+            WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
+                entry.profile.clone(),
+                entry.site.clone(),
+                entry.expires_at_epoch_secs,
+            )
+        }));
+        overrides
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -989,6 +1075,7 @@ checksum = "deadbeef"
             break_glass_confirmation_pending: true,
             strict_reset_confirmation_pending: false,
             temporary_allowlist_entries: Vec::new(),
+            temporary_overrides: Vec::new(),
         })
         .expect("save should succeed");
 

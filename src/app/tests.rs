@@ -5431,6 +5431,7 @@ fn app_restores_cli_workflow_state_from_snapshot() {
         break_glass_confirmation_pending: true,
         strict_reset_confirmation_pending: false,
         temporary_allowlist_entries: Vec::new(),
+        temporary_overrides: Vec::new(),
     }));
 
     let app = App::default();
@@ -5444,6 +5445,47 @@ fn app_restores_cli_workflow_state_from_snapshot() {
             .is_some_and(|delay_until| delay_until > now)
     );
     assert!(app.break_glass_confirmation_pending());
+}
+
+#[test]
+fn app_restores_temporary_overrides_from_canonical_snapshot() {
+    let now = Local::now();
+    session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
+        TimerPhase::Focus,
+        TimerStatus::Running,
+        300,
+        Some("Docs"),
+        ProfileId::Classic,
+    )));
+    session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
+        schedule_delayed_occurrence_key: None,
+        schedule_delay_until_epoch_secs: None,
+        schedule_armed_occurrence_key: None,
+        last_schedule_occurrence_key: None,
+        break_glass_expires_at_epoch_secs: None,
+        break_glass_confirmation_pending: false,
+        strict_reset_confirmation_pending: false,
+        temporary_allowlist_entries: Vec::new(),
+        temporary_overrides: vec![
+            session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_active(
+                (now + ChronoDuration::seconds(90)).timestamp(),
+            ),
+            session_recovery::WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
+                "Default",
+                "reddit.com",
+                (now + ChronoDuration::seconds(120)).timestamp(),
+            ),
+        ],
+    }));
+
+    let app = App::default();
+
+    assert!(app.break_glass_override_remaining_secs().is_some());
+    assert_eq!(app.active_temporary_allowlist_count(), 1);
+    assert_eq!(
+        app.active_temporary_allowlist_entries()[0].site,
+        "reddit.com"
+    );
 }
 
 #[test]
@@ -5475,6 +5517,7 @@ fn app_restores_schedule_arming_continuity_from_workflow_snapshot() {
         break_glass_confirmation_pending: false,
         strict_reset_confirmation_pending: false,
         temporary_allowlist_entries: Vec::new(),
+        temporary_overrides: Vec::new(),
     }));
 
     let app = App::from_config(config);
@@ -5507,6 +5550,7 @@ fn app_restores_strict_reset_confirmation_from_workflow_snapshot() {
         break_glass_confirmation_pending: false,
         strict_reset_confirmation_pending: true,
         temporary_allowlist_entries: Vec::new(),
+        temporary_overrides: Vec::new(),
     }));
 
     let app = App::from_config(AppConfig {
@@ -5530,6 +5574,7 @@ fn app_reports_partial_runtime_recovery_notice_for_ignored_workflow_artifacts() 
         break_glass_confirmation_pending: true,
         strict_reset_confirmation_pending: true,
         temporary_allowlist_entries: Vec::new(),
+        temporary_overrides: Vec::new(),
     }));
 
     let app = App::default();

@@ -127,6 +127,43 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
             );
         }
     }
+    if payload.temporary_overrides.is_empty() {
+        println!("Temporary overrides: off");
+    } else {
+        println!(
+            "Temporary overrides: {} active",
+            payload.temporary_overrides_active_count
+        );
+        for entry in &payload.temporary_overrides {
+            match (
+                entry.kind,
+                entry.site.as_deref(),
+                entry.remaining_secs,
+                entry.expires_at_epoch_secs,
+                entry.pending_confirmation,
+            ) {
+                ("break-glass", _, _, _, true) => {
+                    println!("  - break-glass (pending confirmation)");
+                }
+                ("break-glass", _, Some(remaining_secs), Some(epoch_secs), false) => {
+                    println!(
+                        "  - break-glass (expires in {}{})",
+                        format_duration(remaining_secs),
+                        format_expiry_clock_suffix(epoch_secs)
+                    );
+                }
+                ("allowlist-site", Some(site), Some(remaining_secs), Some(epoch_secs), false) => {
+                    println!(
+                        "  - allowlist site {} (expires in {}{})",
+                        site,
+                        format_duration(remaining_secs),
+                        format_expiry_clock_suffix(epoch_secs)
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
     println!(
         "Strict mode: {}",
         if payload.strict_mode { "on" } else { "off" }

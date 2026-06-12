@@ -6,7 +6,9 @@ use crate::app::{
     replace_weekday_profile_rule_automation_triggers, task_label_index,
 };
 use crate::session_recovery::{
-    self, InProgressSessionSnapshot, WorkflowStateSnapshot, WorkflowTemporaryAllowlistEntrySnapshot,
+    self, InProgressSessionSnapshot, WorkflowStateSnapshot,
+    WorkflowTemporaryAllowlistEntrySnapshot, WorkflowTemporaryOverrideKind,
+    WorkflowTemporaryOverrideSnapshot,
 };
 use crate::temporary_allowlist::{
     TemporaryAllowlistEntry, prune_expired_temporary_allowlist_entries,
@@ -67,15 +69,14 @@ impl App {
         let Some(snapshot) = self.load_cli_workflow_snapshot_for_restore() else {
             return;
         };
+        let temporary_overrides = snapshot.temporary_overrides_with_legacy_fallback();
         let WorkflowStateSnapshot {
             schedule_delayed_occurrence_key,
             schedule_delay_until_epoch_secs,
             schedule_armed_occurrence_key,
             last_schedule_occurrence_key,
-            break_glass_expires_at_epoch_secs,
-            break_glass_confirmation_pending,
             strict_reset_confirmation_pending,
-            temporary_allowlist_entries,
+            ..
         } = snapshot;
 
         self.reset_cli_workflow_runtime_state_for_restore();
@@ -96,12 +97,11 @@ impl App {
             &mut ignored_runtime_artifacts,
         );
         self.restore_break_glass_runtime_state(
-            break_glass_expires_at_epoch_secs,
-            break_glass_confirmation_pending,
+            &temporary_overrides,
             &mut ignored_runtime_artifacts,
         );
         self.restore_temporary_allowlist_runtime_state(
-            temporary_allowlist_entries,
+            &temporary_overrides,
             &mut ignored_runtime_artifacts,
         );
         self.recompute_blocker_sites_from_active_profile();
@@ -187,10 +187,20 @@ impl App {
 
     fn restore_break_glass_runtime_state(
         &mut self,
-        break_glass_expires_at_epoch_secs: Option<i64>,
-        break_glass_confirmation_pending: bool,
+        temporary_overrides: &[WorkflowTemporaryOverrideSnapshot],
         ignored_runtime_artifacts: &mut Vec<&'static str>,
     ) {
+        let break_glass_expires_at_epoch_secs = temporary_overrides
+            .iter()
+            .filter(|override_entry| {
+                override_entry.kind == WorkflowTemporaryOverrideKind::BreakGlass
+            })
+            .filter_map(|override_entry| override_entry.expires_at_epoch_secs)
+            .max();
+        let break_glass_confirmation_pending = temporary_overrides.iter().any(|override_entry| {
+            override_entry.kind == WorkflowTemporaryOverrideKind::BreakGlass
+                && override_entry.confirmation_pending
+        });
         if !self.focus_session_active_for_current_state() {
             if break_glass_expires_at_epoch_secs.is_some() {
                 push_ignored_artifact(ignored_runtime_artifacts, "break-glass override timer");
@@ -239,17 +249,26 @@ impl App {
 
     fn restore_temporary_allowlist_runtime_state(
         &mut self,
-        temporary_allowlist_entries: Vec<WorkflowTemporaryAllowlistEntrySnapshot>,
+        temporary_overrides: &[WorkflowTemporaryOverrideSnapshot],
         ignored_runtime_artifacts: &mut Vec<&'static str>,
     ) {
         let mut restored = Vec::new();
         let mut ignored_count = 0usize;
-        for entry in temporary_allowlist_entries {
-            let profile = entry.profile.trim().to_string();
-            let site = entry.site.trim().to_string();
+        for entry in temporary_overrides
+            .iter()
+            .filter(|entry| entry.kind == WorkflowTemporaryOverrideKind::AllowlistSite)
+        {
+            let profile = entry
+                .profile
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let site = entry.site.as_deref().unwrap_or_default().trim().to_string();
+            let expires_at_epoch_secs = entry.expires_at_epoch_secs.unwrap_or_default();
             if profile.is_empty()
                 || site.is_empty()
-                || entry.expires_at_epoch_secs <= self.current_frame_now.timestamp()
+                || expires_at_epoch_secs <= self.current_frame_now.timestamp()
             {
                 ignored_count += 1;
                 continue;
@@ -257,7 +276,7 @@ impl App {
             restored.push(TemporaryAllowlistEntry {
                 profile,
                 site,
-                expires_at_epoch_secs: entry.expires_at_epoch_secs,
+                expires_at_epoch_secs,
             });
         }
         self.temporary_allowlist_entries = restored;
@@ -442,6 +461,23 @@ impl App {
                 expires_at_epoch_secs: entry.expires_at_epoch_secs,
             })
             .collect::<Vec<_>>();
+        let mut temporary_overrides = Vec::new();
+        if let Some(expires_at_epoch_secs) = break_glass_expires_at_epoch_secs {
+            temporary_overrides.push(WorkflowTemporaryOverrideSnapshot::break_glass_active(
+                expires_at_epoch_secs,
+            ));
+        }
+        if break_glass_confirmation_pending {
+            temporary_overrides
+                .push(WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation());
+        }
+        temporary_overrides.extend(temporary_allowlist_entries.iter().map(|entry| {
+            WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
+                entry.profile.clone(),
+                entry.site.clone(),
+                entry.expires_at_epoch_secs,
+            )
+        }));
         let schedule_armed_occurrence_key = if !focus_active {
             self.schedule_armed_occurrence_key
                 .clone()
@@ -472,6 +508,7 @@ impl App {
             break_glass_confirmation_pending,
             strict_reset_confirmation_pending,
             temporary_allowlist_entries,
+            temporary_overrides,
         };
 
         let should_persist = snapshot.schedule_delayed_occurrence_key.is_some()
@@ -480,6 +517,7 @@ impl App {
             || snapshot.break_glass_expires_at_epoch_secs.is_some()
             || snapshot.break_glass_confirmation_pending
             || snapshot.strict_reset_confirmation_pending
+            || !snapshot.temporary_overrides.is_empty()
             || !snapshot.temporary_allowlist_entries.is_empty();
         if should_persist {
             session_recovery::save_workflow_state(&snapshot)

@@ -5,10 +5,11 @@ use crate::cli::{
     FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput, NaiveDate, ProfileId, ProfileSpec,
     ProfileView, SessionOutput, StatsRetentionStatusOutput, StatusComparisonOptions,
     StatusComparisonOutput, StatusOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
-    ThemePreset, ThemePresetView, TimerPhase, TimerStatus, TodayOutput, WeeklyAllocationDayOutput,
-    WeeklyAllocationOutput, carry_over_goal_target, current_day_key,
-    effective_blocked_sites_for_profile, session_recovery,
+    TemporaryOverrideStatusOutput, ThemePreset, ThemePresetView, TimerPhase, TimerStatus,
+    TodayOutput, WeeklyAllocationDayOutput, WeeklyAllocationOutput, carry_over_goal_target,
+    current_day_key, effective_blocked_sites_for_profile, session_recovery,
 };
+use crate::session_recovery::{WorkflowStateSnapshot, WorkflowTemporaryOverrideKind};
 use crate::stats::ProductivityComparisonFilter;
 use crate::timer::TimerState;
 
@@ -48,7 +49,9 @@ pub(super) fn build_status_output_with_comparison(
         .map(|profile| effective_blocked_sites_for_profile(profile).len())
         .unwrap_or_default();
     let selected_automation = config.profile_automation_for(config.selected_profile);
-    let temporary_allowlist_active = active_temporary_allowlist_status(config);
+    let workflow_state = session_recovery::load_workflow_state().ok().flatten();
+    let temporary_allowlist_active =
+        active_temporary_allowlist_status(config, workflow_state.as_ref());
     let temporary_allowlist_active_count = temporary_allowlist_active.len();
     let temporary_allowlist_next_expiry_remaining_secs = temporary_allowlist_active
         .first()
@@ -56,6 +59,8 @@ pub(super) fn build_status_output_with_comparison(
     let temporary_allowlist_next_expiry_epoch_secs = temporary_allowlist_active
         .first()
         .map(|entry| entry.expires_at_epoch_secs);
+    let temporary_overrides = active_temporary_override_status(config, workflow_state.as_ref());
+    let temporary_overrides_active_count = temporary_overrides.len();
     let live = build_live_status_output(config, selected_task_label.clone());
     let session = build_session_output(&live);
     let latest_interruption = stats.latest_session_interruption();
@@ -110,6 +115,8 @@ pub(super) fn build_status_output_with_comparison(
         temporary_allowlist_next_expiry_remaining_secs,
         temporary_allowlist_next_expiry_epoch_secs,
         temporary_allowlist_active,
+        temporary_overrides_active_count,
+        temporary_overrides,
         strict_mode: selected_automation.strict_mode,
         goal: GoalOutput {
             configured: goal_snapshot.has_any_target(),
@@ -173,30 +180,40 @@ pub(super) fn build_status_output_with_comparison(
     }
 }
 
-fn active_temporary_allowlist_status(config: &AppConfig) -> Vec<TemporaryAllowlistStatusOutput> {
+fn active_temporary_allowlist_status(
+    config: &AppConfig,
+    workflow_state: Option<&WorkflowStateSnapshot>,
+) -> Vec<TemporaryAllowlistStatusOutput> {
     let now_epoch_secs = chrono::Local::now().timestamp();
     let selected_profile = config.selected_blocklist_profile.trim();
     if selected_profile.is_empty() {
         return Vec::new();
     }
-    let Ok(Some(workflow_state)) = session_recovery::load_workflow_state() else {
+    let Some(workflow_state) = workflow_state else {
         return Vec::new();
     };
 
     let mut active = workflow_state
-        .temporary_allowlist_entries
+        .temporary_overrides_with_legacy_fallback()
         .into_iter()
-        .filter(|entry| entry.profile.eq_ignore_ascii_case(selected_profile))
-        .filter(|entry| entry.expires_at_epoch_secs > now_epoch_secs)
+        .filter(|entry| entry.kind == WorkflowTemporaryOverrideKind::AllowlistSite)
         .filter_map(|entry| {
-            let site = entry.site.trim().to_string();
+            let profile = entry.profile.unwrap_or_default();
+            if !profile.eq_ignore_ascii_case(selected_profile) {
+                return None;
+            }
+            let expires_at_epoch_secs = entry.expires_at_epoch_secs?;
+            if expires_at_epoch_secs <= now_epoch_secs {
+                return None;
+            }
+            let site = entry.site.unwrap_or_default().trim().to_string();
             if site.is_empty() {
                 return None;
             }
             Some(TemporaryAllowlistStatusOutput {
                 site,
-                remaining_secs: (entry.expires_at_epoch_secs - now_epoch_secs) as u64,
-                expires_at_epoch_secs: entry.expires_at_epoch_secs,
+                remaining_secs: (expires_at_epoch_secs - now_epoch_secs) as u64,
+                expires_at_epoch_secs,
             })
         })
         .collect::<Vec<_>>();
@@ -208,6 +225,76 @@ fn active_temporary_allowlist_status(config: &AppConfig) -> Vec<TemporaryAllowli
                     .to_ascii_lowercase()
                     .cmp(&right.site.to_ascii_lowercase())
             })
+    });
+    active
+}
+
+fn active_temporary_override_status(
+    config: &AppConfig,
+    workflow_state: Option<&WorkflowStateSnapshot>,
+) -> Vec<TemporaryOverrideStatusOutput> {
+    let now_epoch_secs = chrono::Local::now().timestamp();
+    let selected_profile = config.selected_blocklist_profile.trim();
+    let Some(workflow_state) = workflow_state else {
+        return Vec::new();
+    };
+
+    let mut active = workflow_state
+        .temporary_overrides_with_legacy_fallback()
+        .into_iter()
+        .filter_map(|entry| match entry.kind {
+            WorkflowTemporaryOverrideKind::AllowlistSite => {
+                let profile = entry.profile.unwrap_or_default();
+                if selected_profile.is_empty() || !profile.eq_ignore_ascii_case(selected_profile) {
+                    return None;
+                }
+                let expires_at_epoch_secs = entry.expires_at_epoch_secs?;
+                if expires_at_epoch_secs <= now_epoch_secs {
+                    return None;
+                }
+                let site = entry.site.unwrap_or_default().trim().to_string();
+                if site.is_empty() {
+                    return None;
+                }
+                Some(TemporaryOverrideStatusOutput {
+                    kind: "allowlist-site",
+                    profile: Some(profile),
+                    site: Some(site),
+                    remaining_secs: Some((expires_at_epoch_secs - now_epoch_secs) as u64),
+                    expires_at_epoch_secs: Some(expires_at_epoch_secs),
+                    pending_confirmation: false,
+                })
+            }
+            WorkflowTemporaryOverrideKind::BreakGlass => {
+                let expires_at_epoch_secs = entry.expires_at_epoch_secs;
+                let active_expiry = expires_at_epoch_secs
+                    .filter(|expires_at_epoch_secs| *expires_at_epoch_secs > now_epoch_secs);
+                if active_expiry.is_none() && !entry.confirmation_pending {
+                    return None;
+                }
+                Some(TemporaryOverrideStatusOutput {
+                    kind: "break-glass",
+                    profile: None,
+                    site: None,
+                    remaining_secs: active_expiry.map(|expires_at_epoch_secs| {
+                        (expires_at_epoch_secs - now_epoch_secs) as u64
+                    }),
+                    expires_at_epoch_secs: active_expiry,
+                    pending_confirmation: entry.confirmation_pending,
+                })
+            }
+        })
+        .collect::<Vec<_>>();
+    active.sort_by(|left, right| {
+        left.pending_confirmation
+            .cmp(&right.pending_confirmation)
+            .then_with(|| {
+                left.remaining_secs
+                    .unwrap_or(u64::MAX)
+                    .cmp(&right.remaining_secs.unwrap_or(u64::MAX))
+            })
+            .then_with(|| left.kind.cmp(right.kind))
+            .then_with(|| left.site.cmp(&right.site))
     });
     active
 }
