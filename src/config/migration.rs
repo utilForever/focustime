@@ -415,6 +415,16 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
         );
     }
 
+    if config
+        .blocklist_profiles
+        .iter()
+        .any(blocklist_categories_in_use)
+    {
+        warnings.push(
+            "Deprecated blocklist category configuration is in use. Move category `sites` and `allowlist_sites` into the parent blocklist profile and manage hostnames with profile-level blocklist/allowlist commands.".to_string(),
+        );
+    }
+
     if !config.weekday_profile_rules.is_empty() {
         warnings.push(
             "Deprecated `weekday_profile_rules` is in use. Move weekday defaults to profile schedules and session templates.".to_string(),
@@ -434,6 +444,15 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
     }
 
     warnings
+}
+
+fn blocklist_categories_in_use(profile: &crate::config::BlocklistProfileConfig) -> bool {
+    profile.categories.len() > 1
+        || profile
+            .categories
+            .first()
+            .is_some_and(|category| !category.name.eq_ignore_ascii_case("General"))
+        || !profile.selected_category.eq_ignore_ascii_case("General")
 }
 
 pub(super) fn detect_config_schema_version(config_toml: &toml::Value) -> Option<u32> {

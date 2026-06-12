@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Blocklist category deprecation (#445):** marked category-level blocklist workflows as compatibility-only, added replacement guidance for profile-level site management, and surfaced config doctor warnings for category configs that should be folded into blocklist profiles.
+
 ## [0.15.3] - 2026-06-12
 
 ### Changed

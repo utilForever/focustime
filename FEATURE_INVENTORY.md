@@ -54,7 +54,7 @@
 | `schedule-delay-controls` | Schedule | 3 | 2.25 | 1.33 | merge | --schedule-delay |
 | `weekday-profile-rules` | Schedule | 2 | 2.95 | 0.68 | merge | --weekday-rules, --weekday-rules-set |
 | `blocking-preview-diagnostics` | Blocker | 3 | 2.25 | 1.33 | merge | --diagnostics, --blocking-preview |
-| `blocklist-category-management` | Blocker | 3 | 3.00 | 1.00 | merge | --blocklist-category, --blocklist-category-create, --blocklist-category-rename, --blocklist-category-delete |
+| `blocklist-category-management` | Blocker | 2 | 3.35 | 0.60 | merge | --blocklist-category, --blocklist-category-create, --blocklist-category-rename, --blocklist-category-delete |
 | `blocklist-profile-management` | Blocker | 4 | 3.25 | 1.23 | keep | --blocklist-profile, --blocklist-profile-create, --blocklist-profile-rename, --blocklist-profile-delete |
 | `site-rule-management` | Blocker | 5 | 4.00 | 1.25 | keep | --blocklist-sites, --allowlist-sites, --blocklist-site-add, --allowlist-site-add, --blocklist-site-edit, --allowlist-site-edit, --blocklist-site-delete, --allowlist-site-delete |
 | `temporary-allowlist-overrides` | Blocker | 3 | 3.60 | 0.83 | merge | --allowlist-site-add-temporary |

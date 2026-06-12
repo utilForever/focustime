@@ -39,6 +39,10 @@ pub(in crate::cli) fn print_blocklist_profile_command_output(
 pub(in crate::cli) fn print_blocklist_category_command_output(
     payload: &BlocklistCategoryCommandOutput,
 ) {
+    if payload.deprecated {
+        println!("Blocklist category workflows are deprecated.");
+        println!("Replacement: {}", payload.replacement);
+    }
     if payload.updated {
         println!("Blocklist category updated.");
     }
@@ -126,11 +130,14 @@ fn write_usage_signals_command_output(
 
 pub(in crate::cli) fn print_site_list_command_output(payload: &SiteListCommandOutput) {
     println!(
-        "Active profile/category `{}` / `{}` {} entries: {}",
+        "Active profile `{}` {} entries: {}",
         payload.profile,
-        payload.category,
         payload.target.id(),
         payload.sites.len()
+    );
+    println!(
+        "Compatibility category: `{}` (profile-level site management is recommended)",
+        payload.category
     );
     for site in &payload.sites {
         println!("  - {site}");
@@ -144,18 +151,16 @@ pub(in crate::cli) fn print_site_list_command_output(payload: &SiteListCommandOu
 pub(in crate::cli) fn print_site_add_command_output(payload: &SiteAddCommandOutput) {
     if payload.updated {
         println!(
-            "Added {} hostname(s) to {} in profile/category `{}` / `{}`.",
+            "Added {} hostname(s) to {} in profile `{}`.",
             payload.added.len(),
             payload.target.id(),
-            payload.profile,
-            payload.category
+            payload.profile
         );
     } else {
         println!(
-            "No {} hostnames were added in profile/category `{}` / `{}`.",
+            "No {} hostnames were added in profile `{}`.",
             payload.target.id(),
-            payload.profile,
-            payload.category
+            payload.profile
         );
     }
     if !payload.duplicates.is_empty() {
@@ -213,20 +218,18 @@ pub(in crate::cli) fn print_temporary_site_add_command_output(
 pub(in crate::cli) fn print_site_edit_command_output(payload: &SiteEditCommandOutput) {
     if payload.updated {
         println!(
-            "Updated {} hostname in profile/category `{}` / `{}`: {} -> {}",
+            "Updated {} hostname in profile `{}`: {} -> {}",
             payload.target.id(),
             payload.profile,
-            payload.category,
             payload.previous,
             payload.current
         );
     } else {
         println!(
-            "No change for {} hostname `{}` in profile/category `{}` / `{}`.",
+            "No change for {} hostname `{}` in profile `{}`.",
             payload.target.id(),
             payload.current,
-            payload.profile,
-            payload.category
+            payload.profile
         );
     }
     println!(
@@ -242,11 +245,10 @@ pub(in crate::cli) fn print_site_edit_command_output(payload: &SiteEditCommandOu
 
 pub(in crate::cli) fn print_site_delete_command_output(payload: &SiteDeleteCommandOutput) {
     println!(
-        "Deleted {} hostname `{}` from profile/category `{}` / `{}`.",
+        "Deleted {} hostname `{}` from profile `{}`.",
         payload.target.id(),
         payload.removed,
-        payload.profile,
-        payload.category
+        payload.profile
     );
     println!(
         "{} entries now: {}",

@@ -194,10 +194,10 @@ Options:
   --blocklist-profile-create  Create a blocklist profile and select it
   --blocklist-profile-rename  Rename the active blocklist profile
   --blocklist-profile-delete  Delete the active blocklist profile
-  --blocklist-category         Show active blocklist category, or set active category
-  --blocklist-category-create  Create a blocklist category in active profile and select it
-  --blocklist-category-rename  Rename the active blocklist category
-  --blocklist-category-delete  Delete the active blocklist category
+  --blocklist-category         Deprecated: show/set compatibility category; use profile-level sites
+  --blocklist-category-create  Deprecated: create compatibility category; use profile-level sites
+  --blocklist-category-rename  Deprecated: rename compatibility category
+  --blocklist-category-delete  Deprecated: delete compatibility category
   --session-template         Show active session template, or set active template
   --session-template-apply   Apply a template by name (or apply active template)
   --session-template-create  Capture current task/profile/blocklist/schedule as a template
@@ -207,15 +207,15 @@ Options:
   --history-dashboard-pin   Pin a KPI card by ID
   --history-dashboard-unpin Unpin a KPI card by ID
   --history-dashboard-order Replace full KPI card order with a complete comma-separated list
-  --blocklist-sites           List blocklist sites in active category within active profile
-  --allowlist-sites           List allowlist sites in active category within active profile
-  --blocklist-site-add        Add/import blocklist hostnames in active category within active profile
-  --allowlist-site-add        Add/import allowlist hostnames in active category within active profile
+  --blocklist-sites           List blocklist sites for the active blocklist profile
+  --allowlist-sites           List allowlist sites for the active blocklist profile
+  --blocklist-site-add        Add/import blocklist hostnames for the active blocklist profile
+  --allowlist-site-add        Add/import allowlist hostnames for the active blocklist profile
   --allowlist-site-add-temporary  Add temporary allowlist hostnames with inline duration (HOST=30m,HOST=45s)
-  --blocklist-site-edit       Replace blocklist hostname in active category using OLD=NEW
-  --allowlist-site-edit       Replace allowlist hostname in active category using OLD=NEW
-  --blocklist-site-delete     Delete blocklist hostname in active category within active profile
-  --allowlist-site-delete     Delete allowlist hostname in active category within active profile
+  --blocklist-site-edit       Replace blocklist hostname for the active blocklist profile using OLD=NEW
+  --allowlist-site-edit       Replace allowlist hostname for the active blocklist profile using OLD=NEW
+  --blocklist-site-delete     Delete blocklist hostname from the active blocklist profile
+  --allowlist-site-delete     Delete allowlist hostname from the active blocklist profile
   --daemon-start  Start local daemon mode in the background (loopback API + token auth)
   --daemon-status Show local daemon mode status
   --daemon-stop   Stop a running local daemon
@@ -249,6 +249,7 @@ Retired/legacy command guidance:
   -h, --help      Show this help"#;
 
 const USAGE_SIGNALS_REPLACEMENT: &str = "Use `focustime --feature-inventory` for cleanup reporting; raw usage-signal inspection is no longer a standalone workflow.";
+const BLOCKLIST_CATEGORY_REPLACEMENT: &str = "Manage blocklist and allowlist hostnames directly on blocklist profiles with `--blocklist-profile`, `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; categories remain a compatibility grouping only.";
 const CALENDAR_SYNC_REPLACEMENT: &str = "Calendar sync is now a narrow opt-in schedule annotation cache. Keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data, and use `focustime --diagnostics` to review setup/config guidance.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1123,6 +1124,8 @@ struct BlocklistCategorySummaryOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct BlocklistCategoryCommandOutput {
     action: &'static str,
+    deprecated: bool,
+    replacement: &'static str,
     updated: bool,
     selected_blocklist_profile: String,
     selected_blocklist_category: String,

@@ -93,6 +93,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Deprecated config compatibility fields stay visible in diagnostics",
         "Merged legacy profile names continue to migrate to canonical presets",
         "Removed migration-window and encrypted sync flags stay unavailable",
+        "Blocklist category workflows stay compatibility-only with replacement guidance",
         "cargo test --test v015_cleanup_regression",
     ] {
         assert!(
@@ -105,6 +106,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "### v0.15.x cleanup roadmap",
         "Legacy timer duration fields",
         "Legacy automation and blocklist top-level fields",
+        "Blocklist category workflows (`--blocklist-category*`, `blocklist_profiles.categories`)",
         "Removed migration-window flags (`--migrate`, `--dry-run`)",
         "Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`)",
         "Duplicate schedule/session start entry points",

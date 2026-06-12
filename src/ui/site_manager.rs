@@ -270,8 +270,8 @@ fn render_site_manager_profile_input(
     let profile_input_title = match profile_input_mode {
         Some(BlocklistProfileInputMode::Create) => " New Blocklist Profile ",
         Some(BlocklistProfileInputMode::Rename) => " Rename Blocklist Profile ",
-        Some(BlocklistProfileInputMode::CreateCategory) => " New Blocklist Category ",
-        Some(BlocklistProfileInputMode::RenameCategory) => " Rename Blocklist Category ",
+        Some(BlocklistProfileInputMode::CreateCategory) => " Deprecated Blocklist Category ",
+        Some(BlocklistProfileInputMode::RenameCategory) => " Deprecated Blocklist Category ",
         None => " Blocklist Profiles ",
     };
     let active_style = if app.blocklist_profile_input_active {
@@ -283,7 +283,7 @@ fn render_site_manager_profile_input(
         format!("{}_", app.blocklist_profile_input)
     } else {
         format!(
-            "Profiles [{} {}] switch · {} create/{} rename/{} delete · Categories [{} {}] switch (Ctrl+N/Ctrl+R/Ctrl+X)",
+            "Profiles [{} {}] switch · {} create/{} rename/{} delete · Categories deprecated [{} {}] switch",
             app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
             app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
             app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
@@ -389,7 +389,9 @@ fn site_manager_hint_lines(
                 app.navigation_hint(NavigationAction::Confirm),
                 app.navigation_hint(NavigationAction::Cancel)
             )),
-            Line::from("Tip: use descriptive names like Work, Study, Deep Work, or Social Media"),
+            Line::from(
+                "Tip: categories are deprecated; manage blocklist/allowlist sites on profiles",
+            ),
             Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
         ];
     }
@@ -408,7 +410,7 @@ fn site_manager_hint_lines(
                 app.navigation_hint(NavigationAction::MoveDown),
             )),
             Line::from(format!(
-                "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  Categories: [{}/{}] Switch  [Ctrl+N/Ctrl+R/Ctrl+X] Manage  [{}/{}] Back  [{}] Quit (Locked)",
+                "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  Categories (deprecated): [{}/{}] Switch  [{}/{}] Back  [{}] Quit (Locked)",
                 app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
                 app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
                 app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
@@ -437,7 +439,7 @@ fn site_manager_hint_lines(
             app.navigation_hint(NavigationAction::MoveDown),
         )),
         Line::from(format!(
-            "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  Categories: [{}/{}] Switch  [Ctrl+N/Ctrl+R/Ctrl+X] Manage  [{}/{}] Back",
+            "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  Categories (deprecated): [{}/{}] Switch  [{}/{}] Back",
             app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
             app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
             app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),

@@ -371,9 +371,33 @@ mod tests {
     }
 
     #[test]
-    fn effective_blocked_sites_aggregates_categories_and_dedups_case_insensitively() {
+    fn effective_blocked_sites_prefers_profile_level_rules_when_present() {
         let profile = crate::config::BlocklistProfileConfig {
             sites: vec!["legacy-top-level.com".to_string()],
+            categories: vec![
+                BlocklistCategoryConfig {
+                    name: "Social".to_string(),
+                    sites: vec!["News.com".to_string(), "*.example.com".to_string()],
+                    allowlist_sites: vec!["news.com".to_string()],
+                },
+                BlocklistCategoryConfig {
+                    name: "Work".to_string(),
+                    sites: vec!["*.EXAMPLE.com".to_string(), "forum.example.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+            ],
+            ..crate::config::BlocklistProfileConfig::default()
+        };
+
+        assert_eq!(
+            effective_blocked_sites_for_profile(&profile),
+            vec!["legacy-top-level.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn effective_blocked_sites_falls_back_to_categories_for_compatibility() {
+        let profile = crate::config::BlocklistProfileConfig {
             categories: vec![
                 BlocklistCategoryConfig {
                     name: "Social".to_string(),
