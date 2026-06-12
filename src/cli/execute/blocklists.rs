@@ -284,11 +284,7 @@ fn handle_create_blocklist_profile(
         name: name.clone(),
         sites: Vec::new(),
         allowlist_sites: Vec::new(),
-        categories: vec![crate::config::BlocklistCategoryConfig {
-            name: "General".to_string(),
-            sites: Vec::new(),
-            allowlist_sites: Vec::new(),
-        }],
+        categories: Vec::new(),
         selected_category: "General".to_string(),
     });
     config.selected_blocklist_profile = name;
@@ -352,7 +348,6 @@ pub(in crate::cli) fn apply_site_add_command(
     let result = working.add_sites_from_input(input);
     let updated = !result.added.is_empty();
     *active_profile_sites_mut(config, index, target) = working.sites.clone();
-    sync_profile_site_mirrors(&mut config.blocklist_profiles[index]);
     if updated {
         sync_selected_blocklist_profile(config);
     }
@@ -362,7 +357,6 @@ pub(in crate::cli) fn apply_site_add_command(
         action: "site-add",
         updated,
         profile: active_profile.name.clone(),
-        category: active_profile.selected_category.clone(),
         target,
         added: result.added,
         duplicates: result.duplicates,
@@ -400,14 +394,12 @@ pub(in crate::cli) fn apply_site_edit_command(
     match result {
         EditSiteResult::Updated { old, new } => {
             *active_profile_sites_mut(config, index, target) = working.sites.clone();
-            sync_profile_site_mirrors(&mut config.blocklist_profiles[index]);
             sync_selected_blocklist_profile(config);
             let active_profile = &config.blocklist_profiles[index];
             Ok(SiteEditCommandOutput {
                 action: "site-edit",
                 updated: true,
                 profile: active_profile.name.clone(),
-                category: active_profile.selected_category.clone(),
                 target,
                 previous: old,
                 current: new,
@@ -422,7 +414,6 @@ pub(in crate::cli) fn apply_site_edit_command(
                 action: "site-edit",
                 updated: false,
                 profile: active_profile.name.clone(),
-                category: active_profile.selected_category.clone(),
                 target,
                 previous: hostname.clone(),
                 current: hostname,
@@ -465,7 +456,6 @@ pub(in crate::cli) fn apply_site_delete_command(
         .remove_site(delete_index)
         .ok_or_else(|| format!("Site `{site}` was not found in {}.", target.id()))?;
     *active_profile_sites_mut(config, index, target) = working.sites.clone();
-    sync_profile_site_mirrors(&mut config.blocklist_profiles[index]);
     sync_selected_blocklist_profile(config);
 
     let active_profile = &config.blocklist_profiles[index];
@@ -473,7 +463,6 @@ pub(in crate::cli) fn apply_site_delete_command(
         action: "site-delete",
         updated: true,
         profile: active_profile.name.clone(),
-        category: active_profile.selected_category.clone(),
         target,
         removed,
         sites: active_profile_sites(config, index, target).to_vec(),
@@ -488,8 +477,6 @@ fn ensure_blocklist_profiles(config: &mut AppConfig) {
             .push(BlocklistProfileConfig::default());
         config.selected_blocklist_profile = config.blocklist_profiles[0].name.clone();
     }
-    let index = selected_blocklist_profile_index(config);
-    ensure_blocklist_categories(&mut config.blocklist_profiles[index]);
 }
 
 fn blocklist_profile_index_by_name(
@@ -515,17 +502,9 @@ fn active_profile_sites(
     target: SiteListTarget,
 ) -> &[String] {
     let profile = &config.blocklist_profiles[profile_index];
-    if profile.categories.is_empty() {
-        return match target {
-            SiteListTarget::Blocklist => &profile.sites,
-            SiteListTarget::Allowlist => &profile.allowlist_sites,
-        };
-    }
-    let category_index = selected_blocklist_category_index(profile);
-    let category = &profile.categories[category_index];
     match target {
-        SiteListTarget::Blocklist => &category.sites,
-        SiteListTarget::Allowlist => &category.allowlist_sites,
+        SiteListTarget::Blocklist => &profile.sites,
+        SiteListTarget::Allowlist => &profile.allowlist_sites,
     }
 }
 
@@ -534,13 +513,10 @@ fn active_profile_sites_mut(
     profile_index: usize,
     target: SiteListTarget,
 ) -> &mut Vec<String> {
-    ensure_blocklist_categories(&mut config.blocklist_profiles[profile_index]);
-    let category_index =
-        selected_blocklist_category_index(&config.blocklist_profiles[profile_index]);
-    let category = &mut config.blocklist_profiles[profile_index].categories[category_index];
+    let profile = &mut config.blocklist_profiles[profile_index];
     match target {
-        SiteListTarget::Blocklist => &mut category.sites,
-        SiteListTarget::Allowlist => &mut category.allowlist_sites,
+        SiteListTarget::Blocklist => &mut profile.sites,
+        SiteListTarget::Allowlist => &mut profile.allowlist_sites,
     }
 }
 
@@ -628,7 +604,6 @@ fn build_site_list_command_output(
         return SiteListCommandOutput {
             action,
             profile: fallback,
-            category: "General".to_string(),
             target,
             sites: Vec::new(),
             effective_blocked_sites_count: 0,
@@ -639,7 +614,6 @@ fn build_site_list_command_output(
     SiteListCommandOutput {
         action,
         profile: profile.name.clone(),
-        category: profile.selected_category.clone(),
         target,
         sites: active_profile_sites(config, index, target).to_vec(),
         effective_blocked_sites_count: effective_blocked_sites_for_profile(profile).len(),

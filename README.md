@@ -726,11 +726,9 @@ Open the site manager from timer view with **`b`**.
 - `d` or `Delete`: remove the selected hostname
 - `m`: toggle between editing blocklist sites and allowlist exceptions
 - `[` / `]`: switch active blocklist profile
-- `←` / `→`: switch deprecated compatibility categories when present
 - `n`: create a blocklist profile
 - `r`: rename the active blocklist profile
 - `x`: delete the active blocklist profile
-- `Ctrl+n` / `Ctrl+r` / `Ctrl+x`: deprecated category create/rename/delete compatibility controls
 - `↑/↓` (default `navigate_up`/`navigate_down`): move selection
 - `b`: return to timer view
 - `Esc` (default `cancel`): return to timer view only when add/edit mode is not active
@@ -749,10 +747,10 @@ Allowlist entries act as explicit exceptions: effective focus blocking is comput
 **blocklist sites minus allowlist sites** for the active profile, using exact and
 wildcard rule matching.
 
-Blocklist categories are deprecated compatibility grouping. New configurations
-should keep `sites` and `allowlist_sites` directly on each `[[blocklist_profiles]]`
-entry; `--config-doctor` reports category configs that should be folded into
-profile-level lists.
+Blocklist categories remain a deprecated CLI/config compatibility grouping. New
+configurations should keep `sites` and `allowlist_sites` directly on each
+`[[blocklist_profiles]]` entry; `--config-doctor` reports category configs that
+should be folded into profile-level lists.
 
 For hosts-based blocking to apply reliably, keep DNS-over-HTTPS disabled in your browser.
 If you configure the command backend, ensure your custom commands enforce equivalent restrictions.

@@ -2299,6 +2299,59 @@ fn site_manager_switches_between_blocklist_profiles() {
 }
 
 #[test]
+fn site_manager_uses_profile_sites_not_selected_category() {
+    let config = AppConfig {
+        blocklist_profiles: vec![BlocklistProfileConfig {
+            name: "Work".to_string(),
+            sites: Vec::new(),
+            allowlist_sites: Vec::new(),
+            categories: vec![
+                BlocklistCategoryConfig {
+                    name: "General".to_string(),
+                    sites: vec!["general.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+                BlocklistCategoryConfig {
+                    name: "Social".to_string(),
+                    sites: vec!["social.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+            ],
+            selected_category: "Social".to_string(),
+        }],
+        selected_blocklist_profile: "Work".to_string(),
+        ..AppConfig::default()
+    };
+    let mut app = App::from_config(config);
+    app.handle_key(key(KeyCode::Char('b')));
+
+    assert_eq!(
+        app.active_policy_sites(),
+        vec!["general.com".to_string(), "social.com".to_string()]
+    );
+
+    app.handle_key(key(KeyCode::Char('a')));
+    for c in "new.com".chars() {
+        app.handle_key(key(KeyCode::Char(c)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+
+    let persisted = app.persisted_config();
+    assert_eq!(
+        persisted.blocklist_profiles[0].sites,
+        vec![
+            "general.com".to_string(),
+            "social.com".to_string(),
+            "new.com".to_string()
+        ]
+    );
+    assert_eq!(
+        persisted.blocklist_profiles[0].categories[1].sites,
+        vec!["social.com".to_string()]
+    );
+}
+
+#[test]
 fn site_manager_allowlist_mode_clamps_selection_on_profile_switch() {
     let config = AppConfig {
         blocklist_profiles: vec![

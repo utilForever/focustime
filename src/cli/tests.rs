@@ -2676,6 +2676,49 @@ fn apply_allowlist_site_add_updates_effective_blocking() {
 }
 
 #[test]
+fn apply_site_add_command_uses_profile_sites_not_selected_category() {
+    let mut config = AppConfig {
+        blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+            name: "Default".to_string(),
+            sites: vec!["profile.com".to_string()],
+            allowlist_sites: Vec::new(),
+            categories: vec![
+                crate::config::BlocklistCategoryConfig {
+                    name: "General".to_string(),
+                    sites: vec!["category-general.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+                crate::config::BlocklistCategoryConfig {
+                    name: "Social".to_string(),
+                    sites: vec!["category-social.com".to_string()],
+                    allowlist_sites: Vec::new(),
+                },
+            ],
+            selected_category: "Social".to_string(),
+        }],
+        selected_blocklist_profile: "Default".to_string(),
+        ..AppConfig::default()
+    };
+
+    let payload =
+        apply_site_add_command(&mut config, SiteListTarget::Blocklist, "new.com").unwrap();
+
+    assert!(payload.updated);
+    assert_eq!(
+        config.blocklist_profiles[0].sites,
+        vec!["profile.com".to_string(), "new.com".to_string()]
+    );
+    assert_eq!(
+        config.blocklist_profiles[0].categories[1].sites,
+        vec!["category-social.com".to_string()]
+    );
+    assert_eq!(
+        payload.sites,
+        vec!["profile.com".to_string(), "new.com".to_string()]
+    );
+}
+
+#[test]
 fn apply_site_edit_command_updates_blocklist_sites() {
     let mut config = AppConfig {
         blocklist_profiles: vec![crate::config::BlocklistProfileConfig {

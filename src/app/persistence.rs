@@ -1,9 +1,8 @@
 use crate::app::{
-    App, AppConfig, BlocklistCategoryConfig, BlocklistProfileConfig,
-    DEFAULT_BLOCKLIST_PROFILE_NAME, HistoryDashboardConfig, Local, PendingTimerAction, TimerPhase,
-    TimerState, TimerStatus, blocking_backend_config_for_persistence, format_duration_label,
-    occurrence_key, profile_index, profile_spec_for,
-    replace_weekday_profile_rule_automation_triggers, task_label_index,
+    App, AppConfig, BlocklistProfileConfig, DEFAULT_BLOCKLIST_PROFILE_NAME, HistoryDashboardConfig,
+    Local, PendingTimerAction, TimerPhase, TimerState, TimerStatus,
+    blocking_backend_config_for_persistence, format_duration_label, occurrence_key, profile_index,
+    profile_spec_for, replace_weekday_profile_rule_automation_triggers, task_label_index,
 };
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, WorkflowStateSnapshot,
@@ -533,20 +532,12 @@ impl App {
     pub(super) fn persisted_config(&self) -> AppConfig {
         let custom_profile = self.custom_profile.normalized();
         let mut blocklist_profiles = self.blocklist_profiles.clone();
-        for profile in &mut blocklist_profiles {
-            ensure_profile_categories_for_persistence(profile);
-            sync_profile_site_mirrors_for_persistence(profile);
-        }
         if blocklist_profiles.is_empty() {
             blocklist_profiles.push(BlocklistProfileConfig {
                 name: DEFAULT_BLOCKLIST_PROFILE_NAME.to_string(),
                 sites: self.blocker.sites.clone(),
                 allowlist_sites: Vec::new(),
-                categories: vec![BlocklistCategoryConfig {
-                    name: "General".to_string(),
-                    sites: self.blocker.sites.clone(),
-                    allowlist_sites: Vec::new(),
-                }],
+                categories: Vec::new(),
                 selected_category: "General".to_string(),
             });
         }
@@ -667,59 +658,6 @@ impl App {
             self.stats_has_unsaved_elapsed = false;
         }
     }
-}
-
-fn ensure_profile_categories_for_persistence(profile: &mut BlocklistProfileConfig) {
-    if profile.categories.is_empty() {
-        profile.categories.push(BlocklistCategoryConfig {
-            name: "General".to_string(),
-            sites: profile.sites.clone(),
-            allowlist_sites: profile.allowlist_sites.clone(),
-        });
-    }
-    let selected = profile.selected_category.trim().to_string();
-    if selected.is_empty() {
-        if let Some(first) = profile.categories.first() {
-            profile.selected_category = first.name.clone();
-        } else {
-            profile.selected_category = "General".to_string();
-        }
-    } else if let Some(category) = profile
-        .categories
-        .iter()
-        .find(|category| category.name.eq_ignore_ascii_case(&selected))
-    {
-        profile.selected_category = category.name.clone();
-    } else if let Some(first) = profile.categories.first() {
-        profile.selected_category = first.name.clone();
-    } else {
-        profile.selected_category = "General".to_string();
-    }
-}
-
-fn sync_profile_site_mirrors_for_persistence(profile: &mut BlocklistProfileConfig) {
-    let mut sites: Vec<String> = Vec::new();
-    let mut allowlist_sites: Vec<String> = Vec::new();
-    for category in &profile.categories {
-        for site in &category.sites {
-            if !sites
-                .iter()
-                .any(|existing| existing.eq_ignore_ascii_case(site))
-            {
-                sites.push(site.clone());
-            }
-        }
-        for site in &category.allowlist_sites {
-            if !allowlist_sites
-                .iter()
-                .any(|existing| existing.eq_ignore_ascii_case(site))
-            {
-                allowlist_sites.push(site.clone());
-            }
-        }
-    }
-    profile.sites = sites;
-    profile.allowlist_sites = allowlist_sites;
 }
 
 fn local_datetime_from_epoch_secs(epoch_secs: i64) -> Option<chrono::DateTime<Local>> {

@@ -1,9 +1,8 @@
 use crate::app::{
-    App, AppMode, BlocklistCategoryConfig, BlocklistProfileConfig, BlocklistProfileInputMode,
-    BulkAddResult, EditSiteResult, KeyCode, KeyEvent, KeyModifiers, NavigationAction,
-    ShortcutAction, SiteBlocker, SiteFeedbackLevel, SiteInputMode, SiteListMode,
-    blocklist_category_index, display_input_value, effective_blocked_sites_for_profile,
-    format_count, summarize_invalid_inputs,
+    App, AppMode, BlocklistProfileConfig, BlocklistProfileInputMode, BulkAddResult, EditSiteResult,
+    KeyCode, KeyEvent, KeyModifiers, NavigationAction, ShortcutAction, SiteBlocker,
+    SiteFeedbackLevel, SiteInputMode, SiteListMode, display_input_value,
+    effective_blocked_sites_for_profile, format_count, summarize_invalid_inputs,
 };
 
 const SITE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 10] = [
@@ -34,10 +33,6 @@ impl App {
         }
 
         if self.handle_site_manager_navigation_key(&key) {
-            return;
-        }
-
-        if self.handle_blocklist_category_hotkey(&key) {
             return;
         }
 
@@ -116,37 +111,8 @@ impl App {
                 self.selected_site = self.selected_site.saturating_sub(1);
                 true
             }
-            _ if self.navigation_matches(NavigationAction::MoveLeft, key) => {
-                self.select_previous_blocklist_category();
-                true
-            }
-            _ if self.navigation_matches(NavigationAction::MoveRight, key) => {
-                self.select_next_blocklist_category();
-                true
-            }
             _ if self.navigation_matches(NavigationAction::Cancel, key) => {
                 self.set_mode(AppMode::Timer);
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn handle_blocklist_category_hotkey(&mut self, key: &KeyEvent) -> bool {
-        if !key.modifiers.contains(KeyModifiers::CONTROL) {
-            return false;
-        }
-        match key.code {
-            KeyCode::Char('n') => {
-                self.start_blocklist_profile_input(BlocklistProfileInputMode::CreateCategory);
-                true
-            }
-            KeyCode::Char('r') => {
-                self.start_blocklist_profile_input(BlocklistProfileInputMode::RenameCategory);
-                true
-            }
-            KeyCode::Char('x') => {
-                self.delete_active_blocklist_category();
                 true
             }
             _ => false,
@@ -238,12 +204,6 @@ impl App {
             BlocklistProfileInputMode::Rename => {
                 self.blocklist_profile_input = self.active_blocklist_profile_name().to_string();
             }
-            BlocklistProfileInputMode::CreateCategory => {
-                self.blocklist_profile_input.clear();
-            }
-            BlocklistProfileInputMode::RenameCategory => {
-                self.blocklist_profile_input = self.active_blocklist_category_name().to_string();
-            }
         }
     }
 
@@ -276,14 +236,12 @@ impl App {
             let edit_result = working.edit_site_from_input(index, &input);
             if let Some(target_sites) = self.active_profile_sites_for_mode_mut(mode) {
                 *target_sites = working.sites.clone();
-                self.sync_active_profile_site_mirrors();
             }
             self.apply_edit_site_result(edit_result)
         } else {
             let add_result = working.add_sites_from_input(&input);
             if let Some(target_sites) = self.active_profile_sites_for_mode_mut(mode) {
                 *target_sites = working.sites.clone();
-                self.sync_active_profile_site_mirrors();
             }
             self.apply_bulk_add_result(add_result)
         };
@@ -331,27 +289,13 @@ impl App {
 
         let name = self.blocklist_profile_input.trim().to_string();
         if name.is_empty() {
-            let label = match mode {
-                BlocklistProfileInputMode::Create | BlocklistProfileInputMode::Rename => "Profile",
-                BlocklistProfileInputMode::CreateCategory
-                | BlocklistProfileInputMode::RenameCategory => "Category",
-            };
-            self.set_site_feedback(
-                SiteFeedbackLevel::Warning,
-                format!("{label} name cannot be empty"),
-            );
+            self.set_site_feedback(SiteFeedbackLevel::Warning, "Profile name cannot be empty");
             return;
         }
 
         let outcome = match mode {
             BlocklistProfileInputMode::Create => self.commit_create_blocklist_profile(name),
             BlocklistProfileInputMode::Rename => self.commit_rename_blocklist_profile(name),
-            BlocklistProfileInputMode::CreateCategory => {
-                self.commit_create_blocklist_category(name)
-            }
-            BlocklistProfileInputMode::RenameCategory => {
-                self.commit_rename_blocklist_category(name)
-            }
         };
 
         if let Err(message) = outcome {
@@ -416,90 +360,6 @@ impl App {
         self.set_site_feedback(
             SiteFeedbackLevel::Success,
             format!("Renamed profile `{old_name}` -> `{name}`"),
-        );
-        Ok(())
-    }
-
-    fn commit_create_blocklist_category(&mut self, name: String) -> Result<(), String> {
-        {
-            let Some(profile) = self
-                .blocklist_profiles
-                .get_mut(self.active_blocklist_profile)
-            else {
-                return Ok(());
-            };
-            ensure_profile_categories(profile);
-            let has_duplicate = profile
-                .categories
-                .iter()
-                .any(|category| category.name.eq_ignore_ascii_case(&name));
-            if has_duplicate {
-                return Err(format!("Category `{name}` already exists"));
-            }
-            profile.categories.push(BlocklistCategoryConfig {
-                name: name.clone(),
-                sites: Vec::new(),
-                allowlist_sites: Vec::new(),
-            });
-            profile.selected_category = name.clone();
-            sync_profile_site_mirrors(profile);
-        }
-
-        self.cancel_blocklist_profile_input();
-        self.clamp_selection();
-        self.save_config();
-        self.set_site_feedback(
-            SiteFeedbackLevel::Success,
-            format!("Created category `{name}`"),
-        );
-        Ok(())
-    }
-
-    fn commit_rename_blocklist_category(&mut self, name: String) -> Result<(), String> {
-        let current_name = {
-            let Some(profile) = self
-                .blocklist_profiles
-                .get_mut(self.active_blocklist_profile)
-            else {
-                return Ok(());
-            };
-            ensure_profile_categories(profile);
-            let index = blocklist_category_index(&profile.categories, &profile.selected_category)
-                .min(profile.categories.len().saturating_sub(1));
-            let Some(current) = profile
-                .categories
-                .get(index)
-                .map(|category| category.name.clone())
-            else {
-                return Ok(());
-            };
-            if current.eq_ignore_ascii_case(&name) {
-                return Err(format!("No change for category `{current}`"));
-            }
-            let has_duplicate =
-                profile
-                    .categories
-                    .iter()
-                    .enumerate()
-                    .any(|(candidate_index, category)| {
-                        candidate_index != index && category.name.eq_ignore_ascii_case(&name)
-                    });
-            if has_duplicate {
-                return Err(format!("Category `{name}` already exists"));
-            }
-            if let Some(category) = profile.categories.get_mut(index) {
-                category.name = name.clone();
-            }
-            profile.selected_category = name.clone();
-            sync_profile_site_mirrors(profile);
-            current
-        };
-
-        self.cancel_blocklist_profile_input();
-        self.save_config();
-        self.set_site_feedback(
-            SiteFeedbackLevel::Success,
-            format!("Renamed category `{current_name}` -> `{name}`"),
         );
         Ok(())
     }
@@ -611,7 +471,6 @@ impl App {
         let removed = working.remove_site(selected_site);
         if let Some(target_sites) = self.active_profile_sites_for_mode_mut(mode) {
             *target_sites = working.sites.clone();
-            self.sync_active_profile_site_mirrors();
         }
 
         if let Some(removed) = removed {
@@ -645,46 +504,6 @@ impl App {
         self.switch_blocklist_profile(next);
     }
 
-    fn select_previous_blocklist_category(&mut self) {
-        let next = {
-            let Some(profile) = self
-                .blocklist_profiles
-                .get_mut(self.active_blocklist_profile)
-            else {
-                return;
-            };
-            ensure_profile_categories(profile);
-            if profile.categories.len() <= 1 {
-                return;
-            }
-            let current = blocklist_category_index(&profile.categories, &profile.selected_category);
-            if current == 0 {
-                profile.categories.len().saturating_sub(1)
-            } else {
-                current.saturating_sub(1)
-            }
-        };
-        self.switch_blocklist_category(next);
-    }
-
-    fn select_next_blocklist_category(&mut self) {
-        let next = {
-            let Some(profile) = self
-                .blocklist_profiles
-                .get_mut(self.active_blocklist_profile)
-            else {
-                return;
-            };
-            ensure_profile_categories(profile);
-            if profile.categories.len() <= 1 {
-                return;
-            }
-            let current = blocklist_category_index(&profile.categories, &profile.selected_category);
-            (current + 1) % profile.categories.len()
-        };
-        self.switch_blocklist_category(next);
-    }
-
     fn switch_blocklist_profile(&mut self, next_index: usize) {
         if next_index >= self.blocklist_profiles.len()
             || next_index == self.active_blocklist_profile
@@ -702,79 +521,6 @@ impl App {
             format!(
                 "Switched to profile `{}`",
                 self.active_blocklist_profile_name()
-            ),
-        );
-    }
-
-    fn switch_blocklist_category(&mut self, next_index: usize) {
-        let Some(profile) = self
-            .blocklist_profiles
-            .get_mut(self.active_blocklist_profile)
-        else {
-            return;
-        };
-        ensure_profile_categories(profile);
-        if next_index >= profile.categories.len() {
-            return;
-        }
-        let Some(next_name) = profile
-            .categories
-            .get(next_index)
-            .map(|category| category.name.clone())
-        else {
-            return;
-        };
-        if next_name.eq_ignore_ascii_case(&profile.selected_category) {
-            return;
-        }
-        profile.selected_category = next_name.clone();
-        self.recompute_blocker_sites_from_active_profile();
-        self.clamp_selection();
-        self.save_config();
-        self.sync_blocking_after_site_mutation();
-        self.set_site_feedback(
-            SiteFeedbackLevel::Success,
-            format!("Switched to category `{next_name}`"),
-        );
-    }
-
-    fn delete_active_blocklist_category(&mut self) {
-        let Some(profile) = self
-            .blocklist_profiles
-            .get_mut(self.active_blocklist_profile)
-        else {
-            return;
-        };
-        ensure_profile_categories(profile);
-        if profile.categories.len() <= 1 {
-            self.set_site_feedback(
-                SiteFeedbackLevel::Warning,
-                "At least one blocklist category is required",
-            );
-            return;
-        }
-        let index = blocklist_category_index(&profile.categories, &profile.selected_category)
-            .min(profile.categories.len().saturating_sub(1));
-        let removed = profile.categories.remove(index);
-        let next_index = index.min(profile.categories.len().saturating_sub(1));
-        if let Some(next_name) = profile
-            .categories
-            .get(next_index)
-            .map(|category| category.name.clone())
-        {
-            profile.selected_category = next_name;
-        }
-        sync_profile_site_mirrors(profile);
-        self.recompute_blocker_sites_from_active_profile();
-        self.clamp_selection();
-        self.save_config();
-        self.sync_blocking_after_site_mutation();
-        self.set_site_feedback(
-            SiteFeedbackLevel::Success,
-            format!(
-                "Deleted category `{}` (active: `{}`)",
-                removed.name,
-                self.active_blocklist_category_name()
             ),
         );
     }
@@ -826,24 +572,14 @@ impl App {
         self.active_blocklist_profile = self
             .active_blocklist_profile
             .min(self.blocklist_profiles.len().saturating_sub(1));
-        if let Some(profile) = self
-            .blocklist_profiles
-            .get_mut(self.active_blocklist_profile)
-        {
-            ensure_profile_categories(profile);
-        }
     }
 
     pub(super) fn active_profile_sites_for_mode(&self, mode: SiteListMode) -> &[String] {
         self.blocklist_profiles
             .get(self.active_blocklist_profile)
             .map(|profile| match mode {
-                SiteListMode::Blocklist => active_profile_category(profile)
-                    .map(|category| category.sites.as_slice())
-                    .unwrap_or(profile.sites.as_slice()),
-                SiteListMode::Allowlist => active_profile_category(profile)
-                    .map(|category| category.allowlist_sites.as_slice())
-                    .unwrap_or(profile.allowlist_sites.as_slice()),
+                SiteListMode::Blocklist => profile.sites.as_slice(),
+                SiteListMode::Allowlist => profile.allowlist_sites.as_slice(),
             })
             .unwrap_or(&[])
     }
@@ -856,13 +592,9 @@ impl App {
         let profile = self
             .blocklist_profiles
             .get_mut(self.active_blocklist_profile)?;
-        ensure_profile_categories(profile);
-        let index = blocklist_category_index(&profile.categories, &profile.selected_category)
-            .min(profile.categories.len().saturating_sub(1));
-        let category = profile.categories.get_mut(index)?;
         match mode {
-            SiteListMode::Blocklist => Some(&mut category.sites),
-            SiteListMode::Allowlist => Some(&mut category.allowlist_sites),
+            SiteListMode::Blocklist => Some(&mut profile.sites),
+            SiteListMode::Allowlist => Some(&mut profile.allowlist_sites),
         }
     }
 
@@ -898,16 +630,6 @@ impl App {
         self.sync_blocking_after_site_mutation();
     }
 
-    fn sync_active_profile_site_mirrors(&mut self) {
-        if let Some(profile) = self
-            .blocklist_profiles
-            .get_mut(self.active_blocklist_profile)
-        {
-            ensure_profile_categories(profile);
-            sync_profile_site_mirrors(profile);
-        }
-    }
-
     fn sync_blocking_after_site_mutation(&mut self) {
         if !self.should_resync_blocking_after_site_mutation() {
             return;
@@ -936,69 +658,6 @@ fn temporary_allowlist_syntax_used(input: &str) -> bool {
         .split([',', '\n', '\r'])
         .map(str::trim)
         .any(|token| !token.is_empty() && token.contains('='))
-}
-
-fn active_profile_category(profile: &BlocklistProfileConfig) -> Option<&BlocklistCategoryConfig> {
-    if profile.categories.is_empty() {
-        return None;
-    }
-    let index = blocklist_category_index(&profile.categories, &profile.selected_category)
-        .min(profile.categories.len().saturating_sub(1));
-    profile.categories.get(index)
-}
-
-fn ensure_profile_categories(profile: &mut BlocklistProfileConfig) {
-    if profile.categories.is_empty() {
-        profile.categories.push(BlocklistCategoryConfig {
-            name: default_blocklist_category_name(),
-            sites: profile.sites.clone(),
-            allowlist_sites: profile.allowlist_sites.clone(),
-        });
-    }
-
-    let selected = profile.selected_category.trim().to_string();
-    if selected.is_empty() {
-        if let Some(first) = profile.categories.first() {
-            profile.selected_category = first.name.clone();
-        } else {
-            profile.selected_category = default_blocklist_category_name();
-        }
-    } else if let Some(category) = profile
-        .categories
-        .iter()
-        .find(|category| category.name.eq_ignore_ascii_case(&selected))
-    {
-        profile.selected_category = category.name.clone();
-    } else if let Some(first) = profile.categories.first() {
-        profile.selected_category = first.name.clone();
-    } else {
-        profile.selected_category = default_blocklist_category_name();
-    }
-}
-
-fn sync_profile_site_mirrors(profile: &mut BlocklistProfileConfig) {
-    let mut sites: Vec<String> = Vec::new();
-    let mut allowlist_sites: Vec<String> = Vec::new();
-    for category in &profile.categories {
-        for site in &category.sites {
-            if !sites
-                .iter()
-                .any(|existing| existing.eq_ignore_ascii_case(site))
-            {
-                sites.push(site.clone());
-            }
-        }
-        for site in &category.allowlist_sites {
-            if !allowlist_sites
-                .iter()
-                .any(|existing| existing.eq_ignore_ascii_case(site))
-            {
-                allowlist_sites.push(site.clone());
-            }
-        }
-    }
-    profile.sites = sites;
-    profile.allowlist_sites = allowlist_sites;
 }
 
 fn default_blocklist_category_name() -> String {

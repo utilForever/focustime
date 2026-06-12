@@ -12,12 +12,14 @@ use crate::blocker::{
     EditSiteResult, InvalidSiteInput, SiteBlocker,
 };
 use crate::calendar::{CalendarBusyWindow, active_window_at as active_calendar_window_at};
+#[cfg(test)]
+use crate::config::BlocklistCategoryConfig;
 use crate::config::{
     AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
-    BlockingBackendPolicyConfig, BlocklistCategoryConfig, BlocklistProfileConfig,
-    CalendarSyncConfig, CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig,
-    FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig, HistoryKpiCardId,
-    MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
+    BlockingBackendPolicyConfig, BlocklistProfileConfig, CalendarSyncConfig,
+    CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig, FeatureFlagsConfig,
+    GoalCarryOverConfig, HistoryDashboardConfig, HistoryKpiCardId, MonthlyGoalConfig,
+    NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
     ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
     RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
     ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeekdayProfileRuleConfig,
@@ -117,7 +119,6 @@ pub(crate) use shortcuts::{NavigationAction, ShortcutAction};
 pub(crate) const PROFILE_IDS: [ProfileId; 3] =
     [ProfileId::Classic, ProfileId::DeepWork, ProfileId::Custom];
 const DEFAULT_BLOCKLIST_PROFILE_NAME: &str = "Default";
-const DEFAULT_BLOCKLIST_CATEGORY_NAME: &str = "General";
 #[cfg(not(test))]
 const STATS_FILE_NAME: &str = "stats.toml";
 pub(crate) const PLANNER_RECENT_LABEL_LIMIT: usize = 5;
@@ -216,13 +217,6 @@ fn blocklist_profile_index(profiles: &[BlocklistProfileConfig], selected_name: &
     profiles
         .iter()
         .position(|profile| profile.name.eq_ignore_ascii_case(selected_name))
-        .unwrap_or(0)
-}
-
-fn blocklist_category_index(categories: &[BlocklistCategoryConfig], selected_name: &str) -> usize {
-    categories
-        .iter()
-        .position(|category| category.name.eq_ignore_ascii_case(selected_name))
         .unwrap_or(0)
 }
 
@@ -378,8 +372,6 @@ impl SiteListMode {
 pub(crate) enum BlocklistProfileInputMode {
     Create,
     Rename,
-    CreateCategory,
-    RenameCategory,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1366,42 +1358,6 @@ impl App {
 
     pub(crate) fn blocklist_profile_count(&self) -> usize {
         self.blocklist_profiles.len()
-    }
-
-    pub(crate) fn active_blocklist_category_name(&self) -> &str {
-        let Some(profile) = self.blocklist_profiles.get(self.active_blocklist_profile) else {
-            return DEFAULT_BLOCKLIST_CATEGORY_NAME;
-        };
-        if profile.categories.is_empty() {
-            if profile.selected_category.trim().is_empty() {
-                return DEFAULT_BLOCKLIST_CATEGORY_NAME;
-            }
-            return profile.selected_category.as_str();
-        }
-        let index = blocklist_category_index(&profile.categories, &profile.selected_category)
-            .min(profile.categories.len().saturating_sub(1));
-        profile
-            .categories
-            .get(index)
-            .map(|category| category.name.as_str())
-            .unwrap_or(DEFAULT_BLOCKLIST_CATEGORY_NAME)
-    }
-
-    pub(crate) fn active_blocklist_category_position(&self) -> usize {
-        let Some(profile) = self.blocklist_profiles.get(self.active_blocklist_profile) else {
-            return 1;
-        };
-        if profile.categories.is_empty() {
-            return 1;
-        }
-        blocklist_category_index(&profile.categories, &profile.selected_category).saturating_add(1)
-    }
-
-    pub(crate) fn blocklist_category_count(&self) -> usize {
-        self.blocklist_profiles
-            .get(self.active_blocklist_profile)
-            .map(|profile| profile.categories.len().max(1))
-            .unwrap_or(1)
     }
 
     pub(crate) fn active_session_template_name(&self) -> Option<&str> {

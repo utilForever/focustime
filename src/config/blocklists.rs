@@ -95,27 +95,11 @@ fn block_rule_excluded_by_allowlist(block_rule: &str, allowlist_rules: &[String]
 }
 
 fn all_blocklist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    if !profile.sites.is_empty() || profile.categories.is_empty() {
-        return dedup_case_insensitive(profile.sites.iter().cloned());
-    }
-    dedup_case_insensitive(
-        profile
-            .categories
-            .iter()
-            .flat_map(|category| category.sites.iter().cloned()),
-    )
+    dedup_case_insensitive(profile.sites.iter().cloned())
 }
 
 fn all_allowlist_rules_for_profile(profile: &BlocklistProfileConfig) -> Vec<String> {
-    if !profile.allowlist_sites.is_empty() || profile.categories.is_empty() {
-        return dedup_case_insensitive(profile.allowlist_sites.iter().cloned());
-    }
-    dedup_case_insensitive(
-        profile
-            .categories
-            .iter()
-            .flat_map(|category| category.allowlist_sites.iter().cloned()),
-    )
+    dedup_case_insensitive(profile.allowlist_sites.iter().cloned())
 }
 
 fn dedup_case_insensitive<I>(values: I) -> Vec<String>
