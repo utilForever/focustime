@@ -4585,13 +4585,13 @@ fn history_dashboard_goal_config_change_rebuilds_static_snapshot() {
 }
 
 #[test]
-fn history_dashboard_shortcuts_toggle_reorder_and_persist() {
+fn history_dashboard_uses_stable_default_layout_despite_legacy_customization() {
     let mut app = App::from_config(AppConfig {
         history_dashboard: HistoryDashboardConfig {
             card_order: vec![
-                HistoryKpiCardId::SessionSummary,
-                HistoryKpiCardId::FocusScore,
                 HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::FocusScore,
+                HistoryKpiCardId::SessionSummary,
                 HistoryKpiCardId::FocusRisk,
                 HistoryKpiCardId::WeeklyAllocation,
                 HistoryKpiCardId::LastInterruption,
@@ -4599,60 +4599,41 @@ fn history_dashboard_shortcuts_toggle_reorder_and_persist() {
                 HistoryKpiCardId::Retention,
                 HistoryKpiCardId::ComparisonFilters,
             ],
-            pinned_cards: vec![
-                HistoryKpiCardId::SessionSummary,
-                HistoryKpiCardId::FocusScore,
-            ],
+            pinned_cards: vec![HistoryKpiCardId::GoalStreak],
         },
         ..AppConfig::default()
     });
     app.handle_key(key(KeyCode::Char('h')));
 
     assert_eq!(
-        app.history_dashboard_selected_card(),
-        HistoryKpiCardId::SessionSummary
-    );
-    app.handle_key(key(KeyCode::Char('j')));
-    assert_eq!(
-        app.history_dashboard_selected_card(),
-        HistoryKpiCardId::FocusScore
-    );
-
-    app.handle_key(key(KeyCode::Char('p')));
-    assert_eq!(
-        app.history_dashboard_pinned_cards(),
-        &[HistoryKpiCardId::SessionSummary]
-    );
-    app.handle_key(key(KeyCode::Char('p')));
-    assert_eq!(
-        app.history_dashboard_pinned_cards(),
-        &[
+        app.history_dashboard_cards(),
+        vec![
             HistoryKpiCardId::SessionSummary,
-            HistoryKpiCardId::FocusScore
+            HistoryKpiCardId::FocusScore,
+            HistoryKpiCardId::GoalStreak,
+            HistoryKpiCardId::FocusRisk,
+            HistoryKpiCardId::WeeklyAllocation,
+            HistoryKpiCardId::LastInterruption,
+            HistoryKpiCardId::StatsGrowth,
+            HistoryKpiCardId::Retention,
+            HistoryKpiCardId::ComparisonFilters
         ]
     );
 
+    app.handle_key(key(KeyCode::Char('j')));
+    app.handle_key(key(KeyCode::Char('p')));
     app.handle_key(key(KeyCode::Char('<')));
-    assert_eq!(
-        app.history_dashboard_pinned_cards(),
-        &[
-            HistoryKpiCardId::FocusScore,
-            HistoryKpiCardId::SessionSummary
-        ]
-    );
 
     let persisted = app.persisted_config();
     assert_eq!(
-        persisted.history_dashboard.pinned_cards,
-        vec![
-            HistoryKpiCardId::FocusScore,
-            HistoryKpiCardId::SessionSummary
-        ]
+        persisted.history_dashboard,
+        HistoryDashboardConfig::default()
     );
+    assert!(app.history_feedback.is_none());
 }
 
 #[test]
-fn history_dashboard_prevents_unpinning_last_card() {
+fn history_dashboard_deprecated_shortcuts_do_not_change_feedback() {
     let mut app = App::from_config(AppConfig {
         history_dashboard: HistoryDashboardConfig {
             card_order: vec![
@@ -4672,14 +4653,13 @@ fn history_dashboard_prevents_unpinning_last_card() {
     });
     app.handle_key(key(KeyCode::Char('h')));
     app.handle_key(key(KeyCode::Char('p')));
+    app.handle_key(key(KeyCode::Char('>')));
 
     assert_eq!(
-        app.history_dashboard_pinned_cards(),
-        &[HistoryKpiCardId::SessionSummary]
+        app.history_dashboard_cards(),
+        HistoryKpiCardId::all().to_vec()
     );
-    let feedback = app.history_feedback.as_ref().expect("warning expected");
-    assert_eq!(feedback.level, HistoryFeedbackLevel::Warning);
-    assert!(feedback.message.contains("must remain pinned"));
+    assert!(app.history_feedback.is_none());
 }
 
 #[test]

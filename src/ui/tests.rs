@@ -716,7 +716,7 @@ fn history_view_hints_include_export_shortcut() {
 }
 
 #[test]
-fn history_view_hints_include_dashboard_controls() {
+fn history_view_hints_describe_stable_dashboard_layout() {
     let width = 140;
     let height = 40;
     let backend = TestBackend::new(width, height);
@@ -729,13 +729,16 @@ fn history_view_hints_include_dashboard_controls() {
         .expect("render should succeed");
 
     let text = terminal_text(&terminal, width, height);
-    assert!(text.contains("Dashboard: Select [k]/[j]"), "{text}");
-    assert!(text.contains("Toggle pin [p]"), "{text}");
-    assert!(text.contains("Move [<]/[>]"), "{text}");
+    assert!(
+        text.contains("Dashboard: Stable default KPI layout"),
+        "{text}"
+    );
+    assert!(!text.contains("Toggle pin"), "{text}");
+    assert!(!text.contains("Move [<]/[>]"), "{text}");
 }
 
 #[test]
-fn history_view_dashboard_shows_selected_and_pinned_markers() {
+fn history_view_dashboard_shows_stable_default_kpis_without_pin_markers() {
     let width = 120;
     let height = 24;
     let backend = TestBackend::new(width, height);
@@ -743,9 +746,9 @@ fn history_view_dashboard_shows_selected_and_pinned_markers() {
     let mut app = App::from_config_for_tests(AppConfig {
         history_dashboard: HistoryDashboardConfig {
             card_order: vec![
-                HistoryKpiCardId::SessionSummary,
-                HistoryKpiCardId::FocusScore,
                 HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::FocusScore,
+                HistoryKpiCardId::SessionSummary,
                 HistoryKpiCardId::FocusRisk,
                 HistoryKpiCardId::WeeklyAllocation,
                 HistoryKpiCardId::LastInterruption,
@@ -753,10 +756,7 @@ fn history_view_dashboard_shows_selected_and_pinned_markers() {
                 HistoryKpiCardId::Retention,
                 HistoryKpiCardId::ComparisonFilters,
             ],
-            pinned_cards: vec![
-                HistoryKpiCardId::SessionSummary,
-                HistoryKpiCardId::FocusScore,
-            ],
+            pinned_cards: vec![HistoryKpiCardId::GoalStreak],
         },
         ..AppConfig::default()
     });
@@ -767,8 +767,10 @@ fn history_view_dashboard_shows_selected_and_pinned_markers() {
         .expect("render should succeed");
 
     let text = terminal_text(&terminal, width, height);
-    assert!(text.contains(">* Session"));
-    assert!(text.contains("* Focus"));
+    assert!(text.contains("Session"));
+    assert!(text.contains("Focus score"));
+    assert!(!text.contains(">*"));
+    assert!(!text.contains("* Focus"));
 }
 
 #[test]

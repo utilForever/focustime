@@ -319,6 +319,7 @@ fn round_trip_full_config() {
     assert!(!root.contains_key("strict_mode"));
     assert!(!root.contains_key("recurring_schedule"));
     assert!(!root.contains_key("weekday_profile_rules"));
+    assert!(!root.contains_key("history_dashboard"));
 
     let parsed: AppConfig = toml::from_str(&toml_str).unwrap();
     assert_eq!(parsed.focus_secs, default_focus_secs());
@@ -359,7 +360,7 @@ fn round_trip_full_config() {
     assert_eq!(parsed.monthly_goal, original.monthly_goal);
     assert_eq!(parsed.goal_carry_over, original.goal_carry_over);
     assert_eq!(parsed.stats_retention, original.stats_retention);
-    assert_eq!(parsed.history_dashboard, original.history_dashboard);
+    assert_eq!(parsed.history_dashboard, HistoryDashboardConfig::default());
     assert_eq!(parsed.wakatime, original.wakatime);
     assert_eq!(parsed.wakatime_runtime, original.wakatime_runtime);
     assert_eq!(parsed.feature_flags, original.feature_flags);
@@ -439,7 +440,7 @@ long_break_interval = 3
 }
 
 #[test]
-fn normalize_history_dashboard_filters_unknown_and_appends_missing_cards() {
+fn normalize_history_dashboard_ignores_legacy_custom_card_order() {
     let cfg = AppConfig {
         history_dashboard: HistoryDashboardConfig {
             card_order: vec![
@@ -454,25 +455,11 @@ fn normalize_history_dashboard_filters_unknown_and_appends_missing_cards() {
     }
     .normalize();
 
-    assert_eq!(
-        cfg.history_dashboard.card_order[0],
-        HistoryKpiCardId::GoalStreak
-    );
-    assert_eq!(
-        cfg.history_dashboard.card_order[1],
-        HistoryKpiCardId::FocusScore
-    );
-    assert_eq!(
-        cfg.history_dashboard.card_order.len(),
-        HistoryKpiCardId::all().len()
-    );
-    for card in HistoryKpiCardId::all() {
-        assert!(cfg.history_dashboard.card_order.contains(&card));
-    }
+    assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
 }
 
 #[test]
-fn normalize_history_dashboard_filters_unknown_and_duplicate_pins() {
+fn normalize_history_dashboard_ignores_legacy_custom_pins() {
     let cfg = AppConfig {
         history_dashboard: HistoryDashboardConfig {
             card_order: vec![HistoryKpiCardId::FocusScore, HistoryKpiCardId::Retention],
@@ -487,13 +474,7 @@ fn normalize_history_dashboard_filters_unknown_and_duplicate_pins() {
     }
     .normalize();
 
-    assert_eq!(
-        cfg.history_dashboard.pinned_cards,
-        vec![
-            HistoryKpiCardId::Retention,
-            HistoryKpiCardId::LastInterruption
-        ]
-    );
+    assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
 }
 
 #[test]

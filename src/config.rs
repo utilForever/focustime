@@ -176,8 +176,11 @@ pub(crate) struct AppConfig {
     /// Retention policy for persisted stats history.
     #[serde(default)]
     pub(crate) stats_retention: StatsRetentionConfig,
-    /// History dashboard KPI card layout (pinning + display order).
-    #[serde(default)]
+    /// Deprecated history dashboard KPI card customization surface.
+    ///
+    /// Older config files may still contain this section, but the app now
+    /// always uses the stable default KPI layout and does not persist it.
+    #[serde(default, skip_serializing)]
     pub(crate) history_dashboard: HistoryDashboardConfig,
     /// WakaTime heartbeat metadata labels.
     #[serde(default)]
@@ -1034,10 +1037,6 @@ impl HistoryKpiCardId {
             _ => Self::Unknown,
         }
     }
-
-    fn is_unknown(self) -> bool {
-        self == Self::Unknown
-    }
 }
 
 impl<'de> Deserialize<'de> for HistoryKpiCardId {
@@ -1060,53 +1059,8 @@ pub(crate) struct HistoryDashboardConfig {
 
 impl HistoryDashboardConfig {
     pub(crate) fn normalized(&self) -> Self {
-        let card_order = normalize_history_dashboard_card_order(&self.card_order);
-        let pinned_cards =
-            normalize_history_dashboard_pinned_cards(&self.pinned_cards, &card_order);
-        Self {
-            card_order,
-            pinned_cards,
-        }
+        Self::default()
     }
-}
-
-fn normalize_history_dashboard_card_order(input: &[HistoryKpiCardId]) -> Vec<HistoryKpiCardId> {
-    let mut card_order = Vec::new();
-    for card in input {
-        if card.is_unknown() || card_order.contains(card) {
-            continue;
-        }
-        card_order.push(*card);
-    }
-
-    if card_order.is_empty() {
-        return default_history_dashboard_card_order();
-    }
-
-    for card in HistoryKpiCardId::all() {
-        if !card_order.contains(&card) {
-            card_order.push(card);
-        }
-    }
-    card_order
-}
-
-fn normalize_history_dashboard_pinned_cards(
-    input: &[HistoryKpiCardId],
-    card_order: &[HistoryKpiCardId],
-) -> Vec<HistoryKpiCardId> {
-    let mut pinned_cards = Vec::new();
-    for card in input {
-        if card.is_unknown() || pinned_cards.contains(card) || !card_order.contains(card) {
-            continue;
-        }
-        pinned_cards.push(*card);
-    }
-
-    if pinned_cards.is_empty() {
-        return card_order.to_vec();
-    }
-    pinned_cards
 }
 
 impl Default for HistoryDashboardConfig {

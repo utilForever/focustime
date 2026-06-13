@@ -101,16 +101,18 @@ pub(in crate::cli) fn print_history_dashboard_command_output(
     if payload.updated {
         println!("History dashboard updated.");
     }
-    println!("Card order: {}", payload.card_order.join(", "));
-    println!("Pinned cards: {}", payload.pinned_cards.join(", "));
+    if payload.deprecated {
+        println!("Deprecated command: --{}", payload.action);
+        println!("Replacement: {}", payload.replacement);
+    }
+    println!("Default KPI layout: {}", payload.card_order.join(", "));
     if payload.cards.is_empty() {
         println!("Cards: none");
         return;
     }
     println!("Cards:");
     for card in &payload.cards {
-        let marker = if card.pinned { "*" } else { " " };
-        println!("  {marker} {} ({})", card.label, card.id);
+        println!("  {} ({})", card.label, card.id);
     }
 }
 

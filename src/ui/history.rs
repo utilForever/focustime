@@ -2,9 +2,9 @@ use crate::app::HistoryDashboardViewData;
 use crate::config::HistoryKpiCardId;
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, HistoryFeedbackLevel,
-    Layout, Line, List, ListItem, Modifier, NavigationAction, Paragraph, Rect, ShortcutAction,
-    Span, Style, Wrap, app_color, centered_rect, format_duration_label,
-    format_goal_period_progress, format_wakatime_heartbeat_timestamp, render_hint_lines,
+    Layout, Line, List, ListItem, NavigationAction, Paragraph, Rect, ShortcutAction, Span, Style,
+    Wrap, app_color, centered_rect, format_duration_label, format_goal_period_progress,
+    format_wakatime_heartbeat_timestamp, render_hint_lines,
 };
 
 pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
@@ -35,23 +35,9 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
     let overview_lines: Vec<Line> = dashboard_cards
         .into_iter()
         .map(|card| {
-            let selected = card == app.history_dashboard_selected_card();
-            let pinned = app.history_dashboard_card_is_pinned(card);
-            let style = if selected {
-                Style::default()
-                    .fg(app_color(app, Color::White))
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(app_color(app, Color::DarkGray))
-            };
             Line::styled(
-                format!(
-                    "{}{} {}",
-                    if selected { ">" } else { " " },
-                    if pinned { "*" } else { "-" },
-                    history_kpi_card_text(&history_data, card)
-                ),
-                style,
+                format!("  {}", history_kpi_card_text(&history_data, card)),
+                Style::default().fg(app_color(app, Color::Gray)),
             )
         })
         .collect();
@@ -233,14 +219,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
                 app.navigation_label(NavigationAction::MoveUp),
                 app.navigation_label(NavigationAction::MoveDown),
             )),
-            Line::from(format!(
-                "Dashboard: Select {}/{} Toggle pin {} Move {}/{}",
-                app.shortcut_hint(ShortcutAction::HistoryDashboardSelectPrevious),
-                app.shortcut_hint(ShortcutAction::HistoryDashboardSelectNext),
-                app.shortcut_hint(ShortcutAction::HistoryDashboardTogglePin),
-                app.shortcut_hint(ShortcutAction::HistoryDashboardMoveLeft),
-                app.shortcut_hint(ShortcutAction::HistoryDashboardMoveRight),
-            )),
+            Line::from("Dashboard: Stable default KPI layout"),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
                     "View: [{}/{}] Back  [{}/Ctrl-C] Quit (Locked)",

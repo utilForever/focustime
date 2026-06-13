@@ -594,10 +594,7 @@ impl App {
             monthly_goal: self.monthly_goal,
             goal_carry_over: self.goal_carry_over,
             stats_retention: self.stats_retention,
-            history_dashboard: HistoryDashboardConfig {
-                card_order: self.history_dashboard_card_order().to_vec(),
-                pinned_cards: self.history_dashboard_pinned_cards().to_vec(),
-            },
+            history_dashboard: HistoryDashboardConfig::default(),
             wakatime: self.wakatime_metadata.clone(),
             wakatime_runtime: self.wakatime_runtime.clone(),
             feature_flags: self.feature_flags.clone(),

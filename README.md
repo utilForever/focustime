@@ -166,12 +166,13 @@ cargo run -- --session-template-apply
 cargo run -- --session-template-apply "Deep Flow"
 cargo run -- --session-template-delete --json
 
-# Manage Focus History KPI dashboard cards
+# Inspect the stable Focus History KPI dashboard layout
 cargo run -- --history-dashboard
+cargo run -- --history-dashboard --json
+# Deprecated compatibility commands now report replacement guidance without changing config
 cargo run -- --history-dashboard-pin focus_score
 cargo run -- --history-dashboard-unpin goal_streak
 cargo run -- --history-dashboard-order=focus_score,goal_streak,session_summary,focus_risk,weekly_allocation,last_interruption,stats_growth,retention,comparison_filters
-cargo run -- --history-dashboard --json
 
 # Manage blocklist/allowlist sites for the active blocklist profile
 cargo run -- --blocklist-sites
@@ -347,6 +348,7 @@ Early deprecation notices:
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
 | Blocklist category workflows (`--blocklist-category*`, `blocklist_profiles.categories`) | Manage blocklist/allowlist hostnames directly on blocklist profiles with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; `--config-doctor` reports category configs that should be folded into profile-level lists. |
 | Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields remain readable for automation compatibility. |
+| Focus History dashboard customization (`[history_dashboard]`, `--history-dashboard-pin`, `--history-dashboard-unpin`, `--history-dashboard-order`) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands remain compatibility-only and report replacement guidance without changing config. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
@@ -508,15 +510,14 @@ view always shows the current task label (or a reminder to select one).
 
 Open Focus History from timer view with **`h`**.
 
-- `k` / `j`: select previous/next KPI card
-- `p`: pin/unpin selected KPI card
-- `<` / `>`: move selected pinned card left/right
 - `←/→`: cycle comparison dimension
 - `↑/↓`: cycle task slice, `[`/`]`: cycle profile slice, `,`/`.`: cycle time-of-day slice
 
-Pinned cards always render first in the dashboard list. Dashboard card order and
-pin state persist to `config.toml` and can be scripted with
-`--history-dashboard*` CLI commands.
+Focus History renders a stable default KPI layout covering session summary,
+focus score, goal streak, focus risk, weekly allocation, last interruption,
+stats growth, retention, and comparison filters. Dashboard pin, unpin, and order
+customization commands are deprecated compatibility paths; they report
+replacement guidance and no longer change `config.toml`.
 
 ### Mid-session notes
 
@@ -531,9 +532,12 @@ Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
 CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`,
-`--automation-triggers*`, `--session-template*`, `--history-dashboard*`,
-`--feature-inventory`, `--break-glass-trigger`, and `--break-glass-cancel` for non-interactive
-inspection and in-session workflow control.
+`--automation-triggers*`, `--session-template*`, `--feature-inventory`,
+`--break-glass-trigger`, and `--break-glass-cancel` for non-interactive
+inspection and in-session workflow control. `--history-dashboard` remains
+available for layout inspection; `--history-dashboard-pin`,
+`--history-dashboard-unpin`, and `--history-dashboard-order` are deprecated
+compatibility commands that report replacement guidance without changing config.
 
 Blocklist rules support exact hosts and wildcard subdomain rules. `*.example.com`
 matches `docs.example.com` and `api.example.com`, but does **not** match
@@ -564,16 +568,7 @@ timer_toggle_pause = "space"
 timer_stop_reset = "s"
 open_session_planner = "t"
 open_stats_history = "h"
-history_dashboard_select_previous = "k"
-history_dashboard_select_next = "j"
-history_dashboard_toggle_pin = "p"
-history_dashboard_move_left = "<"
-history_dashboard_move_right = ">"
 quit = "q"
-
-[history_dashboard]
-card_order = ["session_summary", "focus_score", "goal_streak", "focus_risk", "weekly_allocation", "last_interruption", "stats_growth", "retention", "comparison_filters"]
-pinned_cards = ["session_summary", "focus_score"]
 
 [[blocklist_profiles]]
 name = "Work"

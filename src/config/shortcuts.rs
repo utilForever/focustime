@@ -68,15 +68,30 @@ pub(crate) struct ShortcutConfig {
     pub(crate) back_stats_history: String,
     #[serde(default = "default_shortcut_export_stats_history")]
     pub(crate) export_stats_history: String,
-    #[serde(default = "default_shortcut_history_dashboard_select_previous")]
+    #[serde(
+        default = "default_shortcut_history_dashboard_select_previous",
+        skip_serializing
+    )]
     pub(crate) history_dashboard_select_previous: String,
-    #[serde(default = "default_shortcut_history_dashboard_select_next")]
+    #[serde(
+        default = "default_shortcut_history_dashboard_select_next",
+        skip_serializing
+    )]
     pub(crate) history_dashboard_select_next: String,
-    #[serde(default = "default_shortcut_history_dashboard_toggle_pin")]
+    #[serde(
+        default = "default_shortcut_history_dashboard_toggle_pin",
+        skip_serializing
+    )]
     pub(crate) history_dashboard_toggle_pin: String,
-    #[serde(default = "default_shortcut_history_dashboard_move_left")]
+    #[serde(
+        default = "default_shortcut_history_dashboard_move_left",
+        skip_serializing
+    )]
     pub(crate) history_dashboard_move_left: String,
-    #[serde(default = "default_shortcut_history_dashboard_move_right")]
+    #[serde(
+        default = "default_shortcut_history_dashboard_move_right",
+        skip_serializing
+    )]
     pub(crate) history_dashboard_move_right: String,
     #[serde(default = "default_shortcut_back_setup_diagnostics")]
     pub(crate) back_setup_diagnostics: String,

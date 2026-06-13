@@ -2532,13 +2532,13 @@ fn apply_blocklist_profile_delete_switches_selection() {
 }
 
 #[test]
-fn apply_history_dashboard_pin_inserts_card_using_order() {
+fn apply_history_dashboard_pin_is_deprecated_and_keeps_default_layout() {
     let mut config = AppConfig {
         history_dashboard: crate::config::HistoryDashboardConfig {
             card_order: vec![
-                HistoryKpiCardId::SessionSummary,
-                HistoryKpiCardId::FocusScore,
                 HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::FocusScore,
+                HistoryKpiCardId::SessionSummary,
                 HistoryKpiCardId::FocusRisk,
                 HistoryKpiCardId::WeeklyAllocation,
                 HistoryKpiCardId::LastInterruption,
@@ -2546,10 +2546,7 @@ fn apply_history_dashboard_pin_inserts_card_using_order() {
                 HistoryKpiCardId::Retention,
                 HistoryKpiCardId::ComparisonFilters,
             ],
-            pinned_cards: vec![
-                HistoryKpiCardId::SessionSummary,
-                HistoryKpiCardId::GoalStreak,
-            ],
+            pinned_cards: vec![HistoryKpiCardId::GoalStreak],
         },
         ..AppConfig::default()
     }
@@ -2563,19 +2560,21 @@ fn apply_history_dashboard_pin_inserts_card_using_order() {
     )
     .unwrap();
 
-    assert!(payload.updated);
+    assert!(!payload.updated);
+    assert!(payload.deprecated);
+    assert!(payload.replacement.contains("stable default KPI layout"));
     assert_eq!(
-        config.history_dashboard.pinned_cards,
-        vec![
-            HistoryKpiCardId::SessionSummary,
-            HistoryKpiCardId::FocusScore,
-            HistoryKpiCardId::GoalStreak
-        ]
+        config.history_dashboard,
+        crate::config::HistoryDashboardConfig::default()
+    );
+    assert_eq!(
+        payload.card_order,
+        HistoryKpiCardId::all().map(|card| card.id())
     );
 }
 
 #[test]
-fn apply_history_dashboard_unpin_rejects_last_pinned_card() {
+fn apply_history_dashboard_unpin_is_deprecated_without_error() {
     let mut config = AppConfig {
         history_dashboard: crate::config::HistoryDashboardConfig {
             card_order: HistoryKpiCardId::all().to_vec(),
@@ -2585,25 +2584,31 @@ fn apply_history_dashboard_unpin_rejects_last_pinned_card() {
     }
     .normalized();
 
-    let error = apply_history_dashboard_command(
+    let payload = apply_history_dashboard_command(
         &mut config,
         HistoryDashboardCommandKind::Unpin {
             card: HistoryKpiCardId::SessionSummary,
         },
     )
-    .unwrap_err();
+    .unwrap();
 
-    assert!(error.contains("must remain pinned"));
+    assert!(!payload.updated);
+    assert!(payload.deprecated);
+    assert_eq!(payload.action, "history-dashboard-unpin");
+    assert_eq!(
+        payload.pinned_cards,
+        HistoryKpiCardId::all().map(|card| card.id())
+    );
 }
 
 #[test]
-fn apply_history_dashboard_order_resorts_pinned_cards() {
+fn apply_history_dashboard_order_is_deprecated_and_keeps_default_layout() {
     let mut config = AppConfig {
         history_dashboard: crate::config::HistoryDashboardConfig {
             card_order: vec![
-                HistoryKpiCardId::SessionSummary,
-                HistoryKpiCardId::FocusScore,
                 HistoryKpiCardId::GoalStreak,
+                HistoryKpiCardId::FocusScore,
+                HistoryKpiCardId::SessionSummary,
                 HistoryKpiCardId::FocusRisk,
                 HistoryKpiCardId::WeeklyAllocation,
                 HistoryKpiCardId::LastInterruption,
@@ -2611,10 +2616,7 @@ fn apply_history_dashboard_order_resorts_pinned_cards() {
                 HistoryKpiCardId::Retention,
                 HistoryKpiCardId::ComparisonFilters,
             ],
-            pinned_cards: vec![
-                HistoryKpiCardId::GoalStreak,
-                HistoryKpiCardId::SessionSummary,
-            ],
+            pinned_cards: vec![HistoryKpiCardId::GoalStreak],
         },
         ..AppConfig::default()
     }
@@ -2638,15 +2640,14 @@ fn apply_history_dashboard_order_resorts_pinned_cards() {
     )
     .unwrap();
 
-    assert!(payload.updated);
+    assert!(!payload.updated);
+    assert!(payload.deprecated);
+    assert_eq!(payload.action, "history-dashboard-order");
+    assert_eq!(config.history_dashboard.card_order, HistoryKpiCardId::all());
     assert_eq!(
-        config.history_dashboard.pinned_cards,
-        vec![
-            HistoryKpiCardId::GoalStreak,
-            HistoryKpiCardId::SessionSummary
-        ]
+        payload.card_order,
+        HistoryKpiCardId::all().map(|card| card.id())
     );
-    assert_eq!(payload.pinned_cards, vec!["goal_streak", "session_summary"]);
 }
 
 #[test]
