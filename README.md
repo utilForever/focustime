@@ -316,6 +316,7 @@ Milestone policy:
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
 - **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config migration assistant + doctor commands remain available for focused config checks (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
 - **v0.15.3:** calendar sync, weekday rules, and standalone automation triggers are documented as deprecated compatibility paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
+- **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
 ### v0.15.x cleanup roadmap
@@ -332,6 +333,8 @@ Roadmap direction:
 - Keep `--diagnostics` as the supported way to inspect setup health, config
   health, and migration guidance together; keep config migration and doctor
   commands for focused repair workflows.
+- Keep temporary allowlist exceptions and break-glass controls represented as
+  one temporary override runtime model in status and recovery flows.
 - Keep local backup/restore workflows as the supported portable recovery path.
 - Keep cleanup candidates tracked in the feature inventory before they are
   merged or retired.
@@ -343,6 +346,7 @@ Early deprecation notices:
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
 | Blocklist category workflows (`--blocklist-category*`, `blocklist_profiles.categories`) | Manage blocklist/allowlist hostnames directly on blocklist profiles with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; `--config-doctor` reports category configs that should be folded into profile-level lists. |
+| Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields remain readable for automation compatibility. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
@@ -897,7 +901,7 @@ Temporary allowlist exceptions and break-glass both use the same runtime overrid
 
 - `--allowlist-site-add-temporary HOST=30m` grants selected host exceptions without changing profile config
 - `--break-glass-trigger` temporarily pauses all effective blocking for the active focus session after a second confirmation
-- `--status --json` includes the canonical `temporary_overrides` list while keeping the legacy `temporary_allowlist_*` fields for automation compatibility
+- `--status --json` includes the canonical `temporary_overrides` list while keeping the legacy `temporary_allowlist_*` fields for automation compatibility; recovery also reads legacy `break_glass_*` fields
 
 Existing temporary allowlist commands remain supported as compatibility entry points into this shared model.
 
@@ -1038,12 +1042,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.15.3`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.15.4`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.15.3](https://github.com/utilForever/focustime/releases/tag/v0.15.3).
+The latest stable release is [v0.15.4](https://github.com/utilForever/focustime/releases/tag/v0.15.4).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 

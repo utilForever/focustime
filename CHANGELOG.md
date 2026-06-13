@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-06-13
+
 ### Changed
 
 - **Core site rule cleanup (#447):** simplified blocklist/allowlist site CRUD to operate directly on profile-level site rules, removed category controls from the TUI site manager, and kept deprecated category workflows isolated to CLI/config compatibility paths.
@@ -458,7 +460,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.3...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.4...HEAD
+[0.15.4]: https://github.com/utilForever/focustime/compare/v0.15.3...v0.15.4
 [0.15.3]: https://github.com/utilForever/focustime/compare/v0.15.2...v0.15.3
 [0.15.2]: https://github.com/utilForever/focustime/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/utilForever/focustime/compare/v0.15.0...v0.15.1
