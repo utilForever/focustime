@@ -2,6 +2,8 @@ mod diagnostics;
 mod sites;
 mod status;
 
+use std::path::Path;
+
 pub(super) use diagnostics::{
     build_blocking_preview_command_output, build_diagnostics_blocking_preview_error,
     build_diagnostics_blocking_preview_output, build_diagnostics_command_output,
@@ -84,8 +86,7 @@ pub(super) fn print_theme_command_output(payload: &ThemeCommandOutput) {
 
 pub(super) fn print_export_output(payload: &ExportOutput) {
     println!("Exported stats to {}", payload.export_dir.display());
-    println!("JSON: {}", payload.json_path.display());
-    println!("CSV: {}", payload.csv_path.display());
+    print_artifact_paths(&[("JSON", &payload.json_path), ("CSV", &payload.csv_path)]);
 }
 
 pub(super) fn print_feature_inventory_output(payload: &FeatureInventoryOutput) {
@@ -93,8 +94,10 @@ pub(super) fn print_feature_inventory_output(payload: &FeatureInventoryOutput) {
         "Exported feature inventory report to {}",
         payload.export_dir.display()
     );
-    println!("JSON: {}", payload.json_path.display());
-    println!("Markdown: {}", payload.markdown_path.display());
+    print_artifact_paths(&[
+        ("JSON", &payload.json_path),
+        ("Markdown", &payload.markdown_path),
+    ]);
     println!(
         "Features: {} (keep {}, merge {}, remove {})",
         payload.total_features, payload.keep_count, payload.merge_count, payload.remove_count
@@ -103,14 +106,24 @@ pub(super) fn print_feature_inventory_output(payload: &FeatureInventoryOutput) {
 
 pub(super) fn print_backup_output(payload: &BackupOutput) {
     println!("Backed up app data to {}", payload.backup_dir.display());
-    println!("Config: {}", payload.config_backup_path.display());
-    println!("Stats: {}", payload.stats_backup_path.display());
+    print_artifact_paths(&[
+        ("Config", &payload.config_backup_path),
+        ("Stats", &payload.stats_backup_path),
+    ]);
 }
 
 pub(super) fn print_restore_output(payload: &RestoreOutput) {
     println!("Restored app data from {}", payload.restore_dir.display());
-    println!("Config: {}", payload.config_restored_path.display());
-    println!("Stats: {}", payload.stats_restored_path.display());
+    print_artifact_paths(&[
+        ("Config", &payload.config_restored_path),
+        ("Stats", &payload.stats_restored_path),
+    ]);
+}
+
+fn print_artifact_paths(paths: &[(&str, &Path)]) {
+    for (label, path) in paths {
+        println!("{label}: {}", path.display());
+    }
 }
 
 pub(super) fn print_calendar_sync_command_output(payload: &CalendarSyncCommandOutput) {

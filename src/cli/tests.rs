@@ -2306,6 +2306,12 @@ fn parse_rejects_restore_with_blank_positional_value() {
 }
 
 #[test]
+fn parse_rejects_export_with_blank_positional_value() {
+    let error = parse(&["--export", "   "]).unwrap_err();
+    assert!(error.contains("`--export` requires a target directory."));
+}
+
+#[test]
 fn parse_rejects_watch_with_zero_seconds() {
     let error = parse(&["--status", "--watch=0"]).unwrap_err();
     assert!(error.contains("positive whole number of seconds"));

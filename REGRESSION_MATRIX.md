@@ -38,6 +38,7 @@ in the normal release readiness command set.
 | v0.15.4 | Temporary allowlist and break-glass workflows share one temporary override runtime model while legacy fields remain readable for compatibility. | Blocking/runtime cleanup | `app_restores_temporary_overrides_from_canonical_snapshot` plus `build_status_output_includes_break_glass_temporary_override` |
 | v0.15.4 | Focus History uses a stable default KPI layout while deprecated dashboard pin, unpin, and order commands report guidance without persisting customization state. | Stats cleanup | `history_dashboard_uses_stable_default_layout_despite_legacy_customization` plus `apply_history_dashboard_pin_is_deprecated_and_keeps_default_layout` |
 | v0.15.4 | Status comparison CLI flags stay retired from `--status` and point users to export artifacts or Focus History reports. | Stats cleanup | `parse_rejects_status_comparison_options_with_export_replacement` plus `parse_rejects_equals_status_comparison_options_with_export_replacement` |
+| v0.15.4 | Backup, stats export, and feature-inventory artifact workflows share target-directory creation and JSON path contract behavior. | Artifact cleanup | `artifact_workflows_json_create_target_dirs_and_preserve_path_fields` plus `artifact_workflows_json_report_consistent_target_directory_errors` |
 
 ## Release Readiness
 

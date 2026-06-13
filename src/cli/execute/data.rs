@@ -10,6 +10,35 @@ use crate::feature_inventory::{build_feature_inventory_report, export_feature_in
 
 const CONFIG_FILE_NAME: &str = "config.toml";
 const STATS_FILE_NAME: &str = "stats.toml";
+
+#[derive(Clone, Copy)]
+struct ArtifactDirectoryWorkflow {
+    name: &'static str,
+    role: &'static str,
+    create: bool,
+}
+
+const EXPORT_ARTIFACTS: ArtifactDirectoryWorkflow = ArtifactDirectoryWorkflow {
+    name: "Export",
+    role: "target",
+    create: true,
+};
+const FEATURE_INVENTORY_ARTIFACTS: ArtifactDirectoryWorkflow = ArtifactDirectoryWorkflow {
+    name: "Feature inventory export",
+    role: "target",
+    create: true,
+};
+const BACKUP_ARTIFACTS: ArtifactDirectoryWorkflow = ArtifactDirectoryWorkflow {
+    name: "Backup",
+    role: "target",
+    create: true,
+};
+const RESTORE_ARTIFACTS: ArtifactDirectoryWorkflow = ArtifactDirectoryWorkflow {
+    name: "Restore",
+    role: "source",
+    create: false,
+};
+
 pub(super) fn execute_export_command(
     dir: Option<PathBuf>,
     output: OutputMode,
@@ -18,11 +47,7 @@ pub(super) fn execute_export_command(
     let stats = FocusStats::load_with_options(stats_load_options(&config))
         .map_err(|error| format!("Failed to load stats: {error}"))?;
     let history_kpi_context = build_history_kpi_export_context(&config);
-    let target_dir = match dir {
-        Some(path) => path,
-        None => env::current_dir()
-            .map_err(|error| format!("Failed to determine current directory: {error}"))?,
-    };
+    let target_dir = resolve_artifact_directory(dir, EXPORT_ARTIFACTS)?;
     let exported = stats
         .export_to_dir_with_context(&target_dir, &history_kpi_context)
         .map_err(|error| format!("Export failed: {error}"))?;
@@ -43,11 +68,7 @@ pub(super) fn execute_feature_inventory_command(
     dir: Option<PathBuf>,
     output: OutputMode,
 ) -> Result<(), String> {
-    let target_dir = match dir {
-        Some(path) => path,
-        None => env::current_dir()
-            .map_err(|error| format!("Failed to determine current directory: {error}"))?,
-    };
+    let target_dir = resolve_artifact_directory(dir, FEATURE_INVENTORY_ARTIFACTS)?;
 
     let report = build_feature_inventory_report();
     let exported = export_feature_inventory_report(&target_dir, &report)
@@ -102,14 +123,7 @@ pub(super) fn execute_backup_command(
     output: OutputMode,
 ) -> Result<(), String> {
     let _config = AppConfig::load().normalized();
-    let backup_dir = match dir {
-        Some(path) => path,
-        None => env::current_dir().map_err(|error| {
-            format!("Backup failed: could not determine current directory: {error}")
-        })?,
-    };
-    fs::create_dir_all(&backup_dir)
-        .map_err(|error| format!("Backup failed: could not create backup directory: {error}"))?;
+    let backup_dir = resolve_artifact_directory(dir, BACKUP_ARTIFACTS)?;
 
     let source_config = config_file_path()?;
     let source_stats = stats_persistence_path()?;
@@ -138,12 +152,7 @@ pub(super) fn execute_restore_command(
     output: OutputMode,
 ) -> Result<(), String> {
     let _config = AppConfig::load().normalized();
-    let restore_dir = match dir {
-        Some(path) => path,
-        None => env::current_dir().map_err(|error| {
-            format!("Restore failed: could not determine current directory: {error}")
-        })?,
-    };
+    let restore_dir = resolve_artifact_directory(dir, RESTORE_ARTIFACTS)?;
     let source_config = restore_dir.join(CONFIG_FILE_NAME);
     let source_stats = restore_dir.join(STATS_FILE_NAME);
     ensure_restore_source_file(&source_config, CONFIG_FILE_NAME)?;
@@ -305,6 +314,34 @@ fn is_wrapper_punctuation(ch: char) -> bool {
         ch,
         '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | ',' | ';'
     )
+}
+
+fn resolve_artifact_directory(
+    dir: Option<PathBuf>,
+    workflow: ArtifactDirectoryWorkflow,
+) -> Result<PathBuf, String> {
+    let directory = match dir {
+        Some(path) => path,
+        None => env::current_dir().map_err(|error| {
+            format!(
+                "{} failed: could not determine current directory: {error}",
+                workflow.name
+            )
+        })?,
+    };
+
+    if workflow.create {
+        fs::create_dir_all(&directory).map_err(|error| {
+            format!(
+                "{} failed: could not create {} directory `{}`: {error}",
+                workflow.name,
+                workflow.role,
+                directory.display()
+            )
+        })?;
+    }
+
+    Ok(directory)
 }
 
 fn ensure_restore_source_file(path: &Path, file_name: &str) -> Result<(), String> {
@@ -478,4 +515,68 @@ fn copy_file_with_context(source: &Path, destination: &Path, context: &str) -> R
         )
     })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BACKUP_ARTIFACTS, RESTORE_ARTIFACTS, resolve_artifact_directory};
+    use crate::cli::PathBuf;
+    use std::{
+        fs,
+        sync::atomic::{AtomicU64, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn artifact_producer_creates_target_directory() {
+        let root = unique_temp_dir("artifact-create");
+        let target = root.join("nested").join("reports");
+
+        let resolved = resolve_artifact_directory(Some(target.clone()), BACKUP_ARTIFACTS)
+            .expect("target artifact directory should be created");
+
+        assert_eq!(resolved, target);
+        assert!(resolved.is_dir());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn artifact_consumer_does_not_create_source_directory() {
+        let root = unique_temp_dir("artifact-source");
+        let source = root.join("missing-backup");
+
+        let resolved = resolve_artifact_directory(Some(source.clone()), RESTORE_ARTIFACTS)
+            .expect("source artifact directory should be passed through");
+
+        assert_eq!(resolved, source);
+        assert!(!resolved.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn artifact_producer_reports_consistent_directory_creation_error() {
+        let root = unique_temp_dir("artifact-file-target");
+        let target = root.join("occupied");
+        fs::create_dir_all(&root).expect("failed to create temp root");
+        fs::write(&target, "not a directory").expect("failed to write occupied file");
+
+        let error = resolve_artifact_directory(Some(target), BACKUP_ARTIFACTS).unwrap_err();
+
+        assert!(error.contains("Backup failed: could not create target directory"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let unique = TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "focustime-{label}-{}-{now}-{unique}",
+            std::process::id()
+        ))
+    }
 }

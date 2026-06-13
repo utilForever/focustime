@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Artifact workflow handling (#450):** consolidated backup, stats export, and feature-inventory target-directory handling while preserving existing JSON path fields and text output labels.
 - **Focus History dashboard simplification (#448):** replaced customizable KPI card pin/order state with the stable default dashboard layout, kept deprecated dashboard customization CLI commands as guidance-only compatibility paths, and stopped persisting `[history_dashboard]` config.
 - **Core site rule cleanup (#447):** simplified blocklist/allowlist site CRUD to operate directly on profile-level site rules, removed category controls from the TUI site manager, and kept deprecated category workflows isolated to CLI/config compatibility paths.
 - **Temporary override consolidation (#446):** mapped temporary allowlist exceptions and break-glass controls into one runtime recovery/status model while keeping existing command paths and legacy status fields compatible.

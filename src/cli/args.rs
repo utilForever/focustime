@@ -285,46 +285,57 @@ fn classify_task_note_arg(args: &[String], index: usize) -> Result<(ParsedToken,
 }
 
 fn classify_export_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        return Ok((ParsedToken::Export(Some(PathBuf::from(next))), 2));
-    }
-    Ok((ParsedToken::Export(None), 1))
+    classify_optional_artifact_path_arg(
+        args,
+        index,
+        ParsedToken::Export,
+        "`--export` requires a target directory.",
+    )
 }
 
 fn classify_feature_inventory_arg(
     args: &[String],
     index: usize,
 ) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--feature-inventory` requires a target directory.")?;
-        return Ok((ParsedToken::FeatureInventory(Some(PathBuf::from(value))), 2));
-    }
-    Ok((ParsedToken::FeatureInventory(None), 1))
+    classify_optional_artifact_path_arg(
+        args,
+        index,
+        ParsedToken::FeatureInventory,
+        "`--feature-inventory` requires a target directory.",
+    )
 }
 
 fn classify_backup_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(next, "`--backup` requires a target directory.")?;
-        return Ok((ParsedToken::Backup(Some(PathBuf::from(value))), 2));
-    }
-    Ok((ParsedToken::Backup(None), 1))
+    classify_optional_artifact_path_arg(
+        args,
+        index,
+        ParsedToken::Backup,
+        "`--backup` requires a target directory.",
+    )
 }
 
 fn classify_restore_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
+    classify_optional_artifact_path_arg(
+        args,
+        index,
+        ParsedToken::Restore,
+        "`--restore` requires a source directory.",
+    )
+}
+
+fn classify_optional_artifact_path_arg(
+    args: &[String],
+    index: usize,
+    token: fn(Option<PathBuf>) -> ParsedToken,
+    empty_value_message: &'static str,
+) -> Result<(ParsedToken, usize), String> {
     if let Some(next) = args.get(index + 1)
         && !next.starts_with('-')
     {
-        let value = require_nonempty_key_value(next, "`--restore` requires a source directory.")?;
-        return Ok((ParsedToken::Restore(Some(PathBuf::from(value))), 2));
+        let value = require_nonempty_key_value(next, empty_value_message)?;
+        return Ok((token(Some(PathBuf::from(value))), 2));
     }
-    Ok((ParsedToken::Restore(None), 1))
+    Ok((token(None), 1))
 }
 
 fn classify_watch_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {

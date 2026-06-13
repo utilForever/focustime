@@ -235,38 +235,50 @@ fn parse_automation_triggers_set_key_value_arg(arg: &str) -> Result<Option<Parse
 }
 
 fn parse_export_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--export=") {
-        let value = require_nonempty_key_value(value, "`--export=` requires a target directory.")?;
-        return Ok(Some(ParsedToken::Export(Some(PathBuf::from(value)))));
-    }
-    Ok(None)
+    parse_artifact_key_value_arg(
+        arg,
+        "--export=",
+        ParsedToken::Export,
+        "`--export=` requires a target directory.",
+    )
 }
 
 fn parse_feature_inventory_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--feature-inventory=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--feature-inventory=` requires a target directory.",
-        )?;
-        return Ok(Some(ParsedToken::FeatureInventory(Some(PathBuf::from(
-            value,
-        )))));
-    }
-    Ok(None)
+    parse_artifact_key_value_arg(
+        arg,
+        "--feature-inventory=",
+        ParsedToken::FeatureInventory,
+        "`--feature-inventory=` requires a target directory.",
+    )
 }
 
 fn parse_backup_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--backup=") {
-        let value = require_nonempty_key_value(value, "`--backup=` requires a target directory.")?;
-        return Ok(Some(ParsedToken::Backup(Some(PathBuf::from(value)))));
-    }
-    Ok(None)
+    parse_artifact_key_value_arg(
+        arg,
+        "--backup=",
+        ParsedToken::Backup,
+        "`--backup=` requires a target directory.",
+    )
 }
 
 fn parse_restore_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--restore=") {
-        let value = require_nonempty_key_value(value, "`--restore=` requires a source directory.")?;
-        return Ok(Some(ParsedToken::Restore(Some(PathBuf::from(value)))));
+    parse_artifact_key_value_arg(
+        arg,
+        "--restore=",
+        ParsedToken::Restore,
+        "`--restore=` requires a source directory.",
+    )
+}
+
+fn parse_artifact_key_value_arg(
+    arg: &str,
+    prefix: &'static str,
+    token: fn(Option<PathBuf>) -> ParsedToken,
+    empty_value_message: &'static str,
+) -> Result<Option<ParsedToken>, String> {
+    if let Some(value) = arg.strip_prefix(prefix) {
+        let value = require_nonempty_key_value(value, empty_value_message)?;
+        return Ok(Some(token(Some(PathBuf::from(value)))));
     }
     Ok(None)
 }

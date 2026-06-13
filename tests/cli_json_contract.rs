@@ -619,6 +619,106 @@ fn backup_and_restore_json_round_trip_config_and_stats_files() {
 }
 
 #[test]
+fn artifact_workflows_json_create_target_dirs_and_preserve_path_fields() {
+    let env = TestEnv::new("artifact-workflows-json");
+
+    let set_goal_output = env.run(&["--goal=120,4", "--json"]);
+    assert_eq!(set_goal_output.status.code(), Some(0));
+    assert!(stderr_text(&set_goal_output).trim().is_empty());
+
+    let set_task_goal_output = env.run(&["--task-goal=Docs:90,3", "--json"]);
+    assert_eq!(set_task_goal_output.status.code(), Some(0));
+    assert!(stderr_text(&set_task_goal_output).trim().is_empty());
+
+    let backup_dir = env.root.join("artifacts").join("backup").join("nested");
+    let export_dir = env.root.join("artifacts").join("export").join("nested");
+    let inventory_dir = env.root.join("artifacts").join("inventory").join("nested");
+    let backup_arg = format!("--backup={}", backup_dir.display());
+    let export_arg = format!("--export={}", export_dir.display());
+    let inventory_arg = format!("--feature-inventory={}", inventory_dir.display());
+
+    let backup_output = env.run(&[backup_arg.as_str(), "--json"]);
+    assert_eq!(backup_output.status.code(), Some(0));
+    assert!(stderr_text(&backup_output).trim().is_empty());
+    let backup_payload: Value =
+        serde_json::from_slice(&backup_output.stdout).expect("stdout should be JSON");
+    assert_eq!(path_value(&backup_payload, "backup_dir"), backup_dir);
+    assert_eq!(
+        path_value(&backup_payload, "config_backup_path"),
+        backup_dir.join("config.toml")
+    );
+    assert_eq!(
+        path_value(&backup_payload, "stats_backup_path"),
+        backup_dir.join("stats.toml")
+    );
+
+    let export_output = env.run(&[export_arg.as_str(), "--json"]);
+    assert_eq!(export_output.status.code(), Some(0));
+    assert!(stderr_text(&export_output).trim().is_empty());
+    let export_payload: Value =
+        serde_json::from_slice(&export_output.stdout).expect("stdout should be JSON");
+    assert_eq!(path_value(&export_payload, "export_dir"), export_dir);
+    assert_eq!(
+        path_value(&export_payload, "json_path"),
+        export_dir.join("focustime-stats.json")
+    );
+    assert_eq!(
+        path_value(&export_payload, "csv_path"),
+        export_dir.join("focustime-stats.csv")
+    );
+
+    let inventory_output = env.run(&[inventory_arg.as_str(), "--json"]);
+    assert_eq!(inventory_output.status.code(), Some(0));
+    assert!(stderr_text(&inventory_output).trim().is_empty());
+    let inventory_payload: Value =
+        serde_json::from_slice(&inventory_output.stdout).expect("stdout should be JSON");
+    assert_eq!(path_value(&inventory_payload, "export_dir"), inventory_dir);
+    assert_eq!(
+        path_value(&inventory_payload, "json_path"),
+        inventory_dir.join("FEATURE_INVENTORY.json")
+    );
+    assert_eq!(
+        path_value(&inventory_payload, "markdown_path"),
+        inventory_dir.join("FEATURE_INVENTORY.md")
+    );
+}
+
+#[test]
+fn artifact_workflows_json_report_consistent_target_directory_errors() {
+    let env = TestEnv::new("artifact-target-errors");
+    let occupied_path = env.root.join("occupied");
+    fs::write(&occupied_path, "not a directory").expect("failed to write occupied target");
+    let backup_arg = format!("--backup={}", occupied_path.display());
+    let export_arg = format!("--export={}", occupied_path.display());
+    let inventory_arg = format!("--feature-inventory={}", occupied_path.display());
+
+    for (args, command_name) in [
+        ([backup_arg.as_str(), "--json"], "Backup"),
+        ([export_arg.as_str(), "--json"], "Export"),
+        (
+            [inventory_arg.as_str(), "--json"],
+            "Feature inventory export",
+        ),
+    ] {
+        let output = env.run(&args);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(stderr_text(&output).trim().is_empty());
+        let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+        assert_eq!(payload["ok"], false);
+        assert_eq!(payload["error"]["kind"], "runtime");
+        let message = payload["error"]["message"]
+            .as_str()
+            .expect("runtime error message should be a string");
+        assert!(
+            message.contains(&format!(
+                "{command_name} failed: could not create target directory"
+            )),
+            "runtime error should use shared artifact target wording: {message}"
+        );
+    }
+}
+
+#[test]
 fn feature_inventory_json_exports_scored_report_artifacts() {
     let env = TestEnv::new("feature-inventory-json");
     let report_dir = env.root.join("reports");
@@ -663,6 +763,13 @@ fn feature_inventory_json_exports_scored_report_artifacts() {
             .as_array()
             .is_some_and(|dimensions| dimensions.iter().any(|dimension| dimension == "commands"))
     );
+}
+
+fn path_value(payload: &Value, key: &str) -> PathBuf {
+    payload[key]
+        .as_str()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| panic!("payload field `{key}` should be a path string: {payload:#?}"))
 }
 
 #[test]
