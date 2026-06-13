@@ -135,9 +135,9 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --session-template-rename=TEMPLATE_NAME [--json]
   focustime --session-template-delete [--json]
   focustime --history-dashboard [--json]
-  focustime --history-dashboard-pin=CARD_ID [--json]
-  focustime --history-dashboard-unpin=CARD_ID [--json]
-  focustime --history-dashboard-order=CARD_IDS [--json]
+  focustime --history-dashboard-pin=CARD_ID [--json]      (deprecated)
+  focustime --history-dashboard-unpin=CARD_ID [--json]    (deprecated)
+  focustime --history-dashboard-order=CARD_IDS [--json]   (deprecated)
   focustime --blocklist-sites [--json]
   focustime --allowlist-sites [--json]
   focustime --blocklist-site-add=HOSTNAMES [--json]
@@ -203,10 +203,10 @@ Options:
   --session-template-create  Capture current task/profile/blocklist/schedule as a template
   --session-template-rename  Rename the active session template
   --session-template-delete  Delete the active session template
-  --history-dashboard       Show KPI dashboard card order + pinned cards
-  --history-dashboard-pin   Pin a KPI card by ID
-  --history-dashboard-unpin Unpin a KPI card by ID
-  --history-dashboard-order Replace full KPI card order with a complete comma-separated list
+  --history-dashboard       Show the stable default KPI dashboard layout
+  --history-dashboard-pin   Deprecated: Focus History uses the stable default KPI layout
+  --history-dashboard-unpin Deprecated: Focus History uses the stable default KPI layout
+  --history-dashboard-order Deprecated: Focus History uses the stable default KPI layout
   --blocklist-sites           List blocklist sites for the active blocklist profile
   --allowlist-sites           List allowlist sites for the active blocklist profile
   --blocklist-site-add        Add/import blocklist hostnames for the active blocklist profile
@@ -1172,6 +1172,8 @@ struct HistoryDashboardCardOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct HistoryDashboardCommandOutput {
     action: &'static str,
+    deprecated: bool,
+    replacement: &'static str,
     updated: bool,
     card_order: Vec<&'static str>,
     pinned_cards: Vec<&'static str>,

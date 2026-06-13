@@ -18,13 +18,12 @@ use crate::config::{
     AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
     BlockingBackendPolicyConfig, BlocklistProfileConfig, CalendarSyncConfig,
     CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig, FeatureFlagsConfig,
-    GoalCarryOverConfig, HistoryDashboardConfig, HistoryKpiCardId, MonthlyGoalConfig,
-    NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
-    ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
-    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeekdayProfileRuleConfig,
-    WeeklyGoalConfig, replace_weekday_profile_rule_automation_triggers,
-    validate_automation_trigger_rules,
+    GoalCarryOverConfig, HistoryDashboardConfig, MonthlyGoalConfig, NotificationConfig,
+    OneTimeFocusWindowConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
+    SessionTemplateConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
+    WakatimeRuntimeConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    replace_weekday_profile_rule_automation_triggers, validate_automation_trigger_rules,
 };
 use crate::integration::{IntegrationLifecycleEvent, IntegrationRuntime};
 use crate::notifications::PhaseNotifier;
@@ -538,9 +537,6 @@ pub(crate) struct App {
     history_task_filter: Option<String>,
     history_profile_filter: Option<ProfileBucket>,
     history_time_of_day_filter: Option<TimeOfDayBucket>,
-    history_dashboard_card_order: Vec<HistoryKpiCardId>,
-    history_dashboard_pinned_cards: Vec<HistoryKpiCardId>,
-    history_dashboard_selected_card: HistoryKpiCardId,
     history_dashboard_cache: RefCell<HistoryDashboardCache>,
     pub(crate) phase_notification: Option<String>,
     integrations: IntegrationRuntime,
@@ -649,7 +645,6 @@ impl App {
         let monthly_goal = config.monthly_goal;
         let goal_carry_over = config.goal_carry_over;
         let stats_retention = config.stats_retention;
-        let history_dashboard = config.history_dashboard;
         let wakatime_metadata = config.wakatime;
         let wakatime_runtime = config.wakatime_runtime;
         let (integrations, integration_load_warnings) = IntegrationRuntime::load(
@@ -736,11 +731,6 @@ impl App {
             feature_flags.integrations.is_enabled("wakatime"),
             integrations.wakatime_runtime_state(),
         );
-        let history_dashboard_selected_card = history_dashboard
-            .card_order
-            .first()
-            .copied()
-            .unwrap_or(HistoryKpiCardId::SessionSummary);
         let mut app = Self {
             timer,
             should_quit: false,
@@ -786,9 +776,6 @@ impl App {
             history_task_filter: None,
             history_profile_filter: None,
             history_time_of_day_filter: None,
-            history_dashboard_card_order: history_dashboard.card_order,
-            history_dashboard_pinned_cards: history_dashboard.pinned_cards,
-            history_dashboard_selected_card,
             history_dashboard_cache: RefCell::new(HistoryDashboardCache::default()),
             phase_notification: None,
             integrations,

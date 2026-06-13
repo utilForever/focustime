@@ -236,39 +236,11 @@ impl App {
             return;
         }
 
-        if self.handle_key_stats_history_dashboard_shortcuts(&key) {
-            return;
-        }
-
         if self.handle_key_stats_history_navigation_shortcuts(&key) {
             return;
         }
 
         self.handle_key_stats_history_filter_shortcuts(&key);
-    }
-
-    fn handle_key_stats_history_dashboard_shortcuts(&mut self, key: &KeyEvent) -> bool {
-        if self.shortcut_matches(ShortcutAction::HistoryDashboardSelectPrevious, key) {
-            self.cycle_history_dashboard_selected_card(false);
-            return true;
-        }
-        if self.shortcut_matches(ShortcutAction::HistoryDashboardSelectNext, key) {
-            self.cycle_history_dashboard_selected_card(true);
-            return true;
-        }
-        if self.shortcut_matches(ShortcutAction::HistoryDashboardTogglePin, key) {
-            self.toggle_history_dashboard_pin_for_selected_card();
-            return true;
-        }
-        if self.shortcut_matches(ShortcutAction::HistoryDashboardMoveLeft, key) {
-            self.move_history_dashboard_selected_card(false);
-            return true;
-        }
-        if self.shortcut_matches(ShortcutAction::HistoryDashboardMoveRight, key) {
-            self.move_history_dashboard_selected_card(true);
-            return true;
-        }
-        false
     }
 
     fn handle_key_stats_history_navigation_shortcuts(&mut self, key: &KeyEvent) -> bool {
