@@ -94,7 +94,6 @@ fn parse_status_supports_json_mode() {
         CliAction::RunCommand(CliCommand {
             kind: CommandKind::Status {
                 watch_interval_secs: None,
-                comparison: StatusComparisonOptions::default()
             },
             output: OutputMode::Json
         })
@@ -264,7 +263,6 @@ fn parse_status_watch_without_interval_uses_default_cadence() {
         CliAction::RunCommand(CliCommand {
             kind: CommandKind::Status {
                 watch_interval_secs: Some(DEFAULT_WATCH_INTERVAL_SECS),
-                comparison: StatusComparisonOptions::default()
             },
             output: OutputMode::Text
         })
@@ -279,7 +277,6 @@ fn parse_status_watch_with_equals_interval() {
         CliAction::RunCommand(CliCommand {
             kind: CommandKind::Status {
                 watch_interval_secs: Some(3),
-                comparison: StatusComparisonOptions::default()
             },
             output: OutputMode::Text
         })
@@ -294,7 +291,6 @@ fn parse_status_watch_with_space_interval() {
         CliAction::RunCommand(CliCommand {
             kind: CommandKind::Status {
                 watch_interval_secs: Some(2),
-                comparison: StatusComparisonOptions::default()
             },
             output: OutputMode::Text
         })
@@ -350,8 +346,8 @@ fn parse_daemon_stop_defaults_to_text_mode() {
 }
 
 #[test]
-fn parse_status_accepts_comparison_options() {
-    let parsed = parse(&[
+fn parse_rejects_status_comparison_options_with_export_replacement() {
+    let error = parse_with_contract(&[
         "--status",
         "--compare-by",
         "time-of-day",
@@ -364,35 +360,39 @@ fn parse_status_accepts_comparison_options() {
         "--compare-limit",
         "3",
     ])
-    .unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Status {
-                watch_interval_secs: None,
-                comparison: StatusComparisonOptions {
-                    dimension: ComparisonDimension::TimeOfDay,
-                    task_label: Some("Docs".to_string()),
-                    profile: Some(ProfileBucket::Classic),
-                    time_of_day: Some(TimeOfDayBucket::Night),
-                    limit: 3
-                }
-            },
-            output: OutputMode::Text
-        })
+    .unwrap_err();
+
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert!(
+        error
+            .message
+            .contains("`--compare-by` was removed from `--status`.")
     );
+    assert_eq!(error.hint.as_deref(), Some(STATUS_COMPARISON_REPLACEMENT));
 }
 
 #[test]
-fn parse_rejects_comparison_options_without_status() {
-    let error = parse(&["--compare-by", "task"]).unwrap_err();
-    assert!(error.contains("`--compare-*` options are only valid with `--status`"));
+fn parse_rejects_equals_status_comparison_options_with_export_replacement() {
+    let error = parse_with_contract(&["--status", "--compare-time=night"]).unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("`--compare-time` was removed from `--status`.")
+    );
+    assert_eq!(error.hint.as_deref(), Some(STATUS_COMPARISON_REPLACEMENT));
 }
 
 #[test]
-fn parse_rejects_duplicate_compare_time_flags() {
-    let error = parse(&["--status", "--compare-time=night", "--compare-time=morning"]).unwrap_err();
-    assert!(error.contains("`--compare-time` can only be specified once"));
+fn parse_rejects_comparison_options_without_status_with_export_replacement() {
+    let error = parse_with_contract(&["--compare-by", "task"]).unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("`--compare-by` was removed from `--status`.")
+    );
+    assert_eq!(error.hint.as_deref(), Some(STATUS_COMPARISON_REPLACEMENT));
 }
 
 #[test]
@@ -3010,35 +3010,6 @@ fn build_status_output_includes_growth_and_retention_signals() {
         output.stats_retention.pending_prune.focus_sessions_removed,
         1
     );
-}
-
-#[test]
-fn build_status_output_with_comparison_includes_rows() {
-    let mut stats = FocusStats::default();
-    let today = current_day_key();
-    let goal = DailyGoalSnapshot {
-        minutes: 25,
-        pomodoros: 1,
-    };
-    stats.record_focus_elapsed(&today, 25 * 60, goal);
-    stats.record_completed_pomodoro_with_task(
-        &today,
-        goal,
-        Some("Docs"),
-        25 * 60,
-        Some(ProfileId::Classic),
-    );
-
-    let output = build_status_output_with_comparison(
-        &AppConfig::default(),
-        &stats,
-        &StatusComparisonOptions::default(),
-    );
-
-    assert_eq!(output.comparison.dimension, ComparisonDimension::TaskLabel);
-    assert_eq!(output.comparison.limit, DEFAULT_STATUS_COMPARISON_LIMIT);
-    assert_eq!(output.comparison.rows.len(), 1);
-    assert_eq!(output.comparison.rows[0].label, "Docs");
 }
 
 #[test]

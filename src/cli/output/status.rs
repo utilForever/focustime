@@ -1,8 +1,8 @@
 use crate::cli::{
     BreakGlassCommandOutput, DaemonStartCommandOutput, DaemonStatusCommandOutput,
     DaemonStopCommandOutput, FocusScoreOutput, GoalOutput, ScheduleDelayCommandOutput,
-    SessionMetadataCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput,
-    StatusComparisonOutput, StatusOutput, TaskGoalOutput, TimerStateOutput,
+    SessionMetadataCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput,
+    TaskGoalOutput, TimerStateOutput,
 };
 
 use super::{format_duration, format_expiry_clock_suffix};
@@ -124,7 +124,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
         println!("Last interruption: none");
     }
     print_status_focus_score_line(&payload.focus_score);
-    print_status_comparison_line(&payload.comparison);
     print_status_focus_risk_line(&payload.focus_risk);
     print_status_growth_line(&payload.stats_growth);
     print_status_retention_line(&payload.stats_retention);
@@ -319,39 +318,6 @@ fn print_status_focus_score_line(focus_score: &FocusScoreOutput) {
         println!(
             "Focus score: n/a (weekly goal off; consistency {}%)",
             focus_score.consistency_score_pct
-        );
-    }
-}
-
-fn print_status_comparison_line(comparison: &StatusComparisonOutput) {
-    let task_filter = comparison.task_filter.as_deref().unwrap_or("all");
-    let profile_filter = comparison
-        .profile_filter
-        .map(|profile| profile.label().to_string())
-        .unwrap_or_else(|| "All".to_string());
-    let time_filter = comparison
-        .time_of_day_filter
-        .map(|bucket| bucket.label().to_string())
-        .unwrap_or_else(|| "All".to_string());
-    println!(
-        "Comparison: {} | task {} | profile {} | time {} | limit {}",
-        comparison.dimension.id(),
-        task_filter,
-        profile_filter,
-        time_filter,
-        comparison.limit
-    );
-    if comparison.rows.is_empty() {
-        println!("Comparison rows: none");
-        return;
-    }
-    for row in &comparison.rows {
-        println!(
-            "  - {}: {} min, {} sessions, {}% share",
-            row.label,
-            row.focused_minutes(),
-            row.sessions_completed,
-            row.focus_share_pct
         );
     }
 }
