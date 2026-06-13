@@ -346,7 +346,7 @@ Early deprecation notices:
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
 | Blocklist category workflows (`--blocklist-category*`, `blocklist_profiles.categories`) | Manage blocklist/allowlist hostnames directly on blocklist profiles with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; `--config-doctor` reports category configs that should be folded into profile-level lists. |
-| Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `temporary_allowlist_*` status fields remain readable for automation compatibility. |
+| Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields remain readable for automation compatibility. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
@@ -901,7 +901,7 @@ Temporary allowlist exceptions and break-glass both use the same runtime overrid
 
 - `--allowlist-site-add-temporary HOST=30m` grants selected host exceptions without changing profile config
 - `--break-glass-trigger` temporarily pauses all effective blocking for the active focus session after a second confirmation
-- `--status --json` includes the canonical `temporary_overrides` list while keeping the legacy `temporary_allowlist_*` fields for automation compatibility
+- `--status --json` includes the canonical `temporary_overrides` list while keeping the legacy `temporary_allowlist_*` fields for automation compatibility; recovery also reads legacy `break_glass_*` fields
 
 Existing temporary allowlist commands remain supported as compatibility entry points into this shared model.
 
