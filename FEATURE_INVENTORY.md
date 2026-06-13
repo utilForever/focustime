@@ -62,7 +62,7 @@
 | `feature-inventory-reporting` | Stats | 4 | 2.00 | 2.00 | keep | --feature-inventory |
 | `history-dashboard-curation` | Stats | 4 | 2.75 | 1.45 | keep | --history-dashboard, --history-dashboard-pin, --history-dashboard-unpin, --history-dashboard-order |
 | `stats-export-artifacts` | Stats | 4 | 2.65 | 1.51 | keep | --export |
-| `status-comparison-slicing` | Stats | 3 | 3.35 | 0.90 | merge | --compare-by, --compare-task, --compare-profile, --compare-time, --compare-limit |
+| `status-comparison-slicing` | Stats | 1 | 2.00 | 0.50 | merge | --compare-by, --compare-task, --compare-profile, --compare-time, --compare-limit |
 | `status-snapshot-and-streaming` | Stats | 5 | 3.65 | 1.37 | keep | --status, --watch |
 | `usage-signal-cleanup-support` | Stats | 3 | 1.40 | 2.14 | merge | --usage-signals |
 | `calendar-busy-window-sync` | Integration | 2 | 3.10 | 0.65 | merge | --calendar-sync |
