@@ -1,11 +1,10 @@
 use crate::cli::{
-    KeyValueParser, ParsedToken, PathBuf, parse_automation_triggers_value, parse_compare_by_value,
-    parse_compare_limit_value, parse_compare_profile_value, parse_compare_time_of_day_value,
-    parse_daemon_port, parse_goal_carry_value, parse_goal_value,
-    parse_history_dashboard_order_value, parse_history_kpi_card_id, parse_monthly_goal_value,
-    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
-    parse_task_goal_value, parse_theme_preset, parse_watch_interval_secs,
-    parse_weekday_rules_value, parse_weekly_goal_value, require_nonempty_key_value,
+    KeyValueParser, ParsedToken, PathBuf, parse_automation_triggers_value, parse_daemon_port,
+    parse_goal_carry_value, parse_goal_value, parse_history_dashboard_order_value,
+    parse_history_kpi_card_id, parse_monthly_goal_value, parse_profile_id, parse_schedule_value,
+    parse_site_edit_value, parse_strict_value, parse_task_goal_value, parse_theme_preset,
+    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
@@ -297,65 +296,46 @@ fn parse_daemon_port_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, Str
 }
 
 fn parse_compare_by_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--compare-by=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--compare-by=` requires `task`, `profile`, or `time-of-day`.",
-        )?;
-        return Ok(Some(ParsedToken::CompareBy(parse_compare_by_value(value)?)));
+    if arg.starts_with("--compare-by=") {
+        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
+            "--compare-by",
+        )));
     }
     Ok(None)
 }
 
 fn parse_compare_task_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--compare-task=") {
-        let value =
-            require_nonempty_key_value(value, "`--compare-task=` requires a task label or `all`.")?;
-        let task = if value.trim().eq_ignore_ascii_case("all") {
-            None
-        } else {
-            Some(value.to_string())
-        };
-        return Ok(Some(ParsedToken::CompareTask(task)));
+    if arg.starts_with("--compare-task=") {
+        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
+            "--compare-task",
+        )));
     }
     Ok(None)
 }
 
 fn parse_compare_profile_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--compare-profile=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--compare-profile=` requires `basic`, `standard`, `advanced`, `unknown`, or `all`.",
-        )?;
-        return Ok(Some(ParsedToken::CompareProfile(
-            parse_compare_profile_value(value)?,
+    if arg.starts_with("--compare-profile=") {
+        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
+            "--compare-profile",
         )));
     }
     Ok(None)
 }
 
 fn parse_compare_time_of_day_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--compare-time=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--compare-time=` requires `morning`, `afternoon`, `evening`, `night`, `unknown`, or `all`.",
-        )?;
-        return Ok(Some(ParsedToken::CompareTimeOfDay(
-            parse_compare_time_of_day_value(value)?,
+    if arg.starts_with("--compare-time=") {
+        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
+            "--compare-time",
         )));
     }
     Ok(None)
 }
 
 fn parse_compare_limit_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--compare-limit=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--compare-limit=` requires a positive whole number.",
-        )?;
-        return Ok(Some(ParsedToken::CompareLimit(parse_compare_limit_value(
-            value,
-        )?)));
+    if arg.starts_with("--compare-limit=") {
+        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
+            "--compare-limit",
+        )));
     }
     Ok(None)
 }

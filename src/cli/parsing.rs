@@ -2,10 +2,8 @@ mod options;
 mod value;
 
 pub(super) use options::{
-    parse_compare_by_value, parse_compare_limit_value, parse_compare_profile_value,
-    parse_compare_time_of_day_value, parse_daemon_port, parse_daemon_port_option,
-    parse_status_comparison_options, parse_watch_interval_option, parse_watch_interval_secs,
-    require_nonempty_key_value,
+    parse_daemon_port, parse_daemon_port_option, parse_watch_interval_option,
+    parse_watch_interval_secs, require_nonempty_key_value,
 };
 pub(super) use value::{
     parse_automation_triggers_value, parse_goal_carry_value, parse_goal_value,
@@ -14,15 +12,13 @@ pub(super) use value::{
     parse_task_goal_value, parse_theme_preset, parse_weekday_rules_value, parse_weekly_goal_value,
 };
 
+#[cfg(test)]
+use crate::cli::HistoryKpiCardId;
 use crate::cli::{
     BlocklistCategoryCommandKind, BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction,
     CliCommand, CommandKind, HistoryDashboardCommandKind, OutputMode, ParsedToken, PrimaryCommand,
-    SessionTemplateCommandKind, SiteListTarget, StatusComparisonOptions, USAGE_TEXT,
+    STATUS_COMPARISON_REPLACEMENT, SessionTemplateCommandKind, SiteListTarget, USAGE_TEXT,
 };
-#[cfg(test)]
-use crate::cli::{DEFAULT_STATUS_COMPARISON_LIMIT, HistoryKpiCardId};
-#[cfg(test)]
-use crate::stats::{ComparisonDimension, ProfileBucket, TimeOfDayBucket};
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
     let show_help = tokens
@@ -45,6 +41,11 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
                     "Unexpected positional argument `{value}`."
                 )));
             }
+            ParsedToken::RemovedStatusComparisonOption(option) => {
+                return Err(invalid_usage(&format!(
+                    "`{option}` was removed from `--status`."
+                )));
+            }
             ParsedToken::Start
             | ParsedToken::Pause
             | ParsedToken::Resume
@@ -60,11 +61,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::DaemonStop
             | ParsedToken::DaemonPort(_)
             | ParsedToken::Watch(_)
-            | ParsedToken::CompareBy(_)
-            | ParsedToken::CompareTask(_)
-            | ParsedToken::CompareProfile(_)
-            | ParsedToken::CompareTimeOfDay(_)
-            | ParsedToken::CompareLimit(_)
             | ParsedToken::Profile(_)
             | ParsedToken::Theme(_)
             | ParsedToken::Goal(_)
@@ -138,6 +134,12 @@ pub(super) fn first_removed_option_guidance(
             ParsedToken::UnknownOption(option) => {
                 return removed_option_replacement_guidance(option);
             }
+            ParsedToken::RemovedStatusComparisonOption(_) => {
+                return Some(RemovedOptionGuidance {
+                    summary: "This status comparison option was deprecated.",
+                    replacement: STATUS_COMPARISON_REPLACEMENT,
+                });
+            }
             ParsedToken::Positional(_) => return None,
             _ => {}
         }
@@ -171,6 +173,11 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
         "--sync-passphrase" => Some(RemovedOptionGuidance {
             summary: "Encrypted sync passphrases were removed.",
             replacement: "no direct replacement is available because encrypted sync/backups are no longer supported.",
+        }),
+        "--compare-by" | "--compare-task" | "--compare-profile" | "--compare-time"
+        | "--compare-limit" => Some(RemovedOptionGuidance {
+            summary: "This status comparison option was deprecated.",
+            replacement: STATUS_COMPARISON_REPLACEMENT,
         }),
         _ => None,
     }
@@ -215,11 +222,7 @@ pub(super) fn parse_primary_command(
             }
             ParsedToken::DaemonPort(_) => {}
             ParsedToken::Watch(_) => {}
-            ParsedToken::CompareBy(_)
-            | ParsedToken::CompareTask(_)
-            | ParsedToken::CompareProfile(_)
-            | ParsedToken::CompareTimeOfDay(_)
-            | ParsedToken::CompareLimit(_) => {}
+            ParsedToken::RemovedStatusComparisonOption(_) => {}
             ParsedToken::Profile(profile) => {
                 set_primary_command(&mut primary, PrimaryCommand::Profile(*profile))?
             }
@@ -415,8 +418,6 @@ pub(super) fn finalize_cli_action(
     primary: Option<PrimaryCommand>,
     daemon_port: Option<u16>,
     watch_interval_secs: Option<u64>,
-    comparison: StatusComparisonOptions,
-    has_comparison_options: bool,
 ) -> Result<CliAction, String> {
     if show_help {
         return Ok(CliAction::ShowHelp);
@@ -424,11 +425,6 @@ pub(super) fn finalize_cli_action(
 
     if watch_interval_secs.is_some() && !matches!(primary, Some(PrimaryCommand::Status)) {
         return Err(invalid_usage("`--watch` is only valid with `--status`."));
-    }
-    if has_comparison_options && !matches!(primary, Some(PrimaryCommand::Status)) {
-        return Err(invalid_usage(
-            "`--compare-*` options are only valid with `--status`.",
-        ));
     }
     if daemon_port.is_some() && !matches!(primary, Some(PrimaryCommand::DaemonStart)) {
         return Err(invalid_usage(
@@ -592,7 +588,6 @@ pub(super) fn finalize_cli_action(
         Some(PrimaryCommand::Status) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Status {
                 watch_interval_secs,
-                comparison,
             },
             output,
         })),

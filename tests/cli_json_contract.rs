@@ -325,13 +325,7 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload.get("live").is_some());
     assert!(payload["live"].get("focus_intention").is_some());
     assert!(payload["live"].get("task_note").is_some());
-    assert!(payload.get("comparison").is_some());
-    assert!(payload["comparison"].get("dimension").is_some());
-    assert!(payload["comparison"].get("task_filter").is_some());
-    assert!(payload["comparison"].get("profile_filter").is_some());
-    assert!(payload["comparison"].get("time_of_day_filter").is_some());
-    assert!(payload["comparison"].get("limit").is_some());
-    assert!(payload["comparison"].get("rows").is_some());
+    assert!(payload.get("comparison").is_none());
 }
 
 #[test]

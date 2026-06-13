@@ -11,8 +11,6 @@ use crate::config::{
 };
 use crate::error::UserMessage;
 
-#[cfg(test)]
-use crate::cli::StatusComparisonOptions;
 use crate::cli::{
     AppConfig, AutomationTriggerRuleConfig, AutomationTriggersCommandOutput,
     BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig, DailyGoalSnapshot,
@@ -150,8 +148,7 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         }
         CommandKind::Status {
             watch_interval_secs,
-            comparison,
-        } => execute_status_command(cli_command.output, watch_interval_secs, comparison)
+        } => execute_status_command(cli_command.output, watch_interval_secs)
             .map_err(UserMessage::from),
         CommandKind::Backup { dir } => {
             execute_backup_command(dir, cli_command.output).map_err(UserMessage::from)
@@ -1023,7 +1020,6 @@ mod tests {
         assert_eq!(
             command_usage_surface_id(&CommandKind::Status {
                 watch_interval_secs: None,
-                comparison: StatusComparisonOptions::default(),
             }),
             Some("status")
         );
@@ -1039,7 +1035,6 @@ mod tests {
         }));
         assert!(!command_usage_records_via_app(&CommandKind::Status {
             watch_interval_secs: None,
-            comparison: StatusComparisonOptions::default(),
         }));
     }
 

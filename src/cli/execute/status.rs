@@ -8,9 +8,8 @@ use std::{
 };
 
 use crate::cli::{
-    AppConfig, FocusStats, OutputMode, StatusComparisonOptions, StatusOutput,
-    build_status_output_with_comparison, flush_stdout, print_json, print_json_compact,
-    print_status_output,
+    AppConfig, FocusStats, OutputMode, StatusOutput, build_status_output, flush_stdout, print_json,
+    print_json_compact, print_status_output,
 };
 
 use super::data::stats_load_options;
@@ -22,20 +21,18 @@ static WATCH_INTERRUPT_HANDLER: OnceLock<Result<(), String>> = OnceLock::new();
 pub(super) fn execute_status_command(
     output: OutputMode,
     watch_interval_secs: Option<u64>,
-    comparison: StatusComparisonOptions,
 ) -> Result<(), String> {
     if let Some(interval_secs) = watch_interval_secs {
-        return execute_status_watch_command(output, interval_secs, comparison);
+        return execute_status_watch_command(output, interval_secs);
     }
 
-    let payload = load_status_output(&comparison)?;
+    let payload = load_status_output()?;
     emit_status_output(&payload, output, false)
 }
 
 pub(super) fn execute_status_watch_command(
     output: OutputMode,
     interval_secs: u64,
-    comparison: StatusComparisonOptions,
 ) -> Result<(), String> {
     if interval_secs == 0 {
         return Err("`--watch` interval must be greater than 0 seconds.".to_string());
@@ -51,7 +48,7 @@ pub(super) fn execute_status_watch_command(
             break;
         }
 
-        let payload = load_status_output(&comparison)?;
+        let payload = load_status_output()?;
         emit_status_output(&payload, output, true)?;
         flush_stdout()?;
 
@@ -151,13 +148,11 @@ unsafe fn install_platform_watch_interrupt_handler() -> Result<(), String> {
     Ok(())
 }
 
-fn load_status_output(comparison: &StatusComparisonOptions) -> Result<StatusOutput, String> {
+fn load_status_output() -> Result<StatusOutput, String> {
     let config = AppConfig::load().normalized();
     let stats = FocusStats::load_with_options(stats_load_options(&config))
         .map_err(|error| format!("Failed to load stats: {error}"))?;
-    Ok(build_status_output_with_comparison(
-        &config, &stats, comparison,
-    ))
+    Ok(build_status_output(&config, &stats))
 }
 
 fn emit_status_output(
