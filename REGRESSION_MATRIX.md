@@ -36,6 +36,7 @@ in the normal release readiness command set.
 | v0.15.3 | Blocklist category workflows stay compatibility-only with replacement guidance, while profile-level blocklist/allowlist site management remains the supported path. | Blocking cleanup | `blocklist_category_json_emits_deprecated_replacement_payload` plus `config_doctor_reports_deprecated_blocklist_categories` |
 | v0.15.4 | Core blocklist/allowlist site add, edit, delete, and list paths operate on profile-level rules without selected-category branching. | Blocking cleanup | `apply_site_add_command_uses_profile_sites_not_selected_category` plus `site_manager_uses_profile_sites_not_selected_category` |
 | v0.15.4 | Temporary allowlist and break-glass workflows share one temporary override runtime model while legacy fields remain readable for compatibility. | Blocking/runtime cleanup | `app_restores_temporary_overrides_from_canonical_snapshot` plus `build_status_output_includes_break_glass_temporary_override` |
+| v0.15.4 | Focus History uses a stable default KPI layout while deprecated dashboard pin, unpin, and order commands report guidance without persisting customization state. | Stats cleanup | `history_dashboard_uses_stable_default_layout_despite_legacy_customization` plus `apply_history_dashboard_pin_is_deprecated_and_keeps_default_layout` |
 
 ## Release Readiness
 

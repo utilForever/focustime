@@ -416,7 +416,7 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         feature_id: "history-dashboard-curation",
         name: "History dashboard curation",
         surface: FeatureSurface::Stats,
-        description: "Pin, unpin, and reorder history dashboard KPI cards to fit user priorities.",
+        description: "Deprecated history dashboard pin, unpin, and reorder compatibility commands; Focus History uses a stable default KPI layout.",
         cli_flags: &[
             "--history-dashboard",
             "--history-dashboard-pin",
