@@ -268,6 +268,7 @@ cargo run -- --feature-inventory=./reports --json
 
 Backup/restore behavior:
 
+- `--backup`, `--export`, and `--feature-inventory` share the same target-directory handling: omitted directories use the current working directory and explicit targets are created before artifact files are written.
 - `--backup` creates the target directory if needed, then copies `config.toml` and `stats.toml` into it.
 - `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
 - Runtime persistence is canonical-path only; if only legacy `stats.toml` exists, copy it to the canonical stats path (the backup/restore commands can help).
