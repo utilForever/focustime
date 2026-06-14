@@ -40,6 +40,7 @@ in the normal release readiness command set.
 | v0.15.5 | Status comparison CLI flags stay retired from `--status` and point users to export artifacts or Focus History reports. | Stats cleanup | `parse_rejects_status_comparison_options_with_export_replacement` plus `parse_rejects_equals_status_comparison_options_with_export_replacement` |
 | v0.15.5 | Backup, stats export, and feature-inventory artifact workflows share target-directory creation and JSON path contract behavior. | Artifact cleanup | `artifact_workflows_json_create_target_dirs_and_preserve_path_fields` plus `artifact_workflows_json_report_consistent_target_directory_errors` |
 | v0.15.x | Daemon local API lifecycle commands report retirement guidance while CLI timer/session/workflow commands and the TUI remain supported replacement workflows. | Integration cleanup | `daemon_lifecycle_json_emits_deprecated_replacement_payload` plus `daemon_lifecycle_json_contract_round_trip` |
+| v0.15.x | WakaTime integration runtime exposes only supported tracking calls while generic lifecycle/capability extension hooks stay removed. | Integration cleanup | `poll_wakatime_events_applies_async_updates` plus `disabled_wakatime_runtime_ignores_supported_hooks` |
 | v0.15.x | Runtime dependency removal candidates stay documented with owning daemon, calendar, and integration/WakaTime feature paths before cleanup removals change `Cargo.toml`. | Dependency cleanup | `v015_cleanup_docs_keep_matrix_and_release_guidance_aligned` |
 
 ## Release Readiness

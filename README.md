@@ -280,13 +280,14 @@ Retired workflow notice:
 - `--sync-backup` and `--sync-restore` are retired; use local `--backup` and `--restore` for portable recovery workflows.
 - `--sync-passphrase` is also retired; there is no direct replacement because encrypted sync/backups are no longer supported.
 
-### Integration framework foundation
+### WakaTime integration runtime
 
-`focustime` now routes external-tool hooks through a typed integration runtime
-with explicit lifecycle events and capability boundaries. The initial loading
-model is config-driven activation of built-in integrations.
+`focustime` routes supported WakaTime tracking behavior through a narrow
+integration runtime. The runtime exposes only the tracking calls the app uses:
+polling async heartbeat outcomes, syncing focus running state, advancing
+elapsed focus time, and updating heartbeat metadata.
 
-Current built-in integration IDs:
+Current supported integration ID:
 
 - `wakatime`
 
@@ -344,6 +345,9 @@ Roadmap direction:
 - Keep local backup/restore workflows as the supported portable recovery path.
 - Keep cleanup candidates tracked in the feature inventory before they are
   merged or retired.
+- Keep Broad integration lifecycle/capability hooks retired in favor of the
+  supported WakaTime integration runtime calls for heartbeat polling,
+  focus-running sync, elapsed focus tracking, and metadata updates.
 
 Early deprecation notices:
 
@@ -1016,7 +1020,7 @@ Runtime flow (high-level):
 4. Timer ticks advance every elapsed second while running.
 5. Phase-completion notifications are dispatched asynchronously.
 6. Blocking is applied during focus phases and removed outside focus.
-7. WakaTime tracking is managed via `IntegrationRuntime` (`App ->
+7. WakaTime tracking is managed via the narrow `IntegrationRuntime` (`App ->
    IntegrationRuntime -> WakaTime`) and applies async heartbeat outcomes without
    blocking timer flow.
 

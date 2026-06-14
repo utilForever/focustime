@@ -83,7 +83,7 @@ impl SetupDiagnostics {
                 }
             }
         } else {
-            SetupCheck::ok("Disabled by integration framework configuration.".to_string())
+            SetupCheck::ok("Disabled by WakaTime integration configuration.".to_string())
         };
         let wakatime_runtime =
             wakatime_runtime_check(wakatime_integration_enabled, &wakatime_runtime_state);
@@ -191,7 +191,7 @@ fn wakatime_runtime_check(
     state: &WakatimeRuntimeState,
 ) -> SetupCheck {
     if !wakatime_integration_enabled {
-        return SetupCheck::ok("Disabled by integration framework configuration.");
+        return SetupCheck::ok("Disabled by WakaTime integration configuration.");
     }
     match state {
         WakatimeRuntimeState::NotConfigured => SetupCheck::warning(
