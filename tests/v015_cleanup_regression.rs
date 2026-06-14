@@ -96,6 +96,8 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Blocklist category workflows stay compatibility-only with replacement guidance",
         "Daemon local API lifecycle commands report retirement guidance",
         "WakaTime integration runtime exposes only supported tracking calls",
+        "poll_wakatime_events_applies_async_updates",
+        "disabled_wakatime_runtime_ignores_supported_hooks",
         "cargo test --test v015_cleanup_regression",
     ] {
         assert!(
