@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Runtime dependency cleanup audit (#452):** documented runtime dependency removal candidates with owning daemon, calendar, and WakaTime/integration feature paths, and added release-readiness guidance before cleanup removals change `Cargo.toml`.
 - **Daemon API retirement preparation (#451):** marked daemon lifecycle JSON/text output with local API deprecation guidance, documented CLI/TUI replacement workflows, and added focused regression coverage for the retirement notice.
 
 ## [0.15.5] - 2026-06-14

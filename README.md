@@ -363,6 +363,16 @@ Early deprecation notices:
 | Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
 
+Runtime dependency cleanup candidates:
+
+| Dependency | Owning feature paths | Cleanup trigger |
+| --- | --- | --- |
+| `tiny_http` | Deprecated daemon local API server in `src/daemon.rs` and daemon lifecycle CLI paths. | Remove when `--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, and `/v1/*` are retired. |
+| `getrandom` | Deprecated daemon local API bearer-token generation in `src/daemon.rs`. | Remove the direct dependency with the daemon local API removal; transitive RNG crates may remain through TLS dependencies. |
+| `ureq` JSON feature | WakaTime heartbeat transport, deprecated daemon lifecycle client calls, and optional calendar ICS fetches. | Keep while WakaTime or calendar annotations need HTTP; after daemon removal, re-audit whether calendar-only or WakaTime-only usage can narrow enabled features. |
+| `chrono-tz` | Calendar `TZID` parsing in optional schedule annotation cache. | Remove only if calendar annotations stop supporting named time zones or the calendar cache is retired. |
+| `base64` daemon usage | Deprecated daemon token encoding plus WakaTime Basic auth. | Do not remove outright while WakaTime uses Basic auth; after daemon removal, confirm WakaTime still owns the remaining dependency. |
+
 ### Low-value feature retirements
 
 Retired low-value command surfaces and replacements:

@@ -112,6 +112,12 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`)",
         "Duplicate schedule/session start entry points",
         "Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`)",
+        "Runtime dependency cleanup candidates",
+        "`tiny_http`",
+        "`getrandom`",
+        "`ureq` JSON feature",
+        "`chrono-tz`",
+        "`base64` daemon usage",
     ] {
         assert!(
             readme.contains(required),
@@ -122,6 +128,8 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
     assert!(changelog.contains("v0.15.x cleanup roadmap and deprecation notices"));
     assert!(contributing.contains("cargo test --test v015_cleanup_regression"));
     assert!(contributing.contains("v0.15.x cleanup releases"));
+    assert!(contributing.contains("deprecated daemon bearer-token generation"));
+    assert!(matrix.contains("Runtime dependency removal candidates stay documented"));
 }
 
 #[test]

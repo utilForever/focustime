@@ -112,11 +112,24 @@ Key dependencies are defined in `Cargo.toml`:
 
 - `ratatui`: terminal UI rendering.
 - `crossterm`: terminal input/output and screen control.
-- `ureq` + `serde`: HTTP and JSON support for WakaTime heartbeats.
-- `base64`: API authorization header encoding.
+- `ureq` + `serde`: HTTP and JSON support for WakaTime heartbeats, optional
+  calendar annotation refreshes, and deprecated daemon client calls.
+- `serde_json`: CLI/status/export JSON, daemon API payloads, and calendar cache
+  persistence.
+- `toml`: config, stats, WakaTime queue, recovery, and daemon metadata
+  persistence.
+- `csv`: stats export artifacts.
+- `chrono` + `chrono-tz`: timer/stat dates, schedule windows, calendar
+  recurrence, and optional calendar `TZID` handling.
+- `base64`: WakaTime Basic auth and deprecated daemon bearer-token encoding.
+- `tiny_http`: deprecated daemon local API server.
+- `getrandom`: deprecated daemon bearer-token generation.
 
 Dependency guidelines:
 
 - Prefer minimal, well-maintained crates.
 - Keep `Cargo.lock` committed.
 - Run `cargo audit` when updating dependencies.
+- When cleanup work removes daemon, calendar, or integration paths, update the
+  README runtime dependency cleanup table with the owning path and run the
+  release readiness checks in `REGRESSION_MATRIX.md`.
