@@ -319,6 +319,7 @@ Milestone policy:
 - **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config migration assistant + doctor commands remain available for focused config checks (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
 - **v0.15.3:** calendar sync, weekday rules, and standalone automation triggers are documented as deprecated compatibility paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
+- **v0.15.5:** Focus History uses a stable default KPI layout, status comparison flags point to export/history replacements, and backup/export/feature-inventory artifact workflows share target-directory handling.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
 ### v0.15.x cleanup roadmap
@@ -350,6 +351,7 @@ Early deprecation notices:
 | Blocklist category workflows (`--blocklist-category*`, `blocklist_profiles.categories`) | Manage blocklist/allowlist hostnames directly on blocklist profiles with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; `--config-doctor` reports category configs that should be folded into profile-level lists. |
 | Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields remain readable for automation compatibility. |
 | Focus History dashboard customization (`[history_dashboard]`, `--history-dashboard-pin`, `--history-dashboard-unpin`, `--history-dashboard-order`) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands remain compatibility-only and report replacement guidance without changing config. |
+| Status comparison flags (`--compare-by`, `--compare-task`, `--compare-profile`, `--compare-time`, `--compare-limit`) | Use `--export` for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
@@ -366,6 +368,7 @@ Retired low-value command surfaces and replacements:
 | `--migrate`, `--dry-run` | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
 | `--sync-backup`, `--sync-restore` | Use `--backup` and `--restore` for portable recovery and migration workflows. |
 | `--sync-passphrase` | No direct replacement; encrypted sync/backups are no longer supported. |
+| `--compare-by`, `--compare-task`, `--compare-profile`, `--compare-time`, `--compare-limit` | Use `--export` for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
 
 ### CLI JSON/error contract
 
@@ -1038,12 +1041,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.15.4`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.15.5`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.15.4](https://github.com/utilForever/focustime/releases/tag/v0.15.4).
+The latest stable release is [v0.15.5](https://github.com/utilForever/focustime/releases/tag/v0.15.5).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 
