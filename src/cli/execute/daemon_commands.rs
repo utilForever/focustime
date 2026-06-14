@@ -1,7 +1,8 @@
 use crate::cli::{
-    DaemonConnectionOutput, DaemonStartCommandOutput, DaemonStatusCommandOutput,
-    DaemonStopCommandOutput, OutputMode, print_daemon_start_command_output,
-    print_daemon_status_command_output, print_daemon_stop_command_output, print_json,
+    DAEMON_API_REPLACEMENT, DaemonConnectionOutput, DaemonStartCommandOutput,
+    DaemonStatusCommandOutput, DaemonStopCommandOutput, OutputMode,
+    print_daemon_start_command_output, print_daemon_status_command_output,
+    print_daemon_stop_command_output, print_json,
 };
 use crate::daemon;
 
@@ -16,6 +17,8 @@ pub(super) fn execute_daemon_start_command(
     let started = daemon::start_background(port)?;
     let payload = DaemonStartCommandOutput {
         action: "daemon-start",
+        deprecated: true,
+        replacement: DAEMON_API_REPLACEMENT,
         already_running: started.already_running,
         daemon: daemon_connection_output(&started.info),
     };
@@ -30,6 +33,8 @@ pub(super) fn execute_daemon_status_command(output: OutputMode) -> Result<(), St
     let status = daemon::status()?;
     let payload = DaemonStatusCommandOutput {
         action: "daemon-status",
+        deprecated: true,
+        replacement: DAEMON_API_REPLACEMENT,
         running: status.running,
         daemon: status.info.as_ref().map(daemon_connection_output),
     };
@@ -44,6 +49,8 @@ pub(super) fn execute_daemon_stop_command(output: OutputMode) -> Result<(), Stri
     let stopped = daemon::stop()?;
     let payload = DaemonStopCommandOutput {
         action: "daemon-stop",
+        deprecated: true,
+        replacement: DAEMON_API_REPLACEMENT,
         was_running: stopped.was_running,
         stopped: stopped.stopped,
         daemon: stopped.info.as_ref().map(daemon_connection_output),
