@@ -25,7 +25,7 @@ use crate::config::{
     WakatimeRuntimeConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
     replace_weekday_profile_rule_automation_triggers, validate_automation_trigger_rules,
 };
-use crate::integration::{IntegrationLifecycleEvent, IntegrationRuntime};
+use crate::integration::IntegrationRuntime;
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
     OneTimeWindow, RecurringWindow, WindowOccurrence, active_occurrence,
@@ -858,12 +858,7 @@ impl App {
     /// suspend/resume cannot trigger multiple rapid heartbeats.
     pub(crate) fn on_wakatime_elapsed(&mut self, elapsed_secs: u64) {
         if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running {
-            if let Err(error) = self
-                .integrations
-                .dispatch_lifecycle_event(IntegrationLifecycleEvent::FocusElapsed { elapsed_secs })
-            {
-                self.config_error = Some(error);
-            }
+            self.integrations.advance_wakatime(elapsed_secs);
         }
     }
 
@@ -873,12 +868,7 @@ impl App {
         let now = Local::now();
         self.current_frame_now = now;
         self.sync_today_goal_snapshot();
-        if let Err(error) = self
-            .integrations
-            .dispatch_lifecycle_event(IntegrationLifecycleEvent::Poll)
-        {
-            self.config_error = Some(error);
-        }
+        self.integrations.poll_wakatime_events();
         self.sync_temporary_allowlist_entries(now);
         self.sync_break_glass_override();
         self.sync_weekday_profile_rules(now);
