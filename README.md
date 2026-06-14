@@ -345,6 +345,9 @@ Roadmap direction:
 - Keep local backup/restore workflows as the supported portable recovery path.
 - Keep cleanup candidates tracked in the feature inventory before they are
   merged or retired.
+- Keep Broad integration lifecycle/capability hooks retired in favor of the
+  supported WakaTime integration runtime calls for heartbeat polling,
+  focus-running sync, elapsed focus tracking, and metadata updates.
 
 Early deprecation notices:
 
@@ -360,7 +363,6 @@ Early deprecation notices:
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
-| Broad integration lifecycle/capability hooks | Use the supported WakaTime integration runtime calls for heartbeat polling, focus-running sync, elapsed focus tracking, and metadata updates. |
 | Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
 | Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
