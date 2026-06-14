@@ -91,7 +91,8 @@ cargo run -- --resume
 cargo run -- --stop
 cargo run -- --next --json
 
-# Run a headless daemon with local API access
+# Deprecated: run a headless daemon with local API access
+# Prefer CLI timer/session/workflow commands or the TUI for new automation.
 cargo run -- --daemon-start
 cargo run -- --daemon-start --daemon-port=43123 --json
 cargo run -- --daemon-status --json
@@ -260,8 +261,9 @@ cargo run -- --feature-inventory
 cargo run -- --feature-inventory=./reports --json
 ```
 
-### Local daemon API
+### Local daemon API (deprecated)
 
+- The local daemon API is deprecated and is being prepared for a future removal release. New automation should use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) or the TUI for interactive focus sessions.
 - Daemon mode binds to loopback (`127.0.0.1`) and stores daemon connection metadata in `daemon-state.toml` under the same app-data directory used by `config.toml`.
 - Control endpoints require `Authorization: Bearer <token>`, where `<token>` is the per-start random token persisted in daemon metadata.
 - API routes are versioned under `/v1/*`, including health (`/v1/health`), timer status (`/v1/status`), timer controls (`/v1/timer/*`), session metadata (`/v1/session/*`), workflow controls (`/v1/workflow/*`), and daemon shutdown (`/v1/daemon/stop`).
@@ -320,6 +322,7 @@ Milestone policy:
 - **v0.15.3:** calendar sync, weekday rules, and standalone automation triggers are documented as deprecated compatibility paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, status comparison flags point to export/history replacements, and backup/export/feature-inventory artifact workflows share target-directory handling.
+- **v0.15.x future cleanup:** daemon local API lifecycle commands report retirement guidance while CLI timer/session/workflow commands and the TUI remain the supported replacement workflows.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
 ### v0.15.x cleanup roadmap
@@ -355,6 +358,7 @@ Early deprecation notices:
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
+| Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
 | Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
 | Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |

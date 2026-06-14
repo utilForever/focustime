@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Daemon API retirement preparation (#451):** marked daemon lifecycle JSON/text output with local API deprecation guidance, documented CLI/TUI replacement workflows, and added focused regression coverage for the retirement notice.
+
 ## [0.15.5] - 2026-06-14
 
 ### Changed
