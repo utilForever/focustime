@@ -1,6 +1,6 @@
 [package]
 name = "focustime"
-version = "0.15.4"
+version = "0.15.5"
 edition = "2024"
 rust-version = "1.85"
 description = "TUI Pomodoro timer with site blocking and WakaTime tracking"
