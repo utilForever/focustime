@@ -7,12 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.15.4] - 2026-06-13
+## [0.15.5] - 2026-06-14
 
 ### Changed
 
 - **Artifact workflow handling (#450):** consolidated backup, stats export, and feature-inventory target-directory handling while preserving existing JSON path fields and text output labels.
+- **Status comparison surface reduction (#449):** retired status comparison CLI flags from `--status` and added guidance toward export artifacts or Focus History reports for replacement comparison workflows.
 - **Focus History dashboard simplification (#448):** replaced customizable KPI card pin/order state with the stable default dashboard layout, kept deprecated dashboard customization CLI commands as guidance-only compatibility paths, and stopped persisting `[history_dashboard]` config.
+
+## [0.15.4] - 2026-06-13
+
+### Changed
+
 - **Core site rule cleanup (#447):** simplified blocklist/allowlist site CRUD to operate directly on profile-level site rules, removed category controls from the TUI site manager, and kept deprecated category workflows isolated to CLI/config compatibility paths.
 - **Temporary override consolidation (#446):** mapped temporary allowlist exceptions and break-glass controls into one runtime recovery/status model while keeping existing command paths and legacy status fields compatible.
 - **Blocklist category deprecation (#445):** marked category-level blocklist workflows as compatibility-only, added replacement guidance for profile-level site management, and surfaced config doctor warnings for category configs that should be folded into blocklist profiles.
@@ -462,7 +468,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.4...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.5...HEAD
+[0.15.5]: https://github.com/utilForever/focustime/compare/v0.15.4...v0.15.5
 [0.15.4]: https://github.com/utilForever/focustime/compare/v0.15.3...v0.15.4
 [0.15.3]: https://github.com/utilForever/focustime/compare/v0.15.2...v0.15.3
 [0.15.2]: https://github.com/utilForever/focustime/compare/v0.15.1...v0.15.2
