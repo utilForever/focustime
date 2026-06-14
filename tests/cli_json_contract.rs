@@ -37,6 +37,12 @@ fn start_daemon(env: &TestEnv) -> DaemonGuard<'_> {
     assert!(stderr_text(&output).trim().is_empty());
     let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
     assert_eq!(payload["action"], "daemon-start");
+    assert_eq!(payload["deprecated"], true);
+    assert!(payload["replacement"].as_str().is_some_and(|replacement| {
+        replacement.contains("--start")
+            && replacement.contains("--focus-intention")
+            && replacement.contains("--break-glass-trigger")
+    }));
     assert!(payload["daemon"]["pid"].as_u64().is_some_and(|pid| pid > 0));
     assert_eq!(payload["daemon"]["host"], "127.0.0.1");
     assert!(
@@ -1233,6 +1239,14 @@ fn daemon_lifecycle_json_contract_round_trip() {
     let start_payload: Value =
         serde_json::from_slice(&start_output.stdout).expect("stdout should be JSON");
     assert_eq!(start_payload["action"], "daemon-start");
+    assert_eq!(start_payload["deprecated"], true);
+    assert!(
+        start_payload["replacement"]
+            .as_str()
+            .is_some_and(|replacement| replacement.contains("--start")
+                && replacement.contains("--focus-intention")
+                && replacement.contains("--break-glass-trigger"))
+    );
     assert_eq!(start_payload["already_running"], false);
     assert!(
         start_payload["daemon"]["pid"]
@@ -1257,6 +1271,8 @@ fn daemon_lifecycle_json_contract_round_trip() {
     let status_payload: Value =
         serde_json::from_slice(&status_output.stdout).expect("stdout should be JSON");
     assert_eq!(status_payload["action"], "daemon-status");
+    assert_eq!(status_payload["deprecated"], true);
+    assert_eq!(status_payload["replacement"], start_payload["replacement"]);
     assert_eq!(status_payload["running"], true);
     assert_eq!(
         status_payload["daemon"]["pid"],
@@ -1273,6 +1289,8 @@ fn daemon_lifecycle_json_contract_round_trip() {
     assert!(stderr_text(&stop_output).trim().is_empty());
     let stop_payload: Value = serde_json::from_slice(&stop_output.stdout).expect("stdout JSON");
     assert_eq!(stop_payload["action"], "daemon-stop");
+    assert_eq!(stop_payload["deprecated"], true);
+    assert_eq!(stop_payload["replacement"], start_payload["replacement"]);
     assert_eq!(stop_payload["was_running"], true);
     assert_eq!(stop_payload["stopped"], true);
     assert_eq!(
