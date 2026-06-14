@@ -221,6 +221,45 @@ mod tests {
     }
 
     #[test]
+    fn enabled_wakatime_runtime_delegates_supported_focus_hooks() {
+        let (mut runtime, _warnings) = IntegrationRuntime::load(
+            &[WAKATIME_PLUGIN_NAME.to_string()],
+            WakatimeHeartbeatMetadata::default(),
+            WakatimeRuntimeOptions::default(),
+        );
+        runtime.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
+
+        runtime.set_wakatime_tracking(true);
+
+        let tracker = runtime
+            .wakatime_tracker_for_tests()
+            .expect("wakatime integration should be loaded");
+        assert!(tracker.is_tracking());
+        assert_eq!(tracker.runtime_state(), WakatimeRuntimeState::Sending);
+
+        runtime
+            .wakatime_tracker_mut_for_tests()
+            .expect("wakatime integration should be loaded")
+            .push_sent_event_for_tests();
+        runtime.poll_wakatime_events();
+        runtime.advance_wakatime(60);
+
+        let tracker = runtime
+            .wakatime_tracker_for_tests()
+            .expect("wakatime integration should be loaded");
+        assert!(tracker.is_tracking());
+        assert_eq!(tracker.runtime_state(), WakatimeRuntimeState::Tracking);
+
+        runtime.set_wakatime_tracking(false);
+
+        let tracker = runtime
+            .wakatime_tracker_for_tests()
+            .expect("wakatime integration should be loaded");
+        assert!(!tracker.is_tracking());
+        assert_eq!(tracker.runtime_state(), WakatimeRuntimeState::Idle);
+    }
+
+    #[test]
     fn metadata_updates_are_forwarded_to_wakatime_plugin() {
         let (mut runtime, _warnings) = IntegrationRuntime::load(
             &[WAKATIME_PLUGIN_NAME.to_string()],
