@@ -248,6 +248,7 @@ const USAGE_SIGNALS_REPLACEMENT: &str = "Use `focustime --feature-inventory` for
 const BLOCKLIST_CATEGORY_REPLACEMENT: &str = "Manage blocklist and allowlist hostnames directly on blocklist profiles with `--blocklist-profile`, `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; categories remain a compatibility grouping only.";
 const CALENDAR_SYNC_REPLACEMENT: &str = "Calendar sync is now a narrow opt-in schedule annotation cache. Keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data, and use `focustime --diagnostics` to review setup/config guidance.";
 const STATUS_COMPARISON_REPLACEMENT: &str = "Status comparison slicing was retired from `--status`. Use `focustime --export` for productivity comparison rows, or the Focus History report/dashboard for interactive comparison filters.";
+const DAEMON_API_REPLACEMENT: &str = "Use CLI timer, session, and workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OutputMode {
@@ -873,6 +874,8 @@ struct DaemonConnectionOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct DaemonStartCommandOutput {
     action: &'static str,
+    deprecated: bool,
+    replacement: &'static str,
     already_running: bool,
     daemon: DaemonConnectionOutput,
 }
@@ -880,6 +883,8 @@ struct DaemonStartCommandOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct DaemonStatusCommandOutput {
     action: &'static str,
+    deprecated: bool,
+    replacement: &'static str,
     running: bool,
     daemon: Option<DaemonConnectionOutput>,
 }
@@ -887,6 +892,8 @@ struct DaemonStatusCommandOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct DaemonStopCommandOutput {
     action: &'static str,
+    deprecated: bool,
+    replacement: &'static str,
     was_running: bool,
     stopped: bool,
     daemon: Option<DaemonConnectionOutput>,

@@ -27,6 +27,7 @@ pub(in crate::cli) fn print_session_metadata_command_output(
 }
 
 pub(in crate::cli) fn print_daemon_start_command_output(payload: &DaemonStartCommandOutput) {
+    print_daemon_api_deprecation(payload.replacement);
     if payload.already_running {
         println!("Daemon already running.");
     } else {
@@ -41,6 +42,7 @@ pub(in crate::cli) fn print_daemon_start_command_output(payload: &DaemonStartCom
 }
 
 pub(in crate::cli) fn print_daemon_status_command_output(payload: &DaemonStatusCommandOutput) {
+    print_daemon_api_deprecation(payload.replacement);
     println!("Daemon running: {}", payload.running);
     if let Some(daemon) = &payload.daemon {
         println!("PID: {}", daemon.pid);
@@ -52,6 +54,7 @@ pub(in crate::cli) fn print_daemon_status_command_output(payload: &DaemonStatusC
 }
 
 pub(in crate::cli) fn print_daemon_stop_command_output(payload: &DaemonStopCommandOutput) {
+    print_daemon_api_deprecation(payload.replacement);
     if !payload.was_running {
         println!("No running daemon found.");
         return;
@@ -65,6 +68,11 @@ pub(in crate::cli) fn print_daemon_stop_command_output(payload: &DaemonStopComma
         println!("PID: {}", daemon.pid);
         println!("Address: {}:{}", daemon.host, daemon.port);
     }
+}
+
+fn print_daemon_api_deprecation(replacement: &str) {
+    println!("Daemon local API is deprecated.");
+    println!("Replacement: {replacement}");
 }
 
 pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {

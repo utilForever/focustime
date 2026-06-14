@@ -346,6 +346,52 @@ fn parse_daemon_stop_defaults_to_text_mode() {
 }
 
 #[test]
+fn daemon_lifecycle_json_emits_deprecated_replacement_payload() {
+    let connection = DaemonConnectionOutput {
+        pid: 42,
+        host: "127.0.0.1".to_string(),
+        port: 43123,
+        started_at_epoch_secs: 1_779_000_000,
+    };
+    let start_payload = DaemonStartCommandOutput {
+        action: "daemon-start",
+        deprecated: true,
+        replacement: DAEMON_API_REPLACEMENT,
+        already_running: false,
+        daemon: connection.clone(),
+    };
+    let status_payload = DaemonStatusCommandOutput {
+        action: "daemon-status",
+        deprecated: true,
+        replacement: DAEMON_API_REPLACEMENT,
+        running: true,
+        daemon: Some(connection.clone()),
+    };
+    let stop_payload = DaemonStopCommandOutput {
+        action: "daemon-stop",
+        deprecated: true,
+        replacement: DAEMON_API_REPLACEMENT,
+        was_running: true,
+        stopped: true,
+        daemon: Some(connection),
+    };
+
+    for payload in [
+        serde_json::to_value(&start_payload).unwrap(),
+        serde_json::to_value(&status_payload).unwrap(),
+        serde_json::to_value(&stop_payload).unwrap(),
+    ] {
+        assert_eq!(payload["deprecated"], true);
+        assert_eq!(payload["replacement"], DAEMON_API_REPLACEMENT);
+        assert!(payload["replacement"].as_str().is_some_and(|replacement| {
+            replacement.contains("--start")
+                && replacement.contains("--focus-intention")
+                && replacement.contains("--break-glass-trigger")
+        }));
+    }
+}
+
+#[test]
 fn parse_rejects_status_comparison_options_with_export_replacement() {
     let error = parse_with_contract(&[
         "--status",

@@ -39,6 +39,7 @@ in the normal release readiness command set.
 | v0.15.5 | Focus History uses a stable default KPI layout while deprecated dashboard pin, unpin, and order commands report guidance without persisting customization state. | Stats cleanup | `history_dashboard_uses_stable_default_layout_despite_legacy_customization` plus `apply_history_dashboard_pin_is_deprecated_and_keeps_default_layout` |
 | v0.15.5 | Status comparison CLI flags stay retired from `--status` and point users to export artifacts or Focus History reports. | Stats cleanup | `parse_rejects_status_comparison_options_with_export_replacement` plus `parse_rejects_equals_status_comparison_options_with_export_replacement` |
 | v0.15.5 | Backup, stats export, and feature-inventory artifact workflows share target-directory creation and JSON path contract behavior. | Artifact cleanup | `artifact_workflows_json_create_target_dirs_and_preserve_path_fields` plus `artifact_workflows_json_report_consistent_target_directory_errors` |
+| v0.15.x | Daemon local API lifecycle commands report retirement guidance while CLI timer/session/workflow commands and the TUI remain supported replacement workflows. | Integration cleanup | `daemon_lifecycle_json_emits_deprecated_replacement_payload` plus `daemon_lifecycle_json_contract_round_trip` |
 
 ## Release Readiness
 

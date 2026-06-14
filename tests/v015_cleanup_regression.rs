@@ -94,6 +94,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Merged legacy profile names continue to migrate to canonical presets",
         "Removed migration-window and encrypted sync flags stay unavailable",
         "Blocklist category workflows stay compatibility-only with replacement guidance",
+        "Daemon local API lifecycle commands report retirement guidance",
         "cargo test --test v015_cleanup_regression",
     ] {
         assert!(
@@ -110,6 +111,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Removed migration-window flags (`--migrate`, `--dry-run`)",
         "Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`)",
         "Duplicate schedule/session start entry points",
+        "Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`)",
     ] {
         assert!(
             readme.contains(required),
