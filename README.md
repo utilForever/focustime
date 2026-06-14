@@ -280,13 +280,14 @@ Retired workflow notice:
 - `--sync-backup` and `--sync-restore` are retired; use local `--backup` and `--restore` for portable recovery workflows.
 - `--sync-passphrase` is also retired; there is no direct replacement because encrypted sync/backups are no longer supported.
 
-### Integration framework foundation
+### WakaTime integration runtime
 
-`focustime` now routes external-tool hooks through a typed integration runtime
-with explicit lifecycle events and capability boundaries. The initial loading
-model is config-driven activation of built-in integrations.
+`focustime` routes supported WakaTime tracking behavior through a narrow
+integration runtime. The runtime exposes only the tracking calls the app uses:
+polling async heartbeat outcomes, syncing focus running state, advancing
+elapsed focus time, and updating heartbeat metadata.
 
-Current built-in integration IDs:
+Current supported integration ID:
 
 - `wakatime`
 
@@ -359,6 +360,7 @@ Early deprecation notices:
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
 | Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
+| Broad integration lifecycle/capability hooks | Use the supported WakaTime integration runtime calls for heartbeat polling, focus-running sync, elapsed focus tracking, and metadata updates. |
 | Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
 | Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
@@ -1016,7 +1018,7 @@ Runtime flow (high-level):
 4. Timer ticks advance every elapsed second while running.
 5. Phase-completion notifications are dispatched asynchronously.
 6. Blocking is applied during focus phases and removed outside focus.
-7. WakaTime tracking is managed via `IntegrationRuntime` (`App ->
+7. WakaTime tracking is managed via the narrow `IntegrationRuntime` (`App ->
    IntegrationRuntime -> WakaTime`) and applies async heartbeat outcomes without
    blocking timer flow.
 

@@ -19,7 +19,7 @@ flowchart LR
     CFG["config.rs + config/paths.rs<br/>config model + path resolution"]
     TM["timer.rs<br/>Pomodoro state machine"]
     BL["blocker.rs<br/>multi-backend blocking (hosts + command fallback)"]
-    IG["integration.rs<br/>integration runtime + lifecycle dispatch"]
+    IG["integration.rs<br/>WakaTime integration runtime"]
     WK["wakatime.rs<br/>heartbeat tracking"]
     NT["notifications.rs<br/>phase notifications"]
     SCH["schedule.rs<br/>window compilation/selection"]
@@ -70,7 +70,7 @@ flowchart LR
 | `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including feature-flag compatibility defaults, runtime knob settings, and task-label-aware WakaTime metadata mapping rules                                                                                            | `app`, `cli`, filesystem/env                                                                  |
 | `timer.rs`                      | Pomodoro timer domain model and phase transitions                                                                                                                                                                                                                                               | `app`, `ui`                                                                                   |
 | `blocker.rs`                    | Blocking backend orchestration (hosts + command), deterministic fallback selection, preview generation, and backend diagnostics                                                                                                                                                                 | `app`, `cli`, OS/filesystem                                                                   |
-| `integration.rs`                | Plugin/integration framework foundation: typed lifecycle hooks, capability boundaries, config-driven loading of built-in integrations, and runtime dispatch/error surfaces                                                                                                                      | `app`, `config`, `wakatime`                                                                   |
+| `integration.rs`                | Narrow WakaTime integration runtime: config-driven activation plus supported calls for heartbeat polling, focus-running sync, elapsed focus tracking, metadata updates, and runtime status access                                                                                              | `app`, `config`, `wakatime`                                                                   |
 | `schedule.rs`                   | Recurring/one-time schedule compile and conflict/occurrence logic                                                                                                                                                                                                                               | `app`, `cli`, `config`                                                                        |
 | `calendar.rs`                   | Optional calendar ICS fetch/parse/recurrence expansion, timezone normalization, busy-window cache persistence, and overlap helpers used only as schedule annotations                                                                                                                               | `app`, `cli`, HTTP (`ureq`), `config`, filesystem                                             |
 | `session_recovery.rs`           | Runtime recovery snapshot read/write, transient runtime artifact reconciliation, and startup warning notices for dropped invalid fragments                                                                                                                                                      | `app`, `cli`, filesystem                                                                      |
@@ -93,7 +93,7 @@ sequenceDiagram
 
     loop every frame
         Main->>App: poll_wakatime_status()
-        App->>Integrations: dispatch(Poll)
+        App->>Integrations: poll_wakatime_events()
         Integrations->>Waka: poll_events()
         Main->>UI: render(frame, &app)
         Main->>App: handle_key/handle_paste (if input)
@@ -101,11 +101,12 @@ sequenceDiagram
         App->>Timer: tick()
         alt phase changed
             App->>Blocker: block()/unblock()
+            App->>Integrations: set_wakatime_tracking(focus_running)
             App->>Notify: notify_phase_completion()
         end
         Main->>App: on_wakatime_elapsed(elapsed_secs)
         alt Focus + Running
-            App->>Integrations: dispatch(FocusElapsed)
+            App->>Integrations: advance_wakatime(elapsed_secs)
             Integrations->>Waka: tick_elapsed(elapsed_secs)
         end
         App-->>UI: expose sending/queued/replaying/retrying/error state
@@ -118,7 +119,7 @@ sequenceDiagram
    processes keyboard/paste input through `App` key handlers.
 3. A 100ms cadence accumulates elapsed time; each elapsed second advances
    `App::on_tick()` and applies phase-driven side effects.
-4. `App` keeps blocking, notifications, scheduling (including optional calendar busy/overlap annotations), and integration lifecycle dispatch in sync with
+4. `App` keeps blocking, notifications, scheduling (including optional calendar busy/overlap annotations), and supported WakaTime tracking in sync with
    timer state; side effects are isolated in dedicated modules.
 5. Daemon mode reuses the same `App` tick/update behavior in a headless loop,
    then serves loopback-authenticated `/v1/*` API endpoints for automation.

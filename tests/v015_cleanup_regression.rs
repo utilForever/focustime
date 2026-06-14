@@ -95,6 +95,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Removed migration-window and encrypted sync flags stay unavailable",
         "Blocklist category workflows stay compatibility-only with replacement guidance",
         "Daemon local API lifecycle commands report retirement guidance",
+        "WakaTime integration runtime exposes only supported tracking calls",
         "cargo test --test v015_cleanup_regression",
     ] {
         assert!(
@@ -112,6 +113,8 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`)",
         "Duplicate schedule/session start entry points",
         "Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`)",
+        "Broad integration lifecycle/capability hooks",
+        "supported WakaTime integration runtime calls",
         "Runtime dependency cleanup candidates",
         "`tiny_http`",
         "`getrandom`",
@@ -126,6 +129,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
     }
 
     assert!(changelog.contains("v0.15.x cleanup roadmap and deprecation notices"));
+    assert!(changelog.contains("Integration runtime hook narrowing (#453)"));
     assert!(contributing.contains("cargo test --test v015_cleanup_regression"));
     assert!(contributing.contains("v0.15.x cleanup releases"));
     assert!(contributing.contains("deprecated daemon bearer-token generation"));
