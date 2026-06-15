@@ -30,6 +30,26 @@ jobs:
         if: ${{ env.SONAR_TOKEN == '' }}
         run: echo "SONAR_TOKEN is not configured. Skipping SonarCloud scan."
 
+      - name: Install stable toolchain
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-llvm-cov
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate Rust coverage report
+        if: ${{ env.SONAR_TOKEN != '' }}
+        run: |
+          mkdir -p target/llvm-cov
+          cargo llvm-cov --workspace --lcov --output-path target/llvm-cov/lcov.info
+
+      - name: Verify coverage report
+        if: ${{ env.SONAR_TOKEN != '' }}
+        run: |
+          test -s target/llvm-cov/lcov.info
+          wc -l target/llvm-cov/lcov.info
+
       - name: Run SonarCloud scan
         if: ${{ env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@v8
