@@ -323,7 +323,8 @@ Milestone policy:
 - **v0.15.3:** calendar sync, weekday rules, and standalone automation triggers are documented as deprecated compatibility paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, status comparison flags point to export/history replacements, and backup/export/feature-inventory artifact workflows share target-directory handling.
-- **v0.15.x future cleanup:** daemon local API lifecycle commands report retirement guidance while CLI timer/session/workflow commands and the TUI remain the supported replacement workflows.
+- **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency cleanup candidates stay documented, and WakaTime integration uses explicit supported runtime calls.
+- **v0.15.x future cleanup:** continue retiring overlapping paths only after release notes and diagnostics name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
 ### v0.15.x cleanup roadmap
@@ -1059,12 +1060,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.15.5`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.15.6`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.15.5](https://github.com/utilForever/focustime/releases/tag/v0.15.5).
+The latest stable release is [v0.15.6](https://github.com/utilForever/focustime/releases/tag/v0.15.6).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 
