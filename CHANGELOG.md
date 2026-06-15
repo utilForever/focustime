@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.6] - 2026-06-15
+
 ### Changed
 
 - **Integration runtime hook narrowing (#453):** replaced generic integration lifecycle/capability dispatch with explicit WakaTime runtime calls for heartbeat polling, focus-running sync, elapsed focus tracking, and metadata updates.
@@ -474,7 +476,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.5...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.6...HEAD
+[0.15.6]: https://github.com/utilForever/focustime/compare/v0.15.5...v0.15.6
 [0.15.5]: https://github.com/utilForever/focustime/compare/v0.15.4...v0.15.5
 [0.15.4]: https://github.com/utilForever/focustime/compare/v0.15.3...v0.15.4
 [0.15.3]: https://github.com/utilForever/focustime/compare/v0.15.2...v0.15.3
