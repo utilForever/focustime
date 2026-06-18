@@ -186,7 +186,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--diagnostics" => Some(ParsedToken::Diagnostics),
         "--calendar-sync" => Some(ParsedToken::CalendarSync),
         "--blocking-preview" => Some(ParsedToken::BlockingPreview),
-        "--usage-signals" => Some(ParsedToken::UsageSignals),
         "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
         "--blocklist-category-delete" => Some(ParsedToken::BlocklistCategoryDelete),
         "--session-template-delete" => Some(ParsedToken::SessionTemplateDelete),

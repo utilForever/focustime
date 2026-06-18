@@ -1,11 +1,9 @@
 use crate::app::App;
 use crate::cli::{
-    OutputMode, USAGE_SIGNALS_REPLACEMENT, UsageSignalsCommandOutput,
-    build_blocking_preview_command_output, build_diagnostics_blocking_preview_error,
+    OutputMode, build_blocking_preview_command_output, build_diagnostics_blocking_preview_error,
     build_diagnostics_blocking_preview_output, build_diagnostics_command_output,
     print_blocking_preview_command_output, print_config_doctor_output,
     print_config_migration_output, print_diagnostics_command_output, print_json,
-    print_usage_signals_command_output,
 };
 use crate::config::{run_config_doctor, run_config_migration_assistant};
 use crate::error::UserMessage;
@@ -62,19 +60,6 @@ pub(super) fn execute_blocking_preview_command(output: OutputMode) -> Result<(),
 
     match output {
         OutputMode::Text => print_blocking_preview_command_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-pub(super) fn execute_usage_signals_command(output: OutputMode) -> Result<(), String> {
-    let payload = UsageSignalsCommandOutput {
-        action: "usage-signals",
-        deprecated: true,
-        replacement: USAGE_SIGNALS_REPLACEMENT,
-    };
-    match output {
-        OutputMode::Text => print_usage_signals_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

@@ -1,10 +1,7 @@
-use std::io::{self, Write};
-
 use crate::cli::{
     BlocklistCategoryCommandOutput, BlocklistProfileCommandOutput, HistoryDashboardCommandOutput,
     SessionTemplateCommandOutput, SiteAddCommandOutput, SiteDeleteCommandOutput,
     SiteEditCommandOutput, SiteListCommandOutput, TemporarySiteAddCommandOutput,
-    UsageSignalsCommandOutput,
 };
 
 use super::{display_input_value, format_duration};
@@ -114,20 +111,6 @@ pub(in crate::cli) fn print_history_dashboard_command_output(
     for card in &payload.cards {
         println!("  {} ({})", card.label, card.id);
     }
-}
-
-pub(in crate::cli) fn print_usage_signals_command_output(payload: &UsageSignalsCommandOutput) {
-    let mut stdout = io::stdout().lock();
-    write_usage_signals_command_output(&mut stdout, payload)
-        .expect("failed to write usage-signals command output");
-}
-
-fn write_usage_signals_command_output(
-    writer: &mut impl Write,
-    payload: &UsageSignalsCommandOutput,
-) -> io::Result<()> {
-    writeln!(writer, "Deprecated command: --usage-signals")?;
-    writeln!(writer, "Replacement: {}", payload.replacement)
 }
 
 pub(in crate::cli) fn print_site_list_command_output(payload: &SiteListCommandOutput) {
@@ -257,27 +240,4 @@ pub(in crate::cli) fn print_site_delete_command_output(payload: &SiteDeleteComma
         "Effective blocked sites: {}",
         payload.effective_blocked_sites_count
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::cli::{USAGE_SIGNALS_REPLACEMENT, UsageSignalsCommandOutput};
-
-    use super::write_usage_signals_command_output;
-
-    #[test]
-    fn usage_signals_text_output_includes_deprecation_replacement_lines() {
-        let payload = UsageSignalsCommandOutput {
-            action: "usage-signals",
-            deprecated: true,
-            replacement: USAGE_SIGNALS_REPLACEMENT,
-        };
-        let mut output = Vec::new();
-
-        write_usage_signals_command_output(&mut output, &payload).unwrap();
-
-        let text = String::from_utf8(output).unwrap();
-        assert!(text.contains("Deprecated command: --usage-signals\n"));
-        assert!(text.contains(&format!("Replacement: {}\n", USAGE_SIGNALS_REPLACEMENT)));
-    }
 }

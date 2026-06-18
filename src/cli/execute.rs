@@ -63,7 +63,7 @@ use data::{
 };
 use diagnostics::{
     execute_blocking_preview_command, execute_config_doctor_command,
-    execute_config_migrate_command, execute_diagnostics_command, execute_usage_signals_command,
+    execute_config_migrate_command, execute_diagnostics_command,
 };
 use status::execute_status_command;
 #[cfg(test)]
@@ -143,9 +143,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
             execute_diagnostics_command(cli_command.output).map_err(UserMessage::from)
         }
         CommandKind::BlockingPreview => execute_blocking_preview_command(cli_command.output),
-        CommandKind::UsageSignals => {
-            execute_usage_signals_command(cli_command.output).map_err(UserMessage::from)
-        }
         CommandKind::Status {
             watch_interval_secs,
         } => execute_status_command(cli_command.output, watch_interval_secs)
@@ -234,7 +231,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::DaemonStop => Some("daemon-stop"),
         CommandKind::SessionTemplate { .. } => Some("session-template"),
         CommandKind::HistoryDashboard { .. } => Some("history-dashboard"),
-        CommandKind::UsageSignals => None,
     }
 }
 
@@ -1023,7 +1019,10 @@ mod tests {
             }),
             Some("status")
         );
-        assert_eq!(command_usage_surface_id(&CommandKind::UsageSignals), None);
+        assert_eq!(
+            command_usage_surface_id(&CommandKind::FeatureInventory { dir: None }),
+            Some("feature-inventory")
+        );
     }
 
     #[test]

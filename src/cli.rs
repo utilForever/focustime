@@ -61,7 +61,7 @@ use output::{
     print_site_edit_command_output, print_site_list_command_output, print_status_output,
     print_strict_command_output, print_task_goal_command_output,
     print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
-    print_usage_signals_command_output, print_weekday_rules_command_output,
+    print_weekday_rules_command_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage,
@@ -236,7 +236,6 @@ Options:
 
 Retired/legacy command guidance:
   --migrate, --dry-run       Use --config-migrate to preview config migrations or --config-migrate-apply to write a migrated config with backup
-  --usage-signals            Deprecated: use --feature-inventory for cleanup reporting; raw usage-signal inspection is no longer a standalone workflow
   --sync-backup              Use --backup for local portable recovery workflows
   --sync-restore             Use --restore for local portable recovery workflows
   --sync-passphrase          No direct replacement; encrypted sync/backups are no longer supported
@@ -366,7 +365,6 @@ pub(crate) enum CommandKind {
     },
     Diagnostics,
     BlockingPreview,
-    UsageSignals,
     Status {
         watch_interval_secs: Option<u64>,
     },
@@ -463,7 +461,6 @@ enum PrimaryCommand {
     },
     Diagnostics,
     BlockingPreview,
-    UsageSignals,
     Status,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
@@ -545,7 +542,6 @@ enum ParsedToken {
     },
     Diagnostics,
     BlockingPreview,
-    UsageSignals,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
     CalendarSync,
@@ -1144,13 +1140,6 @@ struct HistoryDashboardCommandOutput {
     card_order: Vec<&'static str>,
     pinned_cards: Vec<&'static str>,
     cards: Vec<HistoryDashboardCardOutput>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct UsageSignalsCommandOutput {
-    action: &'static str,
-    deprecated: bool,
-    replacement: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
