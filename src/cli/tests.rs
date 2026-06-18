@@ -51,7 +51,7 @@ fn test_diagnostics_blocking_preview_output() -> DiagnosticsBlockingPreviewOutpu
     DiagnosticsBlockingPreviewOutput {
         status: "ok",
         error: None,
-        preview: Some(BlockingPreviewCommandOutput {
+        preview: Some(BlockingPreviewOutput {
             deprecated: false,
             replacement: None,
             backend: "hosts",
@@ -1145,15 +1145,10 @@ fn diagnostics_output_includes_deprecation_warnings() {
 }
 
 #[test]
-fn parse_blocking_preview_supports_json_mode() {
-    let parsed = parse(&["--blocking-preview", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlockingPreview,
-            output: OutputMode::Json
-        })
-    );
+fn parse_blocking_preview_reports_removed_command_guidance() {
+    let error = parse(&["--blocking-preview", "--json"]).unwrap_err();
+    assert!(error.contains("Unknown option `--blocking-preview`"));
+    assert!(error.contains("standalone blocking preview command was removed"));
 }
 
 #[test]
