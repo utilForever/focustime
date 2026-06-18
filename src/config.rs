@@ -1008,15 +1008,6 @@ impl HistoryKpiCardId {
         ]
     }
 
-    pub(crate) fn from_id(value: &str) -> Option<Self> {
-        let parsed = Self::from_config_value(value);
-        if parsed == Self::Unknown {
-            None
-        } else {
-            Some(parsed)
-        }
-    }
-
     fn from_config_value(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
             "session_summary" | "session-summary" | "sessionsummary" => Self::SessionSummary,

@@ -1,5 +1,5 @@
 use crate::cli::{
-    AutomationTriggerRuleConfig, DailyGoalConfig, HistoryKpiCardId, MonthlyGoalConfig, NaiveDate,
+    AutomationTriggerRuleConfig, DailyGoalConfig, MonthlyGoalConfig, NaiveDate,
     OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
     SiteEditValue, ThemePreset, WeekdayProfileRuleConfig, WeeklyGoalConfig,
 };
@@ -31,49 +31,6 @@ pub(in crate::cli) fn parse_theme_preset(value: &str) -> Result<ThemePreset, Str
             "Invalid theme preset `{value}`. Use `classic`, `high-contrast`, or `deuteranopia-friendly`."
         ))),
     }
-}
-
-pub(in crate::cli) fn parse_history_kpi_card_id(value: &str) -> Result<HistoryKpiCardId, String> {
-    let normalized = value.trim();
-    HistoryKpiCardId::from_id(normalized).ok_or_else(|| {
-        invalid_usage(&format!(
-            "Invalid history dashboard card `{normalized}`. Use one of: session_summary, focus_score, goal_streak, focus_risk, weekly_allocation, last_interruption, stats_growth, retention, comparison_filters."
-        ))
-    })
-}
-
-pub(in crate::cli) fn parse_history_dashboard_order_value(
-    value: &str,
-) -> Result<Vec<HistoryKpiCardId>, String> {
-    let entries: Vec<&str> = value
-        .split(',')
-        .map(str::trim)
-        .filter(|entry| !entry.is_empty())
-        .collect();
-    if entries.is_empty() {
-        return Err(invalid_usage(
-            "`--history-dashboard-order` requires a comma-separated list of KPI card IDs.",
-        ));
-    }
-    let mut order = Vec::with_capacity(entries.len());
-    for entry in entries {
-        let card = parse_history_kpi_card_id(entry)?;
-        if order.contains(&card) {
-            return Err(invalid_usage(&format!(
-                "Duplicate history dashboard card `{}` in `--history-dashboard-order`.",
-                card.id()
-            )));
-        }
-        order.push(card);
-    }
-
-    let required = HistoryKpiCardId::all();
-    if order.len() != required.len() || required.iter().any(|card| !order.contains(card)) {
-        return Err(invalid_usage(
-            "`--history-dashboard-order` must include every KPI card exactly once.",
-        ));
-    }
-    Ok(order)
 }
 
 pub(in crate::cli) fn parse_task_goal_value(

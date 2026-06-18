@@ -7,13 +7,11 @@ pub(super) use options::{
 };
 pub(super) use value::{
     parse_automation_triggers_value, parse_goal_carry_value, parse_goal_value,
-    parse_history_dashboard_order_value, parse_history_kpi_card_id, parse_monthly_goal_value,
-    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
-    parse_task_goal_value, parse_theme_preset, parse_weekday_rules_value, parse_weekly_goal_value,
+    parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
+    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_weekday_rules_value,
+    parse_weekly_goal_value,
 };
 
-#[cfg(test)]
-use crate::cli::HistoryKpiCardId;
 use crate::cli::{
     BlocklistCategoryCommandKind, BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction,
     CliCommand, CommandKind, HistoryDashboardCommandKind, OutputMode, ParsedToken, PrimaryCommand,
@@ -103,9 +101,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::SessionTemplateRename(_)
             | ParsedToken::SessionTemplateDelete
             | ParsedToken::HistoryDashboard
-            | ParsedToken::HistoryDashboardPin(_)
-            | ParsedToken::HistoryDashboardUnpin(_)
-            | ParsedToken::HistoryDashboardOrder(_)
             | ParsedToken::BlocklistSites
             | ParsedToken::AllowlistSites
             | ParsedToken::BlocklistSiteAdd(_)
@@ -359,16 +354,6 @@ pub(super) fn parse_primary_command(
             ParsedToken::HistoryDashboard => {
                 set_primary_command(&mut primary, PrimaryCommand::HistoryDashboard)?
             }
-            ParsedToken::HistoryDashboardPin(card) => {
-                set_primary_command(&mut primary, PrimaryCommand::HistoryDashboardPin(*card))?
-            }
-            ParsedToken::HistoryDashboardUnpin(card) => {
-                set_primary_command(&mut primary, PrimaryCommand::HistoryDashboardUnpin(*card))?
-            }
-            ParsedToken::HistoryDashboardOrder(order) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::HistoryDashboardOrder(order.clone()),
-            )?,
             ParsedToken::BlocklistSites => {
                 set_primary_command(&mut primary, PrimaryCommand::BlocklistSites)?
             }
@@ -706,28 +691,6 @@ pub(super) fn finalize_cli_action(
             },
             output,
         })),
-        Some(PrimaryCommand::HistoryDashboardPin(card)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::HistoryDashboard {
-                command: HistoryDashboardCommandKind::Pin { card },
-            },
-            output,
-        })),
-        Some(PrimaryCommand::HistoryDashboardUnpin(card)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::HistoryDashboard {
-                    command: HistoryDashboardCommandKind::Unpin { card },
-                },
-                output,
-            }))
-        }
-        Some(PrimaryCommand::HistoryDashboardOrder(order)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::HistoryDashboard {
-                    command: HistoryDashboardCommandKind::SetOrder { order },
-                },
-                output,
-            }))
-        }
         Some(PrimaryCommand::BlocklistSites) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::BlocklistSites {
                 target: SiteListTarget::Blocklist,
@@ -865,9 +828,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::SessionTemplateRename(_) => "--session-template-rename",
         PrimaryCommand::SessionTemplateDelete => "--session-template-delete",
         PrimaryCommand::HistoryDashboard => "--history-dashboard",
-        PrimaryCommand::HistoryDashboardPin(_) => "--history-dashboard-pin",
-        PrimaryCommand::HistoryDashboardUnpin(_) => "--history-dashboard-unpin",
-        PrimaryCommand::HistoryDashboardOrder(_) => "--history-dashboard-order",
         PrimaryCommand::BlocklistSites => "--blocklist-sites",
         PrimaryCommand::AllowlistSites => "--allowlist-sites",
         PrimaryCommand::BlocklistSiteAdd(_) => "--blocklist-site-add",
@@ -883,6 +843,3 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
 pub(super) fn invalid_usage(message: &str) -> String {
     format!("{message}\n\n{USAGE_TEXT}")
 }
-
-#[cfg(test)]
-mod tests;

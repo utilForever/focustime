@@ -1467,64 +1467,24 @@ fn parse_history_dashboard_without_value_reads_dashboard_state() {
 }
 
 #[test]
-fn parse_history_dashboard_pin_with_value_sets_card() {
-    let parsed = parse(&["--history-dashboard-pin", "focus_score"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::HistoryDashboard {
-                command: HistoryDashboardCommandKind::Pin {
-                    card: HistoryKpiCardId::FocusScore
-                }
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_retired_history_dashboard_customization_flags() {
+    for values in [
+        &["--history-dashboard-pin", "focus_score"][..],
+        &["--history-dashboard-unpin=goal_streak"][..],
+        &["--history-dashboard-order=focus_score,goal_streak"][..],
+    ] {
+        let error = parse(values).unwrap_err();
+        assert!(error.contains("Unknown option `"));
+        assert!(error.contains("--history-dashboard"));
+    }
 }
 
 #[test]
-fn parse_history_dashboard_unpin_with_equals_sets_card() {
-    let parsed = parse(&["--history-dashboard-unpin=goal_streak"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::HistoryDashboard {
-                command: HistoryDashboardCommandKind::Unpin {
-                    card: HistoryKpiCardId::GoalStreak
-                }
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_history_dashboard_order_sets_complete_order() {
-    let parsed = parse(&[
-        "--history-dashboard-order=focus_score,goal_streak,session_summary,focus_risk,weekly_allocation,last_interruption,stats_growth,retention,comparison_filters",
-    ])
-    .unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::HistoryDashboard {
-                command: HistoryDashboardCommandKind::SetOrder {
-                    order: vec![
-                        HistoryKpiCardId::FocusScore,
-                        HistoryKpiCardId::GoalStreak,
-                        HistoryKpiCardId::SessionSummary,
-                        HistoryKpiCardId::FocusRisk,
-                        HistoryKpiCardId::WeeklyAllocation,
-                        HistoryKpiCardId::LastInterruption,
-                        HistoryKpiCardId::StatsGrowth,
-                        HistoryKpiCardId::Retention,
-                        HistoryKpiCardId::ComparisonFilters
-                    ]
-                }
-            },
-            output: OutputMode::Text
-        })
-    );
+fn usage_text_omits_retired_history_dashboard_customization_flags() {
+    assert!(!USAGE_TEXT.contains("--history-dashboard-pin"));
+    assert!(!USAGE_TEXT.contains("--history-dashboard-unpin"));
+    assert!(!USAGE_TEXT.contains("--history-dashboard-order"));
+    assert!(USAGE_TEXT.contains("--history-dashboard [--json]"));
 }
 
 #[test]
@@ -1851,35 +1811,14 @@ fn classify_key_value_arg_accepts_session_template_rename_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_history_dashboard_pin_equals_value() {
-    let parsed = classify_key_value_arg("--history-dashboard-pin=focus_score").unwrap();
+fn classify_key_value_arg_ignores_retired_history_dashboard_customization() {
     assert_eq!(
-        parsed,
-        Some(ParsedToken::HistoryDashboardPin(
-            HistoryKpiCardId::FocusScore
-        ))
+        classify_key_value_arg("--history-dashboard-pin=focus_score").unwrap(),
+        None
     );
-}
-
-#[test]
-fn classify_key_value_arg_accepts_history_dashboard_order_equals_value() {
-    let parsed = classify_key_value_arg(
-        "--history-dashboard-order=focus_score,goal_streak,session_summary,focus_risk,weekly_allocation,last_interruption,stats_growth,retention,comparison_filters",
-    )
-    .unwrap();
     assert_eq!(
-        parsed,
-        Some(ParsedToken::HistoryDashboardOrder(vec![
-            HistoryKpiCardId::FocusScore,
-            HistoryKpiCardId::GoalStreak,
-            HistoryKpiCardId::SessionSummary,
-            HistoryKpiCardId::FocusRisk,
-            HistoryKpiCardId::WeeklyAllocation,
-            HistoryKpiCardId::LastInterruption,
-            HistoryKpiCardId::StatsGrowth,
-            HistoryKpiCardId::Retention,
-            HistoryKpiCardId::ComparisonFilters
-        ]))
+        classify_key_value_arg("--history-dashboard-order=focus_score,goal_streak").unwrap(),
+        None
     );
 }
 
@@ -2115,18 +2054,6 @@ fn parse_rejects_session_template_create_without_value() {
 fn parse_rejects_session_template_rename_without_value() {
     let error = parse(&["--session-template-rename"]).unwrap_err();
     assert!(error.contains("`--session-template-rename` requires a template name"));
-}
-
-#[test]
-fn parse_rejects_history_dashboard_pin_without_value() {
-    let error = parse(&["--history-dashboard-pin"]).unwrap_err();
-    assert!(error.contains("`--history-dashboard-pin` requires a card ID"));
-}
-
-#[test]
-fn parse_rejects_history_dashboard_order_without_full_catalog() {
-    let error = parse(&["--history-dashboard-order=focus_score,goal_streak"]).unwrap_err();
-    assert!(error.contains("must include every KPI card exactly once"));
 }
 
 #[test]
@@ -2557,7 +2484,7 @@ fn apply_blocklist_profile_delete_switches_selection() {
 }
 
 #[test]
-fn apply_history_dashboard_pin_is_deprecated_and_keeps_default_layout() {
+fn apply_history_dashboard_show_uses_stable_default_layout() {
     let mut config = AppConfig {
         history_dashboard: crate::config::HistoryDashboardConfig {
             card_order: vec![
@@ -2577,101 +2504,20 @@ fn apply_history_dashboard_pin_is_deprecated_and_keeps_default_layout() {
     }
     .normalized();
 
-    let payload = apply_history_dashboard_command(
-        &mut config,
-        HistoryDashboardCommandKind::Pin {
-            card: HistoryKpiCardId::FocusScore,
-        },
-    )
-    .unwrap();
+    let payload =
+        apply_history_dashboard_command(&mut config, HistoryDashboardCommandKind::Show).unwrap();
 
-    assert!(!payload.updated);
-    assert!(payload.deprecated);
-    assert!(payload.replacement.contains("stable default KPI layout"));
+    assert_eq!(payload.action, "history-dashboard");
     assert_eq!(
         config.history_dashboard,
         crate::config::HistoryDashboardConfig::default()
     );
     assert_eq!(
-        payload.card_order,
-        HistoryKpiCardId::all().map(|card| card.id())
-    );
-}
-
-#[test]
-fn apply_history_dashboard_unpin_is_deprecated_without_error() {
-    let mut config = AppConfig {
-        history_dashboard: crate::config::HistoryDashboardConfig {
-            card_order: HistoryKpiCardId::all().to_vec(),
-            pinned_cards: vec![HistoryKpiCardId::SessionSummary],
-        },
-        ..AppConfig::default()
-    }
-    .normalized();
-
-    let payload = apply_history_dashboard_command(
-        &mut config,
-        HistoryDashboardCommandKind::Unpin {
-            card: HistoryKpiCardId::SessionSummary,
-        },
-    )
-    .unwrap();
-
-    assert!(!payload.updated);
-    assert!(payload.deprecated);
-    assert_eq!(payload.action, "history-dashboard-unpin");
-    assert_eq!(
-        payload.pinned_cards,
-        HistoryKpiCardId::all().map(|card| card.id())
-    );
-}
-
-#[test]
-fn apply_history_dashboard_order_is_deprecated_and_keeps_default_layout() {
-    let mut config = AppConfig {
-        history_dashboard: crate::config::HistoryDashboardConfig {
-            card_order: vec![
-                HistoryKpiCardId::GoalStreak,
-                HistoryKpiCardId::FocusScore,
-                HistoryKpiCardId::SessionSummary,
-                HistoryKpiCardId::FocusRisk,
-                HistoryKpiCardId::WeeklyAllocation,
-                HistoryKpiCardId::LastInterruption,
-                HistoryKpiCardId::StatsGrowth,
-                HistoryKpiCardId::Retention,
-                HistoryKpiCardId::ComparisonFilters,
-            ],
-            pinned_cards: vec![HistoryKpiCardId::GoalStreak],
-        },
-        ..AppConfig::default()
-    }
-    .normalized();
-
-    let payload = apply_history_dashboard_command(
-        &mut config,
-        HistoryDashboardCommandKind::SetOrder {
-            order: vec![
-                HistoryKpiCardId::GoalStreak,
-                HistoryKpiCardId::FocusScore,
-                HistoryKpiCardId::SessionSummary,
-                HistoryKpiCardId::FocusRisk,
-                HistoryKpiCardId::WeeklyAllocation,
-                HistoryKpiCardId::LastInterruption,
-                HistoryKpiCardId::StatsGrowth,
-                HistoryKpiCardId::Retention,
-                HistoryKpiCardId::ComparisonFilters,
-            ],
-        },
-    )
-    .unwrap();
-
-    assert!(!payload.updated);
-    assert!(payload.deprecated);
-    assert_eq!(payload.action, "history-dashboard-order");
-    assert_eq!(config.history_dashboard.card_order, HistoryKpiCardId::all());
-    assert_eq!(
-        payload.card_order,
-        HistoryKpiCardId::all().map(|card| card.id())
+        payload.cards.iter().map(|card| card.id).collect::<Vec<_>>(),
+        HistoryKpiCardId::all()
+            .iter()
+            .map(|card| card.id())
+            .collect::<Vec<_>>()
     );
 }
 
