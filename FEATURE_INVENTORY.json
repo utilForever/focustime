@@ -68,7 +68,6 @@
       "--automation-triggers",
       "--automation-triggers-set",
       "--backup",
-      "--blocking-preview",
       "--blocklist-category",
       "--blocklist-category-create",
       "--blocklist-category-delete",
@@ -355,8 +354,7 @@
       "surface": "blocker",
       "description": "Preview effective blocker resolution through diagnostics and inspect command/backend actions.",
       "cli_flags": [
-        "--diagnostics",
-        "--blocking-preview"
+        "--diagnostics"
       ],
       "value": 3,
       "complexity": 2,

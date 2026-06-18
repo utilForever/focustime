@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Blocking preview command removal (#492):** removed the standalone `--blocking-preview` CLI surface while keeping backend-selected preview details available from `--diagnostics` text and JSON output.
 - **Focus History dashboard command retirement (#491):** removed deprecated dashboard pin, unpin, and order CLI command paths, kept `--history-dashboard` focused on the stable default KPI layout, and simplified dashboard JSON/text output to omit compatibility-only customization fields.
 
 ## [0.15.6] - 2026-06-15
