@@ -46,11 +46,10 @@ use execute::{
     apply_site_delete_command, apply_site_edit_command,
 };
 use output::{
-    build_blocking_preview_command_output, build_diagnostics_blocking_preview_error,
-    build_diagnostics_blocking_preview_output, build_diagnostics_command_output,
-    build_schedule_inspection_output, display_input_value, effective_blocked_sites_for_profile,
-    flush_stdout, print_automation_triggers_command_output, print_backup_output,
-    print_blocking_preview_command_output, print_blocklist_category_command_output,
+    build_diagnostics_blocking_preview_error, build_diagnostics_blocking_preview_output,
+    build_diagnostics_command_output, build_schedule_inspection_output, display_input_value,
+    effective_blocked_sites_for_profile, flush_stdout, print_automation_triggers_command_output,
+    print_backup_output, print_blocklist_category_command_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
     print_calendar_sync_command_output, print_config_doctor_output, print_config_migration_output,
     print_daemon_start_command_output, print_daemon_status_command_output,
@@ -148,7 +147,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --config-migrate [--json]
   focustime --config-migrate-apply [--json]
   focustime --diagnostics [--json]
-  focustime --blocking-preview [--json]
   focustime --status [--watch[=SECONDS]] [--json]
   focustime --backup[=DIR] [--json]
   focustime --restore[=DIR] [--json]
@@ -215,7 +213,6 @@ Options:
   --config-migrate  Preview config migration assistant changes for deprecated/renamed keys
   --config-migrate-apply  Apply config migration assistant changes and write migrated config.toml
   --diagnostics   Show setup diagnostics, blocking preview details, config health, and migration guidance
-  --blocking-preview  Deprecated: use --diagnostics to preview backend-selected blocking changes without writing
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
   --compare-by    Deprecated: use --export for productivity comparison rows
@@ -240,6 +237,8 @@ Retired/legacy command guidance:
 
 const USAGE_SIGNALS_REPLACEMENT: &str = "Use `focustime --feature-inventory` for cleanup reporting; raw usage-signal inspection is no longer a standalone workflow.";
 const BLOCKLIST_CATEGORY_REPLACEMENT: &str = "Manage blocklist and allowlist hostnames directly on blocklist profiles with `--blocklist-profile`, `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; categories remain a compatibility grouping only.";
+const BLOCKING_PREVIEW_REPLACEMENT: &str =
+    "Use `focustime --diagnostics` for blocking preview details plus setup/config health.";
 const CALENDAR_SYNC_REPLACEMENT: &str = "Calendar sync is now a narrow opt-in schedule annotation cache. Keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data, and use `focustime --diagnostics` to review setup/config guidance.";
 const STATUS_COMPARISON_REPLACEMENT: &str = "Status comparison slicing was retired from `--status`. Use `focustime --export` for productivity comparison rows, or the Focus History report/dashboard for interactive comparison filters.";
 const DAEMON_API_REPLACEMENT: &str = "Use CLI timer, session, and workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions.";
@@ -359,7 +358,6 @@ pub(crate) enum CommandKind {
         apply: bool,
     },
     Diagnostics,
-    BlockingPreview,
     Status {
         watch_interval_secs: Option<u64>,
     },
@@ -455,7 +453,6 @@ enum PrimaryCommand {
         apply: bool,
     },
     Diagnostics,
-    BlockingPreview,
     Status,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
@@ -533,7 +530,6 @@ enum ParsedToken {
         apply: bool,
     },
     Diagnostics,
-    BlockingPreview,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
     CalendarSync,
@@ -1031,7 +1027,7 @@ struct DiagnosticsCommandOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct BlockingPreviewCommandOutput {
+struct BlockingPreviewOutput {
     deprecated: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     replacement: Option<&'static str>,
@@ -1053,7 +1049,7 @@ struct DiagnosticsBlockingPreviewOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    preview: Option<BlockingPreviewCommandOutput>,
+    preview: Option<BlockingPreviewOutput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

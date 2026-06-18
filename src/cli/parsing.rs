@@ -13,10 +13,10 @@ pub(super) use value::{
 };
 
 use crate::cli::{
-    BlocklistCategoryCommandKind, BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction,
-    CliCommand, CommandKind, HistoryDashboardCommandKind, OutputMode, ParsedToken, PrimaryCommand,
-    STATUS_COMPARISON_REPLACEMENT, SessionTemplateCommandKind, SiteListTarget,
-    USAGE_SIGNALS_REPLACEMENT, USAGE_TEXT,
+    BLOCKING_PREVIEW_REPLACEMENT, BlocklistCategoryCommandKind, BlocklistProfileCommandKind,
+    BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind, HistoryDashboardCommandKind,
+    OutputMode, ParsedToken, PrimaryCommand, STATUS_COMPARISON_REPLACEMENT,
+    SessionTemplateCommandKind, SiteListTarget, USAGE_SIGNALS_REPLACEMENT, USAGE_TEXT,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -82,7 +82,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::ConfigMigrate { .. }
             | ParsedToken::Diagnostics
             | ParsedToken::CalendarSync
-            | ParsedToken::BlockingPreview
             | ParsedToken::Backup(_)
             | ParsedToken::Restore(_)
             | ParsedToken::Export(_)
@@ -177,6 +176,10 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
         "--usage-signals" => Some(RemovedOptionGuidance {
             summary: "This standalone usage-signal command was removed.",
             replacement: USAGE_SIGNALS_REPLACEMENT,
+        }),
+        "--blocking-preview" => Some(RemovedOptionGuidance {
+            summary: "This standalone blocking preview command was removed.",
+            replacement: BLOCKING_PREVIEW_REPLACEMENT,
         }),
         _ => None,
     }
@@ -287,9 +290,6 @@ pub(super) fn parse_primary_command(
             }
             ParsedToken::CalendarSync => {
                 set_primary_command(&mut primary, PrimaryCommand::CalendarSync)?
-            }
-            ParsedToken::BlockingPreview => {
-                set_primary_command(&mut primary, PrimaryCommand::BlockingPreview)?
             }
             ParsedToken::Backup(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Backup(dir.clone()))?
@@ -529,10 +529,6 @@ pub(super) fn finalize_cli_action(
         })),
         Some(PrimaryCommand::Diagnostics) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Diagnostics,
-            output,
-        })),
-        Some(PrimaryCommand::BlockingPreview) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlockingPreview,
             output,
         })),
         Some(PrimaryCommand::Pause) => Ok(CliAction::RunCommand(CliCommand {
@@ -808,7 +804,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::ConfigMigrate { apply: true } => "--config-migrate-apply",
         PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::CalendarSync => "--calendar-sync",
-        PrimaryCommand::BlockingPreview => "--blocking-preview",
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Backup(_) => "--backup",
         PrimaryCommand::Restore(_) => "--restore",
