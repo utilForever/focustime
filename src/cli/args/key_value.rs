@@ -1,14 +1,13 @@
 use crate::cli::{
     KeyValueParser, ParsedToken, PathBuf, parse_automation_triggers_value, parse_daemon_port,
-    parse_goal_carry_value, parse_goal_value, parse_history_dashboard_order_value,
-    parse_history_kpi_card_id, parse_monthly_goal_value, parse_profile_id, parse_schedule_value,
-    parse_site_edit_value, parse_strict_value, parse_task_goal_value, parse_theme_preset,
-    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
-    require_nonempty_key_value,
+    parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_profile_id,
+    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
+    parse_theme_preset, parse_watch_interval_secs, parse_weekday_rules_value,
+    parse_weekly_goal_value, require_nonempty_key_value,
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 47] = [
+    let parsers: [KeyValueParser; 44] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -46,9 +45,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_session_template_apply_key_value_arg,
         parse_session_template_create_key_value_arg,
         parse_session_template_rename_key_value_arg,
-        parse_history_dashboard_pin_key_value_arg,
-        parse_history_dashboard_unpin_key_value_arg,
-        parse_history_dashboard_order_key_value_arg,
         parse_blocklist_site_add_key_value_arg,
         parse_allowlist_site_add_key_value_arg,
         parse_allowlist_site_add_temporary_key_value_arg,
@@ -456,41 +452,6 @@ fn parse_session_template_rename_key_value_arg(arg: &str) -> Result<Option<Parse
         let value =
             require_nonempty_key_value(value, "`--session-template-rename=` requires a name.")?;
         return Ok(Some(ParsedToken::SessionTemplateRename(value.to_string())));
-    }
-    Ok(None)
-}
-
-fn parse_history_dashboard_pin_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--history-dashboard-pin=") {
-        let value =
-            require_nonempty_key_value(value, "`--history-dashboard-pin=` requires a card ID.")?;
-        return Ok(Some(ParsedToken::HistoryDashboardPin(
-            parse_history_kpi_card_id(value)?,
-        )));
-    }
-    Ok(None)
-}
-
-fn parse_history_dashboard_unpin_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--history-dashboard-unpin=") {
-        let value =
-            require_nonempty_key_value(value, "`--history-dashboard-unpin=` requires a card ID.")?;
-        return Ok(Some(ParsedToken::HistoryDashboardUnpin(
-            parse_history_kpi_card_id(value)?,
-        )));
-    }
-    Ok(None)
-}
-
-fn parse_history_dashboard_order_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--history-dashboard-order=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--history-dashboard-order=` requires a comma-separated card ID list.",
-        )?;
-        return Ok(Some(ParsedToken::HistoryDashboardOrder(
-            parse_history_dashboard_order_value(value)?,
-        )));
     }
     Ok(None)
 }

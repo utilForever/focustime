@@ -60,7 +60,7 @@
 | `temporary-allowlist-overrides` | Blocker | 3 | 3.60 | 0.83 | merge | --allowlist-site-add-temporary |
 | `backup-and-restore-workflows` | Stats | 4 | 4.25 | 0.94 | merge | --backup, --restore |
 | `feature-inventory-reporting` | Stats | 4 | 2.00 | 2.00 | keep | --feature-inventory |
-| `history-dashboard-curation` | Stats | 4 | 2.75 | 1.45 | keep | --history-dashboard, --history-dashboard-pin, --history-dashboard-unpin, --history-dashboard-order |
+| `history-dashboard-curation` | Stats | 4 | 2.75 | 1.45 | keep | --history-dashboard |
 | `stats-export-artifacts` | Stats | 4 | 2.65 | 1.51 | keep | --export |
 | `status-comparison-slicing` | Stats | 1 | 2.00 | 0.50 | merge | --compare-by, --compare-task, --compare-profile, --compare-time, --compare-limit |
 | `status-snapshot-and-streaming` | Stats | 5 | 3.65 | 1.37 | keep | --status, --watch |

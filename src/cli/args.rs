@@ -5,9 +5,8 @@ pub(super) use key_value::classify_key_value_arg;
 use crate::cli::{
     OsString, OutputMode, ParsedToken, PathBuf, ValueArgParser, invalid_usage,
     parse_automation_triggers_value, parse_daemon_port, parse_goal_carry_value, parse_goal_value,
-    parse_history_dashboard_order_value, parse_history_kpi_card_id, parse_monthly_goal_value,
-    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
-    parse_task_goal_value, parse_theme_preset, parse_watch_interval_secs,
+    parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
+    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_watch_interval_secs,
     parse_weekday_rules_value, parse_weekly_goal_value, require_nonempty_key_value,
 };
 
@@ -60,7 +59,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 47] = [
+    let parsers: [(&str, ValueArgParser); 44] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -121,18 +120,6 @@ fn classify_value_arg(
         (
             "--session-template-rename",
             classify_session_template_rename_arg,
-        ),
-        (
-            "--history-dashboard-pin",
-            classify_history_dashboard_pin_arg,
-        ),
-        (
-            "--history-dashboard-unpin",
-            classify_history_dashboard_unpin_arg,
-        ),
-        (
-            "--history-dashboard-order",
-            classify_history_dashboard_order_arg,
         ),
         ("--blocklist-site-add", classify_blocklist_site_add_arg),
         ("--allowlist-site-add", classify_allowlist_site_add_arg),
@@ -597,65 +584,6 @@ fn classify_session_template_rename_arg(
     }
     Err(invalid_usage(
         "`--session-template-rename` requires a template name. Use `--session-template-rename=NAME` or `--session-template-rename NAME`.",
-    ))
-}
-
-fn classify_history_dashboard_pin_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--history-dashboard-pin` requires a card ID.")?;
-        return Ok((
-            ParsedToken::HistoryDashboardPin(parse_history_kpi_card_id(value)?),
-            2,
-        ));
-    }
-    Err(invalid_usage(
-        "`--history-dashboard-pin` requires a card ID. Use `--history-dashboard-pin=CARD_ID` or `--history-dashboard-pin CARD_ID`.",
-    ))
-}
-
-fn classify_history_dashboard_unpin_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--history-dashboard-unpin` requires a card ID.")?;
-        return Ok((
-            ParsedToken::HistoryDashboardUnpin(parse_history_kpi_card_id(value)?),
-            2,
-        ));
-    }
-    Err(invalid_usage(
-        "`--history-dashboard-unpin` requires a card ID. Use `--history-dashboard-unpin=CARD_ID` or `--history-dashboard-unpin CARD_ID`.",
-    ))
-}
-
-fn classify_history_dashboard_order_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(
-            next,
-            "`--history-dashboard-order` requires a comma-separated card ID list.",
-        )?;
-        return Ok((
-            ParsedToken::HistoryDashboardOrder(parse_history_dashboard_order_value(value)?),
-            2,
-        ));
-    }
-    Err(invalid_usage(
-        "`--history-dashboard-order` requires a comma-separated card ID list. Use `--history-dashboard-order=id1,id2,...`.",
     ))
 }
 

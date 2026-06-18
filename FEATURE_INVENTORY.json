@@ -108,9 +108,6 @@
       "--goal-monthly",
       "--goal-weekly",
       "--history-dashboard",
-      "--history-dashboard-order",
-      "--history-dashboard-pin",
-      "--history-dashboard-unpin",
       "--migrate",
       "--next",
       "--pause",
@@ -483,12 +480,9 @@
       "feature_id": "history-dashboard-curation",
       "name": "History dashboard curation",
       "surface": "stats",
-      "description": "Deprecated history dashboard pin, unpin, and reorder compatibility commands; Focus History uses a stable default KPI layout.",
+      "description": "Focus History uses a stable default KPI layout exposed through the history dashboard command.",
       "cli_flags": [
-        "--history-dashboard",
-        "--history-dashboard-pin",
-        "--history-dashboard-unpin",
-        "--history-dashboard-order"
+        "--history-dashboard"
       ],
       "value": 4,
       "complexity": 3,

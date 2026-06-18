@@ -11,11 +11,13 @@ use serde::Serialize;
 use crate::app::App;
 use crate::app::{SetupCheck, SetupCheckLevel, SetupDiagnostics};
 use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, SiteBlocker};
+#[cfg(test)]
+use crate::config::HistoryKpiCardId;
 use crate::config::{
     AppConfig, AutomationTriggerRuleConfig, BlocklistProfileConfig, ConfigDoctorReport,
-    ConfigMigrationReport, CustomProfileConfig, DailyGoalConfig, HistoryKpiCardId,
-    MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, ThemePreset, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    ConfigMigrationReport, CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig,
+    OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
+    ThemePreset, WeekdayProfileRuleConfig, WeeklyGoalConfig,
 };
 use crate::error::UserMessage;
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
@@ -66,8 +68,7 @@ use output::{
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage,
     parse_automation_triggers_value, parse_daemon_port, parse_daemon_port_option,
-    parse_global_tokens, parse_goal_carry_value, parse_goal_value,
-    parse_history_dashboard_order_value, parse_history_kpi_card_id, parse_monthly_goal_value,
+    parse_global_tokens, parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value,
     parse_primary_command, parse_profile_id, parse_schedule_value, parse_site_edit_value,
     parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
     parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
@@ -131,9 +132,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --session-template-rename=TEMPLATE_NAME [--json]
   focustime --session-template-delete [--json]
   focustime --history-dashboard [--json]
-  focustime --history-dashboard-pin=CARD_ID [--json]      (deprecated)
-  focustime --history-dashboard-unpin=CARD_ID [--json]    (deprecated)
-  focustime --history-dashboard-order=CARD_IDS [--json]   (deprecated)
   focustime --blocklist-sites [--json]
   focustime --allowlist-sites [--json]
   focustime --blocklist-site-add=HOSTNAMES [--json]
@@ -200,9 +198,6 @@ Options:
   --session-template-rename  Rename the active session template
   --session-template-delete  Delete the active session template
   --history-dashboard       Show the stable default KPI dashboard layout
-  --history-dashboard-pin   Deprecated: Focus History uses the stable default KPI layout
-  --history-dashboard-unpin Deprecated: Focus History uses the stable default KPI layout
-  --history-dashboard-order Deprecated: Focus History uses the stable default KPI layout
   --blocklist-sites           List blocklist sites for the active blocklist profile
   --allowlist-sites           List allowlist sites for the active blocklist profile
   --blocklist-site-add        Add/import blocklist hostnames for the active blocklist profile
@@ -481,9 +476,6 @@ enum PrimaryCommand {
     SessionTemplateRename(String),
     SessionTemplateDelete,
     HistoryDashboard,
-    HistoryDashboardPin(HistoryKpiCardId),
-    HistoryDashboardUnpin(HistoryKpiCardId),
-    HistoryDashboardOrder(Vec<HistoryKpiCardId>),
     BlocklistSites,
     AllowlistSites,
     BlocklistSiteAdd(String),
@@ -561,9 +553,6 @@ enum ParsedToken {
     SessionTemplateRename(String),
     SessionTemplateDelete,
     HistoryDashboard,
-    HistoryDashboardPin(HistoryKpiCardId),
-    HistoryDashboardUnpin(HistoryKpiCardId),
-    HistoryDashboardOrder(Vec<HistoryKpiCardId>),
     BlocklistSites,
     AllowlistSites,
     BlocklistSiteAdd(String),
@@ -638,9 +627,6 @@ pub(crate) enum SessionTemplateCommandKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HistoryDashboardCommandKind {
     Show,
-    Pin { card: HistoryKpiCardId },
-    Unpin { card: HistoryKpiCardId },
-    SetOrder { order: Vec<HistoryKpiCardId> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1128,17 +1114,11 @@ struct SessionTemplateCommandOutput {
 struct HistoryDashboardCardOutput {
     id: &'static str,
     label: &'static str,
-    pinned: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct HistoryDashboardCommandOutput {
     action: &'static str,
-    deprecated: bool,
-    replacement: &'static str,
-    updated: bool,
-    card_order: Vec<&'static str>,
-    pinned_cards: Vec<&'static str>,
     cards: Vec<HistoryDashboardCardOutput>,
 }
 

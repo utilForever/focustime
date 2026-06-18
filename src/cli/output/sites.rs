@@ -95,14 +95,13 @@ pub(in crate::cli) fn print_session_template_command_output(
 pub(in crate::cli) fn print_history_dashboard_command_output(
     payload: &HistoryDashboardCommandOutput,
 ) {
-    if payload.updated {
-        println!("History dashboard updated.");
-    }
-    if payload.deprecated {
-        println!("Deprecated command: --{}", payload.action);
-        println!("Replacement: {}", payload.replacement);
-    }
-    println!("Default KPI layout: {}", payload.card_order.join(", "));
+    let card_order = payload
+        .cards
+        .iter()
+        .map(|card| card.id)
+        .collect::<Vec<_>>()
+        .join(", ");
+    println!("Default KPI layout: {card_order}");
     if payload.cards.is_empty() {
         println!("Cards: none");
         return;
