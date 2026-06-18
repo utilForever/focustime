@@ -9,7 +9,7 @@ use serde::Serialize;
 pub(crate) const FEATURE_INVENTORY_JSON_FILE_NAME: &str = "FEATURE_INVENTORY.json";
 pub(crate) const FEATURE_INVENTORY_MARKDOWN_FILE_NAME: &str = "FEATURE_INVENTORY.md";
 
-const SCHEMA_VERSION: u8 = 5;
+const SCHEMA_VERSION: u8 = 6;
 const COMPLEXITY_WEIGHT: f64 = 0.40;
 const SUPPORT_BURDEN_WEIGHT: f64 = 0.35;
 const FAILURE_IMPACT_WEIGHT: f64 = 0.25;
@@ -129,7 +129,6 @@ pub(crate) struct SurfaceSummary {
 pub(crate) struct UsageSignalCleanupSupport {
     pub(crate) retained_dimensions: Vec<&'static str>,
     pub(crate) retained_summary_fields: Vec<&'static str>,
-    pub(crate) deprecated_cli_flag: &'static str,
     pub(crate) replacement_cli_flag: &'static str,
 }
 
@@ -433,7 +432,7 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         name: "Usage signal cleanup support",
         surface: FeatureSurface::Stats,
         description: "Keep command and screen frequency summaries available as internal inputs for feature cleanup and inventory decisions.",
-        cli_flags: &["--usage-signals"],
+        cli_flags: &[],
         value: 3,
         complexity: 2,
         support_burden: 1,
@@ -592,7 +591,6 @@ fn build_usage_signal_cleanup_support() -> UsageSignalCleanupSupport {
     UsageSignalCleanupSupport {
         retained_dimensions: vec!["commands", "screens"],
         retained_summary_fields: vec!["total_events", "unique_surfaces", "top", "rare"],
-        deprecated_cli_flag: "--usage-signals",
         replacement_cli_flag: "--feature-inventory",
     }
 }
@@ -683,10 +681,7 @@ pub(crate) fn render_markdown_report(report: &FeatureInventoryReport) -> String 
         "- Usage-signal summary fields retained: {}\n",
         cleanup.retained_summary_fields.join(", ")
     ));
-    markdown.push_str(&format!(
-        "- Deprecated standalone access: `{}`\n",
-        cleanup.deprecated_cli_flag
-    ));
+    markdown.push_str("- Standalone usage-signal CLI access: removed\n");
     markdown.push_str(&format!(
         "- Supported reporting workflow: `{}`\n\n",
         cleanup.replacement_cli_flag
@@ -884,7 +879,7 @@ mod tests {
 
     #[test]
     fn schema_version_tracks_rubric_contract() {
-        assert_eq!(SCHEMA_VERSION, 5);
+        assert_eq!(SCHEMA_VERSION, 6);
     }
 
     #[test]

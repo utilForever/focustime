@@ -101,50 +101,6 @@ fn parse_status_supports_json_mode() {
 }
 
 #[test]
-fn parse_usage_signals_supports_text_mode() {
-    let parsed = parse(&["--usage-signals"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::UsageSignals,
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_usage_signals_supports_json_mode() {
-    let parsed = parse(&["--usage-signals", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::UsageSignals,
-            output: OutputMode::Json
-        })
-    );
-}
-
-#[test]
-fn usage_signals_json_emits_deprecated_replacement_payload() {
-    let payload = UsageSignalsCommandOutput {
-        action: "usage-signals",
-        deprecated: true,
-        replacement: USAGE_SIGNALS_REPLACEMENT,
-    };
-
-    assert_eq!(payload.action, "usage-signals");
-    assert!(payload.deprecated);
-    assert_eq!(
-        payload.replacement,
-        "Use `focustime --feature-inventory` for cleanup reporting; raw usage-signal inspection is no longer a standalone workflow."
-    );
-    let json = serde_json::to_value(&payload).unwrap();
-    assert_eq!(json["deprecated"], true);
-    assert_eq!(json["replacement"], payload.replacement);
-    assert!(json.get("summary").is_none());
-}
-
-#[test]
 fn blocklist_category_json_emits_deprecated_replacement_payload() {
     let payload = BlocklistCategoryCommandOutput {
         action: "blocklist-category",
@@ -2328,6 +2284,12 @@ fn parse_rejects_removed_dry_run_option() {
 }
 
 #[test]
+fn parse_rejects_removed_usage_signals_option() {
+    let error = parse(&["--usage-signals"]).unwrap_err();
+    assert!(error.contains("Unknown option `--usage-signals`"));
+}
+
+#[test]
 fn parse_rejects_removed_sync_backup_option() {
     let error = parse(&["--sync-backup"]).unwrap_err();
     assert!(error.contains("Unknown option `--sync-backup`"));
@@ -2397,6 +2359,17 @@ fn parse_with_contract_adds_replacement_hint_for_removed_options() {
         error.hint.as_deref(),
         Some("Use `--restore` for local portable recovery workflows.")
     );
+}
+
+#[test]
+fn parse_with_contract_adds_feature_inventory_hint_for_removed_usage_signals() {
+    let error = parse_with_contract(&["--usage-signals", "--json"]).unwrap_err();
+    assert_eq!(error.kind, CliErrorKind::Usage);
+    assert_eq!(error.output, OutputMode::Json);
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert_eq!(error.code, "cli.usage");
+    assert!(error.message.contains("Unknown option `--usage-signals`"));
+    assert_eq!(error.hint.as_deref(), Some(USAGE_SIGNALS_REPLACEMENT));
 }
 
 #[test]

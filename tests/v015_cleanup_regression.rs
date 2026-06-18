@@ -252,6 +252,7 @@ fn v015_removed_command_paths_keep_targeted_json_guidance() {
     for (flag, replacement) in [
         ("--migrate", "--config-migrate"),
         ("--dry-run", "--config-migrate"),
+        ("--usage-signals", "--feature-inventory"),
         ("--sync-backup", "--backup"),
         ("--sync-restore", "--restore"),
         ("--sync-passphrase=secret", "no direct replacement"),
@@ -287,13 +288,24 @@ fn v015_removed_command_paths_keep_targeted_json_guidance() {
 fn v015_removed_command_text_errors_keep_the_same_replacement_guidance() {
     let env = TestEnv::new("removed-commands-text");
 
-    let output = env.run(&["--sync-backup"]);
+    for (flag, expected_hint) in [
+        (
+            "--sync-backup",
+            "Hint: Use `--backup` for local portable recovery workflows.",
+        ),
+        (
+            "--usage-signals",
+            "Hint: Use `focustime --feature-inventory` for cleanup reporting;",
+        ),
+    ] {
+        let output = env.run(&[flag]);
 
-    assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
-    let stderr = stderr_text(&output);
-    assert!(stderr.contains("Unknown option `--sync-backup`"));
-    assert!(stderr.contains("Hint: Use `--backup` for local portable recovery workflows."));
+        assert_eq!(output.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
+        let stderr = stderr_text(&output);
+        assert!(stderr.contains(&format!("Unknown option `{flag}`")));
+        assert!(stderr.contains(expected_hint));
+    }
 }
 
 fn focustime_bin_path() -> PathBuf {

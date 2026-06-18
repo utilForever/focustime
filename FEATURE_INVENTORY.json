@@ -1,5 +1,5 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "scoring_model": {
     "score_min": 1,
     "score_max": 5,
@@ -136,7 +136,6 @@
       "--task-goal",
       "--task-note",
       "--theme",
-      "--usage-signals",
       "--watch",
       "--weekday-rules",
       "--weekday-rules-set"
@@ -153,7 +152,6 @@
       "top",
       "rare"
     ],
-    "deprecated_cli_flag": "--usage-signals",
     "replacement_cli_flag": "--feature-inventory"
   },
   "features": [
@@ -558,9 +556,7 @@
       "name": "Usage signal cleanup support",
       "surface": "stats",
       "description": "Keep command and screen frequency summaries available as internal inputs for feature cleanup and inventory decisions.",
-      "cli_flags": [
-        "--usage-signals"
-      ],
+      "cli_flags": [],
       "value": 3,
       "complexity": 2,
       "support_burden": 1,

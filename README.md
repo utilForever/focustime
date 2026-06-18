@@ -229,10 +229,6 @@ cargo run -- --config-migrate-apply --json
 cargo run -- --blocking-preview
 cargo run -- --blocking-preview --json
 
-# Deprecated standalone usage-signal path; use --feature-inventory for cleanup reporting
-cargo run -- --usage-signals
-cargo run -- --usage-signals --json
-
 # Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary overrides, latest interruption summary, and `selected_task_goal` in JSON)
 cargo run -- --status
 cargo run -- --status --json
@@ -362,7 +358,7 @@ Early deprecation notices:
 | Status comparison flags (`--compare-by`, `--compare-task`, `--compare-profile`, `--compare-time`, `--compare-limit`) | Use `--export` for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Use `--diagnostics` for blocking preview details alongside setup/config health; older automation receives replacement guidance. |
-| Standalone usage-signal command (`--usage-signals`) | Use `--feature-inventory` for cleanup reporting; raw command/screen frequency summaries remain internal cleanup inputs. |
+| Standalone usage-signal command (`--usage-signals`) | Removed; use `--feature-inventory` for cleanup reporting while raw command/screen frequency summaries remain internal cleanup inputs. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
 | Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
 | Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
@@ -809,10 +805,9 @@ The standalone `focustime --blocking-preview` path remains as deprecated
 replacement-guided output for older automation; new scripts should read the
 `blocking_preview` section from `focustime --diagnostics --json`.
 
-The standalone `focustime --usage-signals` path remains as deprecated
-replacement-guided output for older automation; cleanup scripts should use
-`focustime --feature-inventory --json` and treat raw usage-signal summaries as
-internal cleanup inputs.
+The standalone `focustime --usage-signals` path has been removed; cleanup
+scripts should use `focustime --feature-inventory --json` and treat raw
+usage-signal summaries as internal cleanup inputs.
 
 The standalone `focustime --automation-triggers*` path remains as deprecated
 replacement-guided output for older automation. New scripts should configure
