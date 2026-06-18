@@ -395,23 +395,6 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         failure_impact: 4,
     },
     FeatureSeed {
-        feature_id: "status-comparison-slicing",
-        name: "Deprecated status comparison guidance",
-        surface: FeatureSurface::Stats,
-        description: "Retired status comparison CLI flags that point users to export artifacts and Focus History reports for replacement comparison workflows.",
-        cli_flags: &[
-            "--compare-by",
-            "--compare-task",
-            "--compare-profile",
-            "--compare-time",
-            "--compare-limit",
-        ],
-        value: 1,
-        complexity: 2,
-        support_burden: 2,
-        failure_impact: 2,
-    },
-    FeatureSeed {
         feature_id: "history-dashboard-curation",
         name: "History dashboard curation",
         surface: FeatureSurface::Stats,

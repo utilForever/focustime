@@ -15,8 +15,8 @@ pub(super) use value::{
 use crate::cli::{
     BLOCKING_PREVIEW_REPLACEMENT, BlocklistCategoryCommandKind, BlocklistProfileCommandKind,
     BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind, HistoryDashboardCommandKind,
-    OutputMode, ParsedToken, PrimaryCommand, STATUS_COMPARISON_REPLACEMENT,
-    SessionTemplateCommandKind, SiteListTarget, USAGE_SIGNALS_REPLACEMENT, USAGE_TEXT,
+    OutputMode, ParsedToken, PrimaryCommand, SessionTemplateCommandKind, SiteListTarget,
+    USAGE_SIGNALS_REPLACEMENT, USAGE_TEXT,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -38,11 +38,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             ParsedToken::Positional(value) => {
                 return Err(invalid_usage(&format!(
                     "Unexpected positional argument `{value}`."
-                )));
-            }
-            ParsedToken::RemovedStatusComparisonOption(option) => {
-                return Err(invalid_usage(&format!(
-                    "`{option}` was removed from `--status`."
                 )));
             }
             ParsedToken::Start
@@ -128,12 +123,6 @@ pub(super) fn first_removed_option_guidance(
             ParsedToken::UnknownOption(option) => {
                 return removed_option_replacement_guidance(option);
             }
-            ParsedToken::RemovedStatusComparisonOption(_) => {
-                return Some(RemovedOptionGuidance {
-                    summary: "This status comparison option was deprecated.",
-                    replacement: STATUS_COMPARISON_REPLACEMENT,
-                });
-            }
             ParsedToken::Positional(_) => return None,
             _ => {}
         }
@@ -167,11 +156,6 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
         "--sync-passphrase" => Some(RemovedOptionGuidance {
             summary: "Encrypted sync passphrases were removed.",
             replacement: "no direct replacement is available because encrypted sync/backups are no longer supported.",
-        }),
-        "--compare-by" | "--compare-task" | "--compare-profile" | "--compare-time"
-        | "--compare-limit" => Some(RemovedOptionGuidance {
-            summary: "This status comparison option was deprecated.",
-            replacement: STATUS_COMPARISON_REPLACEMENT,
         }),
         "--usage-signals" => Some(RemovedOptionGuidance {
             summary: "This standalone usage-signal command was removed.",
@@ -224,7 +208,6 @@ pub(super) fn parse_primary_command(
             }
             ParsedToken::DaemonPort(_) => {}
             ParsedToken::Watch(_) => {}
-            ParsedToken::RemovedStatusComparisonOption(_) => {}
             ParsedToken::Profile(profile) => {
                 set_primary_command(&mut primary, PrimaryCommand::Profile(*profile))?
             }
