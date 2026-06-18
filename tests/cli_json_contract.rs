@@ -755,10 +755,11 @@ fn feature_inventory_json_exports_scored_report_artifacts() {
             .expect("failed to read exported feature inventory JSON"),
     )
     .expect("feature inventory export JSON should parse");
-    assert_eq!(inventory_payload["schema_version"], 5);
-    assert_eq!(
-        inventory_payload["cleanup_signal_support"]["deprecated_cli_flag"],
-        "--usage-signals"
+    assert_eq!(inventory_payload["schema_version"], 6);
+    assert!(
+        inventory_payload["cleanup_signal_support"]
+            .get("deprecated_cli_flag")
+            .is_none()
     );
     assert_eq!(
         inventory_payload["cleanup_signal_support"]["replacement_cli_flag"],
