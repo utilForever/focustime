@@ -253,6 +253,7 @@ fn v015_removed_command_paths_keep_targeted_json_guidance() {
         ("--migrate", "--config-migrate"),
         ("--dry-run", "--config-migrate"),
         ("--usage-signals", "--feature-inventory"),
+        ("--blocking-preview", "--diagnostics"),
         ("--sync-backup", "--backup"),
         ("--sync-restore", "--restore"),
         ("--sync-passphrase=secret", "no direct replacement"),

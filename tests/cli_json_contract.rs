@@ -1095,26 +1095,27 @@ fn text_runtime_errors_still_use_stderr() {
 }
 
 #[test]
-fn blocking_preview_json_emits_payload_on_stdout() {
+fn blocking_preview_json_reports_removed_command_guidance() {
     let env = TestEnv::new("blocking-preview-json");
     let output = env.run(&["--blocking-preview", "--json"]);
 
-    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.status.code(), Some(2));
     assert!(stderr_text(&output).trim().is_empty());
 
     let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(payload["deprecated"], true);
+    assert_eq!(payload["ok"], false);
+    assert_eq!(payload["error"]["kind"], "usage");
+    assert_eq!(payload["error"]["exit_code"], 2);
     assert!(
-        payload["replacement"]
+        payload["error"]["message"]
             .as_str()
-            .is_some_and(|replacement| replacement.contains("--diagnostics"))
+            .is_some_and(|message| message.contains("--blocking-preview"))
     );
-    assert!(payload.get("hosts_file_path").is_some());
-    assert!(payload.get("action").is_some());
-    assert!(payload.get("would_change").is_some());
-    assert!(payload.get("effective_blocked_sites_count").is_some());
-    assert!(payload.get("effective_blocked_sites").is_some());
-    assert!(payload.get("section").is_some());
+    assert!(
+        payload["error"]["hint"]
+            .as_str()
+            .is_some_and(|hint| hint.contains("--diagnostics"))
+    );
 }
 
 #[test]

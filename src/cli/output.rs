@@ -5,10 +5,9 @@ mod status;
 use std::path::Path;
 
 pub(super) use diagnostics::{
-    build_blocking_preview_command_output, build_diagnostics_blocking_preview_error,
-    build_diagnostics_blocking_preview_output, build_diagnostics_command_output,
-    build_schedule_inspection_output, print_blocking_preview_command_output,
-    print_config_doctor_output, print_config_migration_output, print_diagnostics_command_output,
+    build_diagnostics_blocking_preview_error, build_diagnostics_blocking_preview_output,
+    build_diagnostics_command_output, build_schedule_inspection_output, print_config_doctor_output,
+    print_config_migration_output, print_diagnostics_command_output,
 };
 pub(super) use sites::{
     print_blocklist_category_command_output, print_blocklist_profile_command_output,

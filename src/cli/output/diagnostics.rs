@@ -1,5 +1,5 @@
 use crate::cli::{
-    BlockingPreviewAction, BlockingPreviewCommandOutput, DiagnosticsBlockingPreviewOutput,
+    BlockingPreviewAction, BlockingPreviewOutput, DiagnosticsBlockingPreviewOutput,
     DiagnosticsCommandOutput, DiagnosticsSetupOutput, RecurringScheduleConfig,
     ScheduleInspectionOutput, SetupCheck, SetupCheckLevel, SetupCheckOutput, SetupDiagnostics,
     format_schedule_conflict, inspect_schedule_conflicts_from_config,
@@ -7,9 +7,6 @@ use crate::cli::{
 use crate::config::{
     ConfigDoctorReport, ConfigHealthFinding, ConfigHealthStatus, ConfigMigrationReport,
 };
-
-const BLOCKING_PREVIEW_REPLACEMENT: &str =
-    "Use `focustime --diagnostics` for blocking preview details plus setup/config health.";
 
 pub(in crate::cli) fn build_schedule_inspection_output(
     schedule: &RecurringScheduleConfig,
@@ -232,7 +229,7 @@ pub(in crate::cli) fn build_diagnostics_blocking_preview_output(
     DiagnosticsBlockingPreviewOutput {
         status: "ok",
         error: None,
-        preview: Some(build_blocking_preview_output(preview, false)),
+        preview: Some(build_blocking_preview_output(preview)),
     }
 }
 
@@ -246,19 +243,7 @@ pub(in crate::cli) fn build_diagnostics_blocking_preview_error(
     }
 }
 
-pub(in crate::cli) fn print_blocking_preview_command_output(
-    payload: &BlockingPreviewCommandOutput,
-) {
-    if payload.deprecated {
-        println!("Deprecated command: --blocking-preview");
-        if let Some(replacement) = payload.replacement {
-            println!("Replacement: {replacement}");
-        }
-    }
-    print_blocking_preview_fields(payload);
-}
-
-fn print_blocking_preview_fields(payload: &BlockingPreviewCommandOutput) {
+fn print_blocking_preview_fields(payload: &BlockingPreviewOutput) {
     println!(
         "Backend: {} (target: {})",
         payload.backend, payload.backend_target
@@ -294,24 +279,17 @@ fn print_blocking_preview_fields(payload: &BlockingPreviewCommandOutput) {
     }
 }
 
-pub(in crate::cli) fn build_blocking_preview_command_output(
-    preview: &crate::blocker::BlockingPreview,
-) -> BlockingPreviewCommandOutput {
-    build_blocking_preview_output(preview, true)
-}
-
 fn build_blocking_preview_output(
     preview: &crate::blocker::BlockingPreview,
-    deprecated: bool,
-) -> BlockingPreviewCommandOutput {
+) -> BlockingPreviewOutput {
     let action = match preview.action {
         BlockingPreviewAction::Block => "block",
         BlockingPreviewAction::Unblock => "unblock",
         BlockingPreviewAction::NoChange => "no_change",
     };
-    BlockingPreviewCommandOutput {
-        deprecated,
-        replacement: deprecated.then_some(BLOCKING_PREVIEW_REPLACEMENT),
+    BlockingPreviewOutput {
+        deprecated: false,
+        replacement: None,
         backend: preview.backend.id(),
         backend_target: preview.backend_target.clone(),
         attempted_backends: preview

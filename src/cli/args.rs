@@ -172,7 +172,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--config-migrate-apply" => Some(ParsedToken::ConfigMigrate { apply: true }),
         "--diagnostics" => Some(ParsedToken::Diagnostics),
         "--calendar-sync" => Some(ParsedToken::CalendarSync),
-        "--blocking-preview" => Some(ParsedToken::BlockingPreview),
         "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
         "--blocklist-category-delete" => Some(ParsedToken::BlocklistCategoryDelete),
         "--session-template-delete" => Some(ParsedToken::SessionTemplateDelete),

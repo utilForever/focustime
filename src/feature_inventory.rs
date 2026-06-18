@@ -377,7 +377,7 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         name: "Blocking preview diagnostics",
         surface: FeatureSurface::Blocker,
         description: "Preview effective blocker resolution through diagnostics and inspect command/backend actions.",
-        cli_flags: &["--diagnostics", "--blocking-preview"],
+        cli_flags: &["--diagnostics"],
         value: 3,
         complexity: 2,
         support_burden: 2,

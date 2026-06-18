@@ -62,8 +62,7 @@ use data::{
     stats_save_options,
 };
 use diagnostics::{
-    execute_blocking_preview_command, execute_config_doctor_command,
-    execute_config_migrate_command, execute_diagnostics_command,
+    execute_config_doctor_command, execute_config_migrate_command, execute_diagnostics_command,
 };
 use status::execute_status_command;
 #[cfg(test)]
@@ -142,7 +141,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Diagnostics => {
             execute_diagnostics_command(cli_command.output).map_err(UserMessage::from)
         }
-        CommandKind::BlockingPreview => execute_blocking_preview_command(cli_command.output),
         CommandKind::Status {
             watch_interval_secs,
         } => execute_status_command(cli_command.output, watch_interval_secs)
@@ -215,7 +213,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::ConfigDoctor => None,
         CommandKind::ConfigMigrate { .. } => None,
         CommandKind::Diagnostics => Some("diagnostics"),
-        CommandKind::BlockingPreview => Some("blocking-preview"),
         CommandKind::Status { .. } => Some("status"),
         CommandKind::Backup { .. } => Some("backup"),
         CommandKind::Restore { .. } => Some("restore"),
@@ -251,7 +248,6 @@ fn command_usage_records_via_app(command: &CommandKind) -> bool {
             | CommandKind::BreakGlassTrigger
             | CommandKind::BreakGlassCancel
             | CommandKind::Diagnostics
-            | CommandKind::BlockingPreview
     )
 }
 
