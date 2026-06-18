@@ -215,11 +215,6 @@ Options:
   --diagnostics   Show setup diagnostics, blocking preview details, config health, and migration guidance
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
-  --compare-by    Deprecated: use --export for productivity comparison rows
-  --compare-task  Deprecated: use --export for productivity comparison rows
-  --compare-profile  Deprecated: use --export for productivity comparison rows
-  --compare-time  Deprecated: use --export for productivity comparison rows
-  --compare-limit Deprecated: use --export for productivity comparison rows
   --backup        Back up config.toml and stats.toml to current directory or DIR
   --restore       Restore config.toml and stats.toml from current directory or DIR
   --calendar-sync  Deprecated: refresh opt-in calendar busy-window cache for schedule annotations; schedule behavior is unchanged when disabled or absent
@@ -240,7 +235,6 @@ const BLOCKLIST_CATEGORY_REPLACEMENT: &str = "Manage blocklist and allowlist hos
 const BLOCKING_PREVIEW_REPLACEMENT: &str =
     "Use `focustime --diagnostics` for blocking preview details plus setup/config health.";
 const CALENDAR_SYNC_REPLACEMENT: &str = "Calendar sync is now a narrow opt-in schedule annotation cache. Keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data, and use `focustime --diagnostics` to review setup/config guidance.";
-const STATUS_COMPARISON_REPLACEMENT: &str = "Status comparison slicing was retired from `--status`. Use `focustime --export` for productivity comparison rows, or the Focus History report/dashboard for interactive comparison filters.";
 const DAEMON_API_REPLACEMENT: &str = "Use CLI timer, session, and workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -506,7 +500,6 @@ enum ParsedToken {
     DaemonStop,
     DaemonPort(u16),
     Watch(Option<u64>),
-    RemovedStatusComparisonOption(&'static str),
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),

@@ -59,7 +59,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 44] = [
+    let parsers: [(&str, ValueArgParser); 39] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -81,11 +81,6 @@ fn classify_value_arg(
         ),
         ("--watch", classify_watch_arg),
         ("--daemon-port", classify_daemon_port_arg),
-        ("--compare-by", classify_compare_by_arg),
-        ("--compare-task", classify_compare_task_arg),
-        ("--compare-profile", classify_compare_profile_arg),
-        ("--compare-time", classify_compare_time_of_day_arg),
-        ("--compare-limit", classify_compare_limit_arg),
         ("--backup", classify_backup_arg),
         ("--restore", classify_restore_arg),
         ("--export", classify_export_arg),
@@ -348,71 +343,6 @@ fn classify_daemon_port_arg(args: &[String], index: usize) -> Result<(ParsedToke
     Err(invalid_usage(
         "`--daemon-port` requires a value. Use `--daemon-port=PORT`.",
     ))
-}
-
-fn classify_compare_by_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
-    Ok(removed_status_comparison_option(
-        args,
-        index,
-        "--compare-by",
-    ))
-}
-
-fn classify_compare_task_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    Ok(removed_status_comparison_option(
-        args,
-        index,
-        "--compare-task",
-    ))
-}
-
-fn classify_compare_profile_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    Ok(removed_status_comparison_option(
-        args,
-        index,
-        "--compare-profile",
-    ))
-}
-
-fn classify_compare_time_of_day_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    Ok(removed_status_comparison_option(
-        args,
-        index,
-        "--compare-time",
-    ))
-}
-
-fn classify_compare_limit_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    Ok(removed_status_comparison_option(
-        args,
-        index,
-        "--compare-limit",
-    ))
-}
-
-fn removed_status_comparison_option(
-    args: &[String],
-    index: usize,
-    flag: &'static str,
-) -> (ParsedToken, usize) {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        return (ParsedToken::RemovedStatusComparisonOption(flag), 2);
-    }
-    (ParsedToken::RemovedStatusComparisonOption(flag), 1)
 }
 
 fn classify_blocklist_profile_arg(

@@ -348,7 +348,7 @@ fn daemon_lifecycle_json_emits_deprecated_replacement_payload() {
 }
 
 #[test]
-fn parse_rejects_status_comparison_options_with_export_replacement() {
+fn parse_rejects_status_comparison_options_as_unknown_options() {
     let error = parse_with_contract(&[
         "--status",
         "--compare-by",
@@ -365,36 +365,28 @@ fn parse_rejects_status_comparison_options_with_export_replacement() {
     .unwrap_err();
 
     assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
-    assert!(
-        error
-            .message
-            .contains("`--compare-by` was removed from `--status`.")
-    );
-    assert_eq!(error.hint.as_deref(), Some(STATUS_COMPARISON_REPLACEMENT));
+    assert!(error.message.contains("Unknown option `--compare-by`."));
+    assert!(error.hint.is_none());
 }
 
 #[test]
-fn parse_rejects_equals_status_comparison_options_with_export_replacement() {
+fn parse_rejects_equals_status_comparison_options_as_unknown_options() {
     let error = parse_with_contract(&["--status", "--compare-time=night"]).unwrap_err();
 
     assert!(
         error
             .message
-            .contains("`--compare-time` was removed from `--status`.")
+            .contains("Unknown option `--compare-time=night`.")
     );
-    assert_eq!(error.hint.as_deref(), Some(STATUS_COMPARISON_REPLACEMENT));
+    assert!(error.hint.is_none());
 }
 
 #[test]
-fn parse_rejects_comparison_options_without_status_with_export_replacement() {
+fn parse_rejects_comparison_options_without_status_as_unknown_options() {
     let error = parse_with_contract(&["--compare-by", "task"]).unwrap_err();
 
-    assert!(
-        error
-            .message
-            .contains("`--compare-by` was removed from `--status`.")
-    );
-    assert_eq!(error.hint.as_deref(), Some(STATUS_COMPARISON_REPLACEMENT));
+    assert!(error.message.contains("Unknown option `--compare-by`."));
+    assert!(error.hint.is_none());
 }
 
 #[test]

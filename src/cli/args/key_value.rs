@@ -7,7 +7,7 @@ use crate::cli::{
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 44] = [
+    let parsers: [KeyValueParser; 39] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -26,11 +26,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_automation_triggers_set_key_value_arg,
         parse_watch_key_value_arg,
         parse_daemon_port_key_value_arg,
-        parse_compare_by_key_value_arg,
-        parse_compare_task_key_value_arg,
-        parse_compare_profile_key_value_arg,
-        parse_compare_time_of_day_key_value_arg,
-        parse_compare_limit_key_value_arg,
         parse_backup_key_value_arg,
         parse_restore_key_value_arg,
         parse_export_key_value_arg,
@@ -299,51 +294,6 @@ fn parse_daemon_port_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, Str
             "`--daemon-port=` requires a port between 1 and 65535.",
         )?;
         return Ok(Some(ParsedToken::DaemonPort(parse_daemon_port(value)?)));
-    }
-    Ok(None)
-}
-
-fn parse_compare_by_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if arg.starts_with("--compare-by=") {
-        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
-            "--compare-by",
-        )));
-    }
-    Ok(None)
-}
-
-fn parse_compare_task_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if arg.starts_with("--compare-task=") {
-        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
-            "--compare-task",
-        )));
-    }
-    Ok(None)
-}
-
-fn parse_compare_profile_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if arg.starts_with("--compare-profile=") {
-        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
-            "--compare-profile",
-        )));
-    }
-    Ok(None)
-}
-
-fn parse_compare_time_of_day_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if arg.starts_with("--compare-time=") {
-        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
-            "--compare-time",
-        )));
-    }
-    Ok(None)
-}
-
-fn parse_compare_limit_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if arg.starts_with("--compare-limit=") {
-        return Ok(Some(ParsedToken::RemovedStatusComparisonOption(
-            "--compare-limit",
-        )));
     }
     Ok(None)
 }
