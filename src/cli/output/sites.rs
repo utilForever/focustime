@@ -1,7 +1,7 @@
 use crate::cli::{
-    BlocklistCategoryCommandOutput, BlocklistProfileCommandOutput, HistoryDashboardCommandOutput,
-    SessionTemplateCommandOutput, SiteAddCommandOutput, SiteDeleteCommandOutput,
-    SiteEditCommandOutput, SiteListCommandOutput, TemporarySiteAddCommandOutput,
+    BlocklistProfileCommandOutput, HistoryDashboardCommandOutput, SessionTemplateCommandOutput,
+    SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
+    TemporarySiteAddCommandOutput,
 };
 
 use super::{display_input_value, format_duration};
@@ -29,34 +29,6 @@ pub(in crate::cli) fn print_blocklist_profile_command_output(
             profile.blocklist_sites_count,
             profile.allowlist_sites_count,
             profile.effective_blocked_sites_count
-        );
-    }
-}
-
-pub(in crate::cli) fn print_blocklist_category_command_output(
-    payload: &BlocklistCategoryCommandOutput,
-) {
-    if payload.deprecated {
-        println!("Blocklist category workflows are deprecated.");
-        println!("Replacement: {}", payload.replacement);
-    }
-    if payload.updated {
-        println!("Blocklist category updated.");
-    }
-    println!(
-        "Selected blocklist profile/category: {} / {}",
-        payload.selected_blocklist_profile, payload.selected_blocklist_category
-    );
-    if payload.categories.is_empty() {
-        println!("Categories: none");
-        return;
-    }
-    println!("Categories:");
-    for category in &payload.categories {
-        let marker = if category.active { "*" } else { " " };
-        println!(
-            "  {marker} {} (blocklist {}, allowlist {})",
-            category.name, category.blocklist_sites_count, category.allowlist_sites_count
         );
     }
 }

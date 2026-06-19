@@ -13,8 +13,8 @@ pub(super) use value::{
 };
 
 use crate::cli::{
-    BlocklistCategoryCommandKind, BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction,
-    CliCommand, CommandKind, HistoryDashboardCommandKind, OutputMode, ParsedToken, PrimaryCommand,
+    BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind,
+    HistoryDashboardCommandKind, OutputMode, ParsedToken, PrimaryCommand,
     SessionTemplateCommandKind, SiteListTarget, USAGE_TEXT,
 };
 
@@ -84,10 +84,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::BlocklistProfileCreate(_)
             | ParsedToken::BlocklistProfileRename(_)
             | ParsedToken::BlocklistProfileDelete
-            | ParsedToken::BlocklistCategory(_)
-            | ParsedToken::BlocklistCategoryCreate(_)
-            | ParsedToken::BlocklistCategoryRename(_)
-            | ParsedToken::BlocklistCategoryDelete
             | ParsedToken::SessionTemplate(_)
             | ParsedToken::SessionTemplateApply(_)
             | ParsedToken::SessionTemplateCreate(_)
@@ -291,21 +287,6 @@ pub(super) fn parse_primary_command(
             )?,
             ParsedToken::BlocklistProfileDelete => {
                 set_primary_command(&mut primary, PrimaryCommand::BlocklistProfileDelete)?
-            }
-            ParsedToken::BlocklistCategory(category) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::BlocklistCategory(category.clone()),
-            )?,
-            ParsedToken::BlocklistCategoryCreate(name) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::BlocklistCategoryCreate(name.clone()),
-            )?,
-            ParsedToken::BlocklistCategoryRename(name) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::BlocklistCategoryRename(name.clone()),
-            )?,
-            ParsedToken::BlocklistCategoryDelete => {
-                set_primary_command(&mut primary, PrimaryCommand::BlocklistCategoryDelete)?
             }
             ParsedToken::SessionTemplate(name) => {
                 set_primary_command(&mut primary, PrimaryCommand::SessionTemplate(name.clone()))?
@@ -591,36 +572,6 @@ pub(super) fn finalize_cli_action(
             },
             output,
         })),
-        Some(PrimaryCommand::BlocklistCategory(category)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::BlocklistCategory {
-                    command: BlocklistCategoryCommandKind::Select { category },
-                },
-                output,
-            }))
-        }
-        Some(PrimaryCommand::BlocklistCategoryCreate(name)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::BlocklistCategory {
-                    command: BlocklistCategoryCommandKind::Create { name },
-                },
-                output,
-            }))
-        }
-        Some(PrimaryCommand::BlocklistCategoryRename(name)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::BlocklistCategory {
-                    command: BlocklistCategoryCommandKind::Rename { name },
-                },
-                output,
-            }))
-        }
-        Some(PrimaryCommand::BlocklistCategoryDelete) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistCategory {
-                command: BlocklistCategoryCommandKind::Delete,
-            },
-            output,
-        })),
         Some(PrimaryCommand::SessionTemplate(name)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::SessionTemplate {
                 command: SessionTemplateCommandKind::Select { name },
@@ -787,10 +738,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
         PrimaryCommand::BlocklistProfileRename(_) => "--blocklist-profile-rename",
         PrimaryCommand::BlocklistProfileDelete => "--blocklist-profile-delete",
-        PrimaryCommand::BlocklistCategory(_) => "--blocklist-category",
-        PrimaryCommand::BlocklistCategoryCreate(_) => "--blocklist-category-create",
-        PrimaryCommand::BlocklistCategoryRename(_) => "--blocklist-category-rename",
-        PrimaryCommand::BlocklistCategoryDelete => "--blocklist-category-delete",
         PrimaryCommand::SessionTemplate(_) => "--session-template",
         PrimaryCommand::SessionTemplateApply(_) => "--session-template-apply",
         PrimaryCommand::SessionTemplateCreate(_) => "--session-template-create",

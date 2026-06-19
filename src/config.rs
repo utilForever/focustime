@@ -23,9 +23,9 @@ use automation::{
     normalize_automation_triggers, normalize_trigger_days, normalize_weekday_profile_rules,
     normalize_weekday_token,
 };
-pub(crate) use blocklists::{
-    BlocklistCategoryConfig, BlocklistProfileConfig, effective_blocked_sites_for_profile,
-};
+#[cfg(test)]
+pub(crate) use blocklists::BlocklistCategoryConfig;
+pub(crate) use blocklists::{BlocklistProfileConfig, effective_blocked_sites_for_profile};
 use blocklists::{
     default_blocklist_profile_name, make_unique_profile_name, normalize_blocklist_profiles,
     normalize_selected_blocklist_profile,

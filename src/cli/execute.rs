@@ -44,10 +44,7 @@ pub(super) use blocklists::{
     apply_blocklist_profile_command, apply_site_add_command, apply_site_delete_command,
     apply_site_edit_command,
 };
-use blocklists::{
-    execute_blocklist_category_command, execute_blocklist_profile_command,
-    execute_blocklist_sites_command,
-};
+use blocklists::{execute_blocklist_profile_command, execute_blocklist_sites_command};
 use daemon_commands::{
     execute_daemon_start_command, execute_daemon_status_command, execute_daemon_stop_command,
 };
@@ -164,10 +161,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
             execute_blocklist_profile_command(command, cli_command.output)
                 .map_err(UserMessage::from)
         }
-        CommandKind::BlocklistCategory { command } => {
-            execute_blocklist_category_command(command, cli_command.output)
-                .map_err(UserMessage::from)
-        }
         CommandKind::BlocklistSites { target, command } => {
             execute_blocklist_sites_command(target, command, cli_command.output)
                 .map_err(UserMessage::from)
@@ -220,7 +213,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Export { .. } => Some("export"),
         CommandKind::FeatureInventory { .. } => Some("feature-inventory"),
         CommandKind::BlocklistProfile { .. } => Some("blocklist-profile"),
-        CommandKind::BlocklistCategory { .. } => Some("blocklist-category"),
         CommandKind::BlocklistSites { .. } => Some("blocklist-sites"),
         CommandKind::AllowlistSiteAddTemporary { .. } => Some("allowlist-site-add-temporary"),
         CommandKind::DaemonStart { .. } => Some("daemon-start"),

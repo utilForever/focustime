@@ -99,31 +99,6 @@ fn parse_status_supports_json_mode() {
 }
 
 #[test]
-fn blocklist_category_json_emits_deprecated_replacement_payload() {
-    let payload = BlocklistCategoryCommandOutput {
-        action: "blocklist-category",
-        deprecated: true,
-        replacement: BLOCKLIST_CATEGORY_REPLACEMENT,
-        updated: false,
-        selected_blocklist_profile: "Work".to_string(),
-        selected_blocklist_category: "Social".to_string(),
-        categories: vec![BlocklistCategorySummaryOutput {
-            name: "Social".to_string(),
-            active: true,
-            blocklist_sites_count: 2,
-            allowlist_sites_count: 1,
-        }],
-    };
-
-    let json = serde_json::to_value(&payload).unwrap();
-
-    assert_eq!(json["deprecated"], true);
-    assert_eq!(json["replacement"], BLOCKLIST_CATEGORY_REPLACEMENT);
-    assert!(payload.replacement.contains("--blocklist-sites"));
-    assert!(payload.replacement.contains("compatibility grouping"));
-}
-
-#[test]
 fn weekday_rules_json_emits_deprecated_replacement_payload() {
     let canonical_rule = AutomationTriggerRuleConfig {
         trigger: AutomationTriggerConditionConfig::Time {
@@ -1467,6 +1442,29 @@ fn usage_text_omits_retired_history_dashboard_customization_flags() {
     assert!(!USAGE_TEXT.contains("--history-dashboard-unpin"));
     assert!(!USAGE_TEXT.contains("--history-dashboard-order"));
     assert!(USAGE_TEXT.contains("--history-dashboard [--json]"));
+}
+
+#[test]
+fn parse_rejects_removed_blocklist_category_flags() {
+    for values in [
+        &["--blocklist-category"][..],
+        &["--blocklist-category=Social"][..],
+        &["--blocklist-category-create", "Social"][..],
+        &["--blocklist-category-create=Social"][..],
+        &["--blocklist-category-rename", "Focus"][..],
+        &["--blocklist-category-rename=Focus"][..],
+        &["--blocklist-category-delete"][..],
+    ] {
+        let error = parse(values).unwrap_err();
+        assert!(error.contains("Unknown option `--blocklist-category"));
+    }
+}
+
+#[test]
+fn usage_text_omits_removed_blocklist_category_flags() {
+    assert!(!USAGE_TEXT.contains("--blocklist-category"));
+    assert!(USAGE_TEXT.contains("--blocklist-sites [--json]"));
+    assert!(USAGE_TEXT.contains("--allowlist-sites [--json]"));
 }
 
 #[test]
