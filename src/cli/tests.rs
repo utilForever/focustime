@@ -2366,13 +2366,11 @@ fn apply_blocklist_profile_select_updates_selection_case_insensitively() {
                 name: "Work".to_string(),
                 sites: vec!["a.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..crate::config::BlocklistProfileConfig::default()
             },
             crate::config::BlocklistProfileConfig {
                 name: "Study".to_string(),
                 sites: vec!["study.com".to_string(), "news.com".to_string()],
                 allowlist_sites: vec!["news.com".to_string()],
-                ..crate::config::BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "work".to_string(),
@@ -2402,13 +2400,11 @@ fn apply_blocklist_profile_rename_updates_selection_and_name() {
                 name: "Work".to_string(),
                 sites: vec!["a.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..crate::config::BlocklistProfileConfig::default()
             },
             crate::config::BlocklistProfileConfig {
                 name: "Study".to_string(),
                 sites: vec!["study.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..crate::config::BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "Work".to_string(),
@@ -2439,13 +2435,11 @@ fn apply_blocklist_profile_delete_switches_selection() {
                 name: "Work".to_string(),
                 sites: vec!["a.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..crate::config::BlocklistProfileConfig::default()
             },
             crate::config::BlocklistProfileConfig {
                 name: "Study".to_string(),
                 sites: vec!["study.com".to_string(), "news.com".to_string()],
                 allowlist_sites: vec!["news.com".to_string()],
-                ..crate::config::BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "Work".to_string(),
@@ -2508,7 +2502,6 @@ fn apply_allowlist_site_add_updates_effective_blocking() {
             name: "Default".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
-            ..crate::config::BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Default".to_string(),
         ..AppConfig::default()
@@ -2529,28 +2522,29 @@ fn apply_allowlist_site_add_updates_effective_blocking() {
 
 #[test]
 fn apply_site_add_command_uses_profile_sites_not_selected_category() {
-    let mut config = AppConfig {
-        blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
-            name: "Default".to_string(),
-            sites: vec!["profile.com".to_string()],
-            allowlist_sites: Vec::new(),
-            categories: vec![
-                crate::config::BlocklistCategoryConfig {
-                    name: "General".to_string(),
-                    sites: vec!["category-general.com".to_string()],
-                    allowlist_sites: Vec::new(),
-                },
-                crate::config::BlocklistCategoryConfig {
-                    name: "Social".to_string(),
-                    sites: vec!["category-social.com".to_string()],
-                    allowlist_sites: Vec::new(),
-                },
-            ],
-            selected_category: "Social".to_string(),
-        }],
-        selected_blocklist_profile: "Default".to_string(),
-        ..AppConfig::default()
-    };
+    let mut config: AppConfig = toml::from_str(
+        r#"
+selected_blocklist_profile = "Default"
+
+[[blocklist_profiles]]
+name = "Default"
+sites = ["profile.com"]
+allowlist_sites = []
+selected_category = "Social"
+
+[[blocklist_profiles.categories]]
+name = "General"
+sites = ["category-general.com"]
+allowlist_sites = []
+
+[[blocklist_profiles.categories]]
+name = "Social"
+sites = ["category-social.com"]
+allowlist_sites = []
+"#,
+    )
+    .unwrap();
+    config = config.normalized();
 
     let payload =
         apply_site_add_command(&mut config, SiteListTarget::Blocklist, "new.com").unwrap();
@@ -2558,15 +2552,21 @@ fn apply_site_add_command_uses_profile_sites_not_selected_category() {
     assert!(payload.updated);
     assert_eq!(
         config.blocklist_profiles[0].sites,
-        vec!["profile.com".to_string(), "new.com".to_string()]
-    );
-    assert_eq!(
-        config.blocklist_profiles[0].categories[1].sites,
-        vec!["category-social.com".to_string()]
+        vec![
+            "category-general.com".to_string(),
+            "profile.com".to_string(),
+            "category-social.com".to_string(),
+            "new.com".to_string()
+        ]
     );
     assert_eq!(
         payload.sites,
-        vec!["profile.com".to_string(), "new.com".to_string()]
+        vec![
+            "category-general.com".to_string(),
+            "profile.com".to_string(),
+            "category-social.com".to_string(),
+            "new.com".to_string()
+        ]
     );
 }
 
@@ -2577,7 +2577,6 @@ fn apply_site_edit_command_updates_blocklist_sites() {
             name: "Default".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: Vec::new(),
-            ..crate::config::BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Default".to_string(),
         ..AppConfig::default()
@@ -2615,7 +2614,6 @@ fn apply_site_edit_command_handles_duplicate_case_entries() {
                 "b.com".to_string(),
             ],
             allowlist_sites: Vec::new(),
-            ..crate::config::BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Default".to_string(),
         ..AppConfig::default()
@@ -2648,7 +2646,6 @@ fn apply_site_delete_command_updates_allowlist_and_effective_blocking() {
             name: "Default".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
-            ..crate::config::BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Default".to_string(),
         ..AppConfig::default()
@@ -2676,7 +2673,6 @@ fn apply_site_delete_command_handles_duplicate_case_entries() {
                 "other.com".to_string(),
             ],
             allowlist_sites: Vec::new(),
-            ..crate::config::BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Default".to_string(),
         ..AppConfig::default()
@@ -2702,7 +2698,6 @@ fn build_status_output_matches_blocklist_profile_case_insensitively() {
             name: "Work".to_string(),
             sites: vec!["youtube.com".to_string(), "reddit.com".to_string()],
             allowlist_sites: Vec::new(),
-            ..crate::config::BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "work".to_string(),
         ..AppConfig::default()
@@ -2735,7 +2730,6 @@ fn build_status_output_excludes_allowlist_from_blocked_sites_count() {
             name: "Work".to_string(),
             sites: vec!["youtube.com".to_string(), "reddit.com".to_string()],
             allowlist_sites: vec!["reddit.com".to_string()],
-            ..crate::config::BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Work".to_string(),
         ..AppConfig::default()

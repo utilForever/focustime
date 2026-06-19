@@ -12,8 +12,6 @@ use crate::blocker::{
     EditSiteResult, InvalidSiteInput, SiteBlocker,
 };
 use crate::calendar::{CalendarBusyWindow, active_window_at as active_calendar_window_at};
-#[cfg(test)]
-use crate::config::BlocklistCategoryConfig;
 use crate::config::{
     AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
     BlockingBackendPolicyConfig, BlocklistProfileConfig, CalendarSyncConfig,

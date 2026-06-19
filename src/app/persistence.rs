@@ -537,8 +537,6 @@ impl App {
                 name: DEFAULT_BLOCKLIST_PROFILE_NAME.to_string(),
                 sites: self.blocker.sites.clone(),
                 allowlist_sites: Vec::new(),
-                categories: Vec::new(),
-                selected_category: "General".to_string(),
             });
         }
         let active_index = self
