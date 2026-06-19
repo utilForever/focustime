@@ -13,10 +13,9 @@ pub(super) use value::{
 };
 
 use crate::cli::{
-    BLOCKING_PREVIEW_REPLACEMENT, BlocklistCategoryCommandKind, BlocklistProfileCommandKind,
-    BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind, HistoryDashboardCommandKind,
-    OutputMode, ParsedToken, PrimaryCommand, SessionTemplateCommandKind, SiteListTarget,
-    USAGE_SIGNALS_REPLACEMENT, USAGE_TEXT,
+    BlocklistCategoryCommandKind, BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction,
+    CliCommand, CommandKind, HistoryDashboardCommandKind, OutputMode, ParsedToken, PrimaryCommand,
+    SessionTemplateCommandKind, SiteListTarget, USAGE_TEXT,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -156,14 +155,6 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
         "--sync-passphrase" => Some(RemovedOptionGuidance {
             summary: "Encrypted sync passphrases were removed.",
             replacement: "no direct replacement is available because encrypted sync/backups are no longer supported.",
-        }),
-        "--usage-signals" => Some(RemovedOptionGuidance {
-            summary: "This standalone usage-signal command was removed.",
-            replacement: USAGE_SIGNALS_REPLACEMENT,
-        }),
-        "--blocking-preview" => Some(RemovedOptionGuidance {
-            summary: "This standalone blocking preview command was removed.",
-            replacement: BLOCKING_PREVIEW_REPLACEMENT,
         }),
         _ => None,
     }

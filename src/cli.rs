@@ -230,10 +230,7 @@ Retired/legacy command guidance:
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
 
-const USAGE_SIGNALS_REPLACEMENT: &str = "Use `focustime --feature-inventory` for cleanup reporting; raw usage-signal inspection is no longer a standalone workflow.";
 const BLOCKLIST_CATEGORY_REPLACEMENT: &str = "Manage blocklist and allowlist hostnames directly on blocklist profiles with `--blocklist-profile`, `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; categories remain a compatibility grouping only.";
-const BLOCKING_PREVIEW_REPLACEMENT: &str =
-    "Use `focustime --diagnostics` for blocking preview details plus setup/config health.";
 const CALENDAR_SYNC_REPLACEMENT: &str = "Calendar sync is now a narrow opt-in schedule annotation cache. Keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data, and use `focustime --diagnostics` to review setup/config guidance.";
 const DAEMON_API_REPLACEMENT: &str = "Use CLI timer, session, and workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions.";
 
@@ -1021,9 +1018,6 @@ struct DiagnosticsCommandOutput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct BlockingPreviewOutput {
-    deprecated: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    replacement: Option<&'static str>,
     backend: &'static str,
     backend_target: String,
     attempted_backends: Vec<&'static str>,

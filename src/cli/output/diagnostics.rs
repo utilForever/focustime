@@ -288,8 +288,6 @@ fn build_blocking_preview_output(
         BlockingPreviewAction::NoChange => "no_change",
     };
     BlockingPreviewOutput {
-        deprecated: false,
-        replacement: None,
         backend: preview.backend.id(),
         backend_target: preview.backend_target.clone(),
         attempted_backends: preview
