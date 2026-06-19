@@ -326,22 +326,6 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         failure_impact: 4,
     },
     FeatureSeed {
-        feature_id: "blocklist-category-management",
-        name: "Blocklist category compatibility",
-        surface: FeatureSurface::Blocker,
-        description: "Compatibility-only category grouping under blocklist profiles; replacement is profile-level site rule management.",
-        cli_flags: &[
-            "--blocklist-category",
-            "--blocklist-category-create",
-            "--blocklist-category-rename",
-            "--blocklist-category-delete",
-        ],
-        value: 2,
-        complexity: 3,
-        support_burden: 4,
-        failure_impact: 3,
-    },
-    FeatureSeed {
         feature_id: "site-rule-management",
         name: "Site rule management",
         surface: FeatureSurface::Blocker,

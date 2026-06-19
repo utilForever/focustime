@@ -33,9 +33,9 @@
     ]
   },
   "summary": {
-    "total_features": 27,
+    "total_features": 26,
     "keep_count": 13,
-    "merge_count": 13,
+    "merge_count": 12,
     "remove_count": 1,
     "by_surface": [
       {
@@ -48,7 +48,7 @@
       },
       {
         "surface": "blocker",
-        "feature_count": 5
+        "feature_count": 4
       },
       {
         "surface": "stats",
@@ -68,10 +68,6 @@
       "--automation-triggers",
       "--automation-triggers-set",
       "--backup",
-      "--blocklist-category",
-      "--blocklist-category-create",
-      "--blocklist-category-delete",
-      "--blocklist-category-rename",
       "--blocklist-profile",
       "--blocklist-profile-create",
       "--blocklist-profile-delete",
@@ -357,25 +353,6 @@
       "failure_impact": 3,
       "maintenance_cost": 2.25,
       "value_to_maintenance_ratio": 1.33,
-      "recommendation": "merge"
-    },
-    {
-      "feature_id": "blocklist-category-management",
-      "name": "Blocklist category compatibility",
-      "surface": "blocker",
-      "description": "Compatibility-only category grouping under blocklist profiles; replacement is profile-level site rule management.",
-      "cli_flags": [
-        "--blocklist-category",
-        "--blocklist-category-create",
-        "--blocklist-category-rename",
-        "--blocklist-category-delete"
-      ],
-      "value": 2,
-      "complexity": 3,
-      "support_burden": 4,
-      "failure_impact": 3,
-      "maintenance_cost": 3.35,
-      "value_to_maintenance_ratio": 0.6,
       "recommendation": "merge"
     },
     {
