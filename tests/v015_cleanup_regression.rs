@@ -311,18 +311,17 @@ fn v015_removed_command_paths_keep_supported_json_guidance_only() {
 fn v015_removed_command_text_errors_keep_supported_replacement_guidance_only() {
     let env = TestEnv::new("removed-commands-text");
 
-    for (flag, expected_hint) in [(
+    let (flag, expected_hint) = (
         "--sync-backup",
         "Hint: Use `--backup` for local portable recovery workflows.",
-    )] {
-        let output = env.run(&[flag]);
+    );
+    let output = env.run(&[flag]);
 
-        assert_eq!(output.status.code(), Some(2));
-        assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
-        let stderr = stderr_text(&output);
-        assert!(stderr.contains(&format!("Unknown option `{flag}`")));
-        assert!(stderr.contains(expected_hint));
-    }
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
+    let stderr = stderr_text(&output);
+    assert!(stderr.contains(&format!("Unknown option `{flag}`")));
+    assert!(stderr.contains(expected_hint));
 
     let output = env.run(&["--usage-signals"]);
     assert_eq!(output.status.code(), Some(2));
