@@ -49,8 +49,7 @@ use output::{
     build_diagnostics_blocking_preview_error, build_diagnostics_blocking_preview_output,
     build_diagnostics_command_output, build_schedule_inspection_output, display_input_value,
     effective_blocked_sites_for_profile, flush_stdout, print_automation_triggers_command_output,
-    print_backup_output, print_blocklist_category_command_output,
-    print_blocklist_profile_command_output, print_break_glass_command_output,
+    print_backup_output, print_blocklist_profile_command_output, print_break_glass_command_output,
     print_calendar_sync_command_output, print_config_doctor_output, print_config_migration_output,
     print_daemon_start_command_output, print_daemon_status_command_output,
     print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
@@ -121,10 +120,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --blocklist-profile-create=PROFILE_NAME [--json]
   focustime --blocklist-profile-rename=PROFILE_NAME [--json]
   focustime --blocklist-profile-delete [--json]
-  focustime --blocklist-category [CATEGORY_NAME] [--json]
-  focustime --blocklist-category-create=CATEGORY_NAME [--json]
-  focustime --blocklist-category-rename=CATEGORY_NAME [--json]
-  focustime --blocklist-category-delete [--json]
   focustime --session-template [TEMPLATE_NAME] [--json]
   focustime --session-template-apply [TEMPLATE_NAME] [--json]
   focustime --session-template-create=TEMPLATE_NAME [--json]
@@ -186,10 +181,6 @@ Options:
   --blocklist-profile-create  Create a blocklist profile and select it
   --blocklist-profile-rename  Rename the active blocklist profile
   --blocklist-profile-delete  Delete the active blocklist profile
-  --blocklist-category         Deprecated: show/set compatibility category; use profile-level sites
-  --blocklist-category-create  Deprecated: create compatibility category; use profile-level sites
-  --blocklist-category-rename  Deprecated: rename compatibility category
-  --blocklist-category-delete  Deprecated: delete compatibility category
   --session-template         Show active session template, or set active template
   --session-template-apply   Apply a template by name (or apply active template)
   --session-template-create  Capture current task/profile/blocklist/schedule as a template
@@ -230,7 +221,6 @@ Retired/legacy command guidance:
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
 
-const BLOCKLIST_CATEGORY_REPLACEMENT: &str = "Manage blocklist and allowlist hostnames directly on blocklist profiles with `--blocklist-profile`, `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; categories remain a compatibility grouping only.";
 const CALENDAR_SYNC_REPLACEMENT: &str = "Calendar sync is now a narrow opt-in schedule annotation cache. Keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data, and use `focustime --diagnostics` to review setup/config guidance.";
 const DAEMON_API_REPLACEMENT: &str = "Use CLI timer, session, and workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions.";
 
@@ -368,9 +358,6 @@ pub(crate) enum CommandKind {
     BlocklistProfile {
         command: BlocklistProfileCommandKind,
     },
-    BlocklistCategory {
-        command: BlocklistCategoryCommandKind,
-    },
     BlocklistSites {
         target: SiteListTarget,
         command: BlocklistSiteCommandKind,
@@ -454,10 +441,6 @@ enum PrimaryCommand {
     BlocklistProfileCreate(String),
     BlocklistProfileRename(String),
     BlocklistProfileDelete,
-    BlocklistCategory(Option<String>),
-    BlocklistCategoryCreate(String),
-    BlocklistCategoryRename(String),
-    BlocklistCategoryDelete,
     SessionTemplate(Option<String>),
     SessionTemplateApply(Option<String>),
     SessionTemplateCreate(String),
@@ -529,10 +512,6 @@ enum ParsedToken {
     BlocklistProfileCreate(String),
     BlocklistProfileRename(String),
     BlocklistProfileDelete,
-    BlocklistCategory(Option<String>),
-    BlocklistCategoryCreate(String),
-    BlocklistCategoryRename(String),
-    BlocklistCategoryDelete,
     SessionTemplate(Option<String>),
     SessionTemplateApply(Option<String>),
     SessionTemplateCreate(String),
@@ -580,14 +559,6 @@ pub(crate) struct SiteEditValue {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum BlocklistProfileCommandKind {
     Select { profile: Option<String> },
-    Create { name: String },
-    Rename { name: String },
-    Delete,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum BlocklistCategoryCommandKind {
-    Select { category: Option<String> },
     Create { name: String },
     Rename { name: String },
     Delete,
@@ -1054,25 +1025,6 @@ struct BlocklistProfileCommandOutput {
     updated: bool,
     selected_blocklist_profile: String,
     profiles: Vec<BlocklistProfileSummaryOutput>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct BlocklistCategorySummaryOutput {
-    name: String,
-    active: bool,
-    blocklist_sites_count: usize,
-    allowlist_sites_count: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct BlocklistCategoryCommandOutput {
-    action: &'static str,
-    deprecated: bool,
-    replacement: &'static str,
-    updated: bool,
-    selected_blocklist_profile: String,
-    selected_blocklist_category: String,
-    categories: Vec<BlocklistCategorySummaryOutput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

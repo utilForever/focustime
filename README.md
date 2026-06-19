@@ -181,10 +181,6 @@ cargo run -- --allowlist-site-add-temporary "reddit.com=30m,news.ycombinator.com
 cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
 cargo run -- --allowlist-site-delete reddit.com
 
-# Deprecated compatibility surface; manage sites directly on blocklist profiles
-cargo run -- --blocklist-category
-cargo run -- --blocklist-category Social --json
-
 # Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"16:00"}]}'
@@ -345,7 +341,7 @@ Early deprecation notices:
 | --- | --- |
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
-| Blocklist category workflows (`--blocklist-category*`, `blocklist_profiles.categories`) | Manage blocklist/allowlist hostnames directly on blocklist profiles with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; `--config-doctor` reports category configs that should be folded into profile-level lists. |
+| Blocklist category config compatibility (`blocklist_profiles.categories`) | Manage blocklist/allowlist hostnames directly on blocklist profiles with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`; `--config-doctor` reports category configs that should be folded into profile-level lists. |
 | Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields remain readable for automation compatibility. |
 | Focus History dashboard customization (`[history_dashboard]`, retired customization CLI paths) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands are removed from help text and command parsing. |
 | Advanced status comparison slicing | Use `--export` artifacts for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
@@ -755,7 +751,7 @@ Allowlist entries act as explicit exceptions: effective focus blocking is comput
 **blocklist sites minus allowlist sites** for the active profile, using exact and
 wildcard rule matching.
 
-Blocklist categories remain a deprecated CLI/config compatibility grouping. New
+Blocklist categories remain a deprecated config compatibility grouping. New
 configurations should keep `sites` and `allowlist_sites` directly on each
 `[[blocklist_profiles]]` entry; `--config-doctor` reports category configs that
 should be folded into profile-level lists.

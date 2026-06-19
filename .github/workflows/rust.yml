@@ -1,5 +1,8 @@
 name: Rust
 
+env:
+  CARGO_HTTP_MULTIPLEXING: false
+
 on:
   push:
     branches:

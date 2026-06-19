@@ -7,7 +7,7 @@ use crate::cli::{
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 39] = [
+    let parsers: [KeyValueParser; 36] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -33,9 +33,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_blocklist_profile_key_value_arg,
         parse_blocklist_profile_create_key_value_arg,
         parse_blocklist_profile_rename_key_value_arg,
-        parse_blocklist_category_key_value_arg,
-        parse_blocklist_category_create_key_value_arg,
-        parse_blocklist_category_rename_key_value_arg,
         parse_session_template_key_value_arg,
         parse_session_template_apply_key_value_arg,
         parse_session_template_create_key_value_arg,
@@ -325,43 +322,6 @@ fn parse_blocklist_profile_rename_key_value_arg(arg: &str) -> Result<Option<Pars
             "`--blocklist-profile-rename=` requires a profile name.",
         )?;
         return Ok(Some(ParsedToken::BlocklistProfileRename(value.to_string())));
-    }
-    Ok(None)
-}
-
-fn parse_blocklist_category_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--blocklist-category=") {
-        let value =
-            require_nonempty_key_value(value, "`--blocklist-category=` requires a category name.")?;
-        return Ok(Some(ParsedToken::BlocklistCategory(Some(
-            value.to_string(),
-        ))));
-    }
-    Ok(None)
-}
-
-fn parse_blocklist_category_create_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--blocklist-category-create=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--blocklist-category-create=` requires a category name.",
-        )?;
-        return Ok(Some(ParsedToken::BlocklistCategoryCreate(
-            value.to_string(),
-        )));
-    }
-    Ok(None)
-}
-
-fn parse_blocklist_category_rename_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--blocklist-category-rename=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--blocklist-category-rename=` requires a category name.",
-        )?;
-        return Ok(Some(ParsedToken::BlocklistCategoryRename(
-            value.to_string(),
-        )));
     }
     Ok(None)
 }

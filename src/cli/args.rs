@@ -59,7 +59,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 39] = [
+    let parsers: [(&str, ValueArgParser); 36] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -93,15 +93,6 @@ fn classify_value_arg(
         (
             "--blocklist-profile-rename",
             classify_blocklist_profile_rename_arg,
-        ),
-        ("--blocklist-category", classify_blocklist_category_arg),
-        (
-            "--blocklist-category-create",
-            classify_blocklist_category_create_arg,
-        ),
-        (
-            "--blocklist-category-rename",
-            classify_blocklist_category_rename_arg,
         ),
         ("--session-template", classify_session_template_arg),
         (
@@ -168,7 +159,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--diagnostics" => Some(ParsedToken::Diagnostics),
         "--calendar-sync" => Some(ParsedToken::CalendarSync),
         "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
-        "--blocklist-category-delete" => Some(ParsedToken::BlocklistCategoryDelete),
         "--session-template-delete" => Some(ParsedToken::SessionTemplateDelete),
         "--history-dashboard" => Some(ParsedToken::HistoryDashboard),
         "--blocklist-sites" => Some(ParsedToken::BlocklistSites),
@@ -395,59 +385,6 @@ fn classify_blocklist_profile_rename_arg(
     }
     Err(invalid_usage(
         "`--blocklist-profile-rename` requires a profile name. Use `--blocklist-profile-rename=NAME` or `--blocklist-profile-rename NAME`.",
-    ))
-}
-
-fn classify_blocklist_category_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        if next.trim().is_empty() {
-            return Err(invalid_usage(
-                "`--blocklist-category` requires a category name when a value is provided.",
-            ));
-        }
-        return Ok((ParsedToken::BlocklistCategory(Some(next.clone())), 2));
-    }
-    Ok((ParsedToken::BlocklistCategory(None), 1))
-}
-
-fn classify_blocklist_category_create_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(
-            next,
-            "`--blocklist-category-create` requires a category name.",
-        )?;
-        return Ok((ParsedToken::BlocklistCategoryCreate(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--blocklist-category-create` requires a category name. Use `--blocklist-category-create=NAME` or `--blocklist-category-create NAME`.",
-    ))
-}
-
-fn classify_blocklist_category_rename_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(
-            next,
-            "`--blocklist-category-rename` requires a category name.",
-        )?;
-        return Ok((ParsedToken::BlocklistCategoryRename(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--blocklist-category-rename` requires a category name. Use `--blocklist-category-rename=NAME` or `--blocklist-category-rename NAME`.",
     ))
 }
 
