@@ -312,6 +312,7 @@ Milestone policy:
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export/feature-inventory artifact workflows share target-directory handling.
 - **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency cleanup candidates stay documented, and WakaTime integration uses explicit supported runtime calls.
+- **v0.15.7:** standalone blocking preview access, Focus History dashboard customization paths, and dedicated status comparison guidance stay removed while diagnostics, the stable KPI dashboard, export artifacts, and Focus History remain the supported replacements.
 - **v0.15.x future cleanup:** continue retiring overlapping paths only after release notes and diagnostics name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
@@ -1044,12 +1045,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.15.6`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.15.7`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.15.6](https://github.com/utilForever/focustime/releases/tag/v0.15.6).
+The latest stable release is [v0.15.7](https://github.com/utilForever/focustime/releases/tag/v0.15.7).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 
