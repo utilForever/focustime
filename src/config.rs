@@ -23,8 +23,6 @@ use automation::{
     normalize_automation_triggers, normalize_trigger_days, normalize_weekday_profile_rules,
     normalize_weekday_token,
 };
-#[cfg(test)]
-pub(crate) use blocklists::BlocklistCategoryConfig;
 pub(crate) use blocklists::{BlocklistProfileConfig, effective_blocked_sites_for_profile};
 use blocklists::{
     default_blocklist_profile_name, make_unique_profile_name, normalize_blocklist_profiles,
@@ -36,9 +34,10 @@ use diagnostics::{run_config_doctor_with_path, run_config_migration_assistant_wi
 #[cfg(test)]
 use migration::migrate_config_toml_legacy_to_v1;
 use migration::{
-    collect_legacy_profile_rename_advice, config_health_error, config_health_warning,
-    detect_legacy_config_deprecation_warnings, migrate_config_toml_to_current,
-    migrate_config_toml_to_current_detailed, sort_config_health_findings, summarize_config_health,
+    collect_blocklist_category_migration_advice, collect_legacy_profile_rename_advice,
+    config_health_error, config_health_warning, detect_legacy_config_deprecation_warnings,
+    migrate_config_toml_to_current, migrate_config_toml_to_current_detailed,
+    sort_config_health_findings, summarize_config_health,
 };
 #[cfg(all(test, not(target_os = "windows")))]
 use paths::env_path_from_value;

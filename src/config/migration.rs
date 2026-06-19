@@ -57,6 +57,16 @@ pub(super) fn migrate_config_toml_to_current_detailed(
                 .to_string(),
         });
     }
+    let blocklist_category_input = config_toml.clone();
+    migrate_blocklist_categories_to_profile_rules(&mut config_toml);
+    if blocklist_category_input != config_toml {
+        steps.push(ConfigMigrationStepReport {
+            from_schema_version,
+            to_schema_version: from_schema_version,
+            summary: "Flatten deprecated blocklist category rules into profile-level site lists."
+                .to_string(),
+        });
+    }
     Ok((config_toml, schema_version, steps))
 }
 
@@ -115,6 +125,154 @@ pub(super) fn migrate_weekday_profile_rules_to_automation_triggers(config_toml: 
             continue;
         };
         triggers.push(trigger);
+    }
+}
+
+pub(super) fn migrate_blocklist_categories_to_profile_rules(config_toml: &mut toml::Value) {
+    let Some(table) = config_toml.as_table_mut() else {
+        return;
+    };
+    let Some(profiles) = table
+        .get_mut("blocklist_profiles")
+        .and_then(toml::Value::as_array_mut)
+    else {
+        return;
+    };
+
+    for profile in profiles {
+        let Some(profile) = profile.as_table_mut() else {
+            continue;
+        };
+        let existing_sites = string_array(profile.get("sites"));
+        let existing_allowlist_sites = string_array(profile.get("allowlist_sites"));
+        let categories = profile.remove("categories");
+        profile.remove("selected_category");
+        let Some(toml::Value::Array(categories)) = categories else {
+            continue;
+        };
+        if categories.is_empty() {
+            continue;
+        }
+
+        let (sites, allowlist_sites) = flatten_blocklist_category_values(
+            &categories,
+            &existing_sites,
+            &existing_allowlist_sites,
+        );
+        profile.insert("sites".to_string(), string_values(sites));
+        profile.insert(
+            "allowlist_sites".to_string(),
+            string_values(allowlist_sites),
+        );
+    }
+}
+
+fn flatten_blocklist_category_values(
+    categories: &[toml::Value],
+    legacy_sites: &[String],
+    legacy_allowlist_sites: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let mut normalized = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
+    for category in categories {
+        let Some(category) = category.as_table() else {
+            continue;
+        };
+        let name = category
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .unwrap_or("General")
+            .to_string();
+        let name = unique_name(&name, &mut seen_names);
+        normalized.push((
+            name,
+            string_array(category.get("sites")),
+            string_array(category.get("allowlist_sites")),
+        ));
+    }
+
+    if normalized.is_empty() {
+        return (
+            dedup_case_insensitive_strings(legacy_sites.iter().cloned()),
+            dedup_case_insensitive_strings(legacy_allowlist_sites.iter().cloned()),
+        );
+    }
+
+    if !legacy_sites.is_empty() || !legacy_allowlist_sites.is_empty() {
+        let general_index = normalized
+            .iter()
+            .position(|(name, _, _)| name.eq_ignore_ascii_case("General"))
+            .unwrap_or_else(|| {
+                normalized.push(("General".to_string(), Vec::new(), Vec::new()));
+                normalized.len().saturating_sub(1)
+            });
+        merge_unique_case_insensitive(&mut normalized[general_index].1, legacy_sites);
+        merge_unique_case_insensitive(&mut normalized[general_index].2, legacy_allowlist_sites);
+    }
+
+    let mut sites = Vec::new();
+    let mut allowlist_sites = Vec::new();
+    for (_, category_sites, category_allowlist_sites) in normalized {
+        merge_unique_case_insensitive(&mut sites, &category_sites);
+        merge_unique_case_insensitive(&mut allowlist_sites, &category_allowlist_sites);
+    }
+    (sites, allowlist_sites)
+}
+
+fn string_array(value: Option<&toml::Value>) -> Vec<String> {
+    value
+        .and_then(toml::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(toml::Value::as_str)
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn string_values(values: Vec<String>) -> toml::Value {
+    toml::Value::Array(values.into_iter().map(toml::Value::String).collect())
+}
+
+fn unique_name(base_name: &str, seen_names: &mut std::collections::HashSet<String>) -> String {
+    if seen_names.insert(base_name.to_ascii_lowercase()) {
+        return base_name.to_string();
+    }
+
+    let mut suffix = 2usize;
+    loop {
+        let candidate = format!("{base_name} ({suffix})");
+        if seen_names.insert(candidate.to_ascii_lowercase()) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
+fn dedup_case_insensitive_strings<I>(values: I) -> Vec<String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut seen = std::collections::HashSet::new();
+    values
+        .into_iter()
+        .filter(|value| seen.insert(value.to_ascii_lowercase()))
+        .collect()
+}
+
+fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
+    let mut seen: std::collections::HashSet<String> = target
+        .iter()
+        .map(|value| value.to_ascii_lowercase())
+        .collect();
+    for value in source {
+        if seen.insert(value.to_ascii_lowercase()) {
+            target.push(value.clone());
+        }
     }
 }
 
@@ -286,6 +444,33 @@ pub(super) fn collect_legacy_profile_rename_advice(config_toml: &toml::Value) ->
     advice
 }
 
+pub(super) fn collect_blocklist_category_migration_advice(
+    config_toml: &toml::Value,
+) -> Vec<String> {
+    let Some(table) = config_toml.as_table() else {
+        return Vec::new();
+    };
+    let Some(profiles) = table
+        .get("blocklist_profiles")
+        .and_then(toml::Value::as_array)
+    else {
+        return Vec::new();
+    };
+
+    let mut advice = Vec::new();
+    for (index, profile) in profiles.iter().enumerate() {
+        let Some(profile) = profile.as_table() else {
+            continue;
+        };
+        if profile.contains_key("categories") || profile.contains_key("selected_category") {
+            advice.push(format!(
+                "blocklist_profiles[{index}] uses deprecated category config; run migration to fold category `sites` and `allowlist_sites` into profile-level lists."
+            ));
+        }
+    }
+    advice
+}
+
 pub(super) fn push_legacy_profile_value_array_advice(
     advice: &mut Vec<String>,
     table: &toml::map::Map<String, toml::Value>,
@@ -415,16 +600,6 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
         );
     }
 
-    if config
-        .blocklist_profiles
-        .iter()
-        .any(blocklist_categories_in_use)
-    {
-        warnings.push(
-            "Deprecated blocklist category configuration is in use. Move category `sites` and `allowlist_sites` into the parent blocklist profile and manage hostnames with profile-level blocklist/allowlist commands.".to_string(),
-        );
-    }
-
     if !config.weekday_profile_rules.is_empty() {
         warnings.push(
             "Deprecated `weekday_profile_rules` is in use. Move weekday defaults to profile schedules and session templates.".to_string(),
@@ -444,15 +619,6 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
     }
 
     warnings
-}
-
-fn blocklist_categories_in_use(profile: &crate::config::BlocklistProfileConfig) -> bool {
-    profile.categories.len() > 1
-        || profile
-            .categories
-            .first()
-            .is_some_and(|category| !category.name.eq_ignore_ascii_case("General"))
-        || !profile.selected_category.eq_ignore_ascii_case("General")
 }
 
 pub(super) fn detect_config_schema_version(config_toml: &toml::Value) -> Option<u32> {

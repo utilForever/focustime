@@ -5,37 +5,39 @@ use crate::blocker::{domain_rule_matches_host, normalize_domain_rule};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(from = "BlocklistProfileConfigDisk")]
 pub(crate) struct BlocklistProfileConfig {
     #[serde(default = "default_blocklist_profile_name")]
     pub(crate) name: String,
     /// Profile-level blocklist rules.
-    ///
-    /// Category data is folded into this list during normalization for
-    /// compatibility with older grouped configs.
     #[serde(default)]
     pub(crate) sites: Vec<String>,
-    /// Profile-level allowlist rules.
-    ///
-    /// Category data is folded into this list during normalization. Effective
-    /// focus blocking is computed as `sites - allowlist_sites`.
+    /// Profile-level allowlist rules. Effective focus blocking is computed as
+    /// `sites - allowlist_sites`.
     #[serde(default)]
     pub(crate) allowlist_sites: Vec<String>,
-    /// Deprecated category-organized block/allow rules kept for compatibility.
-    #[serde(default)]
-    pub(crate) categories: Vec<BlocklistCategoryConfig>,
-    /// Name of the selected category inside this profile.
-    #[serde(default = "default_blocklist_category_name")]
-    pub(crate) selected_category: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct BlocklistCategoryConfig {
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct BlocklistProfileConfigDisk {
+    #[serde(default = "default_blocklist_profile_name")]
+    name: String,
+    #[serde(default)]
+    sites: Vec<String>,
+    #[serde(default)]
+    allowlist_sites: Vec<String>,
+    #[serde(default)]
+    categories: Vec<BlocklistCategoryConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct BlocklistCategoryConfig {
     #[serde(default = "default_blocklist_category_name")]
-    pub(crate) name: String,
+    name: String,
     #[serde(default)]
-    pub(crate) sites: Vec<String>,
+    sites: Vec<String>,
     #[serde(default)]
-    pub(crate) allowlist_sites: Vec<String>,
+    allowlist_sites: Vec<String>,
 }
 
 impl Default for BlocklistProfileConfig {
@@ -44,8 +46,6 @@ impl Default for BlocklistProfileConfig {
             name: default_blocklist_profile_name(),
             sites: Vec::new(),
             allowlist_sites: Vec::new(),
-            categories: Vec::new(),
-            selected_category: default_blocklist_category_name(),
         }
     }
 }
@@ -56,6 +56,21 @@ impl Default for BlocklistCategoryConfig {
             name: default_blocklist_category_name(),
             sites: Vec::new(),
             allowlist_sites: Vec::new(),
+        }
+    }
+}
+
+impl From<BlocklistProfileConfigDisk> for BlocklistProfileConfig {
+    fn from(profile: BlocklistProfileConfigDisk) -> Self {
+        let (sites, allowlist_sites) = flattened_profile_rules(
+            &profile.categories,
+            &profile.sites,
+            &profile.allowlist_sites,
+        );
+        Self {
+            name: profile.name,
+            sites,
+            allowlist_sites,
         }
     }
 }
@@ -132,33 +147,18 @@ pub(super) fn normalize_blocklist_profiles(
         let base_name =
             normalize_nonempty_or_default_string(&profile.name, &default_blocklist_profile_name());
         let name = make_unique_profile_name(&base_name, &mut seen_names);
-        let categories = normalize_blocklist_categories(
-            &profile.categories,
-            &profile.sites,
-            &profile.allowlist_sites,
-        );
-        let selected_category =
-            normalize_selected_blocklist_category(&profile.selected_category, &categories);
-        let (sites, allowlist_sites) = flatten_blocklist_categories(&categories);
         normalized.push(BlocklistProfileConfig {
             name,
-            sites,
-            allowlist_sites,
-            categories,
-            selected_category,
+            sites: dedup_case_insensitive(profile.sites.iter().cloned()),
+            allowlist_sites: dedup_case_insensitive(profile.allowlist_sites.iter().cloned()),
         });
     }
 
     if normalized.is_empty() {
-        let categories = normalize_blocklist_categories(&[], legacy_blocked_sites, &[]);
-        let selected_category = normalize_selected_blocklist_category("", categories.as_slice());
-        let (sites, allowlist_sites) = flatten_blocklist_categories(&categories);
         return vec![BlocklistProfileConfig {
             name: default_blocklist_profile_name(),
-            sites,
-            allowlist_sites,
-            categories,
-            selected_category,
+            sites: dedup_case_insensitive(legacy_blocked_sites.iter().cloned()),
+            allowlist_sites: Vec::new(),
         }];
     }
 
@@ -206,6 +206,16 @@ pub(super) fn make_unique_profile_name(
         }
         suffix += 1;
     }
+}
+
+fn flattened_profile_rules(
+    categories: &[BlocklistCategoryConfig],
+    legacy_sites: &[String],
+    legacy_allowlist_sites: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let categories =
+        normalize_blocklist_categories(categories, legacy_sites, legacy_allowlist_sites);
+    flatten_blocklist_categories(&categories)
 }
 
 fn normalize_blocklist_categories(
@@ -271,31 +281,6 @@ fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
         if seen.insert(key) {
             target.push(value.clone());
         }
-    }
-}
-
-fn normalize_selected_blocklist_category(
-    selected_name: &str,
-    categories: &[BlocklistCategoryConfig],
-) -> String {
-    let selected_name = selected_name.trim();
-    if selected_name.is_empty() {
-        return categories
-            .first()
-            .map(|category| category.name.clone())
-            .unwrap_or_else(default_blocklist_category_name);
-    }
-
-    if let Some(category) = categories
-        .iter()
-        .find(|category| category.name.eq_ignore_ascii_case(selected_name))
-    {
-        category.name.clone()
-    } else {
-        categories
-            .first()
-            .map(|category| category.name.clone())
-            .unwrap_or_else(default_blocklist_category_name)
     }
 }
 

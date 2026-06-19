@@ -352,7 +352,7 @@ pub(super) fn effective_blocked_sites_for_profile(profile: &BlocklistProfileConf
 #[cfg(test)]
 mod tests {
     use super::effective_blocked_sites_for_profile;
-    use crate::config::{AppConfig, BlocklistCategoryConfig};
+    use crate::config::AppConfig;
 
     #[test]
     fn effective_blocked_sites_keeps_wildcard_only_rules() {
@@ -382,21 +382,9 @@ mod tests {
     }
 
     #[test]
-    fn effective_blocked_sites_prefers_profile_level_rules_when_present() {
+    fn effective_blocked_sites_uses_profile_level_rules() {
         let profile = crate::config::BlocklistProfileConfig {
             sites: vec!["legacy-top-level.com".to_string()],
-            categories: vec![
-                BlocklistCategoryConfig {
-                    name: "Social".to_string(),
-                    sites: vec!["News.com".to_string(), "*.example.com".to_string()],
-                    allowlist_sites: vec!["news.com".to_string()],
-                },
-                BlocklistCategoryConfig {
-                    name: "Work".to_string(),
-                    sites: vec!["*.EXAMPLE.com".to_string(), "forum.example.com".to_string()],
-                    allowlist_sites: Vec::new(),
-                },
-            ],
             ..crate::config::BlocklistProfileConfig::default()
         };
 
@@ -408,25 +396,24 @@ mod tests {
 
     #[test]
     fn effective_blocked_sites_uses_normalized_profile_rules_for_category_compatibility() {
-        let config = AppConfig {
-            blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
-                categories: vec![
-                    BlocklistCategoryConfig {
-                        name: "Social".to_string(),
-                        sites: vec!["News.com".to_string(), "*.example.com".to_string()],
-                        allowlist_sites: vec!["news.com".to_string()],
-                    },
-                    BlocklistCategoryConfig {
-                        name: "Work".to_string(),
-                        sites: vec!["*.EXAMPLE.com".to_string(), "forum.example.com".to_string()],
-                        allowlist_sites: Vec::new(),
-                    },
-                ],
-                ..crate::config::BlocklistProfileConfig::default()
-            }],
-            ..AppConfig::default()
-        }
-        .normalized();
+        let config: AppConfig = toml::from_str(
+            r#"
+[[blocklist_profiles]]
+name = "Default"
+
+[[blocklist_profiles.categories]]
+name = "Social"
+sites = ["News.com", "*.example.com"]
+allowlist_sites = ["news.com"]
+
+[[blocklist_profiles.categories]]
+name = "Work"
+sites = ["*.EXAMPLE.com", "forum.example.com"]
+allowlist_sites = []
+"#,
+        )
+        .unwrap();
+        let config = config.normalized();
         let profile = &config.blocklist_profiles[0];
 
         assert_eq!(
