@@ -52,8 +52,6 @@ fn test_diagnostics_blocking_preview_output() -> DiagnosticsBlockingPreviewOutpu
         status: "ok",
         error: None,
         preview: Some(BlockingPreviewOutput {
-            deprecated: false,
-            replacement: None,
             backend: "hosts",
             backend_target: "hosts".to_string(),
             attempted_backends: vec!["hosts"],
@@ -1078,12 +1076,10 @@ fn diagnostics_output_includes_config_health_and_migration_guidance() {
         .preview
         .as_ref()
         .expect("diagnostics should include blocking preview details");
-    assert!(!preview.deprecated);
     assert_eq!(preview.backend, "hosts");
     assert_eq!(preview.action, "block");
     assert!(preview.would_change);
     assert_eq!(preview.effective_blocked_sites, vec!["example.com"]);
-    assert!(preview.replacement.is_none());
     assert_eq!(payload.config_doctor.action, "config-doctor");
     assert_eq!(payload.config_doctor.status, ConfigHealthStatus::Ok);
     assert_eq!(payload.config_migration.action, "config-migrate");
@@ -1137,10 +1133,9 @@ fn diagnostics_output_includes_deprecation_warnings() {
 }
 
 #[test]
-fn parse_blocking_preview_reports_removed_command_guidance() {
+fn parse_blocking_preview_reports_unknown_option() {
     let error = parse(&["--blocking-preview", "--json"]).unwrap_err();
     assert!(error.contains("Unknown option `--blocking-preview`"));
-    assert!(error.contains("standalone blocking preview command was removed"));
 }
 
 #[test]
@@ -2276,14 +2271,14 @@ fn parse_with_contract_adds_replacement_hint_for_removed_options() {
 }
 
 #[test]
-fn parse_with_contract_adds_feature_inventory_hint_for_removed_usage_signals() {
+fn parse_with_contract_treats_removed_usage_signals_as_plain_unknown_option() {
     let error = parse_with_contract(&["--usage-signals", "--json"]).unwrap_err();
     assert_eq!(error.kind, CliErrorKind::Usage);
     assert_eq!(error.output, OutputMode::Json);
     assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
     assert_eq!(error.code, "cli.usage");
     assert!(error.message.contains("Unknown option `--usage-signals`"));
-    assert_eq!(error.hint.as_deref(), Some(USAGE_SIGNALS_REPLACEMENT));
+    assert!(error.hint.is_none());
 }
 
 #[test]

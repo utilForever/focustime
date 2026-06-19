@@ -1095,7 +1095,7 @@ fn text_runtime_errors_still_use_stderr() {
 }
 
 #[test]
-fn blocking_preview_json_reports_removed_command_guidance() {
+fn blocking_preview_json_reports_plain_unknown_option() {
     let env = TestEnv::new("blocking-preview-json");
     let output = env.run(&["--blocking-preview", "--json"]);
 
@@ -1111,11 +1111,7 @@ fn blocking_preview_json_reports_removed_command_guidance() {
             .as_str()
             .is_some_and(|message| message.contains("--blocking-preview"))
     );
-    assert!(
-        payload["error"]["hint"]
-            .as_str()
-            .is_some_and(|hint| hint.contains("--diagnostics"))
-    );
+    assert!(payload["error"].get("hint").is_none());
 }
 
 #[test]
@@ -1133,8 +1129,6 @@ fn diagnostics_json_includes_blocking_preview_payload() {
     assert!(payload.get("config_migration").is_some());
     assert_eq!(payload["blocking_preview"]["status"], "ok");
     let preview = &payload["blocking_preview"]["preview"];
-    assert_eq!(preview["deprecated"], false);
-    assert!(preview.get("replacement").is_none());
     assert!(preview.get("backend").is_some());
     assert!(preview.get("action").is_some());
     assert!(preview.get("would_change").is_some());
