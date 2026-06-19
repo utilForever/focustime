@@ -246,14 +246,12 @@ strict_mode = true
 }
 
 #[test]
-fn v015_removed_command_paths_keep_targeted_json_guidance() {
+fn v015_removed_command_paths_keep_supported_json_guidance_only() {
     let env = TestEnv::new("removed-commands");
 
     for (flag, replacement) in [
         ("--migrate", "--config-migrate"),
         ("--dry-run", "--config-migrate"),
-        ("--usage-signals", "--feature-inventory"),
-        ("--blocking-preview", "--diagnostics"),
         ("--sync-backup", "--backup"),
         ("--sync-restore", "--restore"),
         ("--sync-passphrase=secret", "no direct replacement"),
@@ -283,22 +281,40 @@ fn v015_removed_command_paths_keep_targeted_json_guidance() {
             "removed flag should include replacement hint `{replacement}`: {hint}"
         );
     }
+
+    for flag in ["--usage-signals", "--blocking-preview"] {
+        let output = env.run(&[flag, "--json"]);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(
+            stderr_text(&output).trim().is_empty(),
+            "JSON usage errors should stay on stdout for {flag}"
+        );
+        let payload = parse_json_stdout(&output);
+        assert_eq!(payload["ok"], false);
+        assert_eq!(payload["error"]["kind"], "usage");
+        assert_eq!(payload["error"]["exit_code"], 2);
+        let message = payload["error"]["message"]
+            .as_str()
+            .expect("error message should be a string");
+        assert!(
+            message.contains(flag),
+            "removed flag should be named in its error: {message}"
+        );
+        assert!(
+            payload["error"].get("hint").is_none(),
+            "removed command-surface ballast should not add a replacement-only hint for {flag}"
+        );
+    }
 }
 
 #[test]
-fn v015_removed_command_text_errors_keep_the_same_replacement_guidance() {
+fn v015_removed_command_text_errors_keep_supported_replacement_guidance_only() {
     let env = TestEnv::new("removed-commands-text");
 
-    for (flag, expected_hint) in [
-        (
-            "--sync-backup",
-            "Hint: Use `--backup` for local portable recovery workflows.",
-        ),
-        (
-            "--usage-signals",
-            "Hint: Use `focustime --feature-inventory` for cleanup reporting;",
-        ),
-    ] {
+    for (flag, expected_hint) in [(
+        "--sync-backup",
+        "Hint: Use `--backup` for local portable recovery workflows.",
+    )] {
         let output = env.run(&[flag]);
 
         assert_eq!(output.status.code(), Some(2));
@@ -307,6 +323,13 @@ fn v015_removed_command_text_errors_keep_the_same_replacement_guidance() {
         assert!(stderr.contains(&format!("Unknown option `{flag}`")));
         assert!(stderr.contains(expected_hint));
     }
+
+    let output = env.run(&["--usage-signals"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
+    let stderr = stderr_text(&output);
+    assert!(stderr.contains("Unknown option `--usage-signals`"));
+    assert!(!stderr.contains("Hint:"));
 }
 
 fn focustime_bin_path() -> PathBuf {
