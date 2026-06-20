@@ -92,6 +92,7 @@ pub(super) fn canonicalize_legacy_profile_aliases(config_toml: &mut toml::Value)
     migrate_automation_trigger_action_profiles(table);
 }
 
+/// Removes retired weekday profile rules without migrating them to replacement triggers.
 pub(super) fn remove_weekday_profile_rules(config_toml: &mut toml::Value) {
     let Some(table) = config_toml.as_table_mut() else {
         return;
