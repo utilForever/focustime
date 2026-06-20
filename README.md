@@ -1037,12 +1037,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.15.7`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.15.8`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.15.7](https://github.com/utilForever/focustime/releases/tag/v0.15.7).
+The latest stable release is [v0.15.8](https://github.com/utilForever/focustime/releases/tag/v0.15.8).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 
