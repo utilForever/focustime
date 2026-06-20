@@ -2,8 +2,8 @@ use super::{
     AppConfig, AutoStartConfig, CURRENT_CONFIG_SCHEMA_VERSION, ConfigHealthFinding,
     ConfigHealthSeverity, ConfigHealthStatus, ConfigMigrationStepReport,
     LEGACY_CONFIG_SCHEMA_VERSION, NotificationConfig, RecurringScheduleConfig,
-    WEEKDAY_PROFILE_RULE_REPLACEMENT_AT, canonical_profile_id_token, default_focus_secs,
-    default_long_break_interval, default_long_break_secs, default_short_break_secs,
+    canonical_profile_id_token, default_focus_secs, default_long_break_interval,
+    default_long_break_secs, default_short_break_secs,
 };
 
 pub(super) fn migrate_config_toml_to_current(config_toml: toml::Value) -> Option<toml::Value> {
@@ -48,13 +48,14 @@ pub(super) fn migrate_config_toml_to_current_detailed(
         });
     }
     let weekday_rules_input = config_toml.clone();
-    migrate_weekday_profile_rules_to_automation_triggers(&mut config_toml);
+    remove_weekday_profile_rules(&mut config_toml);
     if weekday_rules_input != config_toml {
         steps.push(ConfigMigrationStepReport {
             from_schema_version,
             to_schema_version: from_schema_version,
-            summary: "Move deprecated weekday profile rules into automation time triggers."
-                .to_string(),
+            summary:
+                "Remove deprecated weekday profile rules; use schedules and session templates."
+                    .to_string(),
         });
     }
     let blocklist_category_input = config_toml.clone();
@@ -88,44 +89,17 @@ pub(super) fn canonicalize_legacy_profile_aliases(config_toml: &mut toml::Value)
     migrate_profile_value_in_table(table, "selected_profile");
     migrate_profile_automation_preset_keys(table);
     migrate_profile_value_in_array_table(table, "session_templates", "profile");
-    migrate_profile_value_in_array_table(table, "weekday_profile_rules", "profile");
     migrate_automation_trigger_action_profiles(table);
 }
 
-pub(super) fn migrate_weekday_profile_rules_to_automation_triggers(config_toml: &mut toml::Value) {
+pub(super) fn remove_weekday_profile_rules(config_toml: &mut toml::Value) {
     let Some(table) = config_toml.as_table_mut() else {
         return;
     };
-    let Some(weekday_rules) = table
-        .get("weekday_profile_rules")
-        .and_then(|value| value.as_array().cloned())
-    else {
+    if !table.contains_key("weekday_profile_rules") {
         return;
     };
-    if table
-        .get("automation_triggers")
-        .is_some_and(|value| !value.is_array())
-    {
-        return;
-    }
     table.remove("weekday_profile_rules");
-    if weekday_rules.is_empty() {
-        return;
-    }
-
-    let triggers = table
-        .entry("automation_triggers")
-        .or_insert_with(|| toml::Value::Array(Vec::new()));
-    let Some(triggers) = triggers.as_array_mut() else {
-        return;
-    };
-    triggers.retain(|trigger| !is_weekday_profile_replacement_trigger_value(trigger));
-    for rule in weekday_rules {
-        let Some(trigger) = weekday_rule_value_to_automation_trigger(rule) else {
-            continue;
-        };
-        triggers.push(trigger);
-    }
 }
 
 pub(super) fn migrate_blocklist_categories_to_profile_rules(config_toml: &mut toml::Value) {
@@ -276,85 +250,6 @@ fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
     }
 }
 
-fn weekday_rule_value_to_automation_trigger(rule: toml::Value) -> Option<toml::Value> {
-    let rule = rule.as_table()?;
-    let day = rule
-        .get("day")
-        .and_then(toml::Value::as_str)
-        .unwrap_or("mon");
-    let profile = rule
-        .get("profile")
-        .and_then(toml::Value::as_str)
-        .and_then(canonical_profile_id_token)
-        .unwrap_or("advanced");
-    let blocklist_profile = rule
-        .get("blocklist_profile")
-        .and_then(toml::Value::as_str)
-        .unwrap_or("Default");
-
-    let mut trigger = toml::map::Map::new();
-    trigger.insert("type".to_string(), toml::Value::String("time".to_string()));
-    trigger.insert(
-        "days".to_string(),
-        toml::Value::Array(vec![toml::Value::String(day.to_string())]),
-    );
-    trigger.insert(
-        "at".to_string(),
-        toml::Value::String(WEEKDAY_PROFILE_RULE_REPLACEMENT_AT.to_string()),
-    );
-
-    let mut action = toml::map::Map::new();
-    action.insert(
-        "type".to_string(),
-        toml::Value::String("apply_defaults".to_string()),
-    );
-    action.insert(
-        "profile".to_string(),
-        toml::Value::String(profile.to_string()),
-    );
-    action.insert(
-        "blocklist_profile".to_string(),
-        toml::Value::String(blocklist_profile.to_string()),
-    );
-    if let Some(template) = rule.get("session_template").and_then(toml::Value::as_str)
-        && !template.trim().is_empty()
-    {
-        action.insert(
-            "session_template".to_string(),
-            toml::Value::String(template.to_string()),
-        );
-    }
-
-    let mut entry = toml::map::Map::new();
-    entry.insert("trigger".to_string(), toml::Value::Table(trigger));
-    entry.insert("action".to_string(), toml::Value::Table(action));
-    Some(toml::Value::Table(entry))
-}
-
-fn is_weekday_profile_replacement_trigger_value(trigger: &toml::Value) -> bool {
-    let Some(trigger) = trigger.as_table() else {
-        return false;
-    };
-    let Some(condition) = trigger.get("trigger").and_then(toml::Value::as_table) else {
-        return false;
-    };
-    let Some(action) = trigger.get("action").and_then(toml::Value::as_table) else {
-        return false;
-    };
-    condition
-        .get("type")
-        .and_then(toml::Value::as_str)
-        .is_some_and(|value| value == "time")
-        && condition
-            .get("at")
-            .and_then(toml::Value::as_str)
-            .is_some_and(|value| value == WEEKDAY_PROFILE_RULE_REPLACEMENT_AT)
-        && action
-            .get("type")
-            .and_then(toml::Value::as_str)
-            .is_some_and(|value| value == "apply_defaults")
-}
-
 pub(super) fn config_health_warning(
     code: impl Into<String>,
     message: impl Into<String>,
@@ -428,13 +323,6 @@ pub(super) fn collect_legacy_profile_rename_advice(config_toml: &toml::Value) ->
         "session_templates",
         "profile",
         "session_templates",
-    );
-    push_legacy_profile_value_array_advice(
-        &mut advice,
-        table,
-        "weekday_profile_rules",
-        "profile",
-        "weekday_profile_rules",
     );
     push_legacy_automation_trigger_profile_advice(&mut advice, table);
     push_legacy_profile_automation_key_advice(&mut advice, table);
@@ -600,12 +488,6 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
         );
     }
 
-    if !config.weekday_profile_rules.is_empty() {
-        warnings.push(
-            "Deprecated `weekday_profile_rules` is in use. Move weekday defaults to profile schedules and session templates.".to_string(),
-        );
-    }
-
     if !config.automation_triggers.is_empty() {
         warnings.push(
             "Deprecated `automation_triggers` is in use. Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active schedule windows, and session templates for task/profile/blocklist defaults.".to_string(),
@@ -653,7 +535,6 @@ pub(super) fn migrate_config_toml_v1_to_v2(mut config_toml: toml::Value) -> Opti
     migrate_profile_value_in_table(table, "selected_profile");
     migrate_profile_automation_preset_keys(table);
     migrate_profile_value_in_array_table(table, "session_templates", "profile");
-    migrate_profile_value_in_array_table(table, "weekday_profile_rules", "profile");
     migrate_automation_trigger_action_profiles(table);
     table.insert(
         "schema_version".to_string(),

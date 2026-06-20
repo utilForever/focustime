@@ -7,7 +7,7 @@ use crate::cli::{
     parse_automation_triggers_value, parse_daemon_port, parse_goal_carry_value, parse_goal_value,
     parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
     parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_watch_interval_secs,
-    parse_weekday_rules_value, parse_weekly_goal_value, require_nonempty_key_value,
+    parse_weekly_goal_value, require_nonempty_key_value,
 };
 
 pub(super) fn infer_output_mode_from_os_args(args: &[OsString]) -> OutputMode {
@@ -59,7 +59,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 36] = [
+    let parsers: [(&str, ValueArgParser); 35] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -74,7 +74,6 @@ fn classify_value_arg(
         ("--goal-carry-monthly", classify_goal_carry_monthly_arg),
         ("--strict", classify_strict_arg),
         ("--schedule-set", classify_schedule_set_arg),
-        ("--weekday-rules-set", classify_weekday_rules_set_arg),
         (
             "--automation-triggers-set",
             classify_automation_triggers_set_arg,
@@ -148,7 +147,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--daemon-status" => Some(ParsedToken::DaemonStatus),
         "--daemon-stop" => Some(ParsedToken::DaemonStop),
         "--schedule" => Some(ParsedToken::Schedule),
-        "--weekday-rules" => Some(ParsedToken::WeekdayRules),
         "--automation-triggers" => Some(ParsedToken::AutomationTriggers),
         "--schedule-delay" => Some(ParsedToken::ScheduleDelay),
         "--break-glass-trigger" => Some(ParsedToken::BreakGlassTrigger),
@@ -667,23 +665,6 @@ fn classify_schedule_set_arg(
     }
     Err(invalid_usage(
         "`--schedule-set` requires a JSON payload. Use `--schedule-set='{\"windows\":[...],\"exception_dates\":[...]}'`.",
-    ))
-}
-
-fn classify_weekday_rules_set_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        return Ok((
-            ParsedToken::WeekdayRulesSet(parse_weekday_rules_value(next)?),
-            2,
-        ));
-    }
-    Err(invalid_usage(
-        "`--weekday-rules-set` requires a JSON payload. This compatibility command maps to `--automation-triggers-set`; use `--weekday-rules-set='[{\"day\":\"mon\",\"profile\":\"standard\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}]'`.",
     ))
 }
 

@@ -20,8 +20,7 @@ use crate::config::{
     OneTimeFocusWindowConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
     RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
     SessionTemplateConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
-    WakatimeRuntimeConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
-    replace_weekday_profile_rule_automation_triggers, validate_automation_trigger_rules,
+    WakatimeRuntimeConfig, WeeklyGoalConfig, validate_automation_trigger_rules,
 };
 use crate::integration::IntegrationRuntime;
 use crate::notifications::PhaseNotifier;
@@ -73,7 +72,6 @@ mod shortcuts;
 mod site_manager;
 mod temporary_allowlist;
 mod timer_flow;
-mod weekday_rules;
 
 pub(crate) use error::{AppError, AppResult};
 use history_dashboard_cache::HistoryDashboardCache;
@@ -101,9 +99,6 @@ pub(crate) use profile_edit::{
     PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
     PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX,
     PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX, PROFILE_EDIT_WAKATIME_PROJECT_INDEX,
-    PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX, PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX,
-    PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX, PROFILE_EDIT_WEEKDAY_RULE_INDEX,
-    PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX, PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, ProfileEditSnapshot,
 };
@@ -545,7 +540,6 @@ pub(crate) struct App {
     profile_automation: ProfileAutomationSettingsConfig,
     automation_triggers: Vec<AutomationTriggerRuleConfig>,
     automation_trigger_last_fired_minute: HashMap<usize, i64>,
-    weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     pub(crate) custom_profile: CustomProfileConfig,
     pub(crate) profile_selection_index: usize,
     pub(crate) profile_edit_active: bool,
@@ -554,7 +548,6 @@ pub(crate) struct App {
     profile_edit_schedule_day: usize,
     profile_edit_schedule_exception: usize,
     profile_edit_one_time_window: usize,
-    profile_edit_weekday_rule: usize,
     profile_edit_automation_trigger: usize,
     profile_edit_automation_triggers: Vec<AutomationTriggerRuleConfig>,
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
@@ -572,7 +565,6 @@ pub(crate) struct App {
     schedule_delay_until: Option<DateTime<Local>>,
     last_schedule_occurrence_key: Option<String>,
     last_active_schedule_occurrence_key: Option<String>,
-    last_weekday_profile_sync_day: Option<NaiveDate>,
     current_frame_now: DateTime<Local>,
     pub(crate) strict_mode: bool,
     break_glass_duration_secs: u64,
@@ -623,7 +615,6 @@ impl App {
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
         let mut automation_triggers = config.automation_triggers.clone();
-        let weekday_profile_rules = config.weekday_profile_rules.clone();
         let selected_automation = config.profile_automation_for(selected_profile);
         let notification_settings = selected_automation.notifications;
         let auto_start = selected_automation.auto_start;
@@ -784,7 +775,6 @@ impl App {
             profile_automation,
             automation_triggers,
             automation_trigger_last_fired_minute: HashMap::new(),
-            weekday_profile_rules,
             custom_profile,
             profile_selection_index: profile_index(selected_profile),
             profile_edit_active: false,
@@ -793,7 +783,6 @@ impl App {
             profile_edit_schedule_day: 0,
             profile_edit_schedule_exception: 0,
             profile_edit_one_time_window: 0,
-            profile_edit_weekday_rule: 0,
             profile_edit_automation_trigger: 0,
             profile_edit_automation_triggers: Vec::new(),
             profile_edit_snapshot: None,
@@ -811,7 +800,6 @@ impl App {
             schedule_delay_until: None,
             last_schedule_occurrence_key: None,
             last_active_schedule_occurrence_key: None,
-            last_weekday_profile_sync_day: None,
             current_frame_now: Local::now(),
             strict_mode,
             break_glass_duration_secs,
@@ -835,7 +823,6 @@ impl App {
         app.recompute_blocker_sites_from_active_profile();
         app.restore_in_progress_session();
         app.restore_cli_workflow_state();
-        app.sync_weekday_profile_rules(Local::now());
         app.sync_planner_selection_to_selected_label();
         app.sync_recovery_snapshot();
         app.apply_blocking_for_phase();
@@ -869,7 +856,6 @@ impl App {
         self.integrations.poll_wakatime_events();
         self.sync_temporary_allowlist_entries(now);
         self.sync_break_glass_override();
-        self.sync_weekday_profile_rules(now);
         self.sync_recurring_schedule(now);
     }
 
@@ -1176,7 +1162,7 @@ impl App {
     }
 
     pub(crate) fn profile_edit_field_value(&self, field_index: usize) -> String {
-        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX)
+        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX)
             .contains(&field_index)
             || (PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX
                 ..=PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX)

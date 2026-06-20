@@ -1,8 +1,7 @@
 use crate::cli::*;
 use crate::config::{
     AutomationTriggerActionConfig, AutomationTriggerConditionConfig, ConfigDoctorReport,
-    ConfigHealthStatus, ConfigMigrationReport, WEEKDAY_PROFILE_RULE_REPLACEMENT_AT,
-    WeekdayProfileRuleConfig,
+    ConfigHealthStatus, ConfigMigrationReport,
 };
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
@@ -95,47 +94,6 @@ fn parse_status_supports_json_mode() {
             },
             output: OutputMode::Json
         })
-    );
-}
-
-#[test]
-fn weekday_rules_json_emits_deprecated_replacement_payload() {
-    let canonical_rule = AutomationTriggerRuleConfig {
-        trigger: AutomationTriggerConditionConfig::Time {
-            days: vec!["mon".to_string()],
-            at: WEEKDAY_PROFILE_RULE_REPLACEMENT_AT.to_string(),
-        },
-        action: AutomationTriggerActionConfig::ApplyDefaults {
-            profile: crate::config::ProfileId::DeepWork,
-            blocklist_profile: "Work".to_string(),
-            session_template: Some("Deep Flow".to_string()),
-        },
-    };
-    let payload = WeekdayRulesCommandOutput {
-        updated: false,
-        deprecated: true,
-        replacement: "Use `--schedule`/`--schedule-set` with session templates for weekday focus defaults.",
-        rules: vec![WeekdayProfileRuleConfig {
-            day: "mon".to_string(),
-            profile: crate::config::ProfileId::DeepWork,
-            blocklist_profile: "Work".to_string(),
-            session_template: Some("Deep Flow".to_string()),
-        }],
-        canonical_rules: vec![canonical_rule],
-    };
-
-    let json = serde_json::to_value(&payload).unwrap();
-    assert_eq!(json["deprecated"], true);
-    assert_eq!(json["replacement"], payload.replacement);
-    assert_eq!(json["rules"][0]["day"], "mon");
-    assert_eq!(json["canonical_rules"][0]["trigger"]["type"], "time");
-    assert_eq!(
-        json["canonical_rules"][0]["trigger"]["at"],
-        WEEKDAY_PROFILE_RULE_REPLACEMENT_AT
-    );
-    assert_eq!(
-        json["canonical_rules"][0]["action"]["type"],
-        "apply_defaults"
     );
 }
 
@@ -780,15 +738,9 @@ fn parse_schedule_reads_current_schedule() {
 }
 
 #[test]
-fn parse_weekday_rules_reads_current_rules() {
-    let parsed = parse(&["--weekday-rules"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::WeekdayRules { rules: None },
-            output: OutputMode::Text
-        })
-    );
+fn parse_weekday_rules_is_retired() {
+    let error = parse(&["--weekday-rules"]).unwrap_err();
+    assert!(error.contains("Unknown option `--weekday-rules`"));
 }
 
 #[test]
@@ -879,30 +831,6 @@ fn parse_schedule_set_accepts_one_time_windows_payload() {
                         end: "15:30".to_string(),
                     }],
                 }),
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_weekday_rules_set_accepts_json_payload() {
-    let payload = r#"[{"day":"monday","profile":"deep-work","blocklist_profile":"Work","session_template":"Deep Flow"}]"#;
-    let parsed = parse_args([
-        OsString::from("--weekday-rules-set"),
-        OsString::from(payload),
-    ])
-    .unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::WeekdayRules {
-                rules: Some(vec![WeekdayProfileRuleConfig {
-                    day: "monday".to_string(),
-                    profile: ProfileId::DeepWork,
-                    blocklist_profile: "Work".to_string(),
-                    session_template: Some("Deep Flow".to_string()),
-                }]),
             },
             output: OutputMode::Text
         })
@@ -1721,23 +1649,6 @@ fn classify_key_value_arg_accepts_schedule_set_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_weekday_rules_set_equals_value() {
-    let payload = "--weekday-rules-set=[{\"day\":\"fri\",\"profile\":\"classic\",\"blocklist_profile\":\"Default\"}]";
-    let parsed = classify_key_value_arg(payload).unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::WeekdayRulesSet(vec![
-            WeekdayProfileRuleConfig {
-                day: "fri".to_string(),
-                profile: ProfileId::Classic,
-                blocklist_profile: "Default".to_string(),
-                session_template: None,
-            }
-        ]))
-    );
-}
-
-#[test]
 fn classify_key_value_arg_accepts_automation_triggers_set_equals_value() {
     let payload = "--automation-triggers-set=[{\"trigger\":{\"type\":\"schedule_window_start\"},\"action\":{\"type\":\"start_focus\"}}]";
     let parsed = classify_key_value_arg(payload).unwrap();
@@ -1875,9 +1786,9 @@ fn classify_key_value_arg_rejects_empty_schedule_set_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_rejects_empty_weekday_rules_set_equals_value() {
-    let error = classify_key_value_arg("--weekday-rules-set=").unwrap_err();
-    assert!(error.contains("`--weekday-rules-set=` requires a JSON payload."));
+fn parse_weekday_rules_set_equals_is_retired() {
+    let error = parse(&["--weekday-rules-set=[]"]).unwrap_err();
+    assert!(error.contains("Unknown option `--weekday-rules-set=[]`"));
 }
 
 #[test]
@@ -2007,9 +1918,9 @@ fn parse_rejects_schedule_set_without_payload() {
 }
 
 #[test]
-fn parse_rejects_weekday_rules_set_without_payload() {
+fn parse_rejects_weekday_rules_set_without_payload_as_retired() {
     let error = parse(&["--weekday-rules-set"]).unwrap_err();
-    assert!(error.contains("`--weekday-rules-set` requires a JSON payload"));
+    assert!(error.contains("Unknown option `--weekday-rules-set`"));
 }
 
 #[test]
@@ -2049,17 +1960,6 @@ fn parse_rejects_schedule_set_with_invalid_weekday() {
     let error =
         parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
     assert!(error.contains("unknown weekday"));
-}
-
-#[test]
-fn parse_rejects_weekday_rules_set_with_invalid_weekday() {
-    let payload = r#"[{"day":"funday","profile":"classic","blocklist_profile":"Default"}]"#;
-    let error = parse_args([
-        OsString::from("--weekday-rules-set"),
-        OsString::from(payload),
-    ])
-    .unwrap_err();
-    assert!(error.contains("unknown day"));
 }
 
 #[test]

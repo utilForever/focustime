@@ -17,7 +17,7 @@ use crate::config::{
     AppConfig, AutomationTriggerRuleConfig, BlocklistProfileConfig, ConfigDoctorReport,
     ConfigMigrationReport, CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig,
     OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
-    ThemePreset, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    ThemePreset, WeeklyGoalConfig,
 };
 use crate::error::UserMessage;
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
@@ -61,7 +61,6 @@ use output::{
     print_site_edit_command_output, print_site_list_command_output, print_status_output,
     print_strict_command_output, print_task_goal_command_output,
     print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
-    print_weekday_rules_command_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage,
@@ -69,8 +68,7 @@ use parsing::{
     parse_global_tokens, parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value,
     parse_primary_command, parse_profile_id, parse_schedule_value, parse_site_edit_value,
     parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
-    parse_watch_interval_secs, parse_weekday_rules_value, parse_weekly_goal_value,
-    require_nonempty_key_value,
+    parse_watch_interval_secs, parse_weekly_goal_value, require_nonempty_key_value,
 };
 use status::{
     available_theme_preset_views, build_status_output, build_task_goal_output, profile_id,
@@ -109,8 +107,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
   focustime --schedule-set=JSON_PAYLOAD [--json]
-  focustime --weekday-rules [--json]
-  focustime --weekday-rules-set=JSON_PAYLOAD [--json]
   focustime --automation-triggers [--json]
   focustime --automation-triggers-set=JSON_PAYLOAD [--json]
   focustime --schedule-delay [--json]
@@ -170,8 +166,6 @@ Options:
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
   --schedule-set  Replace selected profile schedule (recurring + one-time) from JSON payload
-  --weekday-rules      Deprecated: show weekday defaults mapped from automation triggers
-  --weekday-rules-set  Deprecated: replace weekday defaults via automation triggers
   --automation-triggers      Deprecated: show automation trigger rules with schedule replacement guidance
   --automation-triggers-set  Deprecated: use --schedule-set and session templates for replacement behavior
   --schedule-delay  Delay the current active schedule window start by 10 minutes
@@ -325,9 +319,6 @@ pub(crate) enum CommandKind {
     Schedule {
         schedule: Option<RecurringScheduleConfig>,
     },
-    WeekdayRules {
-        rules: Option<Vec<WeekdayProfileRuleConfig>>,
-    },
     AutomationTriggers {
         rules: Option<Vec<AutomationTriggerRuleConfig>>,
     },
@@ -419,8 +410,6 @@ enum PrimaryCommand {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
-    WeekdayRules,
-    WeekdayRulesSet(Vec<WeekdayProfileRuleConfig>),
     AutomationTriggers,
     AutomationTriggersSet(Vec<AutomationTriggerRuleConfig>),
     ScheduleDelay,
@@ -491,8 +480,6 @@ enum ParsedToken {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
-    WeekdayRules,
-    WeekdayRulesSet(Vec<WeekdayProfileRuleConfig>),
     AutomationTriggers,
     AutomationTriggersSet(Vec<AutomationTriggerRuleConfig>),
     ScheduleDelay,
@@ -939,15 +926,6 @@ struct ScheduleCommandOutput {
 struct ScheduleInspectionOutput {
     conflict_count: usize,
     conflicts: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct WeekdayRulesCommandOutput {
-    updated: bool,
-    deprecated: bool,
-    replacement: &'static str,
-    rules: Vec<WeekdayProfileRuleConfig>,
-    canonical_rules: Vec<AutomationTriggerRuleConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

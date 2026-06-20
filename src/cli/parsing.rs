@@ -8,8 +8,7 @@ pub(super) use options::{
 pub(super) use value::{
     parse_automation_triggers_value, parse_goal_carry_value, parse_goal_value,
     parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
-    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_weekday_rules_value,
-    parse_weekly_goal_value,
+    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_weekly_goal_value,
 };
 
 use crate::cli::{
@@ -65,8 +64,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Strict(_)
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
-            | ParsedToken::WeekdayRules
-            | ParsedToken::WeekdayRulesSet(_)
             | ParsedToken::AutomationTriggers
             | ParsedToken::AutomationTriggersSet(_)
             | ParsedToken::ScheduleDelay
@@ -225,12 +222,6 @@ pub(super) fn parse_primary_command(
             ParsedToken::Schedule => set_primary_command(&mut primary, PrimaryCommand::Schedule)?,
             ParsedToken::ScheduleSet(schedule) => {
                 set_primary_command(&mut primary, PrimaryCommand::ScheduleSet(schedule.clone()))?
-            }
-            ParsedToken::WeekdayRules => {
-                set_primary_command(&mut primary, PrimaryCommand::WeekdayRules)?
-            }
-            ParsedToken::WeekdayRulesSet(rules) => {
-                set_primary_command(&mut primary, PrimaryCommand::WeekdayRulesSet(rules.clone()))?
             }
             ParsedToken::AutomationTriggers => {
                 set_primary_command(&mut primary, PrimaryCommand::AutomationTriggers)?
@@ -442,14 +433,6 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Schedule {
                 schedule: Some(schedule),
             },
-            output,
-        })),
-        Some(PrimaryCommand::WeekdayRules) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::WeekdayRules { rules: None },
-            output,
-        })),
-        Some(PrimaryCommand::WeekdayRulesSet(rules)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::WeekdayRules { rules: Some(rules) },
             output,
         })),
         Some(PrimaryCommand::AutomationTriggers) => Ok(CliAction::RunCommand(CliCommand {
@@ -717,8 +700,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Strict(_) => "--strict",
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
-        PrimaryCommand::WeekdayRules => "--weekday-rules",
-        PrimaryCommand::WeekdayRulesSet(_) => "--weekday-rules-set",
         PrimaryCommand::AutomationTriggers => "--automation-triggers",
         PrimaryCommand::AutomationTriggersSet(_) => "--automation-triggers-set",
         PrimaryCommand::ScheduleDelay => "--schedule-delay",

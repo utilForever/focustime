@@ -17,16 +17,12 @@ use crate::app::{
     PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX,
     PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
     PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX,
-    PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX,
-    PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX, PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX,
-    PROFILE_EDIT_WEEKDAY_RULE_INDEX, PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX,
-    PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
+    PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, PROFILE_IDS,
     ProfileAutomationConfig, ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState,
     WakatimeHeartbeatMetadata, adjust_daily_goal_minutes, adjust_daily_goal_pomodoros,
     adjust_duration_minutes, compile_exception_dates, compile_one_time_windows, compile_windows,
     profile_for_index, profile_index, profile_spec_for,
-    replace_weekday_profile_rule_automation_triggers,
 };
 use crate::config::validate_automation_trigger_rules;
 
@@ -98,7 +94,6 @@ impl App {
         self.selected_profile = profile;
         self.profile_selection_index = profile_index(profile);
         self.apply_automation_for_profile(profile);
-        self.last_weekday_profile_sync_day = Some(Local::now().date_naive());
         self.pending_timer_action = None;
         self.save_config();
         self.apply_blocking_for_phase();
@@ -124,7 +119,6 @@ impl App {
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
         self.profile_edit_one_time_window = 0;
-        self.profile_edit_weekday_rule = 0;
         self.profile_edit_automation_trigger = 0;
         self.profile_edit_automation_triggers.clear();
         self.profile_edit_snapshot = None;
@@ -232,7 +226,6 @@ impl App {
             auto_start: self.auto_start,
             recurring_schedule: self.recurring_schedule.clone(),
             automation_triggers: self.automation_triggers.clone(),
-            weekday_profile_rules: self.weekday_profile_rules.clone(),
             strict_mode: self.strict_mode,
             daily_goal: self.daily_goal,
             weekly_goal: self.weekly_goal,
@@ -247,7 +240,6 @@ impl App {
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
         self.profile_edit_one_time_window = 0;
-        self.profile_edit_weekday_rule = 0;
         self.profile_edit_automation_trigger = 0;
         self.profile_edit_automation_triggers = self.automation_triggers.clone();
         self.clamp_profile_edit_schedule_selection();
@@ -260,7 +252,6 @@ impl App {
             self.auto_start = snapshot.auto_start;
             self.recurring_schedule = snapshot.recurring_schedule;
             self.automation_triggers = snapshot.automation_triggers;
-            self.weekday_profile_rules = snapshot.weekday_profile_rules;
             self.strict_mode = snapshot.strict_mode;
             self.daily_goal = snapshot.daily_goal;
             self.weekly_goal = snapshot.weekly_goal;
@@ -278,7 +269,6 @@ impl App {
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
         self.profile_edit_one_time_window = 0;
-        self.profile_edit_weekday_rule = 0;
         self.profile_edit_automation_trigger = 0;
         self.profile_edit_automation_triggers.clear();
         self.clamp_profile_edit_schedule_selection();
@@ -293,10 +283,6 @@ impl App {
         let schedule_changed = self.profile_edit_snapshot.as_ref().is_some_and(|snapshot| {
             snapshot.recurring_schedule.normalized() != normalized_schedule
         });
-        let weekday_rules_changed = self
-            .profile_edit_snapshot
-            .as_ref()
-            .is_some_and(|snapshot| snapshot.weekday_profile_rules != self.weekday_profile_rules);
         let automation_triggers_changed = self
             .profile_edit_snapshot
             .as_ref()
@@ -305,14 +291,8 @@ impl App {
         self.custom_profile = self.custom_profile.normalized();
         self.recurring_schedule = normalized_schedule;
         self.wakatime_metadata = self.wakatime_metadata.normalized();
-        let mut next_automation_triggers = edited_automation_triggers;
-        if weekday_rules_changed {
-            next_automation_triggers = replace_weekday_profile_rule_automation_triggers(
-                &next_automation_triggers,
-                &self.weekday_profile_rules,
-            );
-        }
-        if (automation_triggers_changed || weekday_rules_changed)
+        let next_automation_triggers = edited_automation_triggers;
+        if automation_triggers_changed
             && let Err(error) = validate_automation_trigger_rules(
                 &next_automation_triggers,
                 &self.blocklist_profiles,
@@ -322,14 +302,8 @@ impl App {
             self.config_error = Some(format!("Invalid automation trigger rules: {error}"));
             return;
         }
-        if weekday_rules_changed {
-            let now = Local::now();
-            self.current_frame_now = now;
-            self.apply_weekday_profile_rule_for_current_day(now);
-        }
-        if automation_triggers_changed || weekday_rules_changed {
+        if automation_triggers_changed {
             self.automation_triggers = next_automation_triggers;
-            self.weekday_profile_rules.clear();
         }
         if !self.commit_profile_edit_profile_settings(custom_profile_changed) {
             return;
@@ -339,7 +313,7 @@ impl App {
         self.rebuild_recurring_schedule_runtime();
         self.sync_profile_edit_commit_side_effects(
             schedule_changed,
-            automation_triggers_changed || weekday_rules_changed,
+            automation_triggers_changed,
             goals_changed,
         );
         self.profile_edit_active = false;
@@ -348,7 +322,6 @@ impl App {
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
         self.profile_edit_one_time_window = 0;
-        self.profile_edit_weekday_rule = 0;
         self.profile_edit_automation_trigger = 0;
         self.profile_edit_automation_triggers.clear();
         self.clamp_profile_edit_schedule_selection();
@@ -518,24 +491,6 @@ impl App {
             }
             PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX => {
                 self.adjust_one_time_windows_collection(increase);
-            }
-            PROFILE_EDIT_WEEKDAY_RULE_INDEX => {
-                self.cycle_weekday_profile_rule(increase);
-            }
-            PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX => {
-                self.cycle_weekday_profile_rule_day(increase);
-            }
-            PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX => {
-                self.cycle_weekday_profile_rule_profile(increase);
-            }
-            PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX => {
-                self.cycle_weekday_profile_rule_blocklist(increase);
-            }
-            PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX => {
-                self.cycle_weekday_profile_rule_template(increase);
-            }
-            PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX => {
-                self.adjust_weekday_profile_rules_collection(increase);
             }
             PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX => {
                 self.cycle_automation_trigger_rule(increase);

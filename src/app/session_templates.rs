@@ -234,14 +234,6 @@ impl App {
     ) {
         let replacement = replacement.map(str::to_string);
 
-        for rule in &mut self.weekday_profile_rules {
-            if let Some(name) = rule.session_template.as_deref()
-                && name.eq_ignore_ascii_case(target_name)
-            {
-                rule.session_template = replacement.clone();
-            }
-        }
-
         for trigger in &mut self.automation_triggers {
             if let AutomationTriggerActionConfig::ApplyDefaults {
                 session_template, ..

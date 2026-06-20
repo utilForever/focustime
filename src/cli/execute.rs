@@ -5,10 +5,7 @@ use std::{
 };
 
 use crate::app::App;
-use crate::config::{
-    automation_triggers_to_weekday_profile_rules, replace_weekday_profile_rule_automation_triggers,
-    validate_automation_trigger_rules,
-};
+use crate::config::validate_automation_trigger_rules;
 use crate::error::UserMessage;
 
 use crate::cli::{
@@ -20,16 +17,15 @@ use crate::cli::{
     SessionTemplateCommandOutput, SessionTemplateSummaryOutput, StrictCommandOutput,
     TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
     TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
-    TimerStateOutput, WeekdayProfileRuleConfig, WeekdayRulesCommandOutput, WeeklyGoalConfig,
-    available_theme_preset_views, build_schedule_inspection_output, build_task_goal_output,
+    TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
+    build_schedule_inspection_output, build_task_goal_output,
     print_automation_triggers_command_output, print_break_glass_command_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_profile_output,
     print_schedule_command_output, print_schedule_delay_command_output,
     print_session_metadata_command_output, print_session_template_command_output,
     print_strict_command_output, print_task_goal_command_output,
     print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
-    print_weekday_rules_command_output, profile_id, profile_view, theme_preset_view,
-    timer_phase_id, timer_status_id,
+    profile_id, profile_view, theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 mod blocklists;
@@ -67,8 +63,6 @@ use status::{WATCH_INTERRUPTED, next_watch_deadline, wait_for_next_watch_tick};
 
 type CliExecuteResult<T> = Result<T, UserMessage>;
 
-pub(super) const WEEKDAY_RULES_REPLACEMENT: &str =
-    "Use `--schedule`/`--schedule-set` with session templates for weekday focus defaults.";
 pub(super) const AUTOMATION_TRIGGERS_REPLACEMENT: &str = "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults.";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<()> {
@@ -119,9 +113,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Strict { enabled } => execute_strict_command(enabled, cli_command.output),
         CommandKind::Schedule { schedule } => {
             execute_schedule_command(schedule, cli_command.output)
-        }
-        CommandKind::WeekdayRules { rules } => {
-            execute_weekday_rules_command(rules, cli_command.output)
         }
         CommandKind::AutomationTriggers { rules } => {
             execute_automation_triggers_command(rules, cli_command.output)
@@ -198,7 +189,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::GoalCarryMonthly { .. } => Some("goal-carry-monthly"),
         CommandKind::Strict { .. } => Some("strict"),
         CommandKind::Schedule { .. } => Some("schedule"),
-        CommandKind::WeekdayRules { .. } => Some("weekday-rules"),
         CommandKind::AutomationTriggers { .. } => Some("automation-triggers"),
         CommandKind::ScheduleDelay => Some("schedule-delay"),
         CommandKind::BreakGlassTrigger => Some("break-glass-trigger"),
@@ -765,41 +755,6 @@ fn execute_schedule_command(
 
     match output {
         OutputMode::Text => print_schedule_command_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn execute_weekday_rules_command(
-    rules: Option<Vec<WeekdayProfileRuleConfig>>,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let mut config = AppConfig::load().normalized();
-    let mut updated = false;
-    if let Some(rules) = rules {
-        let merged_rules =
-            replace_weekday_profile_rule_automation_triggers(&config.automation_triggers, &rules);
-        config.automation_triggers =
-            validate_and_normalize_automation_triggers(merged_rules, &config)
-                .map_err(UserMessage::from)?;
-        config.weekday_profile_rules.clear();
-        config
-            .save()
-            .map_err(|error| format!("Failed to save weekday rules: {error}"))?;
-        updated = true;
-    }
-
-    let canonical_rules = config.automation_triggers.clone();
-    let payload = WeekdayRulesCommandOutput {
-        updated,
-        deprecated: true,
-        replacement: WEEKDAY_RULES_REPLACEMENT,
-        rules: automation_triggers_to_weekday_profile_rules(&canonical_rules),
-        canonical_rules,
-    };
-
-    match output {
-        OutputMode::Text => print_weekday_rules_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

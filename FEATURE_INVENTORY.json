@@ -123,9 +123,7 @@
       "--task-goal",
       "--task-note",
       "--theme",
-      "--watch",
-      "--weekday-rules",
-      "--weekday-rules-set"
+      "--watch"
     ]
   },
   "cleanup_signal_support": {
@@ -326,11 +324,8 @@
       "feature_id": "weekday-profile-rules",
       "name": "Deprecated weekday profile rule shims",
       "surface": "schedule",
-      "description": "Compatibility CLI shims that map weekday defaults into automation time triggers.",
-      "cli_flags": [
-        "--weekday-rules",
-        "--weekday-rules-set"
-      ],
+      "description": "Removed compatibility shims for weekday defaults; use schedules and session templates.",
+      "cli_flags": [],
       "value": 2,
       "complexity": 2,
       "support_burden": 4,
