@@ -6,12 +6,14 @@ use super::{
     default_long_break_secs, default_short_break_secs,
 };
 
+/// Migrates raw TOML config data to the current schema without step details.
 pub(super) fn migrate_config_toml_to_current(config_toml: toml::Value) -> Option<toml::Value> {
     migrate_config_toml_to_current_detailed(config_toml)
         .ok()
         .map(|(migrated, _, _)| migrated)
 }
 
+/// Migrates raw TOML config data to the current schema and reports each applied step.
 pub(super) fn migrate_config_toml_to_current_detailed(
     mut config_toml: toml::Value,
 ) -> Result<(toml::Value, u32, Vec<ConfigMigrationStepReport>), String> {
@@ -71,6 +73,7 @@ pub(super) fn migrate_config_toml_to_current_detailed(
     Ok((config_toml, schema_version, steps))
 }
 
+/// Describes a schema-version migration step for user-facing reports.
 pub(super) fn migration_step_summary(from_schema_version: u32, to_schema_version: u32) -> String {
     match (from_schema_version, to_schema_version) {
         (0, 1) => "Add explicit config schema version marker.".to_string(),
@@ -82,6 +85,7 @@ pub(super) fn migration_step_summary(from_schema_version: u32, to_schema_version
     }
 }
 
+/// Rewrites legacy profile aliases inside raw config tables before deserialization.
 pub(super) fn canonicalize_legacy_profile_aliases(config_toml: &mut toml::Value) {
     let Some(table) = config_toml.as_table_mut() else {
         return;
@@ -103,6 +107,7 @@ pub(super) fn remove_weekday_profile_rules(config_toml: &mut toml::Value) {
     table.remove("weekday_profile_rules");
 }
 
+/// Moves deprecated blocklist category rules into profile-level blocked-site entries.
 pub(super) fn migrate_blocklist_categories_to_profile_rules(config_toml: &mut toml::Value) {
     let Some(table) = config_toml.as_table_mut() else {
         return;
@@ -251,6 +256,7 @@ fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
     }
 }
 
+/// Builds a warning-level config health finding with sorted advice messages.
 pub(super) fn config_health_warning(
     code: impl Into<String>,
     message: impl Into<String>,
@@ -264,6 +270,7 @@ pub(super) fn config_health_warning(
     }
 }
 
+/// Builds an error-level config health finding with sorted advice messages.
 pub(super) fn config_health_error(
     code: impl Into<String>,
     message: impl Into<String>,
@@ -277,6 +284,7 @@ pub(super) fn config_health_error(
     }
 }
 
+/// Collapses config health findings into the highest-severity status.
 pub(super) fn summarize_config_health(findings: &[ConfigHealthFinding]) -> ConfigHealthStatus {
     if findings
         .iter()
@@ -291,6 +299,7 @@ pub(super) fn summarize_config_health(findings: &[ConfigHealthFinding]) -> Confi
     }
 }
 
+/// Sorts config health findings into a deterministic display order.
 pub(super) fn sort_config_health_findings(findings: &mut [ConfigHealthFinding]) {
     findings.sort_by(|left, right| {
         left.code
@@ -299,6 +308,7 @@ pub(super) fn sort_config_health_findings(findings: &mut [ConfigHealthFinding]) 
     });
 }
 
+/// Maps a legacy profile token to its canonical replacement, if one exists.
 pub(super) fn legacy_profile_token_migration_target(value: &str) -> Option<&'static str> {
     match value.trim().to_ascii_lowercase().as_str() {
         "classic" => Some("basic"),
@@ -308,6 +318,7 @@ pub(super) fn legacy_profile_token_migration_target(value: &str) -> Option<&'sta
     }
 }
 
+/// Collects guidance for legacy profile names that can be canonicalized automatically.
 pub(super) fn collect_legacy_profile_rename_advice(config_toml: &toml::Value) -> Vec<String> {
     let Some(table) = config_toml.as_table() else {
         return Vec::new();
@@ -333,6 +344,7 @@ pub(super) fn collect_legacy_profile_rename_advice(config_toml: &toml::Value) ->
     advice
 }
 
+/// Collects advice for deprecated blocklist category settings.
 pub(super) fn collect_blocklist_category_migration_advice(
     config_toml: &toml::Value,
 ) -> Vec<String> {
@@ -360,6 +372,7 @@ pub(super) fn collect_blocklist_category_migration_advice(
     advice
 }
 
+/// Adds profile-rename advice for every matching table in an array field.
 pub(super) fn push_legacy_profile_value_array_advice(
     advice: &mut Vec<String>,
     table: &toml::map::Map<String, toml::Value>,
@@ -385,6 +398,7 @@ pub(super) fn push_legacy_profile_value_array_advice(
     }
 }
 
+/// Adds profile-rename advice for legacy automation trigger action profiles.
 pub(super) fn push_legacy_automation_trigger_profile_advice(
     advice: &mut Vec<String>,
     table: &toml::map::Map<String, toml::Value>,
@@ -413,6 +427,7 @@ pub(super) fn push_legacy_automation_trigger_profile_advice(
     }
 }
 
+/// Adds profile-rename advice for legacy profile automation preset keys.
 pub(super) fn push_legacy_profile_automation_key_advice(
     advice: &mut Vec<String>,
     table: &toml::map::Map<String, toml::Value>,
@@ -438,6 +453,7 @@ pub(super) fn push_legacy_profile_automation_key_advice(
     }
 }
 
+/// Adds one profile-rename advice message when a legacy token is recognized.
 pub(super) fn push_legacy_profile_value_advice(
     advice: &mut Vec<String>,
     location: &str,
@@ -451,6 +467,7 @@ pub(super) fn push_legacy_profile_value_advice(
     ));
 }
 
+/// Detects deprecated config surfaces that should be replaced by current workflows.
 pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> Vec<String> {
     let mut warnings = Vec::new();
     let duration_override_without_custom_profile = config.custom_profile.is_none()
@@ -504,6 +521,7 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
     warnings
 }
 
+/// Reads the raw config schema version, defaulting absent legacy configs to v0.
 pub(super) fn detect_config_schema_version(config_toml: &toml::Value) -> Option<u32> {
     let table = config_toml.as_table()?;
     table
@@ -512,6 +530,7 @@ pub(super) fn detect_config_schema_version(config_toml: &toml::Value) -> Option<
         .unwrap_or(Some(LEGACY_CONFIG_SCHEMA_VERSION))
 }
 
+/// Applies one schema-version migration step to raw TOML config data.
 pub(super) fn migrate_config_toml_step(
     config_toml: toml::Value,
     from_schema_version: u32,
@@ -523,6 +542,7 @@ pub(super) fn migrate_config_toml_step(
     }
 }
 
+/// Adds the first explicit schema marker to legacy TOML config data.
 pub(super) fn migrate_config_toml_legacy_to_v1(
     mut config_toml: toml::Value,
 ) -> Option<toml::Value> {
@@ -531,6 +551,7 @@ pub(super) fn migrate_config_toml_legacy_to_v1(
     Some(config_toml)
 }
 
+/// Canonicalizes profile references and advances v1 TOML config data to v2.
 pub(super) fn migrate_config_toml_v1_to_v2(mut config_toml: toml::Value) -> Option<toml::Value> {
     let table = config_toml.as_table_mut()?;
     migrate_profile_value_in_table(table, "selected_profile");
@@ -544,6 +565,7 @@ pub(super) fn migrate_config_toml_v1_to_v2(mut config_toml: toml::Value) -> Opti
     Some(config_toml)
 }
 
+/// Canonicalizes profile values stored inside an array of TOML tables.
 pub(super) fn migrate_profile_value_in_array_table(
     table: &mut toml::map::Map<String, toml::Value>,
     array_key: &str,
@@ -563,6 +585,7 @@ pub(super) fn migrate_profile_value_in_array_table(
     }
 }
 
+/// Canonicalizes one profile value stored directly in a TOML table.
 pub(super) fn migrate_profile_value_in_table(
     table: &mut toml::map::Map<String, toml::Value>,
     field_key: &str,
@@ -579,6 +602,7 @@ pub(super) fn migrate_profile_value_in_table(
     *value = toml::Value::String(mapped.to_string());
 }
 
+/// Canonicalizes legacy keys under the profile automation preset table.
 pub(super) fn migrate_profile_automation_preset_keys(
     table: &mut toml::map::Map<String, toml::Value>,
 ) {
@@ -594,6 +618,7 @@ pub(super) fn migrate_profile_automation_preset_keys(
     migrate_table_key(profile_automation, "custom", "advanced");
 }
 
+/// Renames a TOML table key while preserving an existing canonical destination.
 pub(super) fn migrate_table_key(
     table: &mut toml::map::Map<String, toml::Value>,
     old_key: &str,
@@ -609,6 +634,7 @@ pub(super) fn migrate_table_key(
     table.insert(new_key.to_string(), value);
 }
 
+/// Merges incoming TOML data without overwriting existing destination values.
 pub(super) fn merge_toml_value_prefer_existing(existing: &mut toml::Value, incoming: toml::Value) {
     let (toml::Value::Table(existing_table), toml::Value::Table(incoming_table)) =
         (existing, incoming)
@@ -625,6 +651,7 @@ pub(super) fn merge_toml_value_prefer_existing(existing: &mut toml::Value, incom
     }
 }
 
+/// Canonicalizes profile references inside automation trigger actions.
 pub(super) fn migrate_automation_trigger_action_profiles(
     table: &mut toml::map::Map<String, toml::Value>,
 ) {
