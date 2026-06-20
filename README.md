@@ -187,10 +187,6 @@ cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","
 cargo run -- --schedule-delay
 cargo run -- --schedule --json
 
-# Deprecated compatibility surface; use --schedule/--schedule-set for new automation
-cargo run -- --automation-triggers
-cargo run -- --automation-triggers --json
-
 # Deprecated compatibility surface; refresh opt-in calendar annotations for schedules
 cargo run -- --calendar-sync
 cargo run -- --calendar-sync --json
@@ -304,12 +300,12 @@ Milestone policy:
 - **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
 - **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config migration assistant + doctor commands remain available for focused config checks (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
-- **v0.15.3:** calendar sync, weekday rules, and standalone automation triggers are documented as deprecated compatibility paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
+- **v0.15.3:** calendar sync and weekday rules are documented as deprecated compatibility paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export/feature-inventory artifact workflows share target-directory handling.
 - **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency cleanup candidates stay documented, and WakaTime integration uses explicit supported runtime calls.
 - **v0.15.7:** standalone blocking preview access, Focus History dashboard customization paths, and dedicated status comparison guidance stay removed while diagnostics, the stable KPI dashboard, export artifacts, and Focus History remain the supported replacements.
-- **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites` during config migration and is no longer re-persisted by runtime writes.
+- **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites`, `automation_triggers` config is removed during migration, and neither legacy surface is re-persisted by runtime writes.
 - **v0.15.x future cleanup:** continue retiring overlapping paths only after release notes and diagnostics name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
@@ -346,7 +342,7 @@ Early deprecation notices:
 | Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields remain readable for automation compatibility. |
 | Focus History dashboard customization (`[history_dashboard]`, retired customization CLI paths) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands are removed from help text and command parsing. |
 | Advanced status comparison slicing | Use `--export` artifacts for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
-| Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
+| Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Removed; use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Removed; use `--diagnostics` for blocking preview details alongside setup/config health. |
 | Standalone usage-signal command (`--usage-signals`) | Removed; use `--feature-inventory` for cleanup reporting while raw command/screen frequency summaries remain internal cleanup inputs. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
@@ -540,7 +536,7 @@ Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
 CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`,
-`--automation-triggers*`, `--session-template*`, `--feature-inventory`,
+`--session-template*`, `--feature-inventory`,
 `--break-glass-trigger`, and `--break-glass-cancel` for non-interactive
 inspection and in-session workflow control. `--history-dashboard` remains
 available for layout inspection.
@@ -796,11 +792,10 @@ The standalone `focustime --usage-signals` path has been removed; cleanup
 scripts should use `focustime --feature-inventory --json` and treat raw
 usage-signal summaries as internal cleanup inputs.
 
-The standalone `focustime --automation-triggers*` path remains as deprecated
-replacement-guided output for older automation. New scripts should configure
-profile schedules with `focustime --schedule-set`, delay active windows with
-`focustime --schedule-delay`, and store task/profile/blocklist defaults in
-session templates.
+The standalone `focustime --automation-triggers*` path has been removed. Scripts
+should configure profile schedules with `focustime --schedule-set`, delay active
+windows with `focustime --schedule-delay`, and store task/profile/blocklist
+defaults in session templates.
 
 Blocking backend policy is deterministic:
 
@@ -841,7 +836,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
-- standalone `automation_triggers[]` are deprecated; schedule windows now provide automatic focus starts, `--schedule-delay` handles postponed active windows, and session templates carry task/profile/blocklist defaults
+- standalone `automation_triggers[]` config entries are removed by config migration; schedule windows provide automatic focus starts, `--schedule-delay` handles postponed active windows, and session templates carry task/profile/blocklist defaults
 - deprecated `weekday_profile_rules[]` config entries are removed by config migration; model weekday defaults with schedule windows, `--schedule-delay`, and session templates instead
 - the timer session overview shows the current/next scheduled window
 - when the opt-in calendar annotation cache is enabled and available, schedule text adds `calendar busy` for active calendar events and a `calendar overlap` warning for upcoming schedule collisions

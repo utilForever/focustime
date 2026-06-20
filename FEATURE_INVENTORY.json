@@ -65,8 +65,6 @@
       "--allowlist-site-delete",
       "--allowlist-site-edit",
       "--allowlist-sites",
-      "--automation-triggers",
-      "--automation-triggers-set",
       "--backup",
       "--blocklist-profile",
       "--blocklist-profile-create",
@@ -255,19 +253,16 @@
     },
     {
       "feature_id": "automation-trigger-rules",
-      "name": "Automation trigger rules",
+      "name": "Removed automation trigger rule shims",
       "surface": "schedule",
-      "description": "Configure trigger conditions that launch automation around focus sessions.",
-      "cli_flags": [
-        "--automation-triggers",
-        "--automation-triggers-set"
-      ],
-      "value": 3,
-      "complexity": 4,
+      "description": "Removed standalone trigger compatibility; use schedules, schedule delay, and session templates.",
+      "cli_flags": [],
+      "value": 2,
+      "complexity": 2,
       "support_burden": 4,
-      "failure_impact": 4,
-      "maintenance_cost": 4.0,
-      "value_to_maintenance_ratio": 0.75,
+      "failure_impact": 3,
+      "maintenance_cost": 2.95,
+      "value_to_maintenance_ratio": 0.68,
       "recommendation": "merge"
     },
     {
