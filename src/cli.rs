@@ -14,10 +14,9 @@ use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, Si
 #[cfg(test)]
 use crate::config::HistoryKpiCardId;
 use crate::config::{
-    AppConfig, AutomationTriggerRuleConfig, BlocklistProfileConfig, ConfigDoctorReport,
-    ConfigMigrationReport, CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig,
-    OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
-    ThemePreset, WeeklyGoalConfig,
+    AppConfig, BlocklistProfileConfig, ConfigDoctorReport, ConfigMigrationReport,
+    CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, ThemePreset, WeeklyGoalConfig,
 };
 use crate::error::UserMessage;
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
@@ -48,8 +47,8 @@ use execute::{
 use output::{
     build_diagnostics_blocking_preview_error, build_diagnostics_blocking_preview_output,
     build_diagnostics_command_output, build_schedule_inspection_output, display_input_value,
-    effective_blocked_sites_for_profile, flush_stdout, print_automation_triggers_command_output,
-    print_backup_output, print_blocklist_profile_command_output, print_break_glass_command_output,
+    effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
+    print_blocklist_profile_command_output, print_break_glass_command_output,
     print_calendar_sync_command_output, print_config_doctor_output, print_config_migration_output,
     print_daemon_start_command_output, print_daemon_status_command_output,
     print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
@@ -63,12 +62,12 @@ use output::{
     print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
-    finalize_cli_action, first_removed_option_guidance, invalid_usage,
-    parse_automation_triggers_value, parse_daemon_port, parse_daemon_port_option,
-    parse_global_tokens, parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value,
-    parse_primary_command, parse_profile_id, parse_schedule_value, parse_site_edit_value,
-    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
-    parse_watch_interval_secs, parse_weekly_goal_value, require_nonempty_key_value,
+    finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_daemon_port,
+    parse_daemon_port_option, parse_global_tokens, parse_goal_carry_value, parse_goal_value,
+    parse_monthly_goal_value, parse_primary_command, parse_profile_id, parse_schedule_value,
+    parse_site_edit_value, parse_strict_value, parse_task_goal_value, parse_theme_preset,
+    parse_watch_interval_option, parse_watch_interval_secs, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 use status::{
     available_theme_preset_views, build_status_output, build_task_goal_output, profile_id,
@@ -107,8 +106,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
   focustime --schedule-set=JSON_PAYLOAD [--json]
-  focustime --automation-triggers [--json]
-  focustime --automation-triggers-set=JSON_PAYLOAD [--json]
   focustime --schedule-delay [--json]
   focustime --break-glass-trigger [--json]
   focustime --break-glass-cancel [--json]
@@ -166,8 +163,6 @@ Options:
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
   --schedule-set  Replace selected profile schedule (recurring + one-time) from JSON payload
-  --automation-triggers      Deprecated: show automation trigger rules with schedule replacement guidance
-  --automation-triggers-set  Deprecated: use --schedule-set and session templates for replacement behavior
   --schedule-delay  Delay the current active schedule window start by 10 minutes
   --break-glass-trigger  Trigger temporary override workflow for break-glass (first call arms, second confirms)
   --break-glass-cancel   Cancel a pending break-glass confirmation
@@ -319,9 +314,6 @@ pub(crate) enum CommandKind {
     Schedule {
         schedule: Option<RecurringScheduleConfig>,
     },
-    AutomationTriggers {
-        rules: Option<Vec<AutomationTriggerRuleConfig>>,
-    },
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
@@ -410,8 +402,6 @@ enum PrimaryCommand {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
-    AutomationTriggers,
-    AutomationTriggersSet(Vec<AutomationTriggerRuleConfig>),
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
@@ -480,8 +470,6 @@ enum ParsedToken {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
-    AutomationTriggers,
-    AutomationTriggersSet(Vec<AutomationTriggerRuleConfig>),
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
@@ -926,14 +914,6 @@ struct ScheduleCommandOutput {
 struct ScheduleInspectionOutput {
     conflict_count: usize,
     conflicts: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct AutomationTriggersCommandOutput {
-    updated: bool,
-    deprecated: bool,
-    replacement: &'static str,
-    rules: Vec<AutomationTriggerRuleConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

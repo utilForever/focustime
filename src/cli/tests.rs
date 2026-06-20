@@ -1,8 +1,5 @@
 use crate::cli::*;
-use crate::config::{
-    AutomationTriggerActionConfig, AutomationTriggerConditionConfig, ConfigDoctorReport,
-    ConfigHealthStatus, ConfigMigrationReport,
-};
+use crate::config::{ConfigDoctorReport, ConfigHealthStatus, ConfigMigrationReport};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
     WorkflowStateSnapshot, WorkflowTemporaryOverrideSnapshot,
@@ -96,29 +93,6 @@ fn parse_status_supports_json_mode() {
             output: OutputMode::Json
         })
     );
-}
-
-/// Verifies the deprecated automation trigger command still emits replacement guidance.
-#[test]
-fn automation_triggers_json_emits_deprecated_replacement_payload() {
-    let payload = AutomationTriggersCommandOutput {
-        updated: false,
-        deprecated: true,
-        replacement: "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults.",
-        rules: vec![AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::ScheduleWindowStart,
-            action: AutomationTriggerActionConfig::StartFocus,
-        }],
-    };
-
-    let json = serde_json::to_value(&payload).unwrap();
-    assert_eq!(json["deprecated"], true);
-    assert_eq!(json["replacement"], payload.replacement);
-    assert_eq!(json["rules"][0]["trigger"]["type"], "schedule_window_start");
-
-    let text = output::format_automation_triggers_command_output(&payload);
-    assert!(text.contains("Automation triggers are deprecated."));
-    assert!(text.contains(payload.replacement));
 }
 
 #[test]
@@ -746,15 +720,10 @@ fn parse_weekday_rules_is_retired() {
 }
 
 #[test]
-fn parse_automation_triggers_reads_current_rules() {
-    let parsed = parse(&["--automation-triggers"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::AutomationTriggers { rules: None },
-            output: OutputMode::Text
-        })
-    );
+fn parse_automation_triggers_is_retired() {
+    let error = parse(&["--automation-triggers"]).unwrap_err();
+    assert!(error.contains("Unknown option `--automation-triggers`"));
+    assert!(error.contains("Standalone automation trigger commands were removed."));
 }
 
 #[test]
@@ -840,31 +809,15 @@ fn parse_schedule_set_accepts_one_time_windows_payload() {
     );
 }
 
-/// Verifies automation trigger JSON payloads are accepted by the CLI parser.
 #[test]
-fn parse_automation_triggers_set_accepts_json_payload() {
-    let payload = r#"[{"trigger":{"type":"focus_completed"},"action":{"type":"apply_defaults","profile":"deep-work","blocklist_profile":"Default"}}]"#;
-    let parsed = parse_args([
+fn parse_automation_triggers_set_is_retired() {
+    let payload = r#"[{"trigger":{"type":"focus_completed"},"action":{"type":"start_focus"}}]"#;
+    let error = parse_args([
         OsString::from("--automation-triggers-set"),
         OsString::from(payload),
     ])
-    .unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::AutomationTriggers {
-                rules: Some(vec![AutomationTriggerRuleConfig {
-                    trigger: AutomationTriggerConditionConfig::FocusCompleted,
-                    action: AutomationTriggerActionConfig::ApplyDefaults {
-                        profile: ProfileId::DeepWork,
-                        blocklist_profile: "Default".to_string(),
-                        session_template: None,
-                    },
-                }]),
-            },
-            output: OutputMode::Text
-        })
-    );
+    .unwrap_err();
+    assert!(error.contains("Unknown option `--automation-triggers-set`"));
 }
 
 #[test]
@@ -1653,20 +1606,10 @@ fn classify_key_value_arg_accepts_schedule_set_equals_value() {
     );
 }
 
-/// Verifies key-value parsing accepts inline automation trigger JSON payloads.
 #[test]
-fn classify_key_value_arg_accepts_automation_triggers_set_equals_value() {
+fn classify_key_value_arg_ignores_automation_triggers_set_equals_value() {
     let payload = "--automation-triggers-set=[{\"trigger\":{\"type\":\"schedule_window_start\"},\"action\":{\"type\":\"start_focus\"}}]";
-    let parsed = classify_key_value_arg(payload).unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::AutomationTriggersSet(vec![
-            AutomationTriggerRuleConfig {
-                trigger: AutomationTriggerConditionConfig::ScheduleWindowStart,
-                action: AutomationTriggerActionConfig::StartFocus,
-            }
-        ]))
-    );
+    assert_eq!(classify_key_value_arg(payload).unwrap(), None);
 }
 
 #[test]
@@ -1798,9 +1741,9 @@ fn parse_weekday_rules_set_equals_is_retired() {
 }
 
 #[test]
-fn classify_key_value_arg_rejects_empty_automation_triggers_set_equals_value() {
-    let error = classify_key_value_arg("--automation-triggers-set=").unwrap_err();
-    assert!(error.contains("`--automation-triggers-set=` requires a JSON payload."));
+fn parse_automation_triggers_set_equals_is_retired() {
+    let error = parse(&["--automation-triggers-set=[]"]).unwrap_err();
+    assert!(error.contains("Unknown option `--automation-triggers-set=[]`"));
 }
 
 #[test]
@@ -1930,9 +1873,9 @@ fn parse_rejects_weekday_rules_set_without_payload_as_retired() {
 }
 
 #[test]
-fn parse_rejects_automation_triggers_set_without_payload() {
+fn parse_rejects_automation_triggers_set_without_payload_as_retired() {
     let error = parse(&["--automation-triggers-set"]).unwrap_err();
-    assert!(error.contains("`--automation-triggers-set` requires a JSON payload"));
+    assert!(error.contains("Unknown option `--automation-triggers-set`"));
 }
 
 #[test]
@@ -1967,18 +1910,6 @@ fn parse_rejects_schedule_set_with_invalid_weekday() {
     let error =
         parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
     assert!(error.contains("unknown weekday"));
-}
-
-/// Verifies malformed automation trigger JSON payloads are rejected.
-#[test]
-fn parse_rejects_automation_triggers_set_with_invalid_json() {
-    let payload = r#"[{"trigger":{"type":"unknown"}}]"#;
-    let error = parse_args([
-        OsString::from("--automation-triggers-set"),
-        OsString::from(payload),
-    ])
-    .unwrap_err();
-    assert!(error.contains("Invalid automation-triggers JSON payload"));
 }
 
 #[test]
