@@ -109,25 +109,9 @@ pub(crate) struct WorkflowStateSnapshot {
     #[serde(default)]
     pub(crate) last_schedule_occurrence_key: Option<String>,
     #[serde(default)]
-    pub(crate) break_glass_expires_at_epoch_secs: Option<i64>,
-    #[serde(default)]
-    pub(crate) break_glass_confirmation_pending: bool,
-    #[serde(default)]
     pub(crate) strict_reset_confirmation_pending: bool,
     #[serde(default)]
-    pub(crate) temporary_allowlist_entries: Vec<WorkflowTemporaryAllowlistEntrySnapshot>,
-    #[serde(default)]
     pub(crate) temporary_overrides: Vec<WorkflowTemporaryOverrideSnapshot>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub(crate) struct WorkflowTemporaryAllowlistEntrySnapshot {
-    #[serde(default)]
-    pub(crate) profile: String,
-    #[serde(default)]
-    pub(crate) site: String,
-    #[serde(default)]
-    pub(crate) expires_at_epoch_secs: i64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -183,34 +167,6 @@ impl WorkflowTemporaryOverrideSnapshot {
             expires_at_epoch_secs: None,
             confirmation_pending: true,
         }
-    }
-}
-
-impl WorkflowStateSnapshot {
-    pub(crate) fn temporary_overrides_with_legacy_fallback(
-        &self,
-    ) -> Vec<WorkflowTemporaryOverrideSnapshot> {
-        if !self.temporary_overrides.is_empty() {
-            return self.temporary_overrides.clone();
-        }
-
-        let mut overrides = Vec::new();
-        if let Some(expires_at_epoch_secs) = self.break_glass_expires_at_epoch_secs {
-            overrides.push(WorkflowTemporaryOverrideSnapshot::break_glass_active(
-                expires_at_epoch_secs,
-            ));
-        }
-        if self.break_glass_confirmation_pending {
-            overrides.push(WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation());
-        }
-        overrides.extend(self.temporary_allowlist_entries.iter().map(|entry| {
-            WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-                entry.profile.clone(),
-                entry.site.clone(),
-                entry.expires_at_epoch_secs,
-            )
-        }));
-        overrides
     }
 }
 
@@ -1071,11 +1027,10 @@ checksum = "deadbeef"
             schedule_delay_until_epoch_secs: Some(1_700_000_000),
             schedule_armed_occurrence_key: None,
             last_schedule_occurrence_key: None,
-            break_glass_expires_at_epoch_secs: None,
-            break_glass_confirmation_pending: true,
             strict_reset_confirmation_pending: false,
-            temporary_allowlist_entries: Vec::new(),
-            temporary_overrides: Vec::new(),
+            temporary_overrides: vec![
+                WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
+            ],
         })
         .expect("save should succeed");
 
@@ -1085,16 +1040,14 @@ checksum = "deadbeef"
     }
 
     #[test]
-    fn workflow_state_snapshot_deserializes_legacy_payload_without_new_fields() {
+    fn workflow_state_snapshot_deserializes_payload_without_temporary_overrides() {
         let snapshot: WorkflowStateSnapshot = toml::from_str(
             r#"
 schedule_delayed_occurrence_key = "recurring:0:2026-05-10"
 schedule_delay_until_epoch_secs = 1700000000
-break_glass_expires_at_epoch_secs = 1700000100
-break_glass_confirmation_pending = true
 "#,
         )
-        .expect("legacy payload should deserialize");
+        .expect("payload should deserialize");
 
         assert_eq!(
             snapshot.schedule_delayed_occurrence_key.as_deref(),
@@ -1106,68 +1059,30 @@ break_glass_confirmation_pending = true
         );
         assert!(snapshot.schedule_armed_occurrence_key.is_none());
         assert!(snapshot.last_schedule_occurrence_key.is_none());
-        assert_eq!(
-            snapshot.break_glass_expires_at_epoch_secs,
-            Some(1_700_000_100)
-        );
-        assert!(snapshot.break_glass_confirmation_pending);
         assert!(!snapshot.strict_reset_confirmation_pending);
+        assert!(snapshot.temporary_overrides.is_empty());
     }
 
     #[test]
-    fn workflow_state_legacy_fields_synthesize_temporary_overrides() {
+    fn workflow_state_snapshot_uses_canonical_temporary_overrides() {
         let snapshot = WorkflowStateSnapshot {
-            break_glass_expires_at_epoch_secs: Some(1_700_000_100),
-            break_glass_confirmation_pending: true,
-            temporary_allowlist_entries: vec![WorkflowTemporaryAllowlistEntrySnapshot {
-                profile: "Work".to_string(),
-                site: "reddit.com".to_string(),
-                expires_at_epoch_secs: 1_700_000_200,
-            }],
+            temporary_overrides: vec![
+                WorkflowTemporaryOverrideSnapshot::break_glass_active(1_700_000_100),
+                WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
+                WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
+                    "Work",
+                    "reddit.com",
+                    1_700_000_200,
+                ),
+            ],
             ..WorkflowStateSnapshot::default()
         };
 
-        let overrides = snapshot.temporary_overrides_with_legacy_fallback();
-
+        assert_eq!(snapshot.temporary_overrides.len(), 3);
         assert!(
-            overrides.contains(&WorkflowTemporaryOverrideSnapshot::break_glass_active(
-                1_700_000_100
-            ))
-        );
-        assert!(
-            overrides
+            snapshot
+                .temporary_overrides
                 .contains(&WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation())
         );
-        assert!(
-            overrides.contains(&WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-                "Work",
-                "reddit.com",
-                1_700_000_200
-            ))
-        );
-    }
-
-    #[test]
-    fn workflow_state_explicit_temporary_overrides_take_precedence_over_legacy_fields() {
-        let explicit = vec![WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-            "Work",
-            "news.ycombinator.com",
-            1_700_000_300,
-        )];
-        let snapshot = WorkflowStateSnapshot {
-            break_glass_expires_at_epoch_secs: Some(1_700_000_100),
-            break_glass_confirmation_pending: true,
-            temporary_allowlist_entries: vec![WorkflowTemporaryAllowlistEntrySnapshot {
-                profile: "Work".to_string(),
-                site: "reddit.com".to_string(),
-                expires_at_epoch_secs: 1_700_000_200,
-            }],
-            temporary_overrides: explicit.clone(),
-            ..WorkflowStateSnapshot::default()
-        };
-
-        let overrides = snapshot.temporary_overrides_with_legacy_fallback();
-
-        assert_eq!(overrides, explicit);
     }
 }
