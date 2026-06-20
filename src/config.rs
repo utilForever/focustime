@@ -15,14 +15,8 @@ mod paths;
 mod shortcuts;
 mod wakatime;
 
-pub(crate) use automation::{
-    WEEKDAY_PROFILE_RULE_REPLACEMENT_AT, automation_triggers_to_weekday_profile_rules,
-    replace_weekday_profile_rule_automation_triggers, validate_automation_trigger_rules,
-};
-use automation::{
-    normalize_automation_triggers, normalize_trigger_days, normalize_weekday_profile_rules,
-    normalize_weekday_token,
-};
+pub(crate) use automation::validate_automation_trigger_rules;
+use automation::{normalize_automation_triggers, normalize_trigger_days};
 pub(crate) use blocklists::{BlocklistProfileConfig, effective_blocked_sites_for_profile};
 use blocklists::{
     default_blocklist_profile_name, make_unique_profile_name, normalize_blocklist_profiles,
@@ -104,12 +98,6 @@ pub(crate) struct AppConfig {
     /// This is the canonical persisted timer-duration surface.
     #[serde(default)]
     pub(crate) custom_profile: Option<CustomProfileConfig>,
-    /// Deprecated weekday smart-switch rules for profile and planning defaults.
-    ///
-    /// Replacement behavior should be modeled with profile schedules and
-    /// session templates.
-    #[serde(default, skip_serializing)]
-    pub(crate) weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     /// Reusable session templates bundling task/profile/blocklist/schedule settings.
     #[serde(default)]
     pub(crate) session_templates: Vec<SessionTemplateConfig>,
@@ -628,51 +616,6 @@ impl ProfileAutomationSettingsConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct WeekdayProfileRuleConfig {
-    #[serde(default = "default_weekday_profile_rule_day")]
-    pub(crate) day: String,
-    #[serde(default)]
-    pub(crate) profile: ProfileId,
-    #[serde(default = "default_blocklist_profile_name")]
-    pub(crate) blocklist_profile: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) session_template: Option<String>,
-}
-
-impl WeekdayProfileRuleConfig {
-    fn normalized_with_context(
-        &self,
-        blocklist_profiles: &[BlocklistProfileConfig],
-        session_templates: &[SessionTemplateConfig],
-    ) -> Option<Self> {
-        let day = normalize_weekday_token(&self.day)?;
-        let blocklist_profile =
-            normalize_selected_blocklist_profile(&self.blocklist_profile, blocklist_profiles);
-        let session_template = normalize_optional_selected_session_template(
-            self.session_template.as_deref(),
-            session_templates,
-        );
-        Some(Self {
-            day,
-            profile: self.profile,
-            blocklist_profile,
-            session_template,
-        })
-    }
-}
-
-impl Default for WeekdayProfileRuleConfig {
-    fn default() -> Self {
-        Self {
-            day: default_weekday_profile_rule_day(),
-            profile: ProfileId::default(),
-            blocklist_profile: default_blocklist_profile_name(),
-            session_template: None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub(crate) struct AutomationTriggerRuleConfig {
     pub(crate) trigger: AutomationTriggerConditionConfig,
@@ -1105,10 +1048,7 @@ fn default_schedule_window_days() -> Vec<String> {
     ]
 }
 
-fn default_weekday_profile_rule_day() -> String {
-    "mon".to_string()
-}
-
+/// Provides the default start time for a recurring schedule window.
 fn default_schedule_window_start() -> String {
     "09:00".to_string()
 }
@@ -1369,7 +1309,6 @@ impl Default for AppConfig {
             blocking_backend: BlockingBackendConfig::default(),
             selected_profile: ProfileId::default(),
             custom_profile: None,
-            weekday_profile_rules: Vec::new(),
             session_templates: Vec::new(),
             selected_session_template: String::new(),
             automation_triggers: Vec::new(),
@@ -1578,20 +1517,7 @@ impl AppConfig {
             &self.blocklist_profiles,
             &self.session_templates,
         );
-        let normalized_weekday_profile_rules = normalize_weekday_profile_rules(
-            &self.weekday_profile_rules,
-            &self.blocklist_profiles,
-            &self.session_templates,
-        );
-        self.automation_triggers = if normalized_weekday_profile_rules.is_empty() {
-            normalized_automation_triggers
-        } else {
-            replace_weekday_profile_rule_automation_triggers(
-                &normalized_automation_triggers,
-                &normalized_weekday_profile_rules,
-            )
-        };
-        self.weekday_profile_rules = Vec::new();
+        self.automation_triggers = normalized_automation_triggers;
         self.blocking_backend = self.blocking_backend.normalized();
         self.schedule_runtime = self.schedule_runtime.normalized();
         self.calendar_sync = self.calendar_sync.normalized();

@@ -1,10 +1,10 @@
 use crate::config::{
     AutoStartConfig, AutomationTriggerRuleConfig, CustomProfileConfig, DailyGoalConfig,
     GoalCarryOverConfig, MonthlyGoalConfig, NotificationConfig, RecurringScheduleConfig,
-    ThemePreset, WakatimeMetadataConfig, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    ThemePreset, WakatimeMetadataConfig, WeeklyGoalConfig,
 };
 
-pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 52] = [
+pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 46] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -40,12 +40,6 @@ pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 52] = [
     "One-time end",
     "One-time add/remove",
     "Schedule conflicts",
-    "Weekday rule",
-    "Weekday rule day",
-    "Weekday rule profile",
-    "Weekday rule blocklist",
-    "Weekday rule template",
-    "Weekday rule add/remove",
     "Theme preset",
     "Automation trigger",
     "Trigger condition",
@@ -84,23 +78,17 @@ pub(crate) const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 31;
 pub(crate) const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 32;
 pub(crate) const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 33;
 pub(crate) const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 34;
-pub(crate) const PROFILE_EDIT_WEEKDAY_RULE_INDEX: usize = 35;
-pub(crate) const PROFILE_EDIT_WEEKDAY_RULE_DAY_INDEX: usize = 36;
-pub(crate) const PROFILE_EDIT_WEEKDAY_RULE_PROFILE_INDEX: usize = 37;
-pub(crate) const PROFILE_EDIT_WEEKDAY_RULE_BLOCKLIST_INDEX: usize = 38;
-pub(crate) const PROFILE_EDIT_WEEKDAY_RULE_TEMPLATE_INDEX: usize = 39;
-pub(crate) const PROFILE_EDIT_WEEKDAY_RULE_ADD_REMOVE_INDEX: usize = 40;
-pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 41;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX: usize = 42;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX: usize = 43;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX: usize = 44;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_AT_INDEX: usize = 45;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX: usize = 46;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_PROFILE_INDEX: usize = 47;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_BLOCKLIST_INDEX: usize = 48;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_TEMPLATE_INDEX: usize = 49;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX: usize = 50;
-pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX: usize = 51;
+pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 35;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX: usize = 36;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX: usize = 37;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX: usize = 38;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_AT_INDEX: usize = 39;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX: usize = 40;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_PROFILE_INDEX: usize = 41;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_BLOCKLIST_INDEX: usize = 42;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_TEMPLATE_INDEX: usize = 43;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX: usize = 44;
+pub(crate) const PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX: usize = 45;
 pub(crate) const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 pub(crate) const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 
@@ -111,7 +99,6 @@ pub(crate) struct ProfileEditSnapshot {
     pub(crate) auto_start: AutoStartConfig,
     pub(crate) recurring_schedule: RecurringScheduleConfig,
     pub(crate) automation_triggers: Vec<AutomationTriggerRuleConfig>,
-    pub(crate) weekday_profile_rules: Vec<WeekdayProfileRuleConfig>,
     pub(crate) strict_mode: bool,
     pub(crate) daily_goal: DailyGoalConfig,
     pub(crate) weekly_goal: WeeklyGoalConfig,

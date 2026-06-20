@@ -2,12 +2,12 @@ use crate::cli::{
     KeyValueParser, ParsedToken, PathBuf, parse_automation_triggers_value, parse_daemon_port,
     parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_profile_id,
     parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
-    parse_theme_preset, parse_watch_interval_secs, parse_weekday_rules_value,
-    parse_weekly_goal_value, require_nonempty_key_value,
+    parse_theme_preset, parse_watch_interval_secs, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 36] = [
+    let parsers: [KeyValueParser; 35] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -22,7 +22,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_goal_carry_monthly_key_value_arg,
         parse_strict_key_value_arg,
         parse_schedule_set_key_value_arg,
-        parse_weekday_rules_set_key_value_arg,
         parse_automation_triggers_set_key_value_arg,
         parse_watch_key_value_arg,
         parse_daemon_port_key_value_arg,
@@ -198,17 +197,7 @@ fn parse_schedule_set_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, St
     Ok(None)
 }
 
-fn parse_weekday_rules_set_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--weekday-rules-set=") {
-        let value =
-            require_nonempty_key_value(value, "`--weekday-rules-set=` requires a JSON payload.")?;
-        return Ok(Some(ParsedToken::WeekdayRulesSet(
-            parse_weekday_rules_value(value)?,
-        )));
-    }
-    Ok(None)
-}
-
+/// Parses `--automation-triggers-set=...` key-value arguments.
 fn parse_automation_triggers_set_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--automation-triggers-set=") {
         let value = require_nonempty_key_value(

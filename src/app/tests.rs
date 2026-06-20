@@ -4,7 +4,7 @@ use crate::calendar::CalendarBusyWindow;
 use crate::config::{
     AutomationTriggerActionConfig, AutomationTriggerConditionConfig, AutomationTriggerRuleConfig,
     CalendarProviderConfig, FeatureFlagsConfig, HistoryDashboardConfig, HistoryKpiCardId,
-    ShortcutConfig, StatsRetentionConfig, WeekdayProfileRuleConfig,
+    ShortcutConfig, StatsRetentionConfig,
 };
 use crate::error::UserFacingError;
 use crate::session_recovery::{
@@ -137,6 +137,7 @@ fn legacy_stats_path_migration_warning_includes_actionable_guidance() {
     assert!(warning.contains("focustime --restore"));
 }
 
+/// Verifies startup applies the selected built-in profile settings.
 #[test]
 fn selected_builtin_profile_is_applied_on_startup() {
     let config = AppConfig {
@@ -158,7 +159,6 @@ fn selected_builtin_profile_is_applied_on_startup() {
         session_templates: Vec::new(),
         selected_session_template: String::new(),
         automation_triggers: Vec::new(),
-        weekday_profile_rules: Vec::new(),
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
@@ -740,6 +740,7 @@ fn editing_schedule_exception_fields_updates_and_persists_settings() {
     );
 }
 
+/// Verifies one-time schedule editor changes are persisted.
 #[test]
 fn editing_one_time_schedule_fields_updates_and_persists_settings() {
     let mut app = App::default();
@@ -769,38 +770,7 @@ fn editing_one_time_schedule_fields_updates_and_persists_settings() {
     );
 }
 
-#[test]
-fn weekday_rule_day_cycle_skips_occupied_days() {
-    let mut app = App::default();
-    app.weekday_profile_rules = vec![
-        WeekdayProfileRuleConfig {
-            day: "mon".to_string(),
-            profile: ProfileId::Classic,
-            blocklist_profile: "Default".to_string(),
-            session_template: None,
-        },
-        WeekdayProfileRuleConfig {
-            day: "tue".to_string(),
-            profile: ProfileId::Classic,
-            blocklist_profile: "Default".to_string(),
-            session_template: None,
-        },
-        WeekdayProfileRuleConfig {
-            day: "wed".to_string(),
-            profile: ProfileId::Classic,
-            blocklist_profile: "Default".to_string(),
-            session_template: None,
-        },
-    ];
-    app.profile_edit_weekday_rule = 0;
-
-    app.cycle_weekday_profile_rule_day(true);
-    assert_eq!(app.weekday_profile_rules[0].day, "thu");
-
-    app.cycle_weekday_profile_rule_day(false);
-    assert_eq!(app.weekday_profile_rules[0].day, "mon");
-}
-
+/// Verifies daily goal editor changes are persisted.
 #[test]
 fn editing_daily_goal_fields_updates_and_persists_settings() {
     let mut app = App::default();
@@ -3758,6 +3728,7 @@ fn commit_profile_edit_rejects_invalid_automation_trigger_rules() {
     );
 }
 
+/// Verifies conflicting automation trigger rules keep profile edits staged.
 #[test]
 fn commit_profile_edit_rejects_conflicting_automation_trigger_rules() {
     let mut app = App::default();
@@ -3792,37 +3763,7 @@ fn commit_profile_edit_rejects_conflicting_automation_trigger_rules() {
     }));
 }
 
-#[test]
-fn commit_profile_edit_applies_changed_weekday_rule_for_today_before_clearing_legacy_rules() {
-    let mut app = App::default();
-    let today = weekday_token(Local::now().weekday()).to_string();
-
-    app.begin_profile_edit();
-    app.weekday_profile_rules = vec![WeekdayProfileRuleConfig {
-        day: today.clone(),
-        profile: ProfileId::Classic,
-        blocklist_profile: "Default".to_string(),
-        session_template: None,
-    }];
-
-    app.commit_profile_edit();
-
-    assert_eq!(app.selected_profile, ProfileId::Classic);
-    assert!(app.weekday_profile_rules.is_empty());
-    assert!(app.automation_triggers.iter().any(|rule| {
-        matches!(
-            rule,
-            AutomationTriggerRuleConfig {
-                trigger: AutomationTriggerConditionConfig::Time { days, at },
-                action: AutomationTriggerActionConfig::ApplyDefaults {
-                    profile: ProfileId::Classic,
-                    ..
-                },
-            } if days == std::slice::from_ref(&today) && at == "00:00"
-        )
-    }));
-}
-
+/// Verifies automation trigger edits remain staged until commit.
 #[test]
 fn profile_edit_stages_automation_trigger_changes_until_commit() {
     let mut app = App::default();
@@ -4004,6 +3945,7 @@ fn strict_mode_cannot_be_disabled_during_active_focus_profile_edit() {
     assert!(app.strict_mode);
 }
 
+/// Verifies strict mode blocks custom profile changes during active focus.
 #[test]
 fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
     let config = AppConfig {
@@ -4029,7 +3971,6 @@ fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
         weekly_goal: app.weekly_goal,
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
-        weekday_profile_rules: app.weekday_profile_rules.clone(),
         selected_theme_preset: app.selected_theme_preset,
         wakatime_metadata: app.wakatime_metadata.clone(),
     });
@@ -4059,6 +4000,7 @@ fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
     assert!(app.phase_notification.is_some());
 }
 
+/// Verifies enabling strict mode during active focus persists without resetting the timer.
 #[test]
 fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_reset() {
     let config = AppConfig {
@@ -4085,7 +4027,6 @@ fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_res
         weekly_goal: app.weekly_goal,
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
-        weekday_profile_rules: app.weekday_profile_rules.clone(),
         selected_theme_preset: app.selected_theme_preset,
         wakatime_metadata: app.wakatime_metadata.clone(),
     });
@@ -5924,19 +5865,13 @@ fn session_planner_template_delete_non_active_keeps_active_template() {
 }
 
 #[test]
-fn session_template_rename_updates_weekday_and_automation_references() {
+fn session_template_rename_updates_automation_references() {
     let mut app = App::default();
     app.task_labels = vec!["Docs".to_string()];
     app.selected_task_label = Some("Docs".to_string());
     app.capture_session_template("Template A")
         .expect("template A should be created");
 
-    app.weekday_profile_rules = vec![WeekdayProfileRuleConfig {
-        day: "mon".to_string(),
-        profile: ProfileId::Classic,
-        blocklist_profile: "Default".to_string(),
-        session_template: Some("template a".to_string()),
-    }];
     app.automation_triggers = vec![AutomationTriggerRuleConfig {
         trigger: AutomationTriggerConditionConfig::FocusStarted,
         action: AutomationTriggerActionConfig::ApplyDefaults {
@@ -5951,10 +5886,6 @@ fn session_template_rename_updates_weekday_and_automation_references() {
         .expect("rename should succeed");
 
     assert!(updated);
-    assert_eq!(
-        app.weekday_profile_rules[0].session_template.as_deref(),
-        Some("Template B")
-    );
     let Some(AutomationTriggerRuleConfig {
         action:
             AutomationTriggerActionConfig::ApplyDefaults {
@@ -5969,7 +5900,7 @@ fn session_template_rename_updates_weekday_and_automation_references() {
 }
 
 #[test]
-fn session_template_delete_clears_weekday_and_automation_references() {
+fn session_template_delete_clears_automation_references() {
     let mut app = App::default();
     app.task_labels = vec!["Docs".to_string(), "Review".to_string()];
 
@@ -5980,20 +5911,6 @@ fn session_template_delete_clears_weekday_and_automation_references() {
     app.capture_session_template("Template B")
         .expect("template B should be created");
 
-    app.weekday_profile_rules = vec![
-        WeekdayProfileRuleConfig {
-            day: "mon".to_string(),
-            profile: ProfileId::Classic,
-            blocklist_profile: "Default".to_string(),
-            session_template: Some("template a".to_string()),
-        },
-        WeekdayProfileRuleConfig {
-            day: "tue".to_string(),
-            profile: ProfileId::Classic,
-            blocklist_profile: "Default".to_string(),
-            session_template: Some("Template B".to_string()),
-        },
-    ];
     app.automation_triggers = vec![
         AutomationTriggerRuleConfig {
             trigger: AutomationTriggerConditionConfig::FocusStarted,
@@ -6018,11 +5935,6 @@ fn session_template_delete_clears_weekday_and_automation_references() {
 
     assert_eq!(app.session_templates.len(), 1);
     assert_eq!(app.session_templates[0].name, "Template B");
-    assert_eq!(app.weekday_profile_rules[0].session_template, None);
-    assert_eq!(
-        app.weekday_profile_rules[1].session_template.as_deref(),
-        Some("Template B")
-    );
     let Some(AutomationTriggerRuleConfig {
         action:
             AutomationTriggerActionConfig::ApplyDefaults {

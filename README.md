@@ -842,7 +842,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
 - standalone `automation_triggers[]` are deprecated; schedule windows now provide automatic focus starts, `--schedule-delay` handles postponed active windows, and session templates carry task/profile/blocklist defaults
-- deprecated `weekday_profile_rules[]` config entries are accepted for compatibility; `--weekday-rules*` commands remain available only as guidance/read-write shims
+- deprecated `weekday_profile_rules[]` config entries are removed by config migration; model weekday defaults with schedule windows, `--schedule-delay`, and session templates instead
 - the timer session overview shows the current/next scheduled window
 - when the opt-in calendar annotation cache is enabled and available, schedule text adds `calendar busy` for active calendar events and a `calendar overlap` warning for upcoming schedule collisions
 - `--calendar-sync` is a deprecated compatibility command that refreshes that optional cache from configured ICS feeds (including Google/Outlook ICS feed URLs)

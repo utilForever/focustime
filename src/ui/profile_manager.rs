@@ -246,6 +246,7 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
     }
 }
 
+/// Returns the display label for a profile editor field index.
 fn profile_edit_field_display_label(field_index: usize) -> &'static str {
     match field_index {
         0 => "Focus",
@@ -283,23 +284,17 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         32 => "One-time end",
         33 => "One-time add/remove",
         34 => "Conflict inspector",
-        35 => "Rule selector",
-        36 => "Rule day",
-        37 => "Rule profile",
-        38 => "Rule blocklist",
-        39 => "Rule template",
-        40 => "Rule add/remove",
-        41 => "Theme preset",
-        42 => "Trigger selector",
-        43 => "Trigger condition",
-        44 => "Time day",
-        45 => "Time at",
-        46 => "Action",
-        47 => "Action profile",
-        48 => "Action blocklist",
-        49 => "Action template",
-        50 => "Action delay",
-        51 => "Trigger add/remove",
+        35 => "Theme preset",
+        36 => "Trigger selector",
+        37 => "Trigger condition",
+        38 => "Time day",
+        39 => "Time at",
+        40 => "Action",
+        41 => "Action profile",
+        42 => "Action blocklist",
+        43 => "Action template",
+        44 => "Action delay",
+        45 => "Trigger add/remove",
         _ => "",
     }
 }

@@ -95,6 +95,7 @@ fn stats_retention_windows_change_by_preset() {
     assert_eq!(aggressive.keep_monthly_goal_snapshots_days, Some(180));
 }
 
+/// Verifies the full config schema round-trips through serialization.
 #[test]
 fn round_trip_full_config() {
     let original = AppConfig {
@@ -161,7 +162,6 @@ fn round_trip_full_config() {
                 action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 5 * 60 },
             },
         ],
-        weekday_profile_rules: Vec::new(),
         selected_theme_preset: ThemePreset::HighContrast,
         notifications: NotificationConfig {
             enabled: true,
@@ -855,6 +855,7 @@ fn normalize_filters_invalid_time_triggers_and_clamps_delay_action() {
     );
 }
 
+/// Verifies automation trigger defaults resolve profile and template references.
 #[test]
 fn normalize_automation_trigger_apply_defaults_resolves_references() {
     let cfg = AppConfig {
@@ -903,51 +904,7 @@ fn normalize_automation_trigger_apply_defaults_resolves_references() {
     );
 }
 
-#[test]
-fn normalize_moves_weekday_profile_rules_to_canonical_automation_triggers() {
-    let cfg = AppConfig {
-        blocklist_profiles: vec![
-            BlocklistProfileConfig::default(),
-            BlocklistProfileConfig {
-                name: "Work".to_string(),
-                sites: Vec::new(),
-                allowlist_sites: Vec::new(),
-            },
-        ],
-        session_templates: vec![SessionTemplateConfig {
-            name: "Deep Flow".to_string(),
-            task_label: "Docs".to_string(),
-            profile: ProfileId::DeepWork,
-            blocklist_profile: "Work".to_string(),
-            schedule: RecurringScheduleConfig::default(),
-        }],
-        weekday_profile_rules: vec![WeekdayProfileRuleConfig {
-            day: "monday".to_string(),
-            profile: ProfileId::DeepWork,
-            blocklist_profile: "work".to_string(),
-            session_template: Some("deep flow".to_string()),
-        }],
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert!(cfg.weekday_profile_rules.is_empty());
-    assert_eq!(
-        cfg.automation_triggers,
-        vec![AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec!["mon".to_string()],
-                at: "00:00".to_string(),
-            },
-            action: AutomationTriggerActionConfig::ApplyDefaults {
-                profile: ProfileId::DeepWork,
-                blocklist_profile: "Work".to_string(),
-                session_template: Some("Deep Flow".to_string()),
-            },
-        }]
-    );
-}
-
+/// Verifies automation trigger rules require both trigger and action fields.
 #[test]
 fn automation_trigger_rules_require_trigger_and_action_fields() {
     let missing_action = r#"
@@ -1198,6 +1155,7 @@ long_break_interval = 3
     assert_eq!(custom.long_break_interval, 3);
 }
 
+/// Verifies explicit custom profile settings override built-in defaults.
 #[test]
 fn effective_custom_profile_uses_explicit_profile_when_present() {
     let cfg = AppConfig {
@@ -1219,7 +1177,6 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         session_templates: Vec::new(),
         selected_session_template: String::new(),
         automation_triggers: Vec::new(),
-        weekday_profile_rules: Vec::new(),
         selected_theme_preset: ThemePreset::Classic,
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
@@ -1650,37 +1607,15 @@ strict_mode = false
         .and_then(toml::Value::as_str);
     assert_eq!(automation_trigger_profile, Some("standard"));
 
-    let weekday_replacement = root
+    let automation_triggers = root
         .get("automation_triggers")
         .and_then(toml::Value::as_array)
-        .and_then(|array| {
-            array.iter().find(|entry| {
-                entry
-                    .get("trigger")
-                    .and_then(|trigger| trigger.get("type"))
-                    .and_then(toml::Value::as_str)
-                    == Some("time")
-            })
-        })
-        .expect("weekday rule should migrate to a time automation trigger");
-    assert_eq!(
-        weekday_replacement
-            .get("trigger")
-            .and_then(|trigger| trigger.get("at"))
-            .and_then(toml::Value::as_str),
-        Some("00:00")
-    );
-    assert_eq!(
-        weekday_replacement
-            .get("action")
-            .and_then(|action| action.get("profile"))
-            .and_then(toml::Value::as_str),
-        Some("basic")
-    );
+        .expect("existing automation triggers should remain");
+    assert_eq!(automation_triggers.len(), 1);
 }
 
 #[test]
-fn migrate_empty_weekday_rules_preserves_existing_canonical_midnight_triggers() {
+fn migrate_weekday_rules_removes_key_and_preserves_existing_triggers() {
     let v2: toml::Value = toml::from_str(
         r#"
 schema_version = 2

@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Calendar sync simplification (#444):** narrowed calendar busy-window support to an opt-in schedule annotation cache, marked standalone `--calendar-sync` output with deprecation/replacement guidance, and documented deterministic schedule behavior when calendar data is absent or disabled.
 - **Automation trigger deprecation (#443):** marked standalone `automation_triggers` and `--automation-triggers*` as deprecated compatibility surfaces, routed guidance to schedule windows, `--schedule-delay`, and session templates, and removed standalone trigger execution from schedule/timer runtime paths.
-- **Weekday rule schedule merge (#442):** migrated deprecated `weekday_profile_rules` and `--weekday-rules*` through compatibility `automation_triggers` time rules as a backwards-compatible shim, while the canonical replacement remains schedule windows, `--schedule-delay`, and session templates.
+- **Weekday rule shim cleanup (#497):** removed `--weekday-rules*` command parsing/output and the deprecated `weekday_profile_rules` runtime shim; config migration now removes the legacy key while schedule windows, `--schedule-delay`, and session templates remain the supported replacement.
 
 ## [0.15.2] - 2026-06-10
 

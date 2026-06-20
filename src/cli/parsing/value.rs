@@ -1,7 +1,7 @@
 use crate::cli::{
     AutomationTriggerRuleConfig, DailyGoalConfig, MonthlyGoalConfig, NaiveDate,
     OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
-    SiteEditValue, ThemePreset, WeekdayProfileRuleConfig, WeeklyGoalConfig,
+    SiteEditValue, ThemePreset, WeeklyGoalConfig,
 };
 
 use super::{invalid_usage, require_nonempty_key_value};
@@ -140,18 +140,6 @@ pub(in crate::cli) fn parse_schedule_value(value: &str) -> Result<RecurringSched
     Ok(schedule)
 }
 
-pub(in crate::cli) fn parse_weekday_rules_value(
-    value: &str,
-) -> Result<Vec<WeekdayProfileRuleConfig>, String> {
-    let rules = serde_json::from_str::<Vec<WeekdayProfileRuleConfig>>(value).map_err(|error| {
-        invalid_usage(&format!(
-            "Invalid weekday-rules JSON payload: {error}. This compatibility payload maps to automation time triggers; use `--weekday-rules-set='[{{\"day\":\"mon\",\"profile\":\"standard\",\"blocklist_profile\":\"Work\",\"session_template\":\"Deep Flow\"}}]'`."
-        ))
-    })?;
-    validate_weekday_rules_value(&rules)?;
-    Ok(rules)
-}
-
 pub(in crate::cli) fn parse_automation_triggers_value(
     value: &str,
 ) -> Result<Vec<AutomationTriggerRuleConfig>, String> {
@@ -255,30 +243,7 @@ fn validate_one_time_schedule_window(
     Ok(())
 }
 
-fn validate_weekday_rules_value(rules: &[WeekdayProfileRuleConfig]) -> Result<(), String> {
-    for (index, rule) in rules.iter().enumerate() {
-        if !is_valid_schedule_weekday(&rule.day) {
-            return Err(invalid_usage(&format!(
-                "Invalid weekday rule at index {index}: unknown day `{}`.",
-                rule.day
-            )));
-        }
-        if rule.blocklist_profile.trim().is_empty() {
-            return Err(invalid_usage(&format!(
-                "Invalid weekday rule at index {index}: `blocklist_profile` cannot be empty."
-            )));
-        }
-        if let Some(template) = rule.session_template.as_deref()
-            && template.trim().is_empty()
-        {
-            return Err(invalid_usage(&format!(
-                "Invalid weekday rule at index {index}: `session_template` cannot be empty when provided."
-            )));
-        }
-    }
-    Ok(())
-}
-
+/// Checks whether a schedule weekday token is recognized by the CLI parser.
 fn is_valid_schedule_weekday(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
