@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.8] - 2026-06-20
+
 ### Changed
 
 - **Blocklist category config cleanup (#496):** flattened deprecated blocklist category `sites` and `allowlist_sites` into profile-level rules during config migration, removed category fields from runtime persistence, and updated doctor guidance for profile-level blocklist configs.
@@ -491,7 +493,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.7...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.8...HEAD
+[0.15.8]: https://github.com/utilForever/focustime/compare/v0.15.7...v0.15.8
 [0.15.7]: https://github.com/utilForever/focustime/compare/v0.15.6...v0.15.7
 [0.15.6]: https://github.com/utilForever/focustime/compare/v0.15.5...v0.15.6
 [0.15.5]: https://github.com/utilForever/focustime/compare/v0.15.4...v0.15.5
