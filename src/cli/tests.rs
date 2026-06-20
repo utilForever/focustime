@@ -2581,7 +2581,7 @@ fn build_status_output_excludes_allowlist_from_blocked_sites_count() {
 }
 
 #[test]
-fn build_status_output_includes_active_temporary_allowlist_entries() {
+fn build_status_output_includes_active_temporary_allowlist_overrides() {
     let now_epoch_secs = chrono::Local::now().timestamp();
     session_recovery::set_test_load_workflow_state(Some(WorkflowStateSnapshot {
         temporary_overrides: vec![
@@ -2611,20 +2611,17 @@ fn build_status_output_includes_active_temporary_allowlist_entries() {
     let output = build_status_output(&config, &FocusStats::default());
     session_recovery::set_test_load_workflow_state(None);
 
-    assert_eq!(output.temporary_allowlist_active_count, 1);
-    assert_eq!(
-        output.temporary_allowlist_next_expiry_remaining_secs,
-        Some(output.temporary_allowlist_active[0].remaining_secs)
-    );
-    assert_eq!(
-        output.temporary_allowlist_next_expiry_epoch_secs,
-        Some(output.temporary_allowlist_active[0].expires_at_epoch_secs)
-    );
-    assert_eq!(output.temporary_allowlist_active[0].site, "reddit.com");
-    assert!(output.temporary_allowlist_active[0].remaining_secs <= 120);
-    assert!(output.temporary_allowlist_active[0].remaining_secs > 0);
     assert_eq!(output.temporary_overrides_active_count, 1);
     assert_eq!(output.temporary_overrides[0].kind, "allowlist-site");
+    assert_eq!(
+        output.temporary_overrides[0].site.as_deref(),
+        Some("reddit.com")
+    );
+    assert!(
+        output.temporary_overrides[0]
+            .remaining_secs
+            .is_some_and(|remaining_secs| remaining_secs <= 120 && remaining_secs > 0)
+    );
 }
 
 #[test]

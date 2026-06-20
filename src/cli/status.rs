@@ -4,9 +4,9 @@ use crate::cli::{
     DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS, DailyGoalSnapshot, Datelike,
     FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput, NaiveDate, ProfileId, ProfileSpec,
     ProfileView, SessionOutput, StatsRetentionStatusOutput, StatusOutput, TaskGoalOutput,
-    TemporaryAllowlistStatusOutput, TemporaryOverrideStatusOutput, ThemePreset, ThemePresetView,
-    TimerPhase, TimerStatus, TodayOutput, WeeklyAllocationDayOutput, WeeklyAllocationOutput,
-    carry_over_goal_target, current_day_key, effective_blocked_sites_for_profile, session_recovery,
+    TemporaryOverrideStatusOutput, ThemePreset, ThemePresetView, TimerPhase, TimerStatus,
+    TodayOutput, WeeklyAllocationDayOutput, WeeklyAllocationOutput, carry_over_goal_target,
+    current_day_key, effective_blocked_sites_for_profile, session_recovery,
 };
 use crate::session_recovery::{
     WorkflowStateSnapshot, WorkflowTemporaryOverrideKind, WorkflowTemporaryOverrideSnapshot,
@@ -42,15 +42,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         .unwrap_or_default();
     let selected_automation = config.profile_automation_for(config.selected_profile);
     let workflow_state = session_recovery::load_workflow_state().ok().flatten();
-    let temporary_allowlist_active =
-        active_temporary_allowlist_status(config, workflow_state.as_ref());
-    let temporary_allowlist_active_count = temporary_allowlist_active.len();
-    let temporary_allowlist_next_expiry_remaining_secs = temporary_allowlist_active
-        .first()
-        .map(|entry| entry.remaining_secs);
-    let temporary_allowlist_next_expiry_epoch_secs = temporary_allowlist_active
-        .first()
-        .map(|entry| entry.expires_at_epoch_secs);
     let temporary_overrides = active_temporary_override_status(config, workflow_state.as_ref());
     let temporary_overrides_active_count = temporary_overrides
         .iter()
@@ -99,10 +90,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         task_note,
         selected_blocklist_profile: config.selected_blocklist_profile.clone(),
         blocked_sites_count: active_sites_count,
-        temporary_allowlist_active_count,
-        temporary_allowlist_next_expiry_remaining_secs,
-        temporary_allowlist_next_expiry_epoch_secs,
-        temporary_allowlist_active,
         temporary_overrides_active_count,
         temporary_overrides,
         strict_mode: selected_automation.strict_mode,
@@ -160,55 +147,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     }
 }
 
-fn active_temporary_allowlist_status(
-    config: &AppConfig,
-    workflow_state: Option<&WorkflowStateSnapshot>,
-) -> Vec<TemporaryAllowlistStatusOutput> {
-    let now_epoch_secs = chrono::Local::now().timestamp();
-    let selected_profile = config.selected_blocklist_profile.trim();
-    if selected_profile.is_empty() {
-        return Vec::new();
-    }
-    let Some(workflow_state) = workflow_state else {
-        return Vec::new();
-    };
-
-    let mut active = workflow_state
-        .temporary_overrides_with_legacy_fallback()
-        .into_iter()
-        .filter(|entry| entry.kind == WorkflowTemporaryOverrideKind::AllowlistSite)
-        .filter_map(|entry| {
-            let profile = entry.profile.unwrap_or_default();
-            if !profile.eq_ignore_ascii_case(selected_profile) {
-                return None;
-            }
-            let expires_at_epoch_secs = entry.expires_at_epoch_secs?;
-            if expires_at_epoch_secs <= now_epoch_secs {
-                return None;
-            }
-            let site = entry.site.unwrap_or_default().trim().to_string();
-            if site.is_empty() {
-                return None;
-            }
-            Some(TemporaryAllowlistStatusOutput {
-                site,
-                remaining_secs: (expires_at_epoch_secs - now_epoch_secs) as u64,
-                expires_at_epoch_secs,
-            })
-        })
-        .collect::<Vec<_>>();
-    active.sort_by(|left, right| {
-        left.remaining_secs
-            .cmp(&right.remaining_secs)
-            .then_with(|| {
-                left.site
-                    .to_ascii_lowercase()
-                    .cmp(&right.site.to_ascii_lowercase())
-            })
-    });
-    active
-}
-
 fn active_temporary_override_status(
     config: &AppConfig,
     workflow_state: Option<&WorkflowStateSnapshot>,
@@ -220,7 +158,8 @@ fn active_temporary_override_status(
     };
 
     let mut active = workflow_state
-        .temporary_overrides_with_legacy_fallback()
+        .temporary_overrides
+        .clone()
         .into_iter()
         .filter_map(|entry| {
             temporary_override_status_output(entry, selected_profile, now_epoch_secs)
