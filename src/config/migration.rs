@@ -60,6 +60,16 @@ pub(super) fn migrate_config_toml_to_current_detailed(
                     .to_string(),
         });
     }
+    let automation_triggers_input = config_toml.clone();
+    remove_automation_triggers(&mut config_toml);
+    if automation_triggers_input != config_toml {
+        steps.push(ConfigMigrationStepReport {
+            from_schema_version,
+            to_schema_version: from_schema_version,
+            summary: "Remove deprecated automation triggers; use schedules and session templates."
+                .to_string(),
+        });
+    }
     let blocklist_category_input = config_toml.clone();
     migrate_blocklist_categories_to_profile_rules(&mut config_toml);
     if blocklist_category_input != config_toml {
@@ -93,7 +103,6 @@ pub(super) fn canonicalize_legacy_profile_aliases(config_toml: &mut toml::Value)
     migrate_profile_value_in_table(table, "selected_profile");
     migrate_profile_automation_preset_keys(table);
     migrate_profile_value_in_array_table(table, "session_templates", "profile");
-    migrate_automation_trigger_action_profiles(table);
 }
 
 /// Removes retired weekday profile rules without migrating them to replacement triggers.
@@ -105,6 +114,17 @@ pub(super) fn remove_weekday_profile_rules(config_toml: &mut toml::Value) {
         return;
     }
     table.remove("weekday_profile_rules");
+}
+
+/// Removes retired standalone automation trigger rules.
+pub(super) fn remove_automation_triggers(config_toml: &mut toml::Value) {
+    let Some(table) = config_toml.as_table_mut() else {
+        return;
+    };
+    if !table.contains_key("automation_triggers") {
+        return;
+    }
+    table.remove("automation_triggers");
 }
 
 /// Moves deprecated blocklist category rules into profile-level blocked-site entries.
@@ -336,7 +356,6 @@ pub(super) fn collect_legacy_profile_rename_advice(config_toml: &toml::Value) ->
         "profile",
         "session_templates",
     );
-    push_legacy_automation_trigger_profile_advice(&mut advice, table);
     push_legacy_profile_automation_key_advice(&mut advice, table);
 
     advice.sort_unstable();
@@ -393,35 +412,6 @@ pub(super) fn push_legacy_profile_value_array_advice(
         push_legacy_profile_value_advice(
             advice,
             &format!("{location_prefix}[{index}].{field_key}"),
-            value,
-        );
-    }
-}
-
-/// Adds profile-rename advice for legacy automation trigger action profiles.
-pub(super) fn push_legacy_automation_trigger_profile_advice(
-    advice: &mut Vec<String>,
-    table: &toml::map::Map<String, toml::Value>,
-) {
-    let Some(array) = table
-        .get("automation_triggers")
-        .and_then(toml::Value::as_array)
-    else {
-        return;
-    };
-    for (index, entry) in array.iter().enumerate() {
-        let Some(entry_table) = entry.as_table() else {
-            continue;
-        };
-        let Some(action_table) = entry_table.get("action").and_then(toml::Value::as_table) else {
-            continue;
-        };
-        let Some(value) = action_table.get("profile").and_then(toml::Value::as_str) else {
-            continue;
-        };
-        push_legacy_profile_value_advice(
-            advice,
-            &format!("automation_triggers[{index}].action.profile"),
             value,
         );
     }
@@ -506,12 +496,6 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
         );
     }
 
-    if !config.automation_triggers.is_empty() {
-        warnings.push(
-            "Deprecated `automation_triggers` is in use. Use profile schedules for automatic focus starts, `--schedule-delay` for postponing active schedule windows, and session templates for task/profile/blocklist defaults.".to_string(),
-        );
-    }
-
     if config.calendar_sync.enabled {
         warnings.push(
             "Deprecated standalone calendar sync behavior is enabled. Calendar data is now supported only as an opt-in schedule annotation cache; keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data.".to_string(),
@@ -557,7 +541,6 @@ pub(super) fn migrate_config_toml_v1_to_v2(mut config_toml: toml::Value) -> Opti
     migrate_profile_value_in_table(table, "selected_profile");
     migrate_profile_automation_preset_keys(table);
     migrate_profile_value_in_array_table(table, "session_templates", "profile");
-    migrate_automation_trigger_action_profiles(table);
     table.insert(
         "schema_version".to_string(),
         toml::Value::Integer(i64::from(CURRENT_CONFIG_SCHEMA_VERSION)),
@@ -648,29 +631,5 @@ pub(super) fn merge_toml_value_prefer_existing(existing: &mut toml::Value, incom
         } else {
             existing_table.insert(key, incoming_value);
         }
-    }
-}
-
-/// Canonicalizes profile references inside automation trigger actions.
-pub(super) fn migrate_automation_trigger_action_profiles(
-    table: &mut toml::map::Map<String, toml::Value>,
-) {
-    let Some(triggers) = table
-        .get_mut("automation_triggers")
-        .and_then(|value| value.as_array_mut())
-    else {
-        return;
-    };
-    for entry in triggers {
-        let Some(entry_table) = entry.as_table_mut() else {
-            continue;
-        };
-        let Some(action_table) = entry_table
-            .get_mut("action")
-            .and_then(|action| action.as_table_mut())
-        else {
-            continue;
-        };
-        migrate_profile_value_in_table(action_table, "profile");
     }
 }

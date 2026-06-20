@@ -285,16 +285,6 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         33 => "One-time add/remove",
         34 => "Conflict inspector",
         35 => "Theme preset",
-        36 => "Trigger selector",
-        37 => "Trigger condition",
-        38 => "Time day",
-        39 => "Time at",
-        40 => "Action",
-        41 => "Action profile",
-        42 => "Action blocklist",
-        43 => "Action template",
-        44 => "Action delay",
-        45 => "Trigger add/remove",
         _ => "",
     }
 }

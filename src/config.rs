@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Deserializer, Serialize};
 
-mod automation;
 mod blocklists;
 mod diagnostics;
 mod migration;
@@ -15,8 +14,6 @@ mod paths;
 mod shortcuts;
 mod wakatime;
 
-pub(crate) use automation::validate_automation_trigger_rules;
-use automation::{normalize_automation_triggers, normalize_trigger_days};
 pub(crate) use blocklists::{BlocklistProfileConfig, effective_blocked_sites_for_profile};
 use blocklists::{
     default_blocklist_profile_name, make_unique_profile_name, normalize_blocklist_profiles,
@@ -104,12 +101,6 @@ pub(crate) struct AppConfig {
     /// Name of the active session template (empty = none selected).
     #[serde(default)]
     pub(crate) selected_session_template: String,
-    /// Deprecated rule-based automation triggers for time/schedule/runtime events.
-    ///
-    /// Kept as a load/save compatibility surface while schedule-driven focus
-    /// behavior replaces standalone trigger execution.
-    #[serde(default)]
-    pub(crate) automation_triggers: Vec<AutomationTriggerRuleConfig>,
     /// Selected UI theme preset.
     #[serde(default)]
     pub(crate) selected_theme_preset: ThemePreset,
@@ -612,111 +603,6 @@ impl ProfileAutomationSettingsConfig {
             ProfileId::Classic => self.basic = value,
             ProfileId::DeepWork => self.standard = value,
             ProfileId::Custom => self.advanced = value,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub(crate) struct AutomationTriggerRuleConfig {
-    pub(crate) trigger: AutomationTriggerConditionConfig,
-    pub(crate) action: AutomationTriggerActionConfig,
-}
-
-impl AutomationTriggerRuleConfig {
-    fn normalized_with_context(
-        &self,
-        blocklist_profiles: &[BlocklistProfileConfig],
-        session_templates: &[SessionTemplateConfig],
-    ) -> Option<Self> {
-        let trigger = self.trigger.normalized()?;
-        let action = self
-            .action
-            .normalized_with_context(blocklist_profiles, session_templates)?;
-        Some(Self { trigger, action })
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub(crate) enum AutomationTriggerConditionConfig {
-    #[default]
-    ScheduleWindowStart,
-    ScheduleWindowEnd,
-    FocusStarted,
-    FocusCompleted,
-    BreakStarted,
-    BreakCompleted,
-    Time {
-        #[serde(default = "default_schedule_window_days")]
-        days: Vec<String>,
-        #[serde(default = "default_schedule_window_start")]
-        at: String,
-    },
-}
-
-impl AutomationTriggerConditionConfig {
-    fn normalized(&self) -> Option<Self> {
-        match self {
-            Self::ScheduleWindowStart => Some(Self::ScheduleWindowStart),
-            Self::ScheduleWindowEnd => Some(Self::ScheduleWindowEnd),
-            Self::FocusStarted => Some(Self::FocusStarted),
-            Self::FocusCompleted => Some(Self::FocusCompleted),
-            Self::BreakStarted => Some(Self::BreakStarted),
-            Self::BreakCompleted => Some(Self::BreakCompleted),
-            Self::Time { days, at } => {
-                let days = normalize_trigger_days(days)?;
-                let at = normalize_schedule_time_or_default(at, default_schedule_window_start);
-                Some(Self::Time { days, at })
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub(crate) enum AutomationTriggerActionConfig {
-    #[default]
-    StartFocus,
-    DelayScheduleStart {
-        #[serde(default = "default_schedule_delay_secs")]
-        delay_secs: u64,
-    },
-    ApplyDefaults {
-        #[serde(default)]
-        profile: ProfileId,
-        #[serde(default = "default_blocklist_profile_name")]
-        blocklist_profile: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        session_template: Option<String>,
-    },
-}
-
-impl AutomationTriggerActionConfig {
-    fn normalized_with_context(
-        &self,
-        blocklist_profiles: &[BlocklistProfileConfig],
-        session_templates: &[SessionTemplateConfig],
-    ) -> Option<Self> {
-        match self {
-            Self::StartFocus => Some(Self::StartFocus),
-            Self::DelayScheduleStart { delay_secs } => Some(Self::DelayScheduleStart {
-                delay_secs: (*delay_secs).clamp(SCHEDULE_DELAY_MIN_SECS, SCHEDULE_DELAY_MAX_SECS),
-            }),
-            Self::ApplyDefaults {
-                profile,
-                blocklist_profile,
-                session_template,
-            } => Some(Self::ApplyDefaults {
-                profile: *profile,
-                blocklist_profile: normalize_selected_blocklist_profile(
-                    blocklist_profile,
-                    blocklist_profiles,
-                ),
-                session_template: normalize_optional_selected_session_template(
-                    session_template.as_deref(),
-                    session_templates,
-                ),
-            }),
         }
     }
 }
@@ -1311,7 +1197,6 @@ impl Default for AppConfig {
             custom_profile: None,
             session_templates: Vec::new(),
             selected_session_template: String::new(),
-            automation_triggers: Vec::new(),
             selected_theme_preset: ThemePreset::default(),
             notifications: NotificationConfig::default(),
             auto_start: AutoStartConfig::default(),
@@ -1512,12 +1397,6 @@ impl AppConfig {
             &self.selected_session_template,
             &self.session_templates,
         );
-        let normalized_automation_triggers = normalize_automation_triggers(
-            &self.automation_triggers,
-            &self.blocklist_profiles,
-            &self.session_templates,
-        );
-        self.automation_triggers = normalized_automation_triggers;
         self.blocking_backend = self.blocking_backend.normalized();
         self.schedule_runtime = self.schedule_runtime.normalized();
         self.calendar_sync = self.calendar_sync.normalized();
@@ -1702,17 +1581,6 @@ fn normalize_selected_session_template(
         .find(|template| template.name.eq_ignore_ascii_case(selected_name))
         .map(|template| template.name.clone())
         .unwrap_or_default()
-}
-
-fn normalize_optional_selected_session_template(
-    value: Option<&str>,
-    session_templates: &[SessionTemplateConfig],
-) -> Option<String> {
-    let normalized = normalize_optional_nonempty_string(value)?;
-    session_templates
-        .iter()
-        .find(|template| template.name.eq_ignore_ascii_case(&normalized))
-        .map(|template| template.name.clone())
 }
 
 #[cfg(test)]
