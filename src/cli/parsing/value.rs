@@ -1,7 +1,7 @@
 use crate::cli::{
-    AutomationTriggerRuleConfig, DailyGoalConfig, MonthlyGoalConfig, NaiveDate,
-    OneTimeFocusWindowConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig,
-    SiteEditValue, ThemePreset, WeeklyGoalConfig,
+    DailyGoalConfig, MonthlyGoalConfig, NaiveDate, OneTimeFocusWindowConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, SiteEditValue, ThemePreset,
+    WeeklyGoalConfig,
 };
 
 use super::{invalid_usage, require_nonempty_key_value};
@@ -138,16 +138,6 @@ pub(in crate::cli) fn parse_schedule_value(value: &str) -> Result<RecurringSched
     })?;
     validate_schedule_value(&schedule)?;
     Ok(schedule)
-}
-
-pub(in crate::cli) fn parse_automation_triggers_value(
-    value: &str,
-) -> Result<Vec<AutomationTriggerRuleConfig>, String> {
-    serde_json::from_str::<Vec<AutomationTriggerRuleConfig>>(value).map_err(|error| {
-        invalid_usage(&format!(
-            "Invalid automation-triggers JSON payload: {error}. Use `--automation-triggers-set='[{{\"trigger\":{{\"type\":\"time\",\"days\":[\"mon\"],\"at\":\"09:00\"}},\"action\":{{\"type\":\"start_focus\"}}}}]'`."
-        ))
-    })
 }
 
 fn validate_schedule_value(schedule: &RecurringScheduleConfig) -> Result<(), String> {

@@ -5,21 +5,18 @@ use std::{
 };
 
 use crate::app::App;
-use crate::config::validate_automation_trigger_rules;
 use crate::error::UserMessage;
 
 use crate::cli::{
-    AppConfig, AutomationTriggerRuleConfig, AutomationTriggersCommandOutput,
-    BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig, DailyGoalSnapshot,
-    FocusStats, GoalCarryCommandOutput, GoalCommandOutput, MonthlyGoalConfig, OutputMode,
-    ProfileId, ProfileOutput, ProfileView, RecurringScheduleConfig, ScheduleCommandOutput,
-    ScheduleDelayCommandOutput, SessionMetadataCommandOutput, SessionTemplateCommandKind,
-    SessionTemplateCommandOutput, SessionTemplateSummaryOutput, StrictCommandOutput,
-    TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
-    TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
-    TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
-    build_schedule_inspection_output, build_task_goal_output,
-    print_automation_triggers_command_output, print_break_glass_command_output,
+    AppConfig, BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig,
+    DailyGoalSnapshot, FocusStats, GoalCarryCommandOutput, GoalCommandOutput, MonthlyGoalConfig,
+    OutputMode, ProfileId, ProfileOutput, ProfileView, RecurringScheduleConfig,
+    ScheduleCommandOutput, ScheduleDelayCommandOutput, SessionMetadataCommandOutput,
+    SessionTemplateCommandKind, SessionTemplateCommandOutput, SessionTemplateSummaryOutput,
+    StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
+    TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset,
+    TimerCommandOutput, TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
+    build_schedule_inspection_output, build_task_goal_output, print_break_glass_command_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_profile_output,
     print_schedule_command_output, print_schedule_delay_command_output,
     print_session_metadata_command_output, print_session_template_command_output,
@@ -62,8 +59,6 @@ use status::execute_status_command;
 use status::{WATCH_INTERRUPTED, next_watch_deadline, wait_for_next_watch_tick};
 
 type CliExecuteResult<T> = Result<T, UserMessage>;
-
-pub(super) const AUTOMATION_TRIGGERS_REPLACEMENT: &str = "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults.";
 
 pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<()> {
     if let Some(surface_id) = command_usage_surface_id(&cli_command.kind)
@@ -113,9 +108,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Strict { enabled } => execute_strict_command(enabled, cli_command.output),
         CommandKind::Schedule { schedule } => {
             execute_schedule_command(schedule, cli_command.output)
-        }
-        CommandKind::AutomationTriggers { rules } => {
-            execute_automation_triggers_command(rules, cli_command.output)
         }
         CommandKind::ScheduleDelay => execute_schedule_delay_command(cli_command.output),
         CommandKind::BreakGlassTrigger => execute_break_glass_trigger_command(cli_command.output),
@@ -190,7 +182,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::GoalCarryMonthly { .. } => Some("goal-carry-monthly"),
         CommandKind::Strict { .. } => Some("strict"),
         CommandKind::Schedule { .. } => Some("schedule"),
-        CommandKind::AutomationTriggers { .. } => Some("automation-triggers"),
         CommandKind::ScheduleDelay => Some("schedule-delay"),
         CommandKind::BreakGlassTrigger => Some("break-glass-trigger"),
         CommandKind::BreakGlassCancel => Some("break-glass-cancel"),
@@ -761,51 +752,6 @@ fn execute_schedule_command(
     Ok(())
 }
 
-/// Executes the deprecated automation-trigger inspection or replacement command.
-fn execute_automation_triggers_command(
-    rules: Option<Vec<AutomationTriggerRuleConfig>>,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let mut config = AppConfig::load().normalized();
-    let mut updated = false;
-    if let Some(rules) = rules {
-        config.automation_triggers = validate_and_normalize_automation_triggers(rules, &config)?;
-        config
-            .save()
-            .map_err(|error| format!("Failed to save automation trigger rules: {error}"))?;
-        updated = true;
-    }
-
-    let payload = AutomationTriggersCommandOutput {
-        updated,
-        deprecated: true,
-        replacement: AUTOMATION_TRIGGERS_REPLACEMENT,
-        rules: config.automation_triggers.clone(),
-    };
-
-    match output {
-        OutputMode::Text => print_automation_triggers_command_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn validate_and_normalize_automation_triggers(
-    rules: Vec<AutomationTriggerRuleConfig>,
-    config: &AppConfig,
-) -> Result<Vec<AutomationTriggerRuleConfig>, String> {
-    validate_automation_trigger_rules(
-        &rules,
-        &config.blocklist_profiles,
-        &config.session_templates,
-    )
-    .map_err(|error| format!("Invalid automation trigger rules: {error}"))?;
-
-    let mut normalized = config.clone();
-    normalized.automation_triggers = rules;
-    Ok(normalized.normalized().automation_triggers)
-}
-
 fn execute_schedule_delay_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("schedule-delay");
@@ -1041,45 +987,6 @@ mod tests {
         let interrupted = wait_thread.join().expect("watch wait thread should join");
         WATCH_INTERRUPTED.store(false, Ordering::SeqCst);
         assert!(interrupted);
-    }
-
-    #[test]
-    fn validate_and_normalize_automation_triggers_rejects_invalid_delay_without_clamping() {
-        let config = AppConfig::default().normalized();
-        let rules = vec![AutomationTriggerRuleConfig {
-            trigger: crate::config::AutomationTriggerConditionConfig::ScheduleWindowEnd,
-            action: crate::config::AutomationTriggerActionConfig::DelayScheduleStart {
-                delay_secs: 0,
-            },
-        }];
-
-        let error = validate_and_normalize_automation_triggers(rules, &config).unwrap_err();
-
-        assert!(error.contains("Invalid automation trigger rules"));
-        assert!(error.contains("delay_secs"));
-    }
-
-    #[test]
-    fn validate_and_normalize_automation_triggers_normalizes_valid_day_aliases() {
-        let config = AppConfig::default().normalized();
-        let rules = vec![AutomationTriggerRuleConfig {
-            trigger: crate::config::AutomationTriggerConditionConfig::Time {
-                days: vec!["MONDAY".to_string(), "monday".to_string()],
-                at: "09:00".to_string(),
-            },
-            action: crate::config::AutomationTriggerActionConfig::StartFocus,
-        }];
-
-        let normalized = validate_and_normalize_automation_triggers(rules, &config)
-            .expect("valid rules should normalize");
-
-        assert_eq!(
-            normalized[0].trigger,
-            crate::config::AutomationTriggerConditionConfig::Time {
-                days: vec!["mon".to_string()],
-                at: "09:00".to_string(),
-            }
-        );
     }
 
     #[test]

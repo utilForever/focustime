@@ -2,7 +2,6 @@ use crate::app::*;
 use crate::blocker;
 use crate::calendar::CalendarBusyWindow;
 use crate::config::{
-    AutomationTriggerActionConfig, AutomationTriggerConditionConfig, AutomationTriggerRuleConfig,
     CalendarProviderConfig, FeatureFlagsConfig, HistoryDashboardConfig, HistoryKpiCardId,
     ShortcutConfig, StatsRetentionConfig,
 };
@@ -158,7 +157,6 @@ fn selected_builtin_profile_is_applied_on_startup() {
         }),
         session_templates: Vec::new(),
         selected_session_template: String::new(),
-        automation_triggers: Vec::new(),
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
@@ -3587,7 +3585,7 @@ fn recurring_schedule_does_not_retrigger_within_same_overlapping_occurrence() {
 }
 
 #[test]
-fn deprecated_schedule_window_end_trigger_does_not_delay_schedule_runtime() {
+fn schedule_window_transition_does_not_delay_schedule_runtime_without_delay_request() {
     let first_tick = local_datetime_today(10, 15);
     let overlap_transition_tick = local_datetime_today(10, 20);
     let config = AppConfig {
@@ -3606,10 +3604,6 @@ fn deprecated_schedule_window_end_trigger_does_not_delay_schedule_runtime() {
             ],
             ..RecurringScheduleConfig::default()
         },
-        automation_triggers: vec![AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::ScheduleWindowEnd,
-            action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 120 },
-        }],
         ..AppConfig::default()
     };
     let mut app = App::from_config(config);
@@ -3631,19 +3625,8 @@ fn deprecated_schedule_window_end_trigger_does_not_delay_schedule_runtime() {
 }
 
 #[test]
-fn deprecated_focus_completed_trigger_does_not_apply_profile_defaults() {
-    let config = AppConfig {
-        automation_triggers: vec![AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::FocusCompleted,
-            action: AutomationTriggerActionConfig::ApplyDefaults {
-                profile: ProfileId::DeepWork,
-                blocklist_profile: "Default".to_string(),
-                session_template: None,
-            },
-        }],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
+fn focus_completed_does_not_apply_profile_defaults_without_session_template() {
+    let mut app = App::default();
     app.task_labels = vec!["Docs".to_string()];
     app.selected_task_label = Some("Docs".to_string());
     app.timer.phase = TimerPhase::Focus;
@@ -3653,136 +3636,6 @@ fn deprecated_focus_completed_trigger_does_not_apply_profile_defaults() {
     app.on_tick(false);
 
     assert_ne!(app.selected_profile, ProfileId::DeepWork);
-}
-
-#[test]
-fn profile_editor_adjusts_automation_trigger_fields() {
-    let mut app = App::default();
-
-    app.adjust_automation_triggers_collection(true);
-    assert_eq!(app.automation_triggers.len(), 1);
-    assert_eq!(
-        app.profile_edit_field_value(PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX),
-        "schedule_window_start"
-    );
-
-    app.cycle_automation_trigger_condition(true);
-    assert_eq!(
-        app.profile_edit_field_value(PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX),
-        "schedule_window_end"
-    );
-
-    app.cycle_automation_trigger_action(true);
-    assert_eq!(
-        app.profile_edit_field_value(PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX),
-        "delay_schedule_start"
-    );
-    assert_eq!(
-        app.profile_edit_field_value(PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX),
-        format!("{}s", app.schedule_runtime.delay_secs)
-    );
-}
-
-#[test]
-fn profile_editor_preserves_multi_day_automation_trigger_days() {
-    let mut app = App::default();
-    app.automation_triggers = vec![AutomationTriggerRuleConfig {
-        trigger: AutomationTriggerConditionConfig::Time {
-            days: vec!["mon".to_string(), "wed".to_string()],
-            at: "09:00".to_string(),
-        },
-        action: AutomationTriggerActionConfig::StartFocus,
-    }];
-    let original = app.automation_triggers.clone();
-
-    assert_eq!(
-        app.profile_edit_field_value(PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX),
-        "mon,wed"
-    );
-    app.cycle_automation_trigger_time_day(true);
-    assert_eq!(app.automation_triggers, original);
-}
-
-#[test]
-fn commit_profile_edit_rejects_invalid_automation_trigger_rules() {
-    let mut app = App::default();
-    app.begin_profile_edit();
-    app.profile_edit_automation_triggers = vec![AutomationTriggerRuleConfig {
-        trigger: AutomationTriggerConditionConfig::FocusStarted,
-        action: AutomationTriggerActionConfig::ApplyDefaults {
-            profile: ProfileId::Classic,
-            blocklist_profile: "Missing".to_string(),
-            session_template: None,
-        },
-    }];
-
-    app.commit_profile_edit();
-
-    assert!(app.profile_edit_active);
-    assert!(app.profile_edit_snapshot.is_some());
-    assert!(app.automation_triggers.is_empty());
-    assert!(
-        app.config_error
-            .as_deref()
-            .is_some_and(|error| error.contains("blocklist profile"))
-    );
-}
-
-/// Verifies conflicting automation trigger rules keep profile edits staged.
-#[test]
-fn commit_profile_edit_rejects_conflicting_automation_trigger_rules() {
-    let mut app = App::default();
-    app.begin_profile_edit();
-    app.profile_edit_automation_triggers = vec![
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec!["mon".to_string(), "wed".to_string()],
-                at: "09:00".to_string(),
-            },
-            action: AutomationTriggerActionConfig::StartFocus,
-        },
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec!["wednesday".to_string()],
-                at: "09:00".to_string(),
-            },
-            action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 300 },
-        },
-    ];
-
-    app.commit_profile_edit();
-
-    assert!(app.profile_edit_active);
-    assert!(app.profile_edit_snapshot.is_some());
-    assert!(app.automation_triggers.is_empty());
-    assert!(app.config_error.as_deref().is_some_and(|error| {
-        error.contains("Invalid automation trigger rules")
-            && error.contains("rule #1")
-            && error.contains("rule #2")
-            && error.contains("time trigger `wed@09:00`")
-    }));
-}
-
-/// Verifies automation trigger edits remain staged until commit.
-#[test]
-fn profile_edit_stages_automation_trigger_changes_until_commit() {
-    let mut app = App::default();
-    let initial_rule = AutomationTriggerRuleConfig {
-        trigger: AutomationTriggerConditionConfig::FocusStarted,
-        action: AutomationTriggerActionConfig::StartFocus,
-    };
-    app.automation_triggers = vec![initial_rule];
-
-    app.begin_profile_edit();
-    app.adjust_automation_triggers_collection(true);
-    assert_eq!(app.automation_triggers.len(), 1);
-    assert_eq!(app.profile_edit_automation_triggers.len(), 2);
-
-    app.commit_profile_edit();
-
-    assert!(!app.profile_edit_active);
-    assert_eq!(app.automation_triggers.len(), 2);
-    assert!(app.profile_edit_automation_triggers.is_empty());
 }
 
 #[test]
@@ -3965,7 +3818,6 @@ fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
         notification_settings: app.notification_settings,
         auto_start: app.auto_start,
         recurring_schedule: app.recurring_schedule.clone(),
-        automation_triggers: app.automation_triggers.clone(),
         strict_mode: app.strict_mode,
         daily_goal: app.daily_goal,
         weekly_goal: app.weekly_goal,
@@ -4021,7 +3873,6 @@ fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_res
         notification_settings: app.notification_settings,
         auto_start: app.auto_start,
         recurring_schedule: app.recurring_schedule.clone(),
-        automation_triggers: app.automation_triggers.clone(),
         strict_mode: app.strict_mode,
         daily_goal: app.daily_goal,
         weekly_goal: app.weekly_goal,
@@ -5862,101 +5713,6 @@ fn session_planner_template_delete_non_active_keeps_active_template() {
         .map(|template| template.name.as_str())
         .collect::<Vec<_>>();
     assert_eq!(names, vec!["Template A", "Template B"]);
-}
-
-#[test]
-fn session_template_rename_updates_automation_references() {
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.capture_session_template("Template A")
-        .expect("template A should be created");
-
-    app.automation_triggers = vec![AutomationTriggerRuleConfig {
-        trigger: AutomationTriggerConditionConfig::FocusStarted,
-        action: AutomationTriggerActionConfig::ApplyDefaults {
-            profile: ProfileId::Classic,
-            blocklist_profile: "Default".to_string(),
-            session_template: Some("TEMPLATE A".to_string()),
-        },
-    }];
-
-    let updated = app
-        .rename_session_template_at(0, "Template B")
-        .expect("rename should succeed");
-
-    assert!(updated);
-    let Some(AutomationTriggerRuleConfig {
-        action:
-            AutomationTriggerActionConfig::ApplyDefaults {
-                session_template, ..
-            },
-        ..
-    }) = app.automation_triggers.first()
-    else {
-        panic!("expected apply-defaults trigger");
-    };
-    assert_eq!(session_template.as_deref(), Some("Template B"));
-}
-
-#[test]
-fn session_template_delete_clears_automation_references() {
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string(), "Review".to_string()];
-
-    app.selected_task_label = Some("Docs".to_string());
-    app.capture_session_template("Template A")
-        .expect("template A should be created");
-    app.selected_task_label = Some("Review".to_string());
-    app.capture_session_template("Template B")
-        .expect("template B should be created");
-
-    app.automation_triggers = vec![
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::FocusStarted,
-            action: AutomationTriggerActionConfig::ApplyDefaults {
-                profile: ProfileId::Classic,
-                blocklist_profile: "Default".to_string(),
-                session_template: Some("TEMPLATE A".to_string()),
-            },
-        },
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::FocusCompleted,
-            action: AutomationTriggerActionConfig::ApplyDefaults {
-                profile: ProfileId::Classic,
-                blocklist_profile: "Default".to_string(),
-                session_template: Some("Template B".to_string()),
-            },
-        },
-    ];
-
-    app.delete_session_template_at(0)
-        .expect("delete should succeed");
-
-    assert_eq!(app.session_templates.len(), 1);
-    assert_eq!(app.session_templates[0].name, "Template B");
-    let Some(AutomationTriggerRuleConfig {
-        action:
-            AutomationTriggerActionConfig::ApplyDefaults {
-                session_template, ..
-            },
-        ..
-    }) = app.automation_triggers.first()
-    else {
-        panic!("expected apply-defaults trigger");
-    };
-    assert!(session_template.is_none());
-    let Some(AutomationTriggerRuleConfig {
-        action:
-            AutomationTriggerActionConfig::ApplyDefaults {
-                session_template, ..
-            },
-        ..
-    }) = app.automation_triggers.get(1)
-    else {
-        panic!("expected second apply-defaults trigger");
-    };
-    assert_eq!(session_template.as_deref(), Some("Template B"));
 }
 
 #[test]

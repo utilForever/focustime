@@ -6,9 +6,9 @@ pub(super) use options::{
     parse_watch_interval_secs, require_nonempty_key_value,
 };
 pub(super) use value::{
-    parse_automation_triggers_value, parse_goal_carry_value, parse_goal_value,
-    parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
-    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_weekly_goal_value,
+    parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_profile_id,
+    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
+    parse_theme_preset, parse_weekly_goal_value,
 };
 
 use crate::cli::{
@@ -64,8 +64,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Strict(_)
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
-            | ParsedToken::AutomationTriggers
-            | ParsedToken::AutomationTriggersSet(_)
             | ParsedToken::ScheduleDelay
             | ParsedToken::BreakGlassTrigger
             | ParsedToken::BreakGlassCancel
@@ -149,6 +147,10 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
             summary: "Encrypted sync passphrases were removed.",
             replacement: "no direct replacement is available because encrypted sync/backups are no longer supported.",
         }),
+        "--automation-triggers" | "--automation-triggers-set" => Some(RemovedOptionGuidance {
+            summary: "Standalone automation trigger commands were removed.",
+            replacement: "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults.",
+        }),
         _ => None,
     }
 }
@@ -223,13 +225,6 @@ pub(super) fn parse_primary_command(
             ParsedToken::ScheduleSet(schedule) => {
                 set_primary_command(&mut primary, PrimaryCommand::ScheduleSet(schedule.clone()))?
             }
-            ParsedToken::AutomationTriggers => {
-                set_primary_command(&mut primary, PrimaryCommand::AutomationTriggers)?
-            }
-            ParsedToken::AutomationTriggersSet(rules) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::AutomationTriggersSet(rules.clone()),
-            )?,
             ParsedToken::ScheduleDelay => {
                 set_primary_command(&mut primary, PrimaryCommand::ScheduleDelay)?
             }
@@ -435,16 +430,6 @@ pub(super) fn finalize_cli_action(
             },
             output,
         })),
-        Some(PrimaryCommand::AutomationTriggers) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::AutomationTriggers { rules: None },
-            output,
-        })),
-        Some(PrimaryCommand::AutomationTriggersSet(rules)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::AutomationTriggers { rules: Some(rules) },
-                output,
-            }))
-        }
         Some(PrimaryCommand::ScheduleDelay) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::ScheduleDelay,
             output,
@@ -701,8 +686,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Strict(_) => "--strict",
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
-        PrimaryCommand::AutomationTriggers => "--automation-triggers",
-        PrimaryCommand::AutomationTriggersSet(_) => "--automation-triggers-set",
         PrimaryCommand::ScheduleDelay => "--schedule-delay",
         PrimaryCommand::BreakGlassTrigger => "--break-glass-trigger",
         PrimaryCommand::BreakGlassCancel => "--break-glass-cancel",

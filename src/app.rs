@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashSet},
     time::{Duration, Instant},
 };
 
@@ -13,14 +13,13 @@ use crate::blocker::{
 };
 use crate::calendar::{CalendarBusyWindow, active_window_at as active_calendar_window_at};
 use crate::config::{
-    AppConfig, AutoStartConfig, AutomationTriggerRuleConfig, BlockingBackendConfig,
-    BlockingBackendPolicyConfig, BlocklistProfileConfig, CalendarSyncConfig,
-    CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig, FeatureFlagsConfig,
-    GoalCarryOverConfig, HistoryDashboardConfig, MonthlyGoalConfig, NotificationConfig,
-    OneTimeFocusWindowConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
-    SessionTemplateConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
-    WakatimeRuntimeConfig, WeeklyGoalConfig, validate_automation_trigger_rules,
+    AppConfig, AutoStartConfig, BlockingBackendConfig, BlockingBackendPolicyConfig,
+    BlocklistProfileConfig, CalendarSyncConfig, CommandBlockingBackendConfig, CustomProfileConfig,
+    DailyGoalConfig, FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig,
+    MonthlyGoalConfig, NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
+    ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
+    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeeklyGoalConfig,
 };
 use crate::integration::IntegrationRuntime;
 use crate::notifications::PhaseNotifier;
@@ -80,13 +79,7 @@ pub(crate) use history_dashboard_cache::HistoryDashboardCacheStats;
 pub(crate) use history_dashboard_cache::HistoryDashboardViewData;
 pub(crate) use history_goals::weekly_daily_goal_allocation_for_context;
 pub(crate) use profile_edit::{
-    CUSTOM_DURATION_STEP_SECS, DAILY_GOAL_MINUTES_STEP,
-    PROFILE_EDIT_AUTOMATION_TRIGGER_ACTION_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX,
-    PROFILE_EDIT_AUTOMATION_TRIGGER_BLOCKLIST_INDEX,
-    PROFILE_EDIT_AUTOMATION_TRIGGER_CONDITION_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_DELAY_INDEX,
-    PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_PROFILE_INDEX,
-    PROFILE_EDIT_AUTOMATION_TRIGGER_TEMPLATE_INDEX, PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_AT_INDEX,
-    PROFILE_EDIT_AUTOMATION_TRIGGER_TIME_DAY_INDEX, PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX,
+    CUSTOM_DURATION_STEP_SECS, DAILY_GOAL_MINUTES_STEP, PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX, PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX,
     PROFILE_EDIT_FIELD_LABELS, PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX,
@@ -538,8 +531,6 @@ pub(crate) struct App {
     feature_flags: FeatureFlagsConfig,
     config_deprecation_warnings: Vec<String>,
     profile_automation: ProfileAutomationSettingsConfig,
-    automation_triggers: Vec<AutomationTriggerRuleConfig>,
-    automation_trigger_last_fired_minute: HashMap<usize, i64>,
     pub(crate) custom_profile: CustomProfileConfig,
     pub(crate) profile_selection_index: usize,
     pub(crate) profile_edit_active: bool,
@@ -548,8 +539,6 @@ pub(crate) struct App {
     profile_edit_schedule_day: usize,
     profile_edit_schedule_exception: usize,
     profile_edit_one_time_window: usize,
-    profile_edit_automation_trigger: usize,
-    profile_edit_automation_triggers: Vec<AutomationTriggerRuleConfig>,
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
@@ -614,7 +603,6 @@ impl App {
         let feature_flags = config.feature_flags.clone();
         let custom_profile = config.effective_custom_profile();
         let profile_automation = config.profile_automation.clone().unwrap_or_default();
-        let mut automation_triggers = config.automation_triggers.clone();
         let selected_automation = config.profile_automation_for(selected_profile);
         let notification_settings = selected_automation.notifications;
         let auto_start = selected_automation.auto_start;
@@ -659,16 +647,6 @@ impl App {
                 shortcut_diagnostics.join(" ")
             )
         });
-        let automation_trigger_config_error = validate_automation_trigger_rules(
-            &automation_triggers,
-            &blocklist_profiles,
-            &config.session_templates,
-        )
-        .err()
-        .map(|error| format!("automation trigger config ignored: {error}"));
-        if automation_trigger_config_error.is_some() {
-            automation_triggers.clear();
-        }
         let integration_config_error = (!integration_load_warnings.is_empty()).then(|| {
             format!(
                 "integration config adjusted: {}",
@@ -677,7 +655,6 @@ impl App {
         });
         let initial_config_error = [
             shortcut_config_error,
-            automation_trigger_config_error,
             calendar_sync_error,
             integration_config_error,
         ]
@@ -773,8 +750,6 @@ impl App {
             feature_flags,
             config_deprecation_warnings,
             profile_automation,
-            automation_triggers,
-            automation_trigger_last_fired_minute: HashMap::new(),
             custom_profile,
             profile_selection_index: profile_index(selected_profile),
             profile_edit_active: false,
@@ -783,8 +758,6 @@ impl App {
             profile_edit_schedule_day: 0,
             profile_edit_schedule_exception: 0,
             profile_edit_one_time_window: 0,
-            profile_edit_automation_trigger: 0,
-            profile_edit_automation_triggers: Vec::new(),
             profile_edit_snapshot: None,
             notification_settings,
             auto_start,
@@ -1164,9 +1137,6 @@ impl App {
     pub(crate) fn profile_edit_field_value(&self, field_index: usize) -> String {
         if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX)
             .contains(&field_index)
-            || (PROFILE_EDIT_AUTOMATION_TRIGGER_INDEX
-                ..=PROFILE_EDIT_AUTOMATION_TRIGGER_ADD_REMOVE_INDEX)
-                .contains(&field_index)
         {
             return self.profile_edit_schedule_field_value(field_index);
         }

@@ -29,7 +29,6 @@ fn default_values_are_canonical_pomodoro() {
     assert!(cfg.custom_profile.is_none());
     assert!(cfg.session_templates.is_empty());
     assert!(cfg.selected_session_template.is_empty());
-    assert!(cfg.automation_triggers.is_empty());
     assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
     assert!(cfg.blocked_sites.is_empty());
     assert_eq!(cfg.selected_blocklist_profile, "Default");
@@ -145,23 +144,6 @@ fn round_trip_full_config() {
             },
         }],
         selected_session_template: "Morning deep work".to_string(),
-        automation_triggers: vec![
-            AutomationTriggerRuleConfig {
-                trigger: AutomationTriggerConditionConfig::Time {
-                    days: vec!["mon".to_string(), "wed".to_string()],
-                    at: "08:55".to_string(),
-                },
-                action: AutomationTriggerActionConfig::ApplyDefaults {
-                    profile: ProfileId::DeepWork,
-                    blocklist_profile: "Work".to_string(),
-                    session_template: Some("Morning deep work".to_string()),
-                },
-            },
-            AutomationTriggerRuleConfig {
-                trigger: AutomationTriggerConditionConfig::FocusCompleted,
-                action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 5 * 60 },
-            },
-        ],
         selected_theme_preset: ThemePreset::HighContrast,
         notifications: NotificationConfig {
             enabled: true,
@@ -338,7 +320,6 @@ fn round_trip_full_config() {
         parsed.selected_session_template,
         original.selected_session_template
     );
-    assert_eq!(parsed.automation_triggers, original.automation_triggers);
     assert_eq!(parsed.selected_theme_preset, original.selected_theme_preset);
     assert_eq!(parsed.notifications, NotificationConfig::default());
     assert_eq!(parsed.auto_start, AutoStartConfig::default());
@@ -820,258 +801,6 @@ fn normalize_clamps_schedule_runtime_knobs_to_safe_bounds() {
 }
 
 #[test]
-fn normalize_filters_invalid_time_triggers_and_clamps_delay_action() {
-    let cfg = AppConfig {
-        automation_triggers: vec![
-            AutomationTriggerRuleConfig {
-                trigger: AutomationTriggerConditionConfig::Time {
-                    days: vec!["MONDAY".to_string(), "fri".to_string(), "mon".to_string()],
-                    at: "08:05".to_string(),
-                },
-                action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 0 },
-            },
-            AutomationTriggerRuleConfig {
-                trigger: AutomationTriggerConditionConfig::Time {
-                    days: vec!["nonday".to_string()],
-                    at: "09:00".to_string(),
-                },
-                action: AutomationTriggerActionConfig::StartFocus,
-            },
-        ],
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.automation_triggers.len(), 1);
-    assert_eq!(
-        cfg.automation_triggers[0],
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec!["mon".to_string(), "fri".to_string()],
-                at: "08:05".to_string(),
-            },
-            action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 60 },
-        }
-    );
-}
-
-/// Verifies automation trigger defaults resolve profile and template references.
-#[test]
-fn normalize_automation_trigger_apply_defaults_resolves_references() {
-    let cfg = AppConfig {
-        blocklist_profiles: vec![
-            BlocklistProfileConfig {
-                name: "Default".to_string(),
-                sites: Vec::new(),
-                allowlist_sites: Vec::new(),
-            },
-            BlocklistProfileConfig {
-                name: "Work".to_string(),
-                sites: Vec::new(),
-                allowlist_sites: Vec::new(),
-            },
-        ],
-        session_templates: vec![SessionTemplateConfig {
-            name: "Deep Flow".to_string(),
-            task_label: "Docs".to_string(),
-            profile: ProfileId::DeepWork,
-            blocklist_profile: "Work".to_string(),
-            schedule: RecurringScheduleConfig::default(),
-        }],
-        automation_triggers: vec![AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::FocusStarted,
-            action: AutomationTriggerActionConfig::ApplyDefaults {
-                profile: ProfileId::DeepWork,
-                blocklist_profile: "work".to_string(),
-                session_template: Some("deep flow".to_string()),
-            },
-        }],
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.automation_triggers.len(), 1);
-    assert_eq!(
-        cfg.automation_triggers[0],
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::FocusStarted,
-            action: AutomationTriggerActionConfig::ApplyDefaults {
-                profile: ProfileId::DeepWork,
-                blocklist_profile: "Work".to_string(),
-                session_template: Some("Deep Flow".to_string()),
-            },
-        }
-    );
-}
-
-/// Verifies automation trigger rules require both trigger and action fields.
-#[test]
-fn automation_trigger_rules_require_trigger_and_action_fields() {
-    let missing_action = r#"
-[[automation_triggers]]
-trigger = { type = "focus_started" }
-"#;
-    let missing_trigger = r#"
-[[automation_triggers]]
-action = { type = "start_focus" }
-"#;
-
-    let missing_action_error = toml::from_str::<AppConfig>(missing_action)
-        .expect_err("rule missing action should fail deserialization")
-        .to_string();
-    let missing_trigger_error = toml::from_str::<AppConfig>(missing_trigger)
-        .expect_err("rule missing trigger should fail deserialization")
-        .to_string();
-
-    assert!(missing_action_error.contains("missing field `action`"));
-    assert!(missing_trigger_error.contains("missing field `trigger`"));
-}
-
-#[test]
-fn validate_automation_trigger_rules_rejects_conflicting_rules() {
-    let rules = vec![
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec!["mon".to_string()],
-                at: "09:00".to_string(),
-            },
-            action: AutomationTriggerActionConfig::StartFocus,
-        },
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec!["monday".to_string()],
-                at: "09:00".to_string(),
-            },
-            action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 5 * 60 },
-        },
-    ];
-
-    let error =
-        validate_automation_trigger_rules(&rules, &[BlocklistProfileConfig::default()], &[])
-            .unwrap_err();
-
-    assert!(error.contains("Conflicting automation trigger rules"));
-    assert!(error.contains("rule #1"));
-    assert!(error.contains("rule #2"));
-    assert!(error.contains("start_focus"));
-    assert!(error.contains("delay_schedule_start"));
-    assert!(error.contains("time trigger"));
-    assert!(error.contains("do not overlap"));
-}
-
-#[test]
-fn validate_automation_trigger_rules_rejects_event_conflicts_with_action_diagnostics() {
-    let rules = vec![
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::FocusStarted,
-            action: AutomationTriggerActionConfig::StartFocus,
-        },
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::FocusStarted,
-            action: AutomationTriggerActionConfig::ApplyDefaults {
-                profile: ProfileId::DeepWork,
-                blocklist_profile: "Default".to_string(),
-                session_template: None,
-            },
-        },
-    ];
-
-    let error =
-        validate_automation_trigger_rules(&rules, &[BlocklistProfileConfig::default()], &[])
-            .unwrap_err();
-
-    assert!(error.contains("rule #1"));
-    assert!(error.contains("rule #2"));
-    assert!(error.contains("start_focus"));
-    assert!(error.contains("apply_defaults"));
-    assert!(error.contains("event trigger `focus_started`"));
-}
-
-#[test]
-fn validate_automation_trigger_rules_rejects_multi_day_time_overlap() {
-    let rules = vec![
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec!["mon".to_string(), "tue".to_string()],
-                at: "09:00".to_string(),
-            },
-            action: AutomationTriggerActionConfig::StartFocus,
-        },
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec!["tuesday".to_string()],
-                at: "09:00".to_string(),
-            },
-            action: AutomationTriggerActionConfig::DelayScheduleStart { delay_secs: 60 },
-        },
-    ];
-
-    let error =
-        validate_automation_trigger_rules(&rules, &[BlocklistProfileConfig::default()], &[])
-            .unwrap_err();
-
-    assert!(error.contains("rule #1"));
-    assert!(error.contains("rule #2"));
-    assert!(error.contains("time trigger `tue@09:00`"));
-}
-
-#[test]
-fn validate_automation_trigger_rules_rejects_missing_references() {
-    let rules = vec![AutomationTriggerRuleConfig {
-        trigger: AutomationTriggerConditionConfig::FocusStarted,
-        action: AutomationTriggerActionConfig::ApplyDefaults {
-            profile: ProfileId::DeepWork,
-            blocklist_profile: "Work".to_string(),
-            session_template: Some("Deep Flow".to_string()),
-        },
-    }];
-
-    let error =
-        validate_automation_trigger_rules(&rules, &[BlocklistProfileConfig::default()], &[])
-            .unwrap_err();
-
-    assert!(error.contains("blocklist profile `Work` does not exist"));
-}
-
-#[test]
-fn validate_automation_trigger_rules_accepts_distinct_valid_rules() {
-    let blocklists = vec![
-        BlocklistProfileConfig::default(),
-        BlocklistProfileConfig {
-            name: "Work".to_string(),
-            sites: Vec::new(),
-            allowlist_sites: Vec::new(),
-        },
-    ];
-    let templates = vec![SessionTemplateConfig {
-        name: "Deep Flow".to_string(),
-        task_label: "Docs".to_string(),
-        profile: ProfileId::DeepWork,
-        blocklist_profile: "Work".to_string(),
-        schedule: RecurringScheduleConfig::default(),
-    }];
-    let rules = vec![
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::Time {
-                days: vec!["mon".to_string()],
-                at: "09:00".to_string(),
-            },
-            action: AutomationTriggerActionConfig::ApplyDefaults {
-                profile: ProfileId::DeepWork,
-                blocklist_profile: "Work".to_string(),
-                session_template: Some("Deep Flow".to_string()),
-            },
-        },
-        AutomationTriggerRuleConfig {
-            trigger: AutomationTriggerConditionConfig::ScheduleWindowStart,
-            action: AutomationTriggerActionConfig::StartFocus,
-        },
-    ];
-
-    validate_automation_trigger_rules(&rules, &blocklists, &templates).unwrap();
-}
-
-#[test]
 fn normalize_clamps_wakatime_runtime_knobs_and_falls_back_for_invalid_backoff() {
     let cfg = AppConfig {
         wakatime_runtime: WakatimeRuntimeConfig {
@@ -1176,7 +905,6 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         }),
         session_templates: Vec::new(),
         selected_session_template: String::new(),
-        automation_triggers: Vec::new(),
         selected_theme_preset: ThemePreset::Classic,
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
@@ -1286,10 +1014,6 @@ long_break_secs = 900
 long_break_interval = 3
 strict_mode = true
 blocked_sites = ["youtube.com", "reddit.com"]
-
-[[automation_triggers]]
-trigger = { type = "schedule_window_start" }
-action = { type = "start_focus" }
 "#,
     )
     .unwrap();
@@ -1317,21 +1041,6 @@ action = { type = "start_focus" }
         warnings
             .iter()
             .any(|warning| warning.contains("Deprecated `blocked_sites` is in use"))
-    );
-    assert!(
-        warnings
-            .iter()
-            .any(|warning| warning.contains("Deprecated `automation_triggers` is in use"))
-    );
-    assert!(
-        warnings
-            .iter()
-            .any(|warning| warning.contains("--schedule-delay"))
-    );
-    assert!(
-        warnings
-            .iter()
-            .any(|warning| warning.contains("session templates"))
     );
 }
 
@@ -1596,26 +1305,11 @@ strict_mode = false
 
     assert!(root.get("weekday_profile_rules").is_none());
 
-    let automation_trigger_profile = root
-        .get("automation_triggers")
-        .and_then(toml::Value::as_array)
-        .and_then(|array| array.first())
-        .and_then(toml::Value::as_table)
-        .and_then(|trigger| trigger.get("action"))
-        .and_then(toml::Value::as_table)
-        .and_then(|action| action.get("profile"))
-        .and_then(toml::Value::as_str);
-    assert_eq!(automation_trigger_profile, Some("standard"));
-
-    let automation_triggers = root
-        .get("automation_triggers")
-        .and_then(toml::Value::as_array)
-        .expect("existing automation triggers should remain");
-    assert_eq!(automation_triggers.len(), 1);
+    assert!(root.get("automation_triggers").is_none());
 }
 
 #[test]
-fn migrate_weekday_rules_removes_key_and_preserves_existing_triggers() {
+fn migrate_deprecated_schedule_shims_removes_weekday_rules_and_automation_triggers() {
     let v2: toml::Value = toml::from_str(
         r#"
 schema_version = 2
@@ -1631,25 +1325,7 @@ action = { type = "apply_defaults", profile = "standard", blocklist_profile = "D
     let root = migrated.as_table().expect("root should be a table");
 
     assert!(root.get("weekday_profile_rules").is_none());
-    let triggers = root
-        .get("automation_triggers")
-        .and_then(toml::Value::as_array)
-        .expect("automation triggers should remain");
-    assert_eq!(triggers.len(), 1);
-    assert_eq!(
-        triggers[0]
-            .get("trigger")
-            .and_then(|trigger| trigger.get("at"))
-            .and_then(toml::Value::as_str),
-        Some("00:00")
-    );
-    assert_eq!(
-        triggers[0]
-            .get("action")
-            .and_then(|action| action.get("profile"))
-            .and_then(toml::Value::as_str),
-        Some("standard")
-    );
+    assert!(root.get("automation_triggers").is_none());
 }
 
 #[test]

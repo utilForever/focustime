@@ -8,7 +8,7 @@ use super::{
     ConfigMigrationReport, collect_blocklist_category_migration_advice,
     collect_legacy_profile_rename_advice, config_health_error, config_health_warning,
     detect_legacy_config_deprecation_warnings, migrate_config_toml_to_current_detailed,
-    sort_config_health_findings, summarize_config_health, validate_automation_trigger_rules,
+    sort_config_health_findings, summarize_config_health,
 };
 
 fn next_config_backup_path(path: &Path) -> PathBuf {
@@ -253,18 +253,7 @@ pub(super) fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> Confi
             "Update config.toml to canonical fields and rerun the doctor.",
         ));
     }
-    let normalized = config.normalize();
-    if let Err(error) = validate_automation_trigger_rules(
-        &normalized.automation_triggers,
-        &normalized.blocklist_profiles,
-        &normalized.session_templates,
-    ) {
-        findings.push(config_health_error(
-            "config.automation_trigger_conflict",
-            format!("Automation trigger configuration conflict: {error}"),
-            "Fix the conflicting trigger rules and rerun the doctor.",
-        ));
-    }
+    let _normalized = config.normalize();
 
     sort_config_health_findings(&mut findings);
     ConfigDoctorReport {

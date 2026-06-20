@@ -48,7 +48,7 @@
 | `strict-mode-enforcement` | Timer | 3 | 3.25 | 0.92 | merge | --strict |
 | `task-context-and-notes` | Timer | 5 | 3.00 | 1.67 | keep | --task, --task-goal, --focus-intention, --task-note |
 | `timer-lifecycle-controls` | Timer | 5 | 2.90 | 1.72 | keep | --start, --pause, --resume, --stop, --next |
-| `automation-trigger-rules` | Schedule | 3 | 4.00 | 0.75 | merge | --automation-triggers, --automation-triggers-set |
+| `automation-trigger-rules` | Schedule | 2 | 2.95 | 0.68 | merge | (none) |
 | `break-glass-workflow` | Schedule | 4 | 3.15 | 1.27 | keep | --break-glass-trigger, --break-glass-cancel |
 | `schedule-definition-and-inspection` | Schedule | 5 | 3.65 | 1.37 | keep | --schedule, --schedule-set |
 | `schedule-delay-controls` | Schedule | 3 | 2.25 | 1.33 | merge | --schedule-delay |
