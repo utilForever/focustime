@@ -5108,7 +5108,7 @@ fn cli_schedule_delay_persists_workflow_state() {
             .schedule_delay_until_epoch_secs
             .is_some_and(|epoch| epoch > now.timestamp())
     );
-    assert!(!snapshot.break_glass_confirmation_pending);
+    assert!(snapshot.temporary_overrides.is_empty());
 }
 
 #[test]
@@ -5175,7 +5175,9 @@ fn cli_break_glass_trigger_persists_pending_confirmation() {
 
     let snapshot = session_recovery::test_saved_workflow_snapshot()
         .expect("workflow snapshot should be saved");
-    assert!(snapshot.break_glass_confirmation_pending);
+    assert!(snapshot.temporary_overrides.contains(
+        &session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation()
+    ));
 }
 
 #[test]
@@ -5205,7 +5207,9 @@ fn cli_break_glass_cancel_clears_persisted_workflow_state() {
     app.trigger_break_glass_for_cli().unwrap();
     assert!(
         session_recovery::test_saved_workflow_snapshot()
-            .is_some_and(|snapshot| snapshot.break_glass_confirmation_pending)
+            .is_some_and(|snapshot| snapshot.temporary_overrides.contains(
+                &session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation()
+            ))
     );
 
     app.cancel_break_glass_for_cli().unwrap();
@@ -5240,11 +5244,10 @@ fn app_restores_cli_workflow_state_from_snapshot() {
         schedule_delay_until_epoch_secs: Some((now + ChronoDuration::minutes(5)).timestamp()),
         schedule_armed_occurrence_key: None,
         last_schedule_occurrence_key: None,
-        break_glass_expires_at_epoch_secs: None,
-        break_glass_confirmation_pending: true,
         strict_reset_confirmation_pending: false,
-        temporary_allowlist_entries: Vec::new(),
-        temporary_overrides: Vec::new(),
+        temporary_overrides: vec![
+            session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
+        ],
     }));
 
     let app = App::default();
@@ -5275,10 +5278,7 @@ fn app_restores_temporary_overrides_from_canonical_snapshot() {
         schedule_delay_until_epoch_secs: None,
         schedule_armed_occurrence_key: None,
         last_schedule_occurrence_key: None,
-        break_glass_expires_at_epoch_secs: None,
-        break_glass_confirmation_pending: false,
         strict_reset_confirmation_pending: false,
-        temporary_allowlist_entries: Vec::new(),
         temporary_overrides: vec![
             session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_active(
                 (now + ChronoDuration::seconds(90)).timestamp(),
@@ -5299,54 +5299,6 @@ fn app_restores_temporary_overrides_from_canonical_snapshot() {
         app.active_temporary_allowlist_entries()[0].site,
         "reddit.com"
     );
-}
-
-#[test]
-fn app_prefers_canonical_temporary_overrides_over_legacy_fields() {
-    let now = Local::now();
-    session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
-        TimerPhase::Focus,
-        TimerStatus::Running,
-        300,
-        Some("Docs"),
-        ProfileId::Classic,
-    )));
-    session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
-        schedule_delayed_occurrence_key: None,
-        schedule_delay_until_epoch_secs: None,
-        schedule_armed_occurrence_key: None,
-        last_schedule_occurrence_key: None,
-        break_glass_expires_at_epoch_secs: Some((now + ChronoDuration::minutes(10)).timestamp()),
-        break_glass_confirmation_pending: false,
-        strict_reset_confirmation_pending: false,
-        temporary_allowlist_entries: vec![
-            session_recovery::WorkflowTemporaryAllowlistEntrySnapshot {
-                profile: "Default".to_string(),
-                site: "youtube.com".to_string(),
-                expires_at_epoch_secs: (now + ChronoDuration::minutes(10)).timestamp(),
-            },
-        ],
-        temporary_overrides: vec![
-            session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_active(
-                (now + ChronoDuration::seconds(90)).timestamp(),
-            ),
-            session_recovery::WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-                "Default",
-                "reddit.com",
-                (now + ChronoDuration::seconds(120)).timestamp(),
-            ),
-        ],
-    }));
-
-    let app = App::default();
-    let break_glass_remaining = app
-        .break_glass_override_remaining_secs()
-        .expect("canonical break-glass override should restore");
-    let active_temporary_allowlist = app.active_temporary_allowlist_entries();
-
-    assert!(break_glass_remaining <= 120);
-    assert_eq!(active_temporary_allowlist.len(), 1);
-    assert_eq!(active_temporary_allowlist[0].site, "reddit.com");
 }
 
 #[test]
@@ -5374,10 +5326,7 @@ fn app_restores_schedule_arming_continuity_from_workflow_snapshot() {
         schedule_delay_until_epoch_secs: None,
         schedule_armed_occurrence_key: Some(active_occurrence_key.clone()),
         last_schedule_occurrence_key: Some(active_occurrence_key.clone()),
-        break_glass_expires_at_epoch_secs: None,
-        break_glass_confirmation_pending: false,
         strict_reset_confirmation_pending: false,
-        temporary_allowlist_entries: Vec::new(),
         temporary_overrides: Vec::new(),
     }));
 
@@ -5407,10 +5356,7 @@ fn app_restores_strict_reset_confirmation_from_workflow_snapshot() {
         schedule_delay_until_epoch_secs: None,
         schedule_armed_occurrence_key: None,
         last_schedule_occurrence_key: None,
-        break_glass_expires_at_epoch_secs: None,
-        break_glass_confirmation_pending: false,
         strict_reset_confirmation_pending: true,
-        temporary_allowlist_entries: Vec::new(),
         temporary_overrides: Vec::new(),
     }));
 
@@ -5431,11 +5377,10 @@ fn app_reports_partial_runtime_recovery_notice_for_ignored_workflow_artifacts() 
         ),
         schedule_armed_occurrence_key: Some("recurring:stale".to_string()),
         last_schedule_occurrence_key: Some("recurring:stale".to_string()),
-        break_glass_expires_at_epoch_secs: None,
-        break_glass_confirmation_pending: true,
         strict_reset_confirmation_pending: true,
-        temporary_allowlist_entries: Vec::new(),
-        temporary_overrides: Vec::new(),
+        temporary_overrides: vec![
+            session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
+        ],
     }));
 
     let app = App::default();
