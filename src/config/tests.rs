@@ -1548,7 +1548,7 @@ sound = true
 }
 
 #[test]
-fn config_doctor_reports_deprecated_blocklist_categories() {
+fn config_doctor_omits_retired_blocklist_category_warnings() {
     let temp_base = unique_temp_base("doctor-blocklist-categories");
     let app_dir = temp_base.join("focustime");
     fs::create_dir_all(&app_dir).unwrap();
@@ -1580,14 +1580,16 @@ allowlist_sites = ["reddit.com"]
     let _ = fs::remove_dir_all(&temp_base);
 
     assert!(
-        report.findings.iter().any(|finding| {
-            finding.code == "config.blocklist_category_migration"
-                && finding.message.contains("uses deprecated category config")
-                && finding.message.contains("profile-level lists")
-        }),
-        "expected migration warning for blocklist categories: {:#?}",
+        report
+            .findings
+            .iter()
+            .all(|finding| finding.code != "config.blocklist_category_migration"),
+        "retired blocklist category paths should not produce doctor warnings: {:#?}",
         report.findings
     );
+    assert!(report.migration_steps.iter().any(|step| {
+        step.summary == "Flatten deprecated blocklist category rules into profile-level site lists."
+    }));
 }
 
 #[test]

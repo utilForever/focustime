@@ -363,34 +363,6 @@ pub(super) fn collect_legacy_profile_rename_advice(config_toml: &toml::Value) ->
     advice
 }
 
-/// Collects advice for deprecated blocklist category settings.
-pub(super) fn collect_blocklist_category_migration_advice(
-    config_toml: &toml::Value,
-) -> Vec<String> {
-    let Some(table) = config_toml.as_table() else {
-        return Vec::new();
-    };
-    let Some(profiles) = table
-        .get("blocklist_profiles")
-        .and_then(toml::Value::as_array)
-    else {
-        return Vec::new();
-    };
-
-    let mut advice = Vec::new();
-    for (index, profile) in profiles.iter().enumerate() {
-        let Some(profile) = profile.as_table() else {
-            continue;
-        };
-        if profile.contains_key("categories") || profile.contains_key("selected_category") {
-            advice.push(format!(
-                "blocklist_profiles[{index}] uses deprecated category config; run migration to fold category `sites` and `allowlist_sites` into profile-level lists."
-            ));
-        }
-    }
-    advice
-}
-
 /// Adds profile-rename advice for every matching table in an array field.
 pub(super) fn push_legacy_profile_value_array_advice(
     advice: &mut Vec<String>,
