@@ -98,7 +98,7 @@ pub(super) fn remove_weekday_profile_rules(config_toml: &mut toml::Value) {
     };
     if !table.contains_key("weekday_profile_rules") {
         return;
-    };
+    }
     table.remove("weekday_profile_rules");
 }
 
