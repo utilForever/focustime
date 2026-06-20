@@ -339,7 +339,7 @@ Early deprecation notices:
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
 | Retired blocklist category config is migration-only | `--config-migrate-apply` still folds category `sites` and `allowlist_sites` into profile-level lists, then manage hostnames directly with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`. |
-| Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields remain readable for automation compatibility. |
+| Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields are no longer emitted by runtime persistence or `--status --json`. |
 | Focus History dashboard customization (`[history_dashboard]`, retired customization CLI paths) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands are removed from help text and command parsing. |
 | Advanced status comparison slicing | Use `--export` artifacts for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Removed; use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
@@ -896,7 +896,7 @@ Temporary allowlist exceptions and break-glass both use the same runtime overrid
 
 - `--allowlist-site-add-temporary HOST=30m` grants selected host exceptions without changing profile config
 - `--break-glass-trigger` temporarily pauses all effective blocking for the active focus session after a second confirmation
-- `--status --json` includes the canonical `temporary_overrides` list while keeping the legacy `temporary_allowlist_*` fields for automation compatibility; recovery also reads legacy `break_glass_*` fields
+- `--status --json` reports active temporary allowlist exceptions and break-glass state through the canonical `temporary_overrides` list
 
 Existing temporary allowlist commands remain supported as compatibility entry points into this shared model.
 

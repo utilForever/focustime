@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Blocklist category config cleanup (#496):** flattened deprecated blocklist category `sites` and `allowlist_sites` into profile-level rules during config migration, removed category fields from runtime persistence, and updated doctor guidance for profile-level blocklist configs.
 - **Automation trigger compatibility cleanup (#498):** removed standalone `--automation-triggers*` command parsing/output, dropped `automation_triggers` config/runtime persistence during migration, and kept schedules, `--schedule-delay`, and session templates as the supported automation model.
 - **Cleanup migration and doctor warning simplification (#499):** removed config doctor and migration assistant warnings for retired blocklist category cleanup paths while preserving migration steps for canonical config changes.
+- **Temporary override field cleanup (#500):** removed legacy `temporary_allowlist_*` status JSON fields and duplicate break-glass/temporary allowlist workflow persistence fields so status and recovery use canonical `temporary_overrides`.
 
 ## [0.15.7] - 2026-06-19
 
