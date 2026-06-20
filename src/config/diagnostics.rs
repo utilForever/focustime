@@ -5,10 +5,10 @@ use std::{
 
 use super::{
     AppConfig, AppConfigDisk, CURRENT_CONFIG_SCHEMA_VERSION, ConfigDoctorReport,
-    ConfigMigrationReport, collect_legacy_profile_rename_advice, config_health_error,
-    config_health_warning, detect_legacy_config_deprecation_warnings,
-    migrate_config_toml_to_current_detailed, sort_config_health_findings, summarize_config_health,
-    validate_automation_trigger_rules,
+    ConfigMigrationReport, collect_blocklist_category_migration_advice,
+    collect_legacy_profile_rename_advice, config_health_error, config_health_warning,
+    detect_legacy_config_deprecation_warnings, migrate_config_toml_to_current_detailed,
+    sort_config_health_findings, summarize_config_health, validate_automation_trigger_rules,
 };
 
 fn next_config_backup_path(path: &Path) -> PathBuf {
@@ -156,6 +156,7 @@ pub(super) fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> Confi
     };
 
     let rename_advice = collect_legacy_profile_rename_advice(&original_toml);
+    let blocklist_category_advice = collect_blocklist_category_migration_advice(&original_toml);
     let (migrated_toml, schema_version, steps) =
         match migrate_config_toml_to_current_detailed(original_toml.clone()) {
             Ok(result) => result,
@@ -214,6 +215,13 @@ pub(super) fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> Confi
             "config.legacy_profile_token",
             advice,
             "Run `focustime --config-migrate` to preview canonical profile-key migrations.",
+        ));
+    }
+    for advice in blocklist_category_advice {
+        findings.push(config_health_warning(
+            "config.blocklist_category_migration",
+            advice,
+            "Run `focustime --config-migrate-apply` to remove category fields after folding rules into profile-level `sites` and `allowlist_sites`.",
         ));
     }
 
@@ -381,6 +389,13 @@ pub(super) fn run_config_migration_assistant_with_path(
             "config.legacy_profile_token",
             advice,
             "Use canonical profile tokens (`basic`, `standard`, `advanced`).",
+        ));
+    }
+    for advice in collect_blocklist_category_migration_advice(&original_toml) {
+        findings.push(config_health_warning(
+            "config.blocklist_category_migration",
+            advice,
+            "Apply migration to persist profile-level blocklist and allowlist site rules only.",
         ));
     }
 

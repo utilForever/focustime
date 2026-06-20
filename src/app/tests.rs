@@ -2271,13 +2271,11 @@ fn site_manager_switches_between_blocklist_profiles() {
                 name: "Work".to_string(),
                 sites: vec!["a.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Study".to_string(),
                 sites: vec!["b.com".to_string(), "c.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "Work".to_string(),
@@ -2300,28 +2298,28 @@ fn site_manager_switches_between_blocklist_profiles() {
 
 #[test]
 fn site_manager_uses_profile_sites_not_selected_category() {
-    let config = AppConfig {
-        blocklist_profiles: vec![BlocklistProfileConfig {
-            name: "Work".to_string(),
-            sites: Vec::new(),
-            allowlist_sites: Vec::new(),
-            categories: vec![
-                BlocklistCategoryConfig {
-                    name: "General".to_string(),
-                    sites: vec!["general.com".to_string()],
-                    allowlist_sites: Vec::new(),
-                },
-                BlocklistCategoryConfig {
-                    name: "Social".to_string(),
-                    sites: vec!["social.com".to_string()],
-                    allowlist_sites: Vec::new(),
-                },
-            ],
-            selected_category: "Social".to_string(),
-        }],
-        selected_blocklist_profile: "Work".to_string(),
-        ..AppConfig::default()
-    };
+    let config: AppConfig = toml::from_str(
+        r#"
+selected_blocklist_profile = "Work"
+
+[[blocklist_profiles]]
+name = "Work"
+sites = []
+allowlist_sites = []
+selected_category = "Social"
+
+[[blocklist_profiles.categories]]
+name = "General"
+sites = ["general.com"]
+allowlist_sites = []
+
+[[blocklist_profiles.categories]]
+name = "Social"
+sites = ["social.com"]
+allowlist_sites = []
+"#,
+    )
+    .unwrap();
     let mut app = App::from_config(config);
     app.handle_key(key(KeyCode::Char('b')));
 
@@ -2345,10 +2343,6 @@ fn site_manager_uses_profile_sites_not_selected_category() {
             "new.com".to_string()
         ]
     );
-    assert_eq!(
-        persisted.blocklist_profiles[0].categories[1].sites,
-        vec!["social.com".to_string()]
-    );
 }
 
 #[test]
@@ -2359,13 +2353,11 @@ fn site_manager_allowlist_mode_clamps_selection_on_profile_switch() {
                 name: "Study".to_string(),
                 sites: vec!["study.com".to_string()],
                 allowlist_sites: vec!["allow-a.com".to_string(), "allow-b.com".to_string()],
-                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Work".to_string(),
                 sites: vec!["work.com".to_string(), "news.com".to_string()],
                 allowlist_sites: vec!["news.com".to_string()],
-                ..BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "Study".to_string(),
@@ -2395,7 +2387,6 @@ fn allowlist_excludes_sites_from_effective_blocking() {
             name: "Work".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
-            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Work".to_string(),
         ..AppConfig::default()
@@ -2412,7 +2403,6 @@ fn wildcard_rules_are_kept_in_effective_blocking() {
             name: "Work".to_string(),
             sites: vec!["*.example.com".to_string()],
             allowlist_sites: Vec::new(),
-            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Work".to_string(),
         ..AppConfig::default()
@@ -2433,7 +2423,6 @@ fn runtime_effective_blocking_canonicalizes_dotted_and_punycode_rules() {
                 "api.example.com.".to_string(),
             ],
             allowlist_sites: vec![".example.com".to_string()],
-            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Work".to_string(),
         ..AppConfig::default()
@@ -2453,7 +2442,6 @@ fn site_manager_allowlist_mode_updates_effective_blocked_sites() {
             name: "Default".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
-            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Default".to_string(),
         ..AppConfig::default()

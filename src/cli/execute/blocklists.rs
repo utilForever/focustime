@@ -144,8 +144,6 @@ fn handle_create_blocklist_profile(
         name: name.clone(),
         sites: Vec::new(),
         allowlist_sites: Vec::new(),
-        categories: Vec::new(),
-        selected_category: "General".to_string(),
     });
     config.selected_blocklist_profile = name;
     Ok(("blocklist-profile-create", true))

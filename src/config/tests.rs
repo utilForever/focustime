@@ -108,13 +108,11 @@ fn round_trip_full_config() {
                 name: "Work".to_string(),
                 sites: vec!["example.com".to_string(), "reddit.com".to_string()],
                 allowlist_sites: vec!["reddit.com".to_string()],
-                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Study".to_string(),
                 sites: vec!["x.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "Study".to_string(),
@@ -498,13 +496,11 @@ fn normalize_session_templates_deduplicates_and_filters_invalid_entries() {
                 name: "Work".to_string(),
                 sites: vec!["youtube.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Study".to_string(),
                 sites: vec!["reddit.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..BlocklistProfileConfig::default()
             },
         ],
         session_templates: vec![
@@ -867,13 +863,11 @@ fn normalize_automation_trigger_apply_defaults_resolves_references() {
                 name: "Default".to_string(),
                 sites: Vec::new(),
                 allowlist_sites: Vec::new(),
-                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "Work".to_string(),
                 sites: Vec::new(),
                 allowlist_sites: Vec::new(),
-                ..BlocklistProfileConfig::default()
             },
         ],
         session_templates: vec![SessionTemplateConfig {
@@ -918,7 +912,6 @@ fn normalize_moves_weekday_profile_rules_to_canonical_automation_triggers() {
                 name: "Work".to_string(),
                 sites: Vec::new(),
                 allowlist_sites: Vec::new(),
-                ..BlocklistProfileConfig::default()
             },
         ],
         session_templates: vec![SessionTemplateConfig {
@@ -1091,7 +1084,6 @@ fn validate_automation_trigger_rules_accepts_distinct_valid_rules() {
             name: "Work".to_string(),
             sites: Vec::new(),
             allowlist_sites: Vec::new(),
-            ..BlocklistProfileConfig::default()
         },
     ];
     let templates = vec![SessionTemplateConfig {
@@ -1978,15 +1970,11 @@ allowlist_sites = ["reddit.com"]
 
     assert!(
         report.findings.iter().any(|finding| {
-            finding.code == "config.deprecated_field_in_use"
-                && finding
-                    .message
-                    .contains("Deprecated blocklist category configuration")
-                && finding
-                    .message
-                    .contains("profile-level blocklist/allowlist")
+            finding.code == "config.blocklist_category_migration"
+                && finding.message.contains("uses deprecated category config")
+                && finding.message.contains("profile-level lists")
         }),
-        "expected deprecation warning for blocklist categories: {:#?}",
+        "expected migration warning for blocklist categories: {:#?}",
         report.findings
     );
 }
@@ -2462,13 +2450,11 @@ fn normalize_deduplicates_profile_names_and_fixes_selection() {
                 name: "Work".to_string(),
                 sites: vec!["a.com".to_string()],
                 allowlist_sites: vec!["b.com".to_string()],
-                ..BlocklistProfileConfig::default()
             },
             BlocklistProfileConfig {
                 name: "work".to_string(),
                 sites: vec!["b.com".to_string()],
                 allowlist_sites: Vec::new(),
-                ..BlocklistProfileConfig::default()
             },
         ],
         selected_blocklist_profile: "missing".to_string(),
@@ -2489,7 +2475,6 @@ fn normalize_keeps_legacy_blocked_sites_empty_for_profile_only_config() {
             name: "Work".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
-            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Work".to_string(),
         ..AppConfig::default()
@@ -2678,7 +2663,6 @@ fn normalize_keeps_legacy_blocked_sites_when_profiles_exist() {
             name: "Work".to_string(),
             sites: vec!["a.com".to_string(), "b.com".to_string()],
             allowlist_sites: vec!["b.com".to_string()],
-            ..BlocklistProfileConfig::default()
         }],
         selected_blocklist_profile: "Work".to_string(),
         ..AppConfig::default()
@@ -2691,22 +2675,24 @@ fn normalize_keeps_legacy_blocked_sites_when_profiles_exist() {
 
 #[test]
 fn normalize_merges_legacy_profile_lists_when_categories_exist() {
-    let cfg = AppConfig {
-        blocklist_profiles: vec![BlocklistProfileConfig {
-            name: "Work".to_string(),
-            sites: vec!["legacy.com".to_string()],
-            allowlist_sites: vec!["legacy-allow.com".to_string()],
-            categories: vec![BlocklistCategoryConfig {
-                name: "Social".to_string(),
-                sites: vec!["youtube.com".to_string()],
-                allowlist_sites: Vec::new(),
-            }],
-            selected_category: "Social".to_string(),
-        }],
-        selected_blocklist_profile: "Work".to_string(),
-        ..AppConfig::default()
-    }
-    .normalize();
+    let cfg: AppConfig = toml::from_str(
+        r#"
+selected_blocklist_profile = "Work"
+
+[[blocklist_profiles]]
+name = "Work"
+sites = ["legacy.com"]
+allowlist_sites = ["legacy-allow.com"]
+selected_category = "Social"
+
+[[blocklist_profiles.categories]]
+name = "Social"
+sites = ["youtube.com"]
+allowlist_sites = []
+"#,
+    )
+    .unwrap();
+    let cfg = cfg.normalize();
 
     let profile = &cfg.blocklist_profiles[0];
     assert!(profile.sites.contains(&"youtube.com".to_string()));
@@ -2716,23 +2702,60 @@ fn normalize_merges_legacy_profile_lists_when_categories_exist() {
             .allowlist_sites
             .contains(&"legacy-allow.com".to_string())
     );
-    assert!(profile.categories.iter().any(|category| {
-        category.name.eq_ignore_ascii_case("Social")
-            && category
-                .sites
-                .iter()
-                .any(|site| site.eq_ignore_ascii_case("youtube.com"))
-    }));
-    assert!(profile.categories.iter().any(|category| {
-        category.name.eq_ignore_ascii_case("General")
-            && category
-                .sites
-                .iter()
-                .any(|site| site.eq_ignore_ascii_case("legacy.com"))
-            && category
-                .allowlist_sites
-                .iter()
-                .any(|site| site.eq_ignore_ascii_case("legacy-allow.com"))
+}
+
+#[test]
+fn config_migration_flattens_blocklist_categories_into_profile_rules() {
+    let original: toml::Value = toml::from_str(
+        r#"
+schema_version = 2
+selected_blocklist_profile = "Work"
+
+[[blocklist_profiles]]
+name = "Work"
+sites = ["legacy.com"]
+allowlist_sites = ["legacy-allow.com"]
+selected_category = "Social"
+
+[[blocklist_profiles.categories]]
+name = "Social"
+sites = ["youtube.com", "legacy.com"]
+allowlist_sites = ["news.com"]
+
+[[blocklist_profiles.categories]]
+name = "General"
+sites = ["docs.example.com"]
+allowlist_sites = []
+"#,
+    )
+    .unwrap();
+
+    let (migrated, _, steps) = migrate_config_toml_to_current_detailed(original).unwrap();
+    let profiles = migrated
+        .get("blocklist_profiles")
+        .and_then(toml::Value::as_array)
+        .unwrap();
+    let profile = profiles[0].as_table().unwrap();
+
+    assert!(!profile.contains_key("categories"));
+    assert!(!profile.contains_key("selected_category"));
+    assert_eq!(
+        profile.get("sites").unwrap().as_array().unwrap(),
+        &vec![
+            toml::Value::String("youtube.com".to_string()),
+            toml::Value::String("legacy.com".to_string()),
+            toml::Value::String("docs.example.com".to_string()),
+        ]
+    );
+    assert_eq!(
+        profile.get("allowlist_sites").unwrap().as_array().unwrap(),
+        &vec![
+            toml::Value::String("news.com".to_string()),
+            toml::Value::String("legacy-allow.com".to_string()),
+        ]
+    );
+    assert!(steps.iter().any(|step| {
+        step.summary == "Flatten deprecated blocklist category rules into profile-level site lists."
     }));
 }
 

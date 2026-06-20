@@ -316,8 +316,6 @@ impl App {
             name: name.clone(),
             sites: Vec::new(),
             allowlist_sites: Vec::new(),
-            categories: Vec::new(),
-            selected_category: default_blocklist_category_name(),
         });
         self.active_blocklist_profile = self.blocklist_profiles.len().saturating_sub(1);
         self.recompute_blocker_sites_from_active_profile();
@@ -658,8 +656,4 @@ fn temporary_allowlist_syntax_used(input: &str) -> bool {
         .split([',', '\n', '\r'])
         .map(str::trim)
         .any(|token| !token.is_empty() && token.contains('='))
-}
-
-fn default_blocklist_category_name() -> String {
-    "General".to_string()
 }
