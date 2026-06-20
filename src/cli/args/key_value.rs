@@ -197,6 +197,7 @@ fn parse_schedule_set_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, St
     Ok(None)
 }
 
+/// Parses `--automation-triggers-set=...` key-value arguments.
 fn parse_automation_triggers_set_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--automation-triggers-set=") {
         let value = require_nonempty_key_value(

@@ -95,6 +95,7 @@ fn stats_retention_windows_change_by_preset() {
     assert_eq!(aggressive.keep_monthly_goal_snapshots_days, Some(180));
 }
 
+/// Verifies the full config schema round-trips through serialization.
 #[test]
 fn round_trip_full_config() {
     let original = AppConfig {
@@ -854,6 +855,7 @@ fn normalize_filters_invalid_time_triggers_and_clamps_delay_action() {
     );
 }
 
+/// Verifies automation trigger defaults resolve profile and template references.
 #[test]
 fn normalize_automation_trigger_apply_defaults_resolves_references() {
     let cfg = AppConfig {
@@ -902,6 +904,7 @@ fn normalize_automation_trigger_apply_defaults_resolves_references() {
     );
 }
 
+/// Verifies automation trigger rules require both trigger and action fields.
 #[test]
 fn automation_trigger_rules_require_trigger_and_action_fields() {
     let missing_action = r#"
@@ -1152,6 +1155,7 @@ long_break_interval = 3
     assert_eq!(custom.long_break_interval, 3);
 }
 
+/// Verifies explicit custom profile settings override built-in defaults.
 #[test]
 fn effective_custom_profile_uses_explicit_profile_when_present() {
     let cfg = AppConfig {

@@ -168,6 +168,7 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         }
     }
 }
+/// Maps command variants to their help-surface identifiers.
 fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
     match command {
         CommandKind::Start => Some("start"),
@@ -760,6 +761,7 @@ fn execute_schedule_command(
     Ok(())
 }
 
+/// Executes the deprecated automation-trigger inspection or replacement command.
 fn execute_automation_triggers_command(
     rules: Option<Vec<AutomationTriggerRuleConfig>>,
     output: OutputMode,

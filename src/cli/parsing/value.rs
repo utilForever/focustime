@@ -243,6 +243,7 @@ fn validate_one_time_schedule_window(
     Ok(())
 }
 
+/// Checks whether a schedule weekday token is recognized by the CLI parser.
 fn is_valid_schedule_weekday(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),

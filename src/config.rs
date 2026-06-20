@@ -1048,6 +1048,7 @@ fn default_schedule_window_days() -> Vec<String> {
     ]
 }
 
+/// Provides the default start time for a recurring schedule window.
 fn default_schedule_window_start() -> String {
     "09:00".to_string()
 }

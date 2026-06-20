@@ -675,6 +675,7 @@ fn set_primary_command(
     Ok(())
 }
 
+/// Returns the CLI flag name for a primary command token.
 fn primary_name(command: &PrimaryCommand) -> &'static str {
     match command {
         PrimaryCommand::Start => "--start",

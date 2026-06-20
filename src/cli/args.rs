@@ -54,6 +54,7 @@ fn classify_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), S
     Ok((ParsedToken::Positional(arg.clone()), 1))
 }
 
+/// Classifies options that require a following value token.
 fn classify_value_arg(
     args: &[String],
     index: usize,
@@ -133,6 +134,7 @@ fn classify_value_arg(
     Ok(None)
 }
 
+/// Classifies single-token flags that do not consume a value.
 fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
     match arg {
         "-h" | "--help" => Some(ParsedToken::Help),
@@ -668,6 +670,7 @@ fn classify_schedule_set_arg(
     ))
 }
 
+/// Classifies `--automation-triggers-set` and parses its JSON payload.
 fn classify_automation_triggers_set_arg(
     args: &[String],
     index: usize,

@@ -137,6 +137,7 @@ fn legacy_stats_path_migration_warning_includes_actionable_guidance() {
     assert!(warning.contains("focustime --restore"));
 }
 
+/// Verifies startup applies the selected built-in profile settings.
 #[test]
 fn selected_builtin_profile_is_applied_on_startup() {
     let config = AppConfig {
@@ -739,6 +740,7 @@ fn editing_schedule_exception_fields_updates_and_persists_settings() {
     );
 }
 
+/// Verifies one-time schedule editor changes are persisted.
 #[test]
 fn editing_one_time_schedule_fields_updates_and_persists_settings() {
     let mut app = App::default();
@@ -768,6 +770,7 @@ fn editing_one_time_schedule_fields_updates_and_persists_settings() {
     );
 }
 
+/// Verifies daily goal editor changes are persisted.
 #[test]
 fn editing_daily_goal_fields_updates_and_persists_settings() {
     let mut app = App::default();
@@ -3725,6 +3728,7 @@ fn commit_profile_edit_rejects_invalid_automation_trigger_rules() {
     );
 }
 
+/// Verifies conflicting automation trigger rules keep profile edits staged.
 #[test]
 fn commit_profile_edit_rejects_conflicting_automation_trigger_rules() {
     let mut app = App::default();
@@ -3759,6 +3763,7 @@ fn commit_profile_edit_rejects_conflicting_automation_trigger_rules() {
     }));
 }
 
+/// Verifies automation trigger edits remain staged until commit.
 #[test]
 fn profile_edit_stages_automation_trigger_changes_until_commit() {
     let mut app = App::default();
@@ -3940,6 +3945,7 @@ fn strict_mode_cannot_be_disabled_during_active_focus_profile_edit() {
     assert!(app.strict_mode);
 }
 
+/// Verifies strict mode blocks custom profile changes during active focus.
 #[test]
 fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
     let config = AppConfig {
@@ -3994,6 +4000,7 @@ fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
     assert!(app.phase_notification.is_some());
 }
 
+/// Verifies enabling strict mode during active focus persists without resetting the timer.
 #[test]
 fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_reset() {
     let config = AppConfig {

@@ -83,6 +83,7 @@ fn parse_start_runs_as_noninteractive_command() {
     );
 }
 
+/// Verifies that status output can be requested in JSON mode.
 #[test]
 fn parse_status_supports_json_mode() {
     let parsed = parse(&["--status", "--json"]).unwrap();
@@ -97,6 +98,7 @@ fn parse_status_supports_json_mode() {
     );
 }
 
+/// Verifies the deprecated automation trigger command still emits replacement guidance.
 #[test]
 fn automation_triggers_json_emits_deprecated_replacement_payload() {
     let payload = AutomationTriggersCommandOutput {
@@ -814,6 +816,7 @@ fn parse_schedule_set_accepts_json_payload() {
     );
 }
 
+/// Verifies schedule JSON payloads can include one-time windows.
 #[test]
 fn parse_schedule_set_accepts_one_time_windows_payload() {
     let payload = r#"{"windows":[],"exception_dates":[],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"15:30"}]}"#;
@@ -837,6 +840,7 @@ fn parse_schedule_set_accepts_one_time_windows_payload() {
     );
 }
 
+/// Verifies automation trigger JSON payloads are accepted by the CLI parser.
 #[test]
 fn parse_automation_triggers_set_accepts_json_payload() {
     let payload = r#"[{"trigger":{"type":"focus_completed"},"action":{"type":"apply_defaults","profile":"deep-work","blocklist_profile":"Default"}}]"#;
@@ -1630,6 +1634,7 @@ fn classify_key_value_arg_accepts_goal_carry_monthly_equals_value() {
     assert_eq!(parsed, Some(ParsedToken::GoalCarryMonthly(Some(true))));
 }
 
+/// Verifies key-value parsing accepts inline schedule JSON payloads.
 #[test]
 fn classify_key_value_arg_accepts_schedule_set_equals_value() {
     let payload = "--schedule-set={\"windows\":[{\"days\":[\"fri\"],\"start\":\"10:00\",\"end\":\"11:00\"}],\"exception_dates\":[]}";
@@ -1648,6 +1653,7 @@ fn classify_key_value_arg_accepts_schedule_set_equals_value() {
     );
 }
 
+/// Verifies key-value parsing accepts inline automation trigger JSON payloads.
 #[test]
 fn classify_key_value_arg_accepts_automation_triggers_set_equals_value() {
     let payload = "--automation-triggers-set=[{\"trigger\":{\"type\":\"schedule_window_start\"},\"action\":{\"type\":\"start_focus\"}}]";
@@ -1953,6 +1959,7 @@ fn parse_rejects_blocklist_site_edit_without_old_new_separator() {
     assert!(error.contains("Invalid site edit"));
 }
 
+/// Verifies invalid schedule weekday tokens are rejected.
 #[test]
 fn parse_rejects_schedule_set_with_invalid_weekday() {
     let payload =
@@ -1962,6 +1969,7 @@ fn parse_rejects_schedule_set_with_invalid_weekday() {
     assert!(error.contains("unknown weekday"));
 }
 
+/// Verifies malformed automation trigger JSON payloads are rejected.
 #[test]
 fn parse_rejects_automation_triggers_set_with_invalid_json() {
     let payload = r#"[{"trigger":{"type":"unknown"}}]"#;

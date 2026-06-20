@@ -246,6 +246,7 @@ fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
     }
 }
 
+/// Returns the display label for a profile editor field index.
 fn profile_edit_field_display_label(field_index: usize) -> &'static str {
     match field_index {
         0 => "Focus",
