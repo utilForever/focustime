@@ -471,7 +471,7 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         name: "Calendar busy window sync",
         surface: FeatureSurface::Integration,
         description: "Refresh an opt-in external calendar busy-window cache used only as schedule annotations.",
-        cli_flags: &["--calendar-sync"],
+        cli_flags: &[],
         value: 2,
         complexity: 3,
         support_burden: 4,
