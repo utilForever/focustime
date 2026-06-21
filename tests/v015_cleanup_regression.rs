@@ -124,6 +124,9 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "`ureq` JSON feature",
         "`chrono-tz`",
         "`base64` daemon usage",
+        "Calendar annotations no longer own runtime HTTP",
+        "runtime scheduling only reads optional calendar annotation cache data",
+        "Before changing `Cargo.toml`",
     ] {
         assert!(
             readme.contains(required),
@@ -132,10 +135,13 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
     }
 
     assert!(changelog.contains("v0.15.x cleanup roadmap and deprecation notices"));
+    assert!(changelog.contains("Calendar dependency cleanup audit (#503)"));
     assert!(changelog.contains("Integration runtime hook narrowing (#453)"));
     assert!(contributing.contains("cargo test --test v015_cleanup_regression"));
     assert!(contributing.contains("v0.15.x cleanup releases"));
     assert!(contributing.contains("deprecated daemon bearer-token generation"));
+    assert!(contributing.contains("Calendar annotations no longer own runtime"));
+    assert!(matrix.contains("Calendar dependency ownership reflects"));
     assert!(matrix.contains("Runtime dependency removal candidates stay documented"));
 }
 
