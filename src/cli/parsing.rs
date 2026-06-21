@@ -70,7 +70,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::ConfigDoctor
             | ParsedToken::ConfigMigrate { .. }
             | ParsedToken::Diagnostics
-            | ParsedToken::CalendarSync
             | ParsedToken::Backup(_)
             | ParsedToken::Restore(_)
             | ParsedToken::Export(_)
@@ -243,9 +242,6 @@ pub(super) fn parse_primary_command(
             )?,
             ParsedToken::Diagnostics => {
                 set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
-            }
-            ParsedToken::CalendarSync => {
-                set_primary_command(&mut primary, PrimaryCommand::CalendarSync)?
             }
             ParsedToken::Backup(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Backup(dir.clone()))?
@@ -500,10 +496,6 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Restore { dir },
             output,
         })),
-        Some(PrimaryCommand::CalendarSync) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::CalendarSync,
-            output,
-        })),
         Some(PrimaryCommand::Export(dir)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Export { dir },
             output,
@@ -693,7 +685,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::ConfigMigrate { apply: false } => "--config-migrate",
         PrimaryCommand::ConfigMigrate { apply: true } => "--config-migrate-apply",
         PrimaryCommand::Diagnostics => "--diagnostics",
-        PrimaryCommand::CalendarSync => "--calendar-sync",
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Backup(_) => "--backup",
         PrimaryCommand::Restore(_) => "--restore",

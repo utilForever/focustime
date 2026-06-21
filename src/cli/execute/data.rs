@@ -1,9 +1,8 @@
 use std::{env, fs, path::Path};
 
 use crate::cli::{
-    AppConfig, BackupOutput, CALENDAR_SYNC_REPLACEMENT, CalendarSyncCommandOutput,
-    DailyGoalSnapshot, ExportOutput, FeatureInventoryOutput, FocusStats, OutputMode, PathBuf,
-    RestoreOutput, print_backup_output, print_calendar_sync_command_output, print_export_output,
+    AppConfig, BackupOutput, DailyGoalSnapshot, ExportOutput, FeatureInventoryOutput, FocusStats,
+    OutputMode, PathBuf, RestoreOutput, print_backup_output, print_export_output,
     print_feature_inventory_output, print_json, print_restore_output,
 };
 use crate::feature_inventory::{build_feature_inventory_report, export_feature_inventory_report};
@@ -222,98 +221,6 @@ pub(super) fn execute_restore_command(
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
-}
-
-pub(super) fn execute_calendar_sync_command(output: OutputMode) -> Result<(), String> {
-    let config = AppConfig::load().normalized();
-    let result = crate::calendar::sync_from_config(&config.calendar_sync, chrono::Local::now())?;
-    let errors = result
-        .source_errors
-        .into_iter()
-        .map(redact_calendar_sync_error)
-        .collect::<Vec<_>>();
-    let payload = CalendarSyncCommandOutput {
-        action: "calendar-sync",
-        deprecated: true,
-        replacement: CALENDAR_SYNC_REPLACEMENT,
-        behavior_model: "opt_in_schedule_annotation_cache",
-        synced_at_epoch_secs: result.synced_at_epoch_secs,
-        source_count: result.source_count,
-        windows_count: result.windows.len(),
-        error_count: errors.len(),
-        errors,
-    };
-    match output {
-        OutputMode::Text => print_calendar_sync_command_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-pub(super) fn redact_calendar_sync_error(message: String) -> String {
-    message
-        .split_whitespace()
-        .map(redact_calendar_sync_token)
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn redact_calendar_sync_token(token: &str) -> String {
-    let core_start = token
-        .char_indices()
-        .find(|(_, ch)| !is_wrapper_punctuation(*ch))
-        .map_or(0, |(index, _)| index);
-    let core_end = token
-        .char_indices()
-        .rev()
-        .find(|(_, ch)| !is_wrapper_punctuation(*ch))
-        .map_or(token.len(), |(index, ch)| index + ch.len_utf8());
-    if core_end <= core_start {
-        return token.to_string();
-    }
-    let prefix = &token[..core_start];
-    let core = &token[core_start..core_end];
-    let suffix = &token[core_end..];
-    let redacted_core = if is_url_like_token(core) {
-        redact_url_like_token(core)
-    } else {
-        core.to_string()
-    };
-    format!("{prefix}{redacted_core}{suffix}")
-}
-
-fn is_url_like_token(token: &str) -> bool {
-    token.contains("://")
-        || token.starts_with("webcal://")
-        || token.starts_with("webcals://")
-        || token.starts_with("http://")
-        || token.starts_with("https://")
-}
-
-fn redact_url_like_token(token: &str) -> String {
-    let without_fragment = token.split_once('#').map_or(token, |(base, _)| base);
-    let without_query = without_fragment
-        .split_once('?')
-        .map_or(without_fragment, |(base, _)| base);
-    let Some((scheme, remainder)) = without_query.split_once("://") else {
-        return without_query.to_string();
-    };
-    let authority = remainder.split('/').next().unwrap_or(remainder);
-    let host = authority
-        .rsplit_once('@')
-        .map_or(authority, |(_, stripped)| stripped);
-    if remainder.contains('/') {
-        format!("{scheme}://{host}/<redacted>")
-    } else {
-        format!("{scheme}://{host}")
-    }
-}
-
-fn is_wrapper_punctuation(ch: char) -> bool {
-    matches!(
-        ch,
-        '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | ',' | ';'
-    )
 }
 
 fn resolve_artifact_directory(

@@ -96,29 +96,6 @@ fn parse_status_supports_json_mode() {
 }
 
 #[test]
-fn calendar_sync_json_emits_deprecated_schedule_annotation_guidance() {
-    let payload = CalendarSyncCommandOutput {
-        action: "calendar-sync",
-        deprecated: true,
-        replacement: CALENDAR_SYNC_REPLACEMENT,
-        behavior_model: "opt_in_schedule_annotation_cache",
-        synced_at_epoch_secs: 1_779_000_000,
-        source_count: 0,
-        windows_count: 0,
-        error_count: 0,
-        errors: Vec::new(),
-    };
-
-    let json = serde_json::to_value(&payload).unwrap();
-
-    assert_eq!(json["deprecated"], true);
-    assert_eq!(json["replacement"], CALENDAR_SYNC_REPLACEMENT);
-    assert_eq!(json["behavior_model"], "opt_in_schedule_annotation_cache");
-    assert!(payload.replacement.contains("disabled or absent"));
-    assert!(payload.replacement.contains("--diagnostics"));
-}
-
-#[test]
 fn parse_status_watch_without_interval_uses_default_cadence() {
     let parsed = parse(&["--status", "--watch"]).unwrap();
     assert_eq!(
@@ -1093,15 +1070,12 @@ fn parse_restore_with_equals_accepts_directory() {
 }
 
 #[test]
-fn parse_calendar_sync_supports_json_mode() {
-    let parsed = parse(&["--calendar-sync", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::CalendarSync,
-            output: OutputMode::Json
-        })
-    );
+fn parse_calendar_sync_is_retired() {
+    let error = parse_with_contract(&["--calendar-sync", "--json"]).unwrap_err();
+
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert!(error.message.contains("Unknown option `--calendar-sync`."));
+    assert!(error.hint.is_none());
 }
 
 #[test]

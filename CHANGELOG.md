@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Calendar sync command cleanup (#501):** removed standalone `--calendar-sync` parsing/output while keeping calendar data as optional schedule annotation context when a supported cache is present.
+
 ## [0.15.8] - 2026-06-20
 
 ### Changed

@@ -1,21 +1,25 @@
-use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::PathBuf;
-use std::time::{Duration as StdDuration, SystemTime, UNIX_EPOCH};
 
-use chrono::{
-    DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Timelike,
-    Weekday,
-};
+#[cfg(test)]
+use std::collections::{HashMap, HashSet};
+
+use chrono::{DateTime, Duration, Local, TimeZone};
+#[cfg(test)]
+use chrono::{Datelike, LocalResult, NaiveDate, NaiveDateTime, Timelike, Weekday};
+#[cfg(test)]
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{CalendarProviderConfig, CalendarSourceConfig, CalendarSyncConfig};
+use crate::config::CalendarProviderConfig;
+#[cfg(test)]
+use crate::config::CalendarSourceConfig;
 
 const CALENDAR_SYNC_CACHE_FILE_NAME: &str = "calendar-sync-cache.json";
-const CALENDAR_SYNC_HTTP_TIMEOUT_SECS: u64 = 15;
+#[cfg(test)]
 type PropertyParams = HashMap<String, String>;
+#[cfg(test)]
 type PropertyFieldMap = HashMap<String, Vec<(PropertyParams, String)>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -25,14 +29,6 @@ pub(crate) struct CalendarBusyWindow {
     pub(crate) summary: String,
     pub(crate) start_epoch_secs: i64,
     pub(crate) end_epoch_secs: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CalendarSyncResult {
-    pub(crate) synced_at_epoch_secs: i64,
-    pub(crate) source_count: usize,
-    pub(crate) windows: Vec<CalendarBusyWindow>,
-    pub(crate) source_errors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -45,6 +41,7 @@ struct CalendarSyncCacheDisk {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(test)]
 struct ParsedEvent {
     summary: String,
     start: DateTime<Local>,
@@ -54,6 +51,7 @@ struct ParsedEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(test)]
 struct RecurrenceRule {
     frequency: RecurrenceFrequency,
     interval: u32,
@@ -63,65 +61,17 @@ struct RecurrenceRule {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg(test)]
 enum RecurrenceFrequency {
     Daily,
     Weekly,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(test)]
 struct EventDateValue {
     start: DateTime<Local>,
     is_all_day: bool,
-}
-
-pub(crate) fn sync_from_config(
-    config: &CalendarSyncConfig,
-    now: DateTime<Local>,
-) -> Result<CalendarSyncResult, String> {
-    let synced_at_epoch_secs = current_epoch_secs();
-    if !config.enabled {
-        let result = CalendarSyncResult {
-            synced_at_epoch_secs,
-            source_count: 0,
-            windows: Vec::new(),
-            source_errors: Vec::new(),
-        };
-        save_cache(&result)?;
-        return Ok(result);
-    }
-
-    let range_start = now - Duration::hours(2);
-    let range_end = now + Duration::days(i64::from(config.lookahead_days));
-    let mut windows = Vec::new();
-    let mut errors = Vec::new();
-
-    for source in config.sources.iter().filter(|source| source.enabled) {
-        match fetch_and_parse_source(source, range_start, range_end) {
-            Ok(mut parsed) => windows.append(&mut parsed),
-            Err(error) => errors.push(error),
-        }
-    }
-
-    windows.sort_by_key(|window| (window.start_epoch_secs, window.end_epoch_secs));
-    windows.dedup_by(|left, right| {
-        left.source_name == right.source_name
-            && left.start_epoch_secs == right.start_epoch_secs
-            && left.end_epoch_secs == right.end_epoch_secs
-            && left.summary == right.summary
-    });
-
-    let result = CalendarSyncResult {
-        synced_at_epoch_secs,
-        source_count: config
-            .sources
-            .iter()
-            .filter(|source| source.enabled)
-            .count(),
-        windows,
-        source_errors: errors,
-    };
-    save_cache(&result)?;
-    Ok(result)
 }
 
 pub(crate) fn load_cached_windows(
@@ -193,33 +143,7 @@ pub(crate) fn active_window_at(
     })
 }
 
-fn fetch_and_parse_source(
-    source: &CalendarSourceConfig,
-    range_start: DateTime<Local>,
-    range_end: DateTime<Local>,
-) -> Result<Vec<CalendarBusyWindow>, String> {
-    let source_url = normalized_source_url(source);
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(StdDuration::from_secs(
-            CALENDAR_SYNC_HTTP_TIMEOUT_SECS,
-        )))
-        .build()
-        .into();
-    let response = agent.get(&source_url).call().map_err(|error| {
-        format!(
-            "Calendar sync source `{}` request failed: {error}",
-            source.name
-        )
-    })?;
-    let body = response.into_body().read_to_string().map_err(|error| {
-        format!(
-            "Calendar sync source `{}` body read failed: {error}",
-            source.name
-        )
-    })?;
-    parse_ics_busy_windows(source, &body, range_start, range_end)
-}
-
+#[cfg(test)]
 fn parse_ics_busy_windows(
     source: &CalendarSourceConfig,
     ics: &str,
@@ -235,6 +159,7 @@ fn parse_ics_busy_windows(
     Ok(windows)
 }
 
+#[cfg(test)]
 fn parse_events(
     lines: &[String],
     source: &CalendarSourceConfig,
@@ -271,6 +196,7 @@ fn parse_events(
     Ok(events)
 }
 
+#[cfg(test)]
 fn build_event(
     fields: &PropertyFieldMap,
     source: &CalendarSourceConfig,
@@ -325,6 +251,7 @@ fn build_event(
     }))
 }
 
+#[cfg(test)]
 fn parse_exdates(
     fields: &PropertyFieldMap,
     fallback_start: DateTime<Local>,
@@ -347,6 +274,7 @@ fn parse_exdates(
     Ok(exdates)
 }
 
+#[cfg(test)]
 fn expand_event(
     event: &ParsedEvent,
     range_start: DateTime<Local>,
@@ -383,6 +311,7 @@ fn expand_event(
     );
 }
 
+#[cfg(test)]
 fn expand_recurring_event(
     event: &ParsedEvent,
     recurrence: &RecurrenceRule,
@@ -419,6 +348,7 @@ fn expand_recurring_event(
     }
 }
 
+#[cfg(test)]
 fn recurrence_start_for_date(
     event: &ParsedEvent,
     recurrence: &RecurrenceRule,
@@ -431,6 +361,7 @@ fn recurrence_start_for_date(
     (start >= event.start).then_some(start)
 }
 
+#[cfg(test)]
 fn push_window_if_in_range(
     event: &ParsedEvent,
     source: &CalendarSourceConfig,
@@ -452,6 +383,7 @@ fn push_window_if_in_range(
     });
 }
 
+#[cfg(test)]
 fn recurrence_occurs_on_date(
     rule: &RecurrenceRule,
     start_date: NaiveDate,
@@ -478,6 +410,7 @@ fn recurrence_occurs_on_date(
     }
 }
 
+#[cfg(test)]
 fn parse_recurrence_rule(raw: &str, start: DateTime<Local>) -> Result<RecurrenceRule, String> {
     let mut freq: Option<RecurrenceFrequency> = None;
     let mut interval = 1u32;
@@ -535,10 +468,12 @@ fn parse_recurrence_rule(raw: &str, start: DateTime<Local>) -> Result<Recurrence
     })
 }
 
+#[cfg(test)]
 fn parse_event_date_value(raw: &str, params: &PropertyParams) -> Result<EventDateValue, String> {
     parse_event_date_value_with_fallback_tz(raw, params, Local)
 }
 
+#[cfg(test)]
 fn parse_event_date_value_with_fallback_tz<TzLike>(
     raw: &str,
     params: &PropertyParams,
@@ -606,12 +541,14 @@ where
     })
 }
 
+#[cfg(test)]
 fn parse_naive_local_datetime(value: &str) -> Result<NaiveDateTime, String> {
     NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S")
         .or_else(|_| NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M"))
         .map_err(|error| format!("invalid datetime `{value}`: {error}"))
 }
 
+#[cfg(test)]
 fn parse_weekday_token(token: &str) -> Option<Weekday> {
     match token.trim().to_ascii_uppercase().as_str() {
         "MO" => Some(Weekday::Mon),
@@ -625,6 +562,7 @@ fn parse_weekday_token(token: &str) -> Option<Weekday> {
     }
 }
 
+#[cfg(test)]
 fn parse_property(line: &str) -> Option<(String, PropertyParams, String)> {
     let (raw_head, raw_value) = line.split_once(':')?;
     let mut head_parts = raw_head.split(';');
@@ -639,6 +577,7 @@ fn parse_property(line: &str) -> Option<(String, PropertyParams, String)> {
     Some((name, params, raw_value.trim().to_string()))
 }
 
+#[cfg(test)]
 fn first_property<'a>(
     fields: &'a PropertyFieldMap,
     key: &str,
@@ -649,6 +588,7 @@ fn first_property<'a>(
         .map(|(params, value)| (params, value.as_str()))
 }
 
+#[cfg(test)]
 fn unfold_ics_lines(content: &str) -> Vec<String> {
     let mut unfolded: Vec<String> = Vec::new();
     for raw in content.replace("\r\n", "\n").split('\n') {
@@ -664,6 +604,7 @@ fn unfold_ics_lines(content: &str) -> Vec<String> {
     unfolded
 }
 
+#[cfg(test)]
 fn normalized_source_url(source: &CalendarSourceConfig) -> String {
     let url = source.url.trim();
     if let Some(rest) = url.strip_prefix("webcal://") {
@@ -675,33 +616,6 @@ fn normalized_source_url(source: &CalendarSourceConfig) -> String {
     url.to_string()
 }
 
-fn save_cache(result: &CalendarSyncResult) -> Result<(), String> {
-    let path = cache_path()?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "Calendar sync cache write failed: could not create `{}`: {error}",
-                parent.display()
-            )
-        })?;
-    }
-    let disk = CalendarSyncCacheDisk {
-        schema_version: 1,
-        synced_at_epoch_secs: result.synced_at_epoch_secs,
-        source_count: result.source_count,
-        windows: result.windows.clone(),
-        source_errors: result.source_errors.clone(),
-    };
-    let content = serde_json::to_string_pretty(&disk)
-        .map_err(|error| format!("Calendar sync cache encode failed: {error}"))?;
-    fs::write(&path, content).map_err(|error| {
-        format!(
-            "Calendar sync cache write failed at `{}`: {error}",
-            path.display()
-        )
-    })
-}
-
 fn cache_path() -> Result<PathBuf, String> {
     crate::config::app_data_path(CALENDAR_SYNC_CACHE_FILE_NAME).ok_or_else(|| {
         format!(
@@ -710,6 +624,7 @@ fn cache_path() -> Result<PathBuf, String> {
     })
 }
 
+#[cfg(test)]
 fn local_datetime_on_day_start(date: NaiveDate) -> Option<DateTime<Local>> {
     match Local.with_ymd_and_hms(date.year(), date.month(), date.day(), 0, 0, 0) {
         LocalResult::Single(dt) => Some(dt),
@@ -718,6 +633,7 @@ fn local_datetime_on_day_start(date: NaiveDate) -> Option<DateTime<Local>> {
     }
 }
 
+#[cfg(test)]
 fn local_datetime_on_date_with_time(
     date: NaiveDate,
     sample: DateTime<Local>,
@@ -738,14 +654,6 @@ fn local_datetime_on_date_with_time(
 
 fn local_datetime_from_epoch(epoch_secs: i64) -> Option<DateTime<Local>> {
     Local.timestamp_opt(epoch_secs, 0).single()
-}
-
-fn current_epoch_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|duration| duration.as_secs().min(i64::MAX as u64) as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

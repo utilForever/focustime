@@ -187,10 +187,6 @@ cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","
 cargo run -- --schedule-delay
 cargo run -- --schedule --json
 
-# Deprecated compatibility surface; refresh opt-in calendar annotations for schedules
-cargo run -- --calendar-sync
-cargo run -- --calendar-sync --json
-
 # Break-glass temporary override controls from CLI (first call arms, second confirms)
 cargo run -- --break-glass-trigger
 cargo run -- --break-glass-trigger --json
@@ -703,13 +699,11 @@ schedule runtime defaults (`time_step_minutes = 15`, `delay_secs = 600`).
 `[calendar_sync]` is optional and remains a narrow opt-in cache for schedule
 annotations only. When omitted or disabled, schedule behavior stays
 deterministic without calendar data; no calendar busy/overlap annotations are
-loaded. If enabled, `--calendar-sync` can refresh the local cache from configured
-ICS feeds, but the standalone command is deprecated in favor of treating
-calendar data as optional schedule context and checking setup/config guidance
-with `--diagnostics`. Runtime normalization clamps `refresh_secs` to
-`300..86400` and `lookahead_days` to `1..90`, trims source names/URLs,
-auto-fills blank source names (`calendar-source-N`), and removes duplicate
-provider+URL sources.
+loaded. Calendar data is treated only as optional schedule context, and
+`--diagnostics` remains the supported setup/config guidance workflow. Runtime
+normalization clamps `refresh_secs` to `300..86400` and `lookahead_days` to
+`1..90`, trims source names/URLs, auto-fills blank source names
+(`calendar-source-N`), and removes duplicate provider+URL sources.
 
 `[wakatime_runtime]` is optional. When omitted, focustime keeps existing
 WakaTime runtime defaults (`retry_backoff_secs = [2, 5, 10]`,
@@ -840,7 +834,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - deprecated `weekday_profile_rules[]` config entries are removed by config migration; model weekday defaults with schedule windows, `--schedule-delay`, and session templates instead
 - the timer session overview shows the current/next scheduled window
 - when the opt-in calendar annotation cache is enabled and available, schedule text adds `calendar busy` for active calendar events and a `calendar overlap` warning for upcoming schedule collisions
-- `--calendar-sync` is a deprecated compatibility command that refreshes that optional cache from configured ICS feeds (including Google/Outlook ICS feed URLs)
+- the standalone calendar refresh command has been removed; calendar data remains optional schedule annotation context when a supported cache is present
 
 You can configure notification and auto-start settings directly from the TUI:
 

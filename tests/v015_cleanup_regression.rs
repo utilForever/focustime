@@ -283,7 +283,7 @@ fn v015_removed_command_paths_keep_supported_json_guidance_only() {
         );
     }
 
-    for flag in ["--usage-signals", "--blocking-preview"] {
+    for flag in ["--usage-signals", "--blocking-preview", "--calendar-sync"] {
         let output = env.run(&[flag, "--json"]);
         assert_eq!(output.status.code(), Some(2));
         assert!(
