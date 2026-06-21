@@ -112,15 +112,17 @@ Key dependencies are defined in `Cargo.toml`:
 
 - `ratatui`: terminal UI rendering.
 - `crossterm`: terminal input/output and screen control.
-- `ureq` + `serde`: HTTP and JSON support for WakaTime heartbeats, optional
-  calendar annotation refreshes, and deprecated daemon client calls.
+- `ureq` + `serde`: HTTP and JSON support for WakaTime heartbeats and
+  deprecated daemon client calls. Calendar annotations no longer own runtime
+  HTTP after standalone refresh removal.
 - `serde_json`: CLI/status/export JSON, daemon API payloads, and calendar cache
   persistence.
 - `toml`: config, stats, WakaTime queue, recovery, and daemon metadata
   persistence.
 - `csv`: stats export artifacts.
-- `chrono` + `chrono-tz`: timer/stat dates, schedule windows, calendar
-  recurrence, and optional calendar `TZID` handling.
+- `chrono` + `chrono-tz`: timer/stat dates and schedule windows. `chrono-tz`
+  is currently held only by retired calendar ICS `TZID` parsing coverage, so
+  confirm ownership before moving it to `dev-dependencies` or removing it.
 - `base64`: WakaTime Basic auth and deprecated daemon bearer-token encoding.
 - `tiny_http`: deprecated daemon local API server.
 - `getrandom`: deprecated daemon bearer-token generation.
@@ -133,3 +135,5 @@ Dependency guidelines:
 - When cleanup work removes daemon, calendar, or integration paths, update the
   README runtime dependency cleanup table with the owning path and run the
   release readiness checks in `REGRESSION_MATRIX.md`.
+- Before changing `Cargo.toml` for calendar-owned cleanup candidates, confirm
+  non-test usage with `rg -n "ureq|chrono_tz|chrono-tz" src tests`.
