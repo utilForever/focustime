@@ -2887,6 +2887,10 @@ fn recurring_schedule_next_window_text_flags_calendar_overlap() {
             }],
             ..RecurringScheduleConfig::default()
         },
+        calendar_sync: crate::config::CalendarSyncConfig {
+            enabled: true,
+            ..crate::config::CalendarSyncConfig::default()
+        },
         ..AppConfig::default()
     };
     let mut app = App::from_config(config);
@@ -2917,7 +2921,19 @@ fn recurring_schedule_text_omits_calendar_annotations_when_disabled_or_absent() 
         },
         ..AppConfig::default()
     };
-    let app = App::from_config(config);
+    let absent_app = App::from_config(config.clone());
+    let (absent_next_text, absent_status_text) = absent_app.recurring_schedule_texts_at(now);
+    assert!(!absent_next_text.contains("calendar"));
+    assert!(!absent_status_text.contains("calendar"));
+
+    let mut app = App::from_config(config);
+    app.set_calendar_busy_windows_for_tests(vec![CalendarBusyWindow {
+        source_name: "work".to_string(),
+        provider: CalendarProviderConfig::Google,
+        summary: "Disabled calendar cache".to_string(),
+        start_epoch_secs: local_datetime_today(11, 15).timestamp(),
+        end_epoch_secs: local_datetime_today(11, 45).timestamp(),
+    }]);
 
     let (next_text, status_text) = app.recurring_schedule_texts_at(now);
 
@@ -2936,6 +2952,10 @@ fn recurring_schedule_status_text_mentions_active_calendar_busy_window() {
                 end: "11:00".to_string(),
             }],
             ..RecurringScheduleConfig::default()
+        },
+        calendar_sync: crate::config::CalendarSyncConfig {
+            enabled: true,
+            ..crate::config::CalendarSyncConfig::default()
         },
         ..AppConfig::default()
     };
