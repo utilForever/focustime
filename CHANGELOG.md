@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.9] - 2026-06-21
+
 ### Changed
 
 - **Calendar sync command cleanup (#501):** removed standalone `--calendar-sync` parsing/output while keeping calendar data as optional schedule annotation context when a supported cache is present.
@@ -498,7 +500,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.8...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.15.9...HEAD
+[0.15.9]: https://github.com/utilForever/focustime/compare/v0.15.8...v0.15.9
 [0.15.8]: https://github.com/utilForever/focustime/compare/v0.15.7...v0.15.8
 [0.15.7]: https://github.com/utilForever/focustime/compare/v0.15.6...v0.15.7
 [0.15.6]: https://github.com/utilForever/focustime/compare/v0.15.5...v0.15.6
