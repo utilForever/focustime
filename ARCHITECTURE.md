@@ -23,7 +23,7 @@ flowchart LR
     WK["wakatime.rs<br/>heartbeat tracking"]
     NT["notifications.rs<br/>phase notifications"]
     SCH["schedule.rs<br/>window compilation/selection"]
-    CAL["calendar.rs<br/>ICS cache + schedule annotation helpers"]
+    CAL["calendar.rs<br/>cache loading + overlap helpers for schedule annotations"]
     REC["session_recovery.rs<br/>runtime snapshot I/O"]
     TL["task_labels.rs<br/>task label normalization/indexing"]
     OS["OS / filesystem / hosts / notifications"]
@@ -47,7 +47,6 @@ flowchart LR
     APP --> REC
     CLI --> APP
     CLI --> CFG
-    CLI --> CAL
     CLI --> ST
     CLI --> FI
     UI --> APP
