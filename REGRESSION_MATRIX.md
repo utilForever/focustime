@@ -32,6 +32,7 @@ in the normal release readiness command set.
 | v0.15.2 | Raw usage-signal summaries remain internal cleanup inputs while feature inventory output is the supported reporting workflow. | Usage cleanup | committed feature inventory coverage |
 | v0.15.3 | Calendar busy-window sync stays a narrow opt-in schedule annotation cache, while disabled/absent calendar data leaves schedules deterministic. | Schedule/config cleanup | `load_with_env_reports_calendar_sync_annotation_cache_guidance` plus `recurring_schedule_text_omits_calendar_annotations_when_disabled_or_absent` |
 | v0.15.9 | Standalone calendar sync command parsing is removed, and calendar data remains only optional schedule annotation context when a supported cache is present. | Schedule/config cleanup | `parse_calendar_sync_is_retired` plus `v015_removed_command_paths_keep_supported_json_guidance_only` |
+| v0.15.9 | Calendar dependency ownership reflects the removed standalone refresh path: runtime `ureq` is owned by WakaTime/daemon clients, and `chrono-tz` is only test-owned until future cache refresh support is reintroduced. | Dependency cleanup | `v015_cleanup_docs_keep_matrix_and_release_guidance_aligned` plus `rg -n "ureq|chrono_tz|chrono-tz" src tests` |
 | v0.15.8 | Deprecated weekday profile rule shims are removed: `--weekday-rules*` is no longer parsed, config migration drops `weekday_profile_rules`, and schedules/session templates remain the replacement path. | Schedule/config cleanup | `parse_weekday_rules_is_retired` plus `migrate_deprecated_schedule_shims_removes_weekday_rules_and_automation_triggers` |
 | v0.15.8 | Standalone automation trigger compatibility is removed: `--automation-triggers*` is no longer parsed, config migration drops `automation_triggers`, and schedules/session templates remain the replacement path. | Schedule/runtime cleanup | `parse_automation_triggers_is_retired` plus `parse_automation_triggers_set_is_retired` and `migrate_deprecated_schedule_shims_removes_weekday_rules_and_automation_triggers` |
 | v0.15.8 | Retired blocklist category config no longer adds config-doctor warnings, while profile-level blocklist/allowlist site management remains the supported path. | Blocking cleanup | `config_doctor_omits_retired_blocklist_category_warnings` plus `parse_rejects_removed_blocklist_category_flags` |
@@ -71,6 +72,7 @@ here and add or update the matching focused test before preparing the release
 commit. Documentation-only roadmap updates should still keep README,
 CHANGELOG.md, CONTRIBUTING.md, and this matrix aligned with supported
 replacement behavior.
-When cleanup work changes runtime dependencies, also run `cargo check --all`,
+When cleanup work changes runtime dependencies, first confirm ownership with
+`rg -n "ureq|chrono_tz|chrono-tz" src tests`, then run `cargo check --all`,
 `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and
 `cargo audit` before release tagging.
