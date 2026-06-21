@@ -44,12 +44,9 @@ use daemon_commands::{
 #[cfg(test)]
 pub(super) use dashboard::apply_history_dashboard_command;
 use dashboard::execute_history_dashboard_command;
-#[cfg(test)]
-use data::redact_calendar_sync_error;
 use data::{
-    execute_backup_command, execute_calendar_sync_command, execute_export_command,
-    execute_feature_inventory_command, execute_restore_command, stats_load_options,
-    stats_save_options,
+    execute_backup_command, execute_export_command, execute_feature_inventory_command,
+    execute_restore_command, stats_load_options, stats_save_options,
 };
 use diagnostics::{
     execute_config_doctor_command, execute_config_migrate_command, execute_diagnostics_command,
@@ -131,9 +128,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Restore { dir } => {
             execute_restore_command(dir, cli_command.output).map_err(UserMessage::from)
         }
-        CommandKind::CalendarSync => {
-            execute_calendar_sync_command(cli_command.output).map_err(UserMessage::from)
-        }
         CommandKind::Export { dir } => {
             execute_export_command(dir, cli_command.output).map_err(UserMessage::from)
         }
@@ -191,7 +185,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Status { .. } => Some("status"),
         CommandKind::Backup { .. } => Some("backup"),
         CommandKind::Restore { .. } => Some("restore"),
-        CommandKind::CalendarSync => Some("calendar-sync"),
         CommandKind::Export { .. } => Some("export"),
         CommandKind::FeatureInventory { .. } => Some("feature-inventory"),
         CommandKind::BlocklistProfile { .. } => Some("blocklist-profile"),
@@ -987,57 +980,5 @@ mod tests {
         let interrupted = wait_thread.join().expect("watch wait thread should join");
         WATCH_INTERRUPTED.store(false, Ordering::SeqCst);
         assert!(interrupted);
-    }
-
-    #[test]
-    fn redact_calendar_sync_error_redacts_private_url_path_query_and_fragment() {
-        let error = "Calendar sync source `work` request failed: https://example.com/feed.ics?token=abc123#frag"
-            .to_string();
-
-        let redacted = redact_calendar_sync_error(error);
-
-        assert_eq!(
-            redacted,
-            "Calendar sync source `work` request failed: https://example.com/<redacted>"
-        );
-    }
-
-    #[test]
-    fn redact_calendar_sync_error_preserves_non_url_tokens() {
-        let error = "Calendar sync source `work` parse failed: value?still-visible".to_string();
-
-        let redacted = redact_calendar_sync_error(error);
-
-        assert_eq!(
-            redacted,
-            "Calendar sync source `work` parse failed: value?still-visible"
-        );
-    }
-
-    #[test]
-    fn redact_calendar_sync_error_preserves_host_only_urls() {
-        let error = "Calendar sync source `work` request failed: https://example.com?token=abc123"
-            .to_string();
-
-        let redacted = redact_calendar_sync_error(error);
-
-        assert_eq!(
-            redacted,
-            "Calendar sync source `work` request failed: https://example.com"
-        );
-    }
-
-    #[test]
-    fn redact_calendar_sync_error_redacts_url_userinfo() {
-        let error =
-            "Calendar sync source `work` request failed: https://user:pass@example.com/feed.ics"
-                .to_string();
-
-        let redacted = redact_calendar_sync_error(error);
-
-        assert_eq!(
-            redacted,
-            "Calendar sync source `work` request failed: https://example.com/<redacted>"
-        );
     }
 }

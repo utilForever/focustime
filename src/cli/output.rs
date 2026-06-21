@@ -23,10 +23,9 @@ pub(super) use status::{
 };
 
 use crate::cli::{
-    BackupOutput, BlocklistProfileConfig, CalendarSyncCommandOutput, ExportOutput,
-    FeatureInventoryOutput, GoalCarryCommandOutput, GoalCommandOutput, ProfileOutput,
-    RestoreOutput, ScheduleCommandOutput, Serialize, StrictCommandOutput, TaskGoalCommandOutput,
-    ThemeCommandOutput, Write, io,
+    BackupOutput, BlocklistProfileConfig, ExportOutput, FeatureInventoryOutput,
+    GoalCarryCommandOutput, GoalCommandOutput, ProfileOutput, RestoreOutput, ScheduleCommandOutput,
+    Serialize, StrictCommandOutput, TaskGoalCommandOutput, ThemeCommandOutput, Write, io,
 };
 use chrono::{Local, TimeZone};
 
@@ -120,24 +119,6 @@ pub(super) fn print_restore_output(payload: &RestoreOutput) {
 fn print_artifact_paths(paths: &[(&str, &Path)]) {
     for (label, path) in paths {
         println!("{label}: {}", path.display());
-    }
-}
-
-pub(super) fn print_calendar_sync_command_output(payload: &CalendarSyncCommandOutput) {
-    if payload.deprecated {
-        println!("Deprecated command: --calendar-sync");
-        println!("Replacement: {}", payload.replacement);
-    }
-    println!("Calendar cache refreshed for schedule annotations.");
-    println!("Behavior model: {}", payload.behavior_model);
-    println!("Sources: {}", payload.source_count);
-    println!("Busy windows: {}", payload.windows_count);
-    println!("Source errors: {}", payload.error_count);
-    if !payload.errors.is_empty() {
-        println!("Errors:");
-        for error in &payload.errors {
-            println!("  - {error}");
-        }
     }
 }
 

@@ -49,10 +49,10 @@ use output::{
     build_diagnostics_command_output, build_schedule_inspection_output, display_input_value,
     effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_calendar_sync_command_output, print_config_doctor_output, print_config_migration_output,
-    print_daemon_start_command_output, print_daemon_status_command_output,
-    print_daemon_stop_command_output, print_diagnostics_command_output, print_export_output,
-    print_feature_inventory_output, print_goal_carry_command_output, print_goal_command_output,
+    print_config_doctor_output, print_config_migration_output, print_daemon_start_command_output,
+    print_daemon_status_command_output, print_daemon_stop_command_output,
+    print_diagnostics_command_output, print_export_output, print_feature_inventory_output,
+    print_goal_carry_command_output, print_goal_command_output,
     print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
     print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
     print_session_metadata_command_output, print_session_template_command_output,
@@ -138,7 +138,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --status [--watch[=SECONDS]] [--json]
   focustime --backup[=DIR] [--json]
   focustime --restore[=DIR] [--json]
-  focustime --calendar-sync [--json]
   focustime --export[=DIR] [--json]
   focustime --feature-inventory[=DIR] [--json]
 
@@ -197,7 +196,6 @@ Options:
   --watch         Stream periodic status updates (status command only; default 1s)
   --backup        Back up config.toml and stats.toml to current directory or DIR
   --restore       Restore config.toml and stats.toml from current directory or DIR
-  --calendar-sync  Deprecated: refresh opt-in calendar busy-window cache for schedule annotations; schedule behavior is unchanged when disabled or absent
   --export        Export stats to current directory or DIR
   --feature-inventory  Export feature inventory scoring report to current directory or DIR
 
@@ -210,7 +208,6 @@ Retired/legacy command guidance:
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
 
-const CALENDAR_SYNC_REPLACEMENT: &str = "Calendar sync is now a narrow opt-in schedule annotation cache. Keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data, and use `focustime --diagnostics` to review setup/config guidance.";
 const DAEMON_API_REPLACEMENT: &str = "Use CLI timer, session, and workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -331,7 +328,6 @@ pub(crate) enum CommandKind {
     Restore {
         dir: Option<PathBuf>,
     },
-    CalendarSync,
     Export {
         dir: Option<PathBuf>,
     },
@@ -413,7 +409,6 @@ enum PrimaryCommand {
     Status,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
-    CalendarSync,
     Export(Option<PathBuf>),
     FeatureInventory(Option<PathBuf>),
     BlocklistProfile(Option<String>),
@@ -480,7 +475,6 @@ enum ParsedToken {
     Diagnostics,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
-    CalendarSync,
     Export(Option<PathBuf>),
     FeatureInventory(Option<PathBuf>),
     BlocklistProfile(Option<String>),
@@ -758,19 +752,6 @@ struct RestoreOutput {
     restore_dir: PathBuf,
     config_restored_path: PathBuf,
     stats_restored_path: PathBuf,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct CalendarSyncCommandOutput {
-    action: &'static str,
-    deprecated: bool,
-    replacement: &'static str,
-    behavior_model: &'static str,
-    synced_at_epoch_secs: i64,
-    source_count: usize,
-    windows_count: usize,
-    error_count: usize,
-    errors: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
