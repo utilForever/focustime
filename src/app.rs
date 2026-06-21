@@ -266,6 +266,10 @@ fn blocking_backend_config_for_persistence(
 fn load_calendar_busy_windows(
     calendar_sync: &CalendarSyncConfig,
 ) -> (Vec<CalendarBusyWindow>, Option<String>) {
+    if !calendar_sync.enabled {
+        return (Vec::new(), None);
+    }
+
     let _ = crate::calendar::load_cached_windows(Local::now(), calendar_sync.lookahead_days);
     (Vec::new(), None)
 }
@@ -876,7 +880,15 @@ impl App {
             .runtime_options_for_tests()
     }
 
+    fn calendar_annotations_enabled(&self) -> bool {
+        self.calendar_sync.enabled
+    }
+
     fn active_calendar_busy_window(&self, now: DateTime<Local>) -> Option<&CalendarBusyWindow> {
+        if !self.calendar_annotations_enabled() {
+            return None;
+        }
+
         active_calendar_window_at(&self.calendar_busy_windows, now)
     }
 
@@ -884,6 +896,10 @@ impl App {
         &self,
         occurrence: &WindowOccurrence,
     ) -> Option<&CalendarBusyWindow> {
+        if !self.calendar_annotations_enabled() {
+            return None;
+        }
+
         crate::calendar::first_overlap(
             &self.calendar_busy_windows,
             occurrence.start,
