@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Daemon-owned runtime dependency cleanup (#506):** locked the dependency ownership audit after daemon API retirement so daemon-only local API server and direct random-token dependencies stay removed while WakaTime remains the owner of runtime HTTP and Basic auth crates.
+
 ## [0.15.9] - 2026-06-21
 
 ### Changed

@@ -291,7 +291,7 @@ Milestone policy:
 - **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export/feature-inventory artifact workflows share target-directory handling.
-- **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency cleanup candidates stay documented, and WakaTime integration uses explicit supported runtime calls.
+- **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency ownership stays documented, and WakaTime integration uses explicit supported runtime calls.
 - **v0.15.7:** standalone blocking preview access, Focus History dashboard customization paths, and dedicated status comparison guidance stay removed while diagnostics, the stable KPI dashboard, export artifacts, and Focus History remain the supported replacements.
 - **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites`, `automation_triggers` config is removed during migration, and neither legacy surface is re-persisted by runtime writes.
 - **v0.15.9:** standalone calendar sync and daemon local API command access are retired; calendar data remains optional schedule annotation context from supported caches, and dependency ownership reflects the removed refresh and daemon paths.
@@ -340,15 +340,15 @@ Early deprecation notices:
 | Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
 
-Runtime dependency cleanup candidates:
+Runtime dependency ownership after daemon cleanup:
 
-| Dependency | Owning feature paths | Cleanup trigger |
+| Dependency | Owning feature paths | Ownership note |
 | --- | --- | --- |
 | `ureq` JSON feature | WakaTime heartbeat transport. Calendar annotations and the retired daemon path no longer own runtime HTTP after standalone refresh and daemon local API removal. | Keep while WakaTime heartbeat submission uses `send_json`; re-audit if the transport changes. |
 | `chrono-tz` | Retired calendar ICS `TZID` parsing coverage is currently test-only; runtime schedule annotations consume cached epoch windows without named-timezone conversion. | Before moving to `dev-dependencies` or removing it, confirm there is no non-test `chrono_tz` caller and decide whether future calendar cache refresh support might still need named `TZID` parsing support. |
 | `base64` | WakaTime Basic auth. | Keep while WakaTime uses Basic auth. |
 
-Before changing `Cargo.toml` for these cleanup candidates, run `rg -n "ureq|chrono_tz|chrono-tz" src tests`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
+When changing `Cargo.toml` dependency ownership, run `rg -n "ureq|chrono_tz|chrono-tz" src tests`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
 
 ### Low-value feature retirements
 

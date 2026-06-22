@@ -100,6 +100,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "poll_wakatime_events_applies_async_updates",
         "disabled_wakatime_runtime_ignores_supported_hooks",
         "cargo test --test v015_cleanup_regression",
+        "v015_dependency_ownership_keeps_daemon_only_crates_removed",
     ] {
         assert!(
             matrix.contains(required),
@@ -120,13 +121,13 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "The loopback `/v1/*` daemon endpoints are no longer a supported runtime surface",
         "Broad integration lifecycle/capability hooks",
         "supported WakaTime integration runtime calls",
-        "Runtime dependency cleanup candidates",
+        "Runtime dependency ownership after daemon cleanup",
         "`ureq` JSON feature",
         "`chrono-tz`",
         "`base64`",
         "Calendar annotations and the retired daemon path no longer own runtime HTTP",
         "runtime scheduling only reads optional calendar annotation cache data",
-        "Before changing `Cargo.toml`",
+        "When changing `Cargo.toml` dependency ownership",
     ] {
         assert!(
             readme.contains(required),
@@ -136,15 +137,61 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
 
     assert!(changelog.contains("v0.15.x cleanup roadmap and deprecation notices"));
     assert!(changelog.contains("Calendar dependency cleanup audit (#503)"));
+    assert!(changelog.contains("Daemon-owned runtime dependency cleanup (#506)"));
     assert!(changelog.contains("Integration runtime hook narrowing (#453)"));
     assert!(contributing.contains("cargo test --test v015_cleanup_regression"));
     assert!(contributing.contains("v0.15.x cleanup releases"));
     assert!(contributing.contains("retired daemon paths no longer own runtime HTTP"));
+    assert!(contributing.contains("README runtime dependency ownership table"));
     assert!(!contributing.contains("deprecated daemon bearer-token generation"));
     assert!(!readme.contains("`tiny_http`"));
     assert!(!readme.contains("`getrandom`"));
     assert!(matrix.contains("Calendar and daemon cleanup leave runtime `ureq`"));
-    assert!(matrix.contains("Runtime dependency removal candidates stay documented"));
+    assert!(matrix.contains("Runtime dependency ownership stays documented"));
+}
+
+#[test]
+fn v015_dependency_ownership_keeps_daemon_only_crates_removed() {
+    let manifest = include_str!("../Cargo.toml");
+    let lock = include_str!("../Cargo.lock");
+    let wakatime_transport = include_str!("../src/wakatime/transport.rs");
+
+    let manifest_dependencies = manifest_dependency_names(manifest);
+    for dependency in ["tiny_http", "getrandom"] {
+        assert!(
+            !manifest_dependencies.contains(&dependency),
+            "Cargo.toml should not keep daemon-only direct dependency `{dependency}`"
+        );
+    }
+    for dependency in ["ureq", "base64"] {
+        assert!(
+            manifest_dependencies.contains(&dependency),
+            "Cargo.toml should keep `{dependency}` while WakaTime owns it"
+        );
+    }
+
+    let lock_dependencies = focustime_lock_dependencies(lock);
+    for dependency in ["tiny_http", "getrandom"] {
+        assert!(
+            !lock_dependencies.contains(&dependency),
+            "Cargo.lock focustime package should not list daemon-only direct dependency `{dependency}`"
+        );
+    }
+    for dependency in ["ureq", "base64"] {
+        assert!(
+            lock_dependencies.contains(&dependency),
+            "Cargo.lock focustime package should keep `{dependency}` while WakaTime owns it"
+        );
+    }
+    assert!(
+        !lock.contains("name = \"tiny_http\""),
+        "Cargo.lock should not include the retired daemon local API server crate"
+    );
+
+    assert!(wakatime_transport.contains("ureq::Agent"));
+    assert!(wakatime_transport.contains("send_json"));
+    assert!(wakatime_transport.contains("base64::Engine"));
+    assert!(wakatime_transport.contains("BASE64.encode"));
 }
 
 #[test]
@@ -352,6 +399,56 @@ fn parse_json_stdout(output: &Output) -> Value {
 
 fn stderr_text(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).to_string()
+}
+
+fn manifest_dependency_names(manifest: &str) -> Vec<&str> {
+    let mut names = Vec::new();
+    let mut in_dependencies = false;
+
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_dependencies = trimmed == "[dependencies]";
+            continue;
+        }
+        if !in_dependencies || trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((name, _)) = trimmed.split_once('=') {
+            names.push(name.trim());
+        }
+    }
+
+    names
+}
+
+fn focustime_lock_dependencies(lock: &str) -> Vec<&str> {
+    let package = lock
+        .split("[[package]]")
+        .find(|section| {
+            section
+                .lines()
+                .any(|line| line.trim() == "name = \"focustime\"")
+        })
+        .expect("Cargo.lock should include the focustime package");
+    let mut dependencies = Vec::new();
+    let mut in_dependencies = false;
+
+    for line in package.lines() {
+        let trimmed = line.trim();
+        if trimmed == "dependencies = [" {
+            in_dependencies = true;
+            continue;
+        }
+        if in_dependencies {
+            if trimmed == "]" {
+                break;
+            }
+            dependencies.push(trimmed.trim_end_matches(',').trim_matches('"'));
+        }
+    }
+
+    dependencies
 }
 
 fn assert_finding_contains_all(findings: &[Value], code: &str, needles: &[&str]) {
