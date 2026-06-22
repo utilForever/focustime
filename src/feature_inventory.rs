@@ -451,22 +451,6 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         failure_impact: 2,
     },
     FeatureSeed {
-        feature_id: "daemon-api-lifecycle",
-        name: "Daemon API lifecycle",
-        surface: FeatureSurface::Integration,
-        description: "Run and manage daemon mode for automation and external tooling integration.",
-        cli_flags: &[
-            "--daemon-start",
-            "--daemon-status",
-            "--daemon-stop",
-            "--daemon-port",
-        ],
-        value: 3,
-        complexity: 4,
-        support_burden: 4,
-        failure_impact: 5,
-    },
-    FeatureSeed {
         feature_id: "calendar-busy-window-sync",
         name: "Calendar busy window annotations",
         surface: FeatureSurface::Integration,

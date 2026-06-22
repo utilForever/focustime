@@ -14,16 +14,16 @@
 
 ## Summary
 
-- Total features: 26
+- Total features: 25
 - Keep: 13
-- Merge: 12
+- Merge: 11
 - Remove: 1
 - Surface coverage:
   - Timer: 6
   - Schedule: 5
   - Blocker: 4
   - Stats: 6
-  - Integration: 5
+  - Integration: 4
 
 ## Cleanup signal support
 
@@ -64,7 +64,6 @@
 | `status-snapshot-and-streaming` | Stats | 5 | 3.65 | 1.37 | keep | --status, --watch |
 | `usage-signal-cleanup-support` | Stats | 3 | 1.40 | 2.14 | merge | (none) |
 | `calendar-busy-window-sync` | Integration | 2 | 3.10 | 0.65 | merge | (none) |
-| `daemon-api-lifecycle` | Integration | 3 | 4.25 | 0.71 | merge | --daemon-start, --daemon-status, --daemon-stop, --daemon-port |
 | `retired-low-value-command-guidance` | Integration | 1 | 3.50 | 0.29 | remove | --migrate, --dry-run, --sync-backup, --sync-restore, --sync-passphrase |
 | `setup-diagnostics-and-health-signals` | Integration | 3 | 2.75 | 1.09 | merge | --diagnostics, --config-doctor, --config-migrate, --config-migrate-apply |
 | `wakatime-heartbeat-pipeline` | Integration | 4 | 3.00 | 1.33 | keep | (none) |
