@@ -91,13 +91,6 @@ cargo run -- --resume
 cargo run -- --stop
 cargo run -- --next --json
 
-# Deprecated: run a headless daemon with local API access
-# Prefer CLI timer/session/workflow commands or the TUI for new automation.
-cargo run -- --daemon-start
-cargo run -- --daemon-start --daemon-port=43123 --json
-cargo run -- --daemon-status --json
-cargo run -- --daemon-stop --json
-
 # Select task label (creates label if it does not exist yet)
 cargo run -- --task "Write docs"
 cargo run -- --task=Write-docs --json
@@ -237,12 +230,11 @@ cargo run -- --feature-inventory
 cargo run -- --feature-inventory=./reports --json
 ```
 
-### Local daemon API (deprecated)
+### Retired local daemon API
 
-- The local daemon API is deprecated and is being prepared for a future removal release. New automation should use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) or the TUI for interactive focus sessions.
-- Daemon mode binds to loopback (`127.0.0.1`) and stores daemon connection metadata in `daemon-state.toml` under the same app-data directory used by `config.toml`.
-- Control endpoints require `Authorization: Bearer <token>`, where `<token>` is the per-start random token persisted in daemon metadata.
-- API routes are versioned under `/v1/*`, including health (`/v1/health`), timer status (`/v1/status`), timer controls (`/v1/timer/*`), session metadata (`/v1/session/*`), workflow controls (`/v1/workflow/*`), and daemon shutdown (`/v1/daemon/stop`).
+- The local daemon API lifecycle commands (`--daemon-start`, `--daemon-status`, `--daemon-stop`, and `--daemon-port`) are removed.
+- New automation should use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) or the TUI for interactive focus sessions.
+- The loopback `/v1/*` daemon endpoints are no longer a supported runtime surface.
 
 Backup/restore behavior:
 
@@ -302,7 +294,7 @@ Milestone policy:
 - **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency cleanup candidates stay documented, and WakaTime integration uses explicit supported runtime calls.
 - **v0.15.7:** standalone blocking preview access, Focus History dashboard customization paths, and dedicated status comparison guidance stay removed while diagnostics, the stable KPI dashboard, export artifacts, and Focus History remain the supported replacements.
 - **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites`, `automation_triggers` config is removed during migration, and neither legacy surface is re-persisted by runtime writes.
-- **v0.15.9:** standalone calendar sync command access is retired; calendar data remains optional schedule annotation context from supported caches, and dependency ownership reflects the removed refresh path.
+- **v0.15.9:** standalone calendar sync and daemon local API command access are retired; calendar data remains optional schedule annotation context from supported caches, and dependency ownership reflects the removed refresh and daemon paths.
 - **v0.15.x future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
@@ -343,7 +335,7 @@ Early deprecation notices:
 | Standalone blocking preview command (`--blocking-preview`) | Removed; use `--diagnostics` for blocking preview details alongside setup/config health. |
 | Standalone usage-signal command (`--usage-signals`) | Removed; use `--feature-inventory` for cleanup reporting while raw command/screen frequency summaries remain internal cleanup inputs. |
 | Standalone calendar refresh command (`--calendar-sync`) | Removed; scheduling only consumes an optional existing calendar annotation cache when it is enabled and available. |
-| Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
+| Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
 | Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
 | Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
@@ -352,11 +344,9 @@ Runtime dependency cleanup candidates:
 
 | Dependency | Owning feature paths | Cleanup trigger |
 | --- | --- | --- |
-| `tiny_http` | Deprecated daemon local API server in `src/daemon.rs` and daemon lifecycle CLI paths. | Remove when `--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, and `/v1/*` are retired. |
-| `getrandom` | Deprecated daemon local API bearer-token generation in `src/daemon.rs`. | Remove the direct dependency with the daemon local API removal; transitive RNG crates may remain through TLS dependencies. |
-| `ureq` JSON feature | WakaTime heartbeat transport and deprecated daemon lifecycle client calls. Calendar annotations no longer own runtime HTTP after standalone refresh removal. | Keep while WakaTime or daemon client calls need HTTP; after daemon removal, re-audit whether WakaTime-only usage still needs the enabled JSON feature. |
+| `ureq` JSON feature | WakaTime heartbeat transport. Calendar annotations and the retired daemon path no longer own runtime HTTP after standalone refresh and daemon local API removal. | Keep while WakaTime heartbeat submission uses `send_json`; re-audit if the transport changes. |
 | `chrono-tz` | Retired calendar ICS `TZID` parsing coverage is currently test-only; runtime schedule annotations consume cached epoch windows without named-timezone conversion. | Before moving to `dev-dependencies` or removing it, confirm there is no non-test `chrono_tz` caller and decide whether future calendar cache refresh support might still need named `TZID` parsing support. |
-| `base64` daemon usage | Deprecated daemon token encoding plus WakaTime Basic auth. | Do not remove outright while WakaTime uses Basic auth; after daemon removal, confirm WakaTime still owns the remaining dependency. |
+| `base64` | WakaTime Basic auth. | Keep while WakaTime uses Basic auth. |
 
 Before changing `Cargo.toml` for these cleanup candidates, run `rg -n "ureq|chrono_tz|chrono-tz" src tests`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
 

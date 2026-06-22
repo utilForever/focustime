@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Daemon local API command retirement (#504):** removed `--daemon-start`, `--daemon-status`, `--daemon-stop`, and `--daemon-port` parsing/execution plus the loopback daemon runtime surface; CLI timer/session/workflow commands remain the supported automation path.
 - **Calendar sync command cleanup (#501):** removed standalone `--calendar-sync` parsing/output while keeping calendar data as optional schedule annotation context when a supported cache is present.
-- **Calendar dependency cleanup audit (#503):** re-audited calendar-owned dependency notes after standalone refresh removal, documenting that runtime `ureq` is now owned by WakaTime/daemon clients and `chrono-tz` is only test-owned unless calendar cache refresh support is reintroduced.
+- **Calendar dependency cleanup audit (#503):** re-audited calendar-owned dependency notes after standalone refresh removal, documenting that runtime `ureq` is now owned by WakaTime heartbeats and `chrono-tz` is only test-owned unless calendar cache refresh support is reintroduced.
 
 ## [0.15.8] - 2026-06-20
 

@@ -11,7 +11,6 @@ stable while splitting implementation details by responsibility.
 flowchart LR
     M["main.rs<br/>entrypoint + terminal lifecycle"]
     CLI["cli.rs + cli/*<br/>CLI contract/parsing/execution/output"]
-    DAE["daemon.rs<br/>deprecated loopback local API + daemon lifecycle"]
     APP["app.rs + app/*<br/>runtime orchestration + state transitions"]
     UI["ui.rs + ui/*<br/>screen rendering"]
     ST["stats.rs + stats/*<br/>persistence/analytics/export"]
@@ -30,8 +29,6 @@ flowchart LR
     API["WakaTime API"]
 
     M --> CLI
-    CLI --> DAE
-    DAE --> APP
     M --> APP
     M --> UI
     APP --> CFG
@@ -61,8 +58,7 @@ flowchart LR
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `main.rs`                       | Composition root, CLI vs TUI dispatch, terminal setup/teardown, frame/tick loop                                                                                                                                                                                                                 | `cli`, `app`, `ui`, `crossterm`, `ratatui`                                                    |
 | `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`), with temporary allowlist and break-glass mapped into one temporary override recovery model | `timer`, `blocker`, `integration`, `notifications`, `schedule`, `calendar`, `stats`, `config` |
-| `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless timer controls, daemon lifecycle commands, schedule delay/temporary override controls, and local backup/restore. The standalone calendar refresh command is retired.                    | `app`, `daemon`, `config`, `stats`, `blocker`                                     |
-| `daemon.rs`                     | Deprecated headless daemon runtime boundary with loopback-only versioned local API, bearer-token auth, daemon metadata persistence, and graceful lifecycle/status/stop orchestration. New automation should route through CLI timer/session/workflow commands or the TUI, leaving this module as the future removal boundary.                                  | `app`, `cli`, filesystem, `ureq`, `tiny_http`                                                 |
+| `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless timer/session/workflow controls, schedule delay/temporary override controls, and local backup/restore. The standalone calendar refresh and daemon local API lifecycle commands are retired.                    | `app`, `config`, `stats`, `blocker`                                     |
 | `stats.rs` + `stats/*`          | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers, including canonical-path persistence and legacy read-time compatibility handling during deprecation windows                                                                                          | `app`, `task_labels`, filesystem                                                              |
 | `feature_inventory.rs`          | Deterministic feature inventory catalog with value/maintenance scoring and JSON/Markdown report generation for keep/merge/remove roadmap decisions                                                                                                                                              | `cli`, filesystem                                                                             |
 | `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                                                              | `app`, `timer`, `integration`                                                                 |
@@ -120,8 +116,8 @@ sequenceDiagram
    `App::on_tick()` and applies phase-driven side effects.
 4. `App` keeps blocking, notifications, scheduling (including optional calendar busy/overlap annotations), and supported WakaTime tracking in sync with
    timer state; side effects are isolated in dedicated modules.
-5. Daemon mode reuses the same `App` tick/update behavior in a headless loop,
-   then serves loopback-authenticated `/v1/*` API endpoints for automation.
+5. Headless automation routes through CLI timer/session/workflow commands; the
+   daemon local API lifecycle and loopback `/v1/*` endpoints are retired.
 
 ## Visibility rules
 
