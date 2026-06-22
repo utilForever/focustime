@@ -128,7 +128,7 @@ Dependency guidelines:
 - Keep `Cargo.lock` committed.
 - Run `cargo audit` when updating dependencies.
 - When cleanup work removes daemon, calendar, or integration paths, update the
-  README runtime dependency cleanup table with the owning path and run the
+  README runtime dependency ownership table with the owning path and run the
   release readiness checks in `REGRESSION_MATRIX.md`.
 - Before changing `Cargo.toml` for calendar-owned cleanup candidates, confirm
   non-test usage with `rg -n "ureq|chrono_tz|chrono-tz" src tests`.
