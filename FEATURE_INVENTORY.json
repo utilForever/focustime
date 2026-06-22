@@ -33,9 +33,9 @@
     ]
   },
   "summary": {
-    "total_features": 26,
+    "total_features": 25,
     "keep_count": 13,
-    "merge_count": 12,
+    "merge_count": 11,
     "remove_count": 1,
     "by_surface": [
       {
@@ -56,7 +56,7 @@
       },
       {
         "surface": "integration",
-        "feature_count": 5
+        "feature_count": 4
       }
     ],
     "covered_cli_flags": [
@@ -79,10 +79,6 @@
       "--config-doctor",
       "--config-migrate",
       "--config-migrate-apply",
-      "--daemon-port",
-      "--daemon-start",
-      "--daemon-status",
-      "--daemon-stop",
       "--diagnostics",
       "--dry-run",
       "--export",
@@ -510,25 +506,6 @@
       "failure_impact": 2,
       "maintenance_cost": 3.1,
       "value_to_maintenance_ratio": 0.65,
-      "recommendation": "merge"
-    },
-    {
-      "feature_id": "daemon-api-lifecycle",
-      "name": "Daemon API lifecycle",
-      "surface": "integration",
-      "description": "Run and manage daemon mode for automation and external tooling integration.",
-      "cli_flags": [
-        "--daemon-start",
-        "--daemon-status",
-        "--daemon-stop",
-        "--daemon-port"
-      ],
-      "value": 3,
-      "complexity": 4,
-      "support_burden": 4,
-      "failure_impact": 5,
-      "maintenance_cost": 4.25,
-      "value_to_maintenance_ratio": 0.71,
       "recommendation": "merge"
     },
     {

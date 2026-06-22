@@ -95,7 +95,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Removed migration-window and encrypted sync flags stay unavailable",
         "Retired blocklist category config no longer adds config-doctor warnings",
         "Retired blocklist category config still migrates into profile-level `sites` and `allowlist_sites`",
-        "Daemon local API lifecycle commands report retirement guidance",
+        "Daemon local API lifecycle commands stay removed",
         "WakaTime integration runtime exposes only supported tracking calls",
         "poll_wakatime_events_applies_async_updates",
         "disabled_wakatime_runtime_ignores_supported_hooks",
@@ -115,16 +115,16 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Removed migration-window flags (`--migrate`, `--dry-run`)",
         "Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`)",
         "Duplicate schedule/session start entry points",
-        "Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`)",
+        "Retired local daemon API",
+        "The local daemon API lifecycle commands (`--daemon-start`, `--daemon-status`, `--daemon-stop`, and `--daemon-port`) are removed",
+        "The loopback `/v1/*` daemon endpoints are no longer a supported runtime surface",
         "Broad integration lifecycle/capability hooks",
         "supported WakaTime integration runtime calls",
         "Runtime dependency cleanup candidates",
-        "`tiny_http`",
-        "`getrandom`",
         "`ureq` JSON feature",
         "`chrono-tz`",
-        "`base64` daemon usage",
-        "Calendar annotations no longer own runtime HTTP",
+        "`base64`",
+        "Calendar annotations and the retired daemon path no longer own runtime HTTP",
         "runtime scheduling only reads optional calendar annotation cache data",
         "Before changing `Cargo.toml`",
     ] {
@@ -139,9 +139,11 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
     assert!(changelog.contains("Integration runtime hook narrowing (#453)"));
     assert!(contributing.contains("cargo test --test v015_cleanup_regression"));
     assert!(contributing.contains("v0.15.x cleanup releases"));
-    assert!(contributing.contains("deprecated daemon bearer-token generation"));
-    assert!(contributing.contains("Calendar annotations no longer own runtime"));
-    assert!(matrix.contains("Calendar dependency ownership reflects"));
+    assert!(contributing.contains("retired daemon paths no longer own runtime HTTP"));
+    assert!(!contributing.contains("deprecated daemon bearer-token generation"));
+    assert!(!readme.contains("`tiny_http`"));
+    assert!(!readme.contains("`getrandom`"));
+    assert!(matrix.contains("Calendar and daemon cleanup leave runtime `ureq`"));
     assert!(matrix.contains("Runtime dependency removal candidates stay documented"));
 }
 

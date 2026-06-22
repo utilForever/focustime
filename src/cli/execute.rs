@@ -26,7 +26,6 @@ use crate::cli::{
 };
 
 mod blocklists;
-mod daemon_commands;
 mod dashboard;
 mod data;
 mod diagnostics;
@@ -38,9 +37,6 @@ pub(super) use blocklists::{
     apply_site_edit_command,
 };
 use blocklists::{execute_blocklist_profile_command, execute_blocklist_sites_command};
-use daemon_commands::{
-    execute_daemon_start_command, execute_daemon_status_command, execute_daemon_stop_command,
-};
 #[cfg(test)]
 pub(super) use dashboard::apply_history_dashboard_command;
 use dashboard::execute_history_dashboard_command;
@@ -71,15 +67,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Resume => execute_resume_command(cli_command.output),
         CommandKind::Stop => execute_stop_command(cli_command.output),
         CommandKind::Next => execute_next_command(cli_command.output),
-        CommandKind::DaemonStart { port } => {
-            execute_daemon_start_command(port, cli_command.output).map_err(UserMessage::from)
-        }
-        CommandKind::DaemonStatus => {
-            execute_daemon_status_command(cli_command.output).map_err(UserMessage::from)
-        }
-        CommandKind::DaemonStop => {
-            execute_daemon_stop_command(cli_command.output).map_err(UserMessage::from)
-        }
         CommandKind::Task { label } => execute_task_command(label, cli_command.output),
         CommandKind::TaskGoal { label, goal } => {
             execute_task_goal_command(label, goal, cli_command.output)
@@ -190,9 +177,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::BlocklistProfile { .. } => Some("blocklist-profile"),
         CommandKind::BlocklistSites { .. } => Some("blocklist-sites"),
         CommandKind::AllowlistSiteAddTemporary { .. } => Some("allowlist-site-add-temporary"),
-        CommandKind::DaemonStart { .. } => Some("daemon-start"),
-        CommandKind::DaemonStatus => Some("daemon-status"),
-        CommandKind::DaemonStop => Some("daemon-stop"),
         CommandKind::SessionTemplate { .. } => Some("session-template"),
         CommandKind::HistoryDashboard { .. } => Some("history-dashboard"),
     }

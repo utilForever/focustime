@@ -2,8 +2,7 @@ mod options;
 mod value;
 
 pub(super) use options::{
-    parse_daemon_port, parse_daemon_port_option, parse_watch_interval_option,
-    parse_watch_interval_secs, require_nonempty_key_value,
+    parse_watch_interval_option, parse_watch_interval_secs, require_nonempty_key_value,
 };
 pub(super) use value::{
     parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_profile_id,
@@ -48,10 +47,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::FocusIntention(_)
             | ParsedToken::TaskNote(_)
             | ParsedToken::Status
-            | ParsedToken::DaemonStart
-            | ParsedToken::DaemonStatus
-            | ParsedToken::DaemonStop
-            | ParsedToken::DaemonPort(_)
             | ParsedToken::Watch(_)
             | ParsedToken::Profile(_)
             | ParsedToken::Theme(_)
@@ -182,16 +177,6 @@ pub(super) fn parse_primary_command(
                 set_primary_command(&mut primary, PrimaryCommand::TaskNote(value.clone()))?
             }
             ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
-            ParsedToken::DaemonStart => {
-                set_primary_command(&mut primary, PrimaryCommand::DaemonStart)?
-            }
-            ParsedToken::DaemonStatus => {
-                set_primary_command(&mut primary, PrimaryCommand::DaemonStatus)?
-            }
-            ParsedToken::DaemonStop => {
-                set_primary_command(&mut primary, PrimaryCommand::DaemonStop)?
-            }
-            ParsedToken::DaemonPort(_) => {}
             ParsedToken::Watch(_) => {}
             ParsedToken::Profile(profile) => {
                 set_primary_command(&mut primary, PrimaryCommand::Profile(*profile))?
@@ -339,7 +324,6 @@ pub(super) fn finalize_cli_action(
     show_help: bool,
     output: OutputMode,
     primary: Option<PrimaryCommand>,
-    daemon_port: Option<u16>,
     watch_interval_secs: Option<u64>,
 ) -> Result<CliAction, String> {
     if show_help {
@@ -349,12 +333,6 @@ pub(super) fn finalize_cli_action(
     if watch_interval_secs.is_some() && !matches!(primary, Some(PrimaryCommand::Status)) {
         return Err(invalid_usage("`--watch` is only valid with `--status`."));
     }
-    if daemon_port.is_some() && !matches!(primary, Some(PrimaryCommand::DaemonStart)) {
-        return Err(invalid_usage(
-            "`--daemon-port` is only valid with `--daemon-start`.",
-        ));
-    }
-
     match primary {
         None => {
             if output == OutputMode::Json {
@@ -366,18 +344,6 @@ pub(super) fn finalize_cli_action(
         }
         Some(PrimaryCommand::Start) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Start,
-            output,
-        })),
-        Some(PrimaryCommand::DaemonStart) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::DaemonStart { port: daemon_port },
-            output,
-        })),
-        Some(PrimaryCommand::DaemonStatus) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::DaemonStatus,
-            output,
-        })),
-        Some(PrimaryCommand::DaemonStop) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::DaemonStop,
             output,
         })),
         Some(PrimaryCommand::Profile(profile)) => Ok(CliAction::RunCommand(CliCommand {
@@ -664,9 +630,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::TaskGoal { .. } => "--task-goal",
         PrimaryCommand::FocusIntention(_) => "--focus-intention",
         PrimaryCommand::TaskNote(_) => "--task-note",
-        PrimaryCommand::DaemonStart => "--daemon-start",
-        PrimaryCommand::DaemonStatus => "--daemon-status",
-        PrimaryCommand::DaemonStop => "--daemon-stop",
         PrimaryCommand::Profile(_) => "--profile",
         PrimaryCommand::Theme(_) => "--theme",
         PrimaryCommand::Goal(_) => "--goal",
