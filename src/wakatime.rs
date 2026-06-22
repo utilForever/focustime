@@ -507,6 +507,14 @@ impl WakatimeTracker {
         self.set_tracking_state(false);
     }
 
+    pub(crate) fn set_focus_tracking(&mut self, focus_running: bool) {
+        if focus_running && !self.is_tracking() {
+            self.on_focus_start();
+        } else if !focus_running && self.is_tracking() {
+            self.on_focus_stop();
+        }
+    }
+
     pub(crate) fn set_heartbeat_metadata(&mut self, metadata: WakatimeHeartbeatMetadata) {
         self.heartbeat_metadata = metadata.normalized();
     }

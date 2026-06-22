@@ -185,6 +185,27 @@ fn on_focus_stop_clears_tracking() {
 }
 
 #[test]
+fn set_focus_tracking_syncs_running_state() {
+    let mut tracker = tracker_with(Some("test-key"), false, 50);
+
+    tracker.set_focus_tracking(true);
+
+    assert!(tracker.is_tracking());
+    assert_eq!(tracker.secs_since_last_heartbeat, 0);
+    assert!(tracker.heartbeat_in_flight);
+
+    tracker.set_focus_tracking(true);
+
+    assert!(tracker.is_tracking());
+    assert!(tracker.heartbeat_in_flight);
+
+    tracker.set_focus_tracking(false);
+
+    assert!(!tracker.is_tracking());
+    assert!(!tracker.pending_immediate_heartbeat);
+}
+
+#[test]
 fn set_heartbeat_metadata_normalizes_and_updates_values() {
     let mut tracker = tracker_with(None, false, 0);
     tracker.set_heartbeat_metadata(WakatimeHeartbeatMetadata {
