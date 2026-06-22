@@ -1,6 +1,5 @@
 use crate::cli::{
-    BreakGlassCommandOutput, DaemonStartCommandOutput, DaemonStatusCommandOutput,
-    DaemonStopCommandOutput, FocusScoreOutput, GoalOutput, ScheduleDelayCommandOutput,
+    BreakGlassCommandOutput, FocusScoreOutput, GoalOutput, ScheduleDelayCommandOutput,
     SessionMetadataCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput,
     TaskGoalOutput, TimerStateOutput,
 };
@@ -24,55 +23,6 @@ pub(in crate::cli) fn print_session_metadata_command_output(
         payload.task_note.as_deref().unwrap_or("none")
     );
     print_timer_state_output(&payload.timer);
-}
-
-pub(in crate::cli) fn print_daemon_start_command_output(payload: &DaemonStartCommandOutput) {
-    print_daemon_api_deprecation(payload.replacement);
-    if payload.already_running {
-        println!("Daemon already running.");
-    } else {
-        println!("Daemon started.");
-    }
-    println!("PID: {}", payload.daemon.pid);
-    println!("Address: {}:{}", payload.daemon.host, payload.daemon.port);
-    println!(
-        "Started at epoch seconds: {}",
-        payload.daemon.started_at_epoch_secs
-    );
-}
-
-pub(in crate::cli) fn print_daemon_status_command_output(payload: &DaemonStatusCommandOutput) {
-    print_daemon_api_deprecation(payload.replacement);
-    println!("Daemon running: {}", payload.running);
-    if let Some(daemon) = &payload.daemon {
-        println!("PID: {}", daemon.pid);
-        println!("Address: {}:{}", daemon.host, daemon.port);
-        println!("Started at epoch seconds: {}", daemon.started_at_epoch_secs);
-    } else {
-        println!("Daemon metadata: unavailable");
-    }
-}
-
-pub(in crate::cli) fn print_daemon_stop_command_output(payload: &DaemonStopCommandOutput) {
-    print_daemon_api_deprecation(payload.replacement);
-    if !payload.was_running {
-        println!("No running daemon found.");
-        return;
-    }
-    if payload.stopped {
-        println!("Daemon stopped.");
-    } else {
-        println!("Stop signal sent, but daemon shutdown was not confirmed.");
-    }
-    if let Some(daemon) = &payload.daemon {
-        println!("PID: {}", daemon.pid);
-        println!("Address: {}:{}", daemon.host, daemon.port);
-    }
-}
-
-fn print_daemon_api_deprecation(replacement: &str) {
-    println!("Daemon local API is deprecated.");
-    println!("Replacement: {replacement}");
 }
 
 pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {

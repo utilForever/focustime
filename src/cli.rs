@@ -49,25 +49,23 @@ use output::{
     build_diagnostics_command_output, build_schedule_inspection_output, display_input_value,
     effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_config_doctor_output, print_config_migration_output, print_daemon_start_command_output,
-    print_daemon_status_command_output, print_daemon_stop_command_output,
-    print_diagnostics_command_output, print_export_output, print_feature_inventory_output,
-    print_goal_carry_command_output, print_goal_command_output,
-    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
-    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
-    print_session_metadata_command_output, print_session_template_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output,
-    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_config_doctor_output, print_config_migration_output, print_diagnostics_command_output,
+    print_export_output, print_feature_inventory_output, print_goal_carry_command_output,
+    print_goal_command_output, print_history_dashboard_command_output, print_json,
+    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
+    print_schedule_delay_command_output, print_session_metadata_command_output,
+    print_session_template_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_temporary_site_add_command_output,
+    print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
-    finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_daemon_port,
-    parse_daemon_port_option, parse_global_tokens, parse_goal_carry_value, parse_goal_value,
-    parse_monthly_goal_value, parse_primary_command, parse_profile_id, parse_schedule_value,
-    parse_site_edit_value, parse_strict_value, parse_task_goal_value, parse_theme_preset,
-    parse_watch_interval_option, parse_watch_interval_secs, parse_weekly_goal_value,
-    require_nonempty_key_value,
+    finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
+    parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_primary_command,
+    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
+    parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
+    parse_watch_interval_secs, parse_weekly_goal_value, require_nonempty_key_value,
 };
 use status::{
     available_theme_preset_views, build_status_output, build_task_goal_output, profile_id,
@@ -128,9 +126,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --allowlist-site-edit=OLD=NEW [--json]
   focustime --blocklist-site-delete=HOSTNAME [--json]
   focustime --allowlist-site-delete=HOSTNAME [--json]
-  focustime --daemon-start [--daemon-port=PORT] [--json]
-  focustime --daemon-status [--json]
-  focustime --daemon-stop [--json]
   focustime --config-doctor [--json]
   focustime --config-migrate [--json]
   focustime --config-migrate-apply [--json]
@@ -184,10 +179,6 @@ Options:
   --allowlist-site-edit       Replace allowlist hostname for the active blocklist profile using OLD=NEW
   --blocklist-site-delete     Delete blocklist hostname from the active blocklist profile
   --allowlist-site-delete     Delete allowlist hostname from the active blocklist profile
-  --daemon-start  Start local daemon mode in the background (loopback API + token auth)
-  --daemon-status Show local daemon mode status
-  --daemon-stop   Stop a running local daemon
-  --daemon-port   Override daemon API listen port (daemon start only; default random loopback port)
   --config-doctor  Run config diagnostics (invalid/conflicting/stale settings) with remediation guidance
   --config-migrate  Preview config migration assistant changes for deprecated/renamed keys
   --config-migrate-apply  Apply config migration assistant changes and write migrated config.toml
@@ -207,8 +198,6 @@ Retired/legacy command guidance:
 
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
-
-const DAEMON_API_REPLACEMENT: &str = "Use CLI timer, session, and workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OutputMode {
@@ -344,11 +333,6 @@ pub(crate) enum CommandKind {
     AllowlistSiteAddTemporary {
         input: String,
     },
-    DaemonStart {
-        port: Option<u16>,
-    },
-    DaemonStatus,
-    DaemonStop,
     SessionTemplate {
         command: SessionTemplateCommandKind,
     },
@@ -384,9 +368,6 @@ enum PrimaryCommand {
     },
     FocusIntention(Option<String>),
     TaskNote(Option<String>),
-    DaemonStart,
-    DaemonStatus,
-    DaemonStop,
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
@@ -449,10 +430,6 @@ enum ParsedToken {
     FocusIntention(Option<String>),
     TaskNote(Option<String>),
     Status,
-    DaemonStart,
-    DaemonStatus,
-    DaemonStop,
-    DaemonPort(u16),
     Watch(Option<u64>),
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
@@ -755,42 +732,6 @@ struct RestoreOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct DaemonConnectionOutput {
-    pid: u32,
-    host: String,
-    port: u16,
-    started_at_epoch_secs: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct DaemonStartCommandOutput {
-    action: &'static str,
-    deprecated: bool,
-    replacement: &'static str,
-    already_running: bool,
-    daemon: DaemonConnectionOutput,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct DaemonStatusCommandOutput {
-    action: &'static str,
-    deprecated: bool,
-    replacement: &'static str,
-    running: bool,
-    daemon: Option<DaemonConnectionOutput>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct DaemonStopCommandOutput {
-    action: &'static str,
-    deprecated: bool,
-    replacement: &'static str,
-    was_running: bool,
-    stopped: bool,
-    daemon: Option<DaemonConnectionOutput>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct TimerStateOutput {
     phase: &'static str,
     status: &'static str,
@@ -1088,11 +1029,9 @@ where
         }
     })?;
     let primary = parse_primary_command(&tokens).map_err(|message| usage_error(output, message))?;
-    let daemon_port =
-        parse_daemon_port_option(&tokens).map_err(|message| usage_error(output, message))?;
     let watch_interval_secs =
         parse_watch_interval_option(&tokens).map_err(|message| usage_error(output, message))?;
-    finalize_cli_action(show_help, output, primary, daemon_port, watch_interval_secs)
+    finalize_cli_action(show_help, output, primary, watch_interval_secs)
         .map_err(|message| usage_error(output, message))
 }
 

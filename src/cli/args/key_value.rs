@@ -1,12 +1,12 @@
 use crate::cli::{
-    KeyValueParser, ParsedToken, PathBuf, parse_daemon_port, parse_goal_carry_value,
-    parse_goal_value, parse_monthly_goal_value, parse_profile_id, parse_schedule_value,
-    parse_site_edit_value, parse_strict_value, parse_task_goal_value, parse_theme_preset,
-    parse_watch_interval_secs, parse_weekly_goal_value, require_nonempty_key_value,
+    KeyValueParser, ParsedToken, PathBuf, parse_goal_carry_value, parse_goal_value,
+    parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
+    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_watch_interval_secs,
+    parse_weekly_goal_value, require_nonempty_key_value,
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 34] = [
+    let parsers: [KeyValueParser; 33] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -22,7 +22,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_strict_key_value_arg,
         parse_schedule_set_key_value_arg,
         parse_watch_key_value_arg,
-        parse_daemon_port_key_value_arg,
         parse_backup_key_value_arg,
         parse_restore_key_value_arg,
         parse_export_key_value_arg,
@@ -253,17 +252,6 @@ fn parse_watch_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
         return Ok(Some(ParsedToken::Watch(Some(parse_watch_interval_secs(
             value,
         )?))));
-    }
-    Ok(None)
-}
-
-fn parse_daemon_port_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--daemon-port=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--daemon-port=` requires a port between 1 and 65535.",
-        )?;
-        return Ok(Some(ParsedToken::DaemonPort(parse_daemon_port(value)?)));
     }
     Ok(None)
 }

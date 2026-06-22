@@ -138,96 +138,50 @@ fn parse_status_watch_with_space_interval() {
 }
 
 #[test]
-fn parse_daemon_start_defaults_to_ephemeral_port() {
-    let parsed = parse(&["--daemon-start"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::DaemonStart { port: None },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_daemon_start_accepts_daemon_port_with_space_syntax() {
-    let parsed = parse(&["--daemon-start", "--daemon-port", "43123"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::DaemonStart { port: Some(43123) },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_daemon_status_supports_json_mode() {
-    let parsed = parse(&["--daemon-status", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::DaemonStatus,
-            output: OutputMode::Json
-        })
-    );
-}
-
-#[test]
-fn parse_daemon_stop_defaults_to_text_mode() {
-    let parsed = parse(&["--daemon-stop"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::DaemonStop,
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn daemon_lifecycle_json_emits_deprecated_replacement_payload() {
-    let connection = DaemonConnectionOutput {
-        pid: 42,
-        host: "127.0.0.1".to_string(),
-        port: 43123,
-        started_at_epoch_secs: 1_779_000_000,
-    };
-    let start_payload = DaemonStartCommandOutput {
-        action: "daemon-start",
-        deprecated: true,
-        replacement: DAEMON_API_REPLACEMENT,
-        already_running: false,
-        daemon: connection.clone(),
-    };
-    let status_payload = DaemonStatusCommandOutput {
-        action: "daemon-status",
-        deprecated: true,
-        replacement: DAEMON_API_REPLACEMENT,
-        running: true,
-        daemon: Some(connection.clone()),
-    };
-    let stop_payload = DaemonStopCommandOutput {
-        action: "daemon-stop",
-        deprecated: true,
-        replacement: DAEMON_API_REPLACEMENT,
-        was_running: true,
-        stopped: true,
-        daemon: Some(connection),
-    };
-
-    for payload in [
-        serde_json::to_value(&start_payload).unwrap(),
-        serde_json::to_value(&status_payload).unwrap(),
-        serde_json::to_value(&stop_payload).unwrap(),
+fn parse_rejects_retired_daemon_lifecycle_options() {
+    for flag in [
+        "--daemon-start",
+        "--daemon-status",
+        "--daemon-stop",
+        "--daemon-port=43123",
     ] {
-        assert_eq!(payload["deprecated"], true);
-        assert_eq!(payload["replacement"], DAEMON_API_REPLACEMENT);
-        assert!(payload["replacement"].as_str().is_some_and(|replacement| {
-            replacement.contains("--start")
-                && replacement.contains("--focus-intention")
-                && replacement.contains("--break-glass-trigger")
-        }));
+        let error = parse_with_contract(&[flag, "--json"]).unwrap_err();
+        assert_eq!(error.output, OutputMode::Json);
+        assert!(error.message.contains(&format!("Unknown option `{flag}`")));
+        assert!(error.hint.is_none());
+    }
+}
+
+#[test]
+fn usage_text_omits_retired_daemon_lifecycle_options() {
+    let usage = usage_text();
+    for retired in [
+        "--daemon-start",
+        "--daemon-status",
+        "--daemon-stop",
+        "--daemon-port",
+    ] {
+        assert!(!usage.contains(retired));
+    }
+}
+
+#[test]
+fn usage_text_keeps_supported_cli_automation_replacements() {
+    let usage = usage_text();
+    for supported in [
+        "--start",
+        "--pause",
+        "--resume",
+        "--stop",
+        "--next",
+        "--task",
+        "--focus-intention",
+        "--task-note",
+        "--schedule-delay",
+        "--break-glass-trigger",
+        "--break-glass-cancel",
+    ] {
+        assert!(usage.contains(supported));
     }
 }
 
@@ -1972,23 +1926,6 @@ fn parse_rejects_watch_without_status() {
 fn parse_rejects_watch_with_non_status_command() {
     let error = parse(&["--export", "--watch"]).unwrap_err();
     assert!(error.contains("`--watch` is only valid with `--status`"));
-}
-
-#[test]
-fn parse_rejects_daemon_port_without_daemon_start() {
-    let error = parse(&["--daemon-port=41000"]).unwrap_err();
-    assert!(error.contains("`--daemon-port` is only valid with `--daemon-start`"));
-}
-
-#[test]
-fn parse_rejects_duplicate_daemon_port_flags() {
-    let error = parse(&[
-        "--daemon-start",
-        "--daemon-port=41000",
-        "--daemon-port=42000",
-    ])
-    .unwrap_err();
-    assert!(error.contains("`--daemon-port` can only be specified once"));
 }
 
 #[test]

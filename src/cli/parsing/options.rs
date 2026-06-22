@@ -17,21 +17,6 @@ pub(in crate::cli) fn parse_watch_interval_option(
     Ok(interval)
 }
 
-pub(in crate::cli) fn parse_daemon_port_option(
-    tokens: &[ParsedToken],
-) -> Result<Option<u16>, String> {
-    let mut port: Option<u16> = None;
-    for token in tokens {
-        if let ParsedToken::DaemonPort(value) = token {
-            if port.is_some() {
-                return Err(invalid_usage("`--daemon-port` can only be specified once."));
-            }
-            port = Some(*value);
-        }
-    }
-    Ok(port)
-}
-
 pub(in crate::cli) fn parse_watch_interval_secs(value: &str) -> Result<u64, String> {
     let trimmed = value.trim();
     let secs = trimmed
@@ -43,19 +28,6 @@ pub(in crate::cli) fn parse_watch_interval_secs(value: &str) -> Result<u64, Stri
         ));
     }
     Ok(secs)
-}
-
-pub(in crate::cli) fn parse_daemon_port(value: &str) -> Result<u16, String> {
-    let trimmed = value.trim();
-    let port = trimmed
-        .parse::<u16>()
-        .map_err(|_| invalid_usage("`--daemon-port` requires a port between 1 and 65535."))?;
-    if port == 0 {
-        return Err(invalid_usage(
-            "`--daemon-port` requires a port between 1 and 65535.",
-        ));
-    }
-    Ok(port)
 }
 
 pub(in crate::cli) fn require_nonempty_key_value<'a>(

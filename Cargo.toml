@@ -22,8 +22,6 @@ toml = "1.1"
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 chrono-tz = "0.10"
-getrandom = "0.4"
-tiny_http = "0.12"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winrt-toast-reborn = "0.3.8"

@@ -3,7 +3,6 @@ mod blocker;
 mod calendar;
 mod cli;
 mod config;
-mod daemon;
 mod error;
 mod feature_inventory;
 mod integration;

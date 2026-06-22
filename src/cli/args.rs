@@ -3,7 +3,7 @@ mod key_value;
 pub(super) use key_value::classify_key_value_arg;
 
 use crate::cli::{
-    OsString, OutputMode, ParsedToken, PathBuf, ValueArgParser, invalid_usage, parse_daemon_port,
+    OsString, OutputMode, ParsedToken, PathBuf, ValueArgParser, invalid_usage,
     parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_profile_id,
     parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
     parse_theme_preset, parse_watch_interval_secs, parse_weekly_goal_value,
@@ -60,7 +60,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 34] = [
+    let parsers: [(&str, ValueArgParser); 33] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -76,7 +76,6 @@ fn classify_value_arg(
         ("--strict", classify_strict_arg),
         ("--schedule-set", classify_schedule_set_arg),
         ("--watch", classify_watch_arg),
-        ("--daemon-port", classify_daemon_port_arg),
         ("--backup", classify_backup_arg),
         ("--restore", classify_restore_arg),
         ("--export", classify_export_arg),
@@ -141,9 +140,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--stop" => Some(ParsedToken::Stop),
         "--next" => Some(ParsedToken::Next),
         "--status" => Some(ParsedToken::Status),
-        "--daemon-start" => Some(ParsedToken::DaemonStart),
-        "--daemon-status" => Some(ParsedToken::DaemonStatus),
-        "--daemon-stop" => Some(ParsedToken::DaemonStop),
         "--schedule" => Some(ParsedToken::Schedule),
         "--schedule-delay" => Some(ParsedToken::ScheduleDelay),
         "--break-glass-trigger" => Some(ParsedToken::BreakGlassTrigger),
@@ -312,21 +308,6 @@ fn classify_watch_arg(args: &[String], index: usize) -> Result<(ParsedToken, usi
         ));
     }
     Ok((ParsedToken::Watch(None), 1))
-}
-
-fn classify_daemon_port_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(
-            next,
-            "`--daemon-port` requires a port between 1 and 65535.",
-        )?;
-        return Ok((ParsedToken::DaemonPort(parse_daemon_port(value)?), 2));
-    }
-    Err(invalid_usage(
-        "`--daemon-port` requires a value. Use `--daemon-port=PORT`.",
-    ))
 }
 
 fn classify_blocklist_profile_arg(

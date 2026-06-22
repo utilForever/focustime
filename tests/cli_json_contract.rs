@@ -4,112 +4,12 @@ use std::{
     process::{Child, Command, Output, Stdio},
     sync::atomic::{AtomicU64, Ordering},
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-#[derive(Debug, Deserialize)]
-struct DaemonStateFile {
-    pid: u32,
-    host: String,
-    port: u16,
-    token: String,
-    started_at_epoch_secs: i64,
-}
-
-struct DaemonGuard<'a> {
-    env: &'a TestEnv,
-}
-
-impl Drop for DaemonGuard<'_> {
-    fn drop(&mut self) {
-        let _ = self.env.run(&["--daemon-stop", "--json"]);
-    }
-}
-
-fn start_daemon(env: &TestEnv) -> DaemonGuard<'_> {
-    let output = env.run(&["--daemon-start", "--json"]);
-    assert_eq!(output.status.code(), Some(0));
-    assert!(stderr_text(&output).trim().is_empty());
-    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(payload["action"], "daemon-start");
-    assert_eq!(payload["deprecated"], true);
-    assert!(payload["replacement"].as_str().is_some_and(|replacement| {
-        replacement.contains("--start")
-            && replacement.contains("--focus-intention")
-            && replacement.contains("--break-glass-trigger")
-    }));
-    assert!(payload["daemon"]["pid"].as_u64().is_some_and(|pid| pid > 0));
-    assert_eq!(payload["daemon"]["host"], "127.0.0.1");
-    assert!(
-        payload["daemon"]["port"]
-            .as_u64()
-            .is_some_and(|port| port > 0)
-    );
-    DaemonGuard { env }
-}
-
-fn load_daemon_state(env: &TestEnv) -> DaemonStateFile {
-    let state_path = env.app_data_dir().join("daemon-state.toml");
-    let content = fs::read_to_string(state_path).expect("failed to read daemon state file");
-    toml::from_str::<DaemonStateFile>(&content).expect("failed to parse daemon state file")
-}
-
-fn daemon_get_json(state: &DaemonStateFile, path: &str) -> Value {
-    let url = format!("http://{}:{}{path}", state.host, state.port);
-    let auth_header = format!("Bearer {}", state.token);
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(2)))
-        .build()
-        .into();
-    let response = agent
-        .get(&url)
-        .header("Authorization", &auth_header)
-        .call()
-        .expect("daemon GET request failed");
-    response
-        .into_body()
-        .read_json::<Value>()
-        .expect("daemon GET response body should be valid JSON")
-}
-
-fn daemon_post_json(state: &DaemonStateFile, path: &str, payload: Value) -> Value {
-    let url = format!("http://{}:{}{path}", state.host, state.port);
-    let auth_header = format!("Bearer {}", state.token);
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(2)))
-        .build()
-        .into();
-    let response = agent
-        .post(&url)
-        .header("Authorization", &auth_header)
-        .send_json(payload)
-        .expect("daemon POST request failed");
-    response
-        .into_body()
-        .read_json::<Value>()
-        .expect("daemon POST response body should be valid JSON")
-}
-
-fn wait_until_daemon_stopped(env: &TestEnv) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline {
-        let output = env.run(&["--daemon-status", "--json"]);
-        assert_eq!(output.status.code(), Some(0));
-        assert!(stderr_text(&output).trim().is_empty());
-        let payload: Value =
-            serde_json::from_slice(&output.stdout).expect("daemon status should be JSON");
-        if payload["running"] == Value::Bool(false) {
-            return;
-        }
-        thread::sleep(Duration::from_millis(100));
-    }
-    panic!("daemon did not stop before timeout");
-}
 
 struct TestEnv {
     root: PathBuf,
@@ -1235,119 +1135,27 @@ fn recurring_schedule_is_profile_scoped_via_cli_commands() {
 }
 
 #[test]
-fn daemon_lifecycle_json_contract_round_trip() {
-    let env = TestEnv::new("daemon-lifecycle-json");
+fn retired_daemon_lifecycle_commands_emit_json_usage_errors() {
+    let env = TestEnv::new("retired-daemon-lifecycle");
 
-    let start_output = env.run(&["--daemon-start", "--json"]);
-    assert_eq!(start_output.status.code(), Some(0));
-    assert!(stderr_text(&start_output).trim().is_empty());
-    let start_payload: Value =
-        serde_json::from_slice(&start_output.stdout).expect("stdout should be JSON");
-    assert_eq!(start_payload["action"], "daemon-start");
-    assert_eq!(start_payload["deprecated"], true);
-    assert!(
-        start_payload["replacement"]
-            .as_str()
-            .is_some_and(|replacement| replacement.contains("--start")
-                && replacement.contains("--focus-intention")
-                && replacement.contains("--break-glass-trigger"))
-    );
-    assert_eq!(start_payload["already_running"], false);
-    assert!(
-        start_payload["daemon"]["pid"]
-            .as_u64()
-            .is_some_and(|pid| pid > 0)
-    );
-    assert_eq!(start_payload["daemon"]["host"], "127.0.0.1");
-    assert!(
-        start_payload["daemon"]["port"]
-            .as_u64()
-            .is_some_and(|port| port > 0)
-    );
-    assert!(
-        start_payload["daemon"]["started_at_epoch_secs"]
-            .as_i64()
-            .is_some_and(|timestamp| timestamp > 0)
-    );
-
-    let status_output = env.run(&["--daemon-status", "--json"]);
-    assert_eq!(status_output.status.code(), Some(0));
-    assert!(stderr_text(&status_output).trim().is_empty());
-    let status_payload: Value =
-        serde_json::from_slice(&status_output.stdout).expect("stdout should be JSON");
-    assert_eq!(status_payload["action"], "daemon-status");
-    assert_eq!(status_payload["deprecated"], true);
-    assert_eq!(status_payload["replacement"], start_payload["replacement"]);
-    assert_eq!(status_payload["running"], true);
-    assert_eq!(
-        status_payload["daemon"]["pid"],
-        start_payload["daemon"]["pid"]
-    );
-    assert_eq!(status_payload["daemon"]["host"], "127.0.0.1");
-    assert_eq!(
-        status_payload["daemon"]["port"],
-        start_payload["daemon"]["port"]
-    );
-
-    let stop_output = env.run(&["--daemon-stop", "--json"]);
-    assert_eq!(stop_output.status.code(), Some(0));
-    assert!(stderr_text(&stop_output).trim().is_empty());
-    let stop_payload: Value = serde_json::from_slice(&stop_output.stdout).expect("stdout JSON");
-    assert_eq!(stop_payload["action"], "daemon-stop");
-    assert_eq!(stop_payload["deprecated"], true);
-    assert_eq!(stop_payload["replacement"], start_payload["replacement"]);
-    assert_eq!(stop_payload["was_running"], true);
-    assert_eq!(stop_payload["stopped"], true);
-    assert_eq!(
-        stop_payload["daemon"]["pid"],
-        start_payload["daemon"]["pid"]
-    );
-
-    let status_after_stop = env.run(&["--daemon-status", "--json"]);
-    assert_eq!(status_after_stop.status.code(), Some(0));
-    assert!(stderr_text(&status_after_stop).trim().is_empty());
-    let status_after_stop_payload: Value =
-        serde_json::from_slice(&status_after_stop.stdout).expect("stdout JSON");
-    assert_eq!(status_after_stop_payload["action"], "daemon-status");
-    assert_eq!(status_after_stop_payload["running"], false);
-}
-
-#[test]
-fn daemon_local_api_supports_timer_and_metadata_controls() {
-    let env = TestEnv::new("daemon-local-api-controls");
-    let _daemon_guard = start_daemon(&env);
-    let state = load_daemon_state(&env);
-    assert!(state.pid > 0);
-    assert_eq!(state.host, "127.0.0.1");
-    assert!(state.port > 0);
-    assert!(!state.token.trim().is_empty());
-    assert!(state.started_at_epoch_secs > 0);
-
-    let health = daemon_get_json(&state, "/v1/health");
-    assert_eq!(health["ok"], true);
-    assert_eq!(health["data"]["status"], "ok");
-
-    let task_select = daemon_post_json(&state, "/v1/task/select", json!({ "label": "Docs" }));
-    assert_eq!(task_select["ok"], true);
-    assert!(task_select["data"]["state"].is_object());
-
-    let timer_start = daemon_post_json(&state, "/v1/timer/start", json!({}));
-    assert_eq!(timer_start["ok"], true);
-    assert_eq!(timer_start["data"]["phase"], "focus");
-    assert_eq!(timer_start["data"]["status"], "running");
-    assert_eq!(timer_start["data"]["selected_task_label"], "Docs");
-
-    let focus_intention = daemon_post_json(
-        &state,
-        "/v1/session/focus-intention",
-        json!({ "value": "Write docs" }),
-    );
-    assert_eq!(focus_intention["ok"], true);
-    assert_eq!(focus_intention["data"]["focus_intention"], "Write docs");
-    assert_eq!(focus_intention["data"]["state"]["status"], "running");
-
-    let stop = daemon_post_json(&state, "/v1/daemon/stop", json!({}));
-    assert_eq!(stop["ok"], true);
-    assert_eq!(stop["data"]["stopping"], true);
-    wait_until_daemon_stopped(&env);
+    for flag in [
+        "--daemon-start",
+        "--daemon-status",
+        "--daemon-stop",
+        "--daemon-port=43123",
+    ] {
+        let output = env.run(&[flag, "--json"]);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(stderr_text(&output).trim().is_empty());
+        let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+        assert_eq!(payload["ok"], false);
+        assert_eq!(payload["error"]["kind"], "usage");
+        assert_eq!(payload["error"]["exit_code"], 2);
+        assert!(
+            payload["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains(&format!("Unknown option `{flag}`")))
+        );
+        assert!(payload["error"].get("hint").is_none());
+    }
 }
