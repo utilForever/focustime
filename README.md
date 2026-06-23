@@ -295,7 +295,8 @@ Milestone policy:
 - **v0.15.7:** standalone blocking preview access, Focus History dashboard customization paths, and dedicated status comparison guidance stay removed while diagnostics, the stable KPI dashboard, export artifacts, and Focus History remain the supported replacements.
 - **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites`, `automation_triggers` config is removed during migration, and neither legacy surface is re-persisted by runtime writes.
 - **v0.15.9:** standalone calendar sync and daemon local API command access are retired; calendar data remains optional schedule annotation context from supported caches, and dependency ownership reflects the removed refresh and daemon paths.
-- **v0.15.x future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
+- **v0.16.0:** daemon-owned runtime dependency cleanup is locked; WakaTime owns runtime HTTP and Basic auth while daemon-only local API server and direct random-token dependencies stay removed.
+- **Future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
 ### v0.15.x cleanup roadmap
@@ -1025,12 +1026,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.15.9`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.16.0`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.15.9](https://github.com/utilForever/focustime/releases/tag/v0.15.9).
+The latest stable release is [v0.16.0](https://github.com/utilForever/focustime/releases/tag/v0.16.0).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 
