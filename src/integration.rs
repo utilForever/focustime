@@ -4,22 +4,8 @@ use crate::wakatime::{
 
 const WAKATIME_PLUGIN_NAME: &str = "wakatime";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum IntegrationId {
-    Wakatime,
-}
-
-impl IntegrationId {
-    fn from_config_name(value: &str) -> Option<Self> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            WAKATIME_PLUGIN_NAME => Some(Self::Wakatime),
-            _ => None,
-        }
-    }
-}
-
 pub(crate) struct IntegrationRuntime {
-    wakatime: Option<WakatimeIntegration>,
+    wakatime: Option<WakatimeTracker>,
 }
 
 impl IntegrationRuntime {
@@ -31,61 +17,53 @@ impl IntegrationRuntime {
         let mut warnings = Vec::new();
         let mut wakatime = None;
         for plugin_name in normalized_enabled_plugins(enabled_plugins) {
-            let Some(plugin_id) = IntegrationId::from_config_name(&plugin_name) else {
+            if plugin_name == WAKATIME_PLUGIN_NAME {
+                wakatime = Some(WakatimeTracker::new_with_settings(
+                    wakatime_metadata.clone(),
+                    wakatime_runtime.clone(),
+                ));
+            } else {
                 warnings.push(format!("unknown integration `{plugin_name}` ignored"));
-                continue;
-            };
-            match plugin_id {
-                IntegrationId::Wakatime => {
-                    wakatime = Some(WakatimeIntegration::new(
-                        wakatime_metadata.clone(),
-                        wakatime_runtime.clone(),
-                    ));
-                }
             }
         }
         (Self { wakatime }, warnings)
     }
 
     pub(crate) fn poll_wakatime_events(&mut self) {
-        let Some(wakatime) = self.wakatime.as_mut() else {
-            return;
-        };
-        wakatime.poll_events();
+        if let Some(wakatime) = self.wakatime.as_mut() {
+            wakatime.poll_events();
+        }
     }
 
     pub(crate) fn set_wakatime_tracking(&mut self, focus_running: bool) {
-        let Some(wakatime) = self.wakatime.as_mut() else {
-            return;
-        };
-        wakatime.set_tracking(focus_running);
+        if let Some(wakatime) = self.wakatime.as_mut() {
+            wakatime.set_focus_tracking(focus_running);
+        }
     }
 
     pub(crate) fn advance_wakatime(&mut self, elapsed_secs: u64) {
-        let Some(wakatime) = self.wakatime.as_mut() else {
-            return;
-        };
-        wakatime.advance(elapsed_secs);
+        if let Some(wakatime) = self.wakatime.as_mut() {
+            wakatime.tick_elapsed(elapsed_secs);
+        }
     }
 
     pub(crate) fn set_wakatime_metadata(&mut self, metadata: WakatimeHeartbeatMetadata) {
-        let Some(wakatime) = self.wakatime.as_mut() else {
-            return;
-        };
-        wakatime.set_metadata(metadata);
+        if let Some(wakatime) = self.wakatime.as_mut() {
+            wakatime.set_heartbeat_metadata(metadata);
+        }
     }
 
     pub(crate) fn wakatime_runtime_state(&self) -> WakatimeRuntimeState {
         self.wakatime
             .as_ref()
-            .map(|wakatime| wakatime.tracker().runtime_state())
+            .map(WakatimeTracker::runtime_state)
             .unwrap_or(WakatimeRuntimeState::NotConfigured)
     }
 
     pub(crate) fn wakatime_last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
         self.wakatime
             .as_ref()
-            .and_then(|wakatime| wakatime.tracker().last_successful_heartbeat_epoch_secs())
+            .and_then(WakatimeTracker::last_successful_heartbeat_epoch_secs)
     }
 
     #[cfg(test)]
@@ -95,56 +73,19 @@ impl IntegrationRuntime {
 
     #[cfg(test)]
     pub(crate) fn replace_wakatime_tracker_for_tests(&mut self, tracker: WakatimeTracker) {
-        let Some(wakatime) = self.wakatime.as_mut() else {
-            return;
-        };
-        wakatime.tracker = tracker;
+        if let Some(wakatime) = self.wakatime.as_mut() {
+            *wakatime = tracker;
+        }
     }
 
     #[cfg(test)]
     pub(crate) fn wakatime_tracker_mut_for_tests(&mut self) -> Option<&mut WakatimeTracker> {
-        self.wakatime.as_mut().map(|wakatime| &mut wakatime.tracker)
+        self.wakatime.as_mut()
     }
 
     #[cfg(test)]
     pub(crate) fn wakatime_tracker_for_tests(&self) -> Option<&WakatimeTracker> {
-        self.wakatime.as_ref().map(WakatimeIntegration::tracker)
-    }
-}
-
-struct WakatimeIntegration {
-    tracker: WakatimeTracker,
-}
-
-impl WakatimeIntegration {
-    fn new(metadata: WakatimeHeartbeatMetadata, runtime: WakatimeRuntimeOptions) -> Self {
-        Self {
-            tracker: WakatimeTracker::new_with_settings(metadata, runtime),
-        }
-    }
-
-    fn tracker(&self) -> &WakatimeTracker {
-        &self.tracker
-    }
-
-    fn poll_events(&mut self) {
-        self.tracker.poll_events();
-    }
-
-    fn set_tracking(&mut self, focus_running: bool) {
-        if focus_running && !self.tracker.is_tracking() {
-            self.tracker.on_focus_start();
-        } else if !focus_running && self.tracker.is_tracking() {
-            self.tracker.on_focus_stop();
-        }
-    }
-
-    fn advance(&mut self, elapsed_secs: u64) {
-        self.tracker.tick_elapsed(elapsed_secs);
-    }
-
-    fn set_metadata(&mut self, metadata: WakatimeHeartbeatMetadata) {
-        self.tracker.set_heartbeat_metadata(metadata);
+        self.wakatime.as_ref()
     }
 }
 
