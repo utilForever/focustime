@@ -60,7 +60,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 33] = [
+    let parsers: [(&str, ValueArgParser); 32] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -79,7 +79,6 @@ fn classify_value_arg(
         ("--backup", classify_backup_arg),
         ("--restore", classify_restore_arg),
         ("--export", classify_export_arg),
-        ("--feature-inventory", classify_feature_inventory_arg),
         ("--blocklist-profile", classify_blocklist_profile_arg),
         (
             "--blocklist-profile-create",
@@ -250,18 +249,6 @@ fn classify_export_arg(args: &[String], index: usize) -> Result<(ParsedToken, us
         index,
         ParsedToken::Export,
         "`--export` requires a target directory.",
-    )
-}
-
-fn classify_feature_inventory_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    classify_optional_artifact_path_arg(
-        args,
-        index,
-        ParsedToken::FeatureInventory,
-        "`--feature-inventory` requires a target directory.",
     )
 }
 

@@ -1047,29 +1047,17 @@ fn parse_export_with_equals_accepts_directory() {
 }
 
 #[test]
-fn parse_feature_inventory_without_value_uses_current_directory() {
-    let parsed = parse(&["--feature-inventory"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::FeatureInventory { dir: None },
-            output: OutputMode::Text
-        })
-    );
-}
+fn parse_feature_inventory_is_retired() {
+    let error = parse_with_contract(&["--feature-inventory=reports", "--json"]).unwrap_err();
 
-#[test]
-fn parse_feature_inventory_with_equals_accepts_directory() {
-    let parsed = parse(&["--feature-inventory=reports"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::FeatureInventory {
-                dir: Some(PathBuf::from("reports"))
-            },
-            output: OutputMode::Text
-        })
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert_eq!(error.output, OutputMode::Json);
+    assert!(
+        error
+            .message
+            .contains("Unknown option `--feature-inventory=reports`.")
     );
+    assert!(error.hint.is_none());
 }
 
 #[test]
@@ -1427,17 +1415,6 @@ fn classify_key_value_arg_accepts_export_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_feature_inventory_equals_value() {
-    let parsed = classify_key_value_arg("--feature-inventory=reports").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::FeatureInventory(Some(PathBuf::from(
-            "reports"
-        ))))
-    );
-}
-
-#[test]
 fn classify_key_value_arg_accepts_backup_equals_value() {
     let parsed = classify_key_value_arg("--backup=reports").unwrap();
     assert_eq!(
@@ -1594,12 +1571,6 @@ fn classify_key_value_arg_ignores_retired_history_dashboard_customization() {
 fn classify_key_value_arg_rejects_empty_export_equals_value() {
     let error = classify_key_value_arg("--export=").unwrap_err();
     assert!(error.contains("`--export=` requires a target directory."));
-}
-
-#[test]
-fn classify_key_value_arg_rejects_empty_feature_inventory_equals_value() {
-    let error = classify_key_value_arg("--feature-inventory=").unwrap_err();
-    assert!(error.contains("`--feature-inventory=` requires a target directory."));
 }
 
 #[test]
@@ -1869,8 +1840,8 @@ fn parse_rejects_multiple_primary_commands_for_backup_and_restore() {
 }
 
 #[test]
-fn parse_rejects_multiple_primary_commands_for_export_and_feature_inventory() {
-    let error = parse(&["--export", "--feature-inventory"]).unwrap_err();
+fn parse_rejects_multiple_primary_commands_for_backup_and_export() {
+    let error = parse(&["--backup", "--export"]).unwrap_err();
     assert!(error.contains("Multiple primary commands"));
 }
 
@@ -1899,18 +1870,6 @@ fn parse_start_supports_json_mode() {
         parsed,
         CliAction::RunCommand(CliCommand {
             kind: CommandKind::Start,
-            output: OutputMode::Json
-        })
-    );
-}
-
-#[test]
-fn parse_feature_inventory_supports_json_mode() {
-    let parsed = parse(&["--feature-inventory", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::FeatureInventory { dir: None },
             output: OutputMode::Json
         })
     );

@@ -21,9 +21,9 @@ pub(super) use status::{
 };
 
 use crate::cli::{
-    BackupOutput, BlocklistProfileConfig, ExportOutput, FeatureInventoryOutput,
-    GoalCarryCommandOutput, GoalCommandOutput, ProfileOutput, RestoreOutput, ScheduleCommandOutput,
-    Serialize, StrictCommandOutput, TaskGoalCommandOutput, ThemeCommandOutput, Write, io,
+    BackupOutput, BlocklistProfileConfig, ExportOutput, GoalCarryCommandOutput, GoalCommandOutput,
+    ProfileOutput, RestoreOutput, ScheduleCommandOutput, Serialize, StrictCommandOutput,
+    TaskGoalCommandOutput, ThemeCommandOutput, Write, io,
 };
 use chrono::{Local, TimeZone};
 
@@ -81,21 +81,6 @@ pub(super) fn print_theme_command_output(payload: &ThemeCommandOutput) {
 pub(super) fn print_export_output(payload: &ExportOutput) {
     println!("Exported stats to {}", payload.export_dir.display());
     print_artifact_paths(&[("JSON", &payload.json_path), ("CSV", &payload.csv_path)]);
-}
-
-pub(super) fn print_feature_inventory_output(payload: &FeatureInventoryOutput) {
-    println!(
-        "Exported feature inventory report to {}",
-        payload.export_dir.display()
-    );
-    print_artifact_paths(&[
-        ("JSON", &payload.json_path),
-        ("Markdown", &payload.markdown_path),
-    ]);
-    println!(
-        "Features: {} (keep {}, merge {}, remove {})",
-        payload.total_features, payload.keep_count, payload.merge_count, payload.remove_count
-    );
 }
 
 pub(super) fn print_backup_output(payload: &BackupOutput) {

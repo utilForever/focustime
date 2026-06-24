@@ -4,7 +4,6 @@ mod calendar;
 mod cli;
 mod config;
 mod error;
-mod feature_inventory;
 mod integration;
 mod notifications;
 mod schedule;
