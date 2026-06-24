@@ -243,11 +243,6 @@ Backup/restore behavior:
 - `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
 - Runtime persistence is canonical-path only; if only legacy `stats.toml` exists, copy it to the canonical stats path (the backup/restore commands can help).
 
-Retired workflow notice:
-
-- `--sync-backup` and `--sync-restore` are retired; use local `--backup` and `--restore` for portable recovery workflows.
-- `--sync-passphrase` is also retired; there is no direct replacement because encrypted sync/backups are no longer supported.
-
 ### WakaTime integration runtime
 
 `focustime` routes supported WakaTime tracking behavior through a narrow
@@ -337,8 +332,6 @@ Early deprecation notices:
 | Standalone usage-signal command (`--usage-signals`) | Removed; use `--feature-inventory` for cleanup reporting while raw command/screen frequency summaries remain internal cleanup inputs. |
 | Standalone calendar refresh command (`--calendar-sync`) | Removed; scheduling only consumes an optional existing calendar annotation cache when it is enabled and available. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
-| Removed migration-window flags (`--migrate`, `--dry-run`) | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
-| Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`) | Use `--backup` and `--restore` for local portable recovery; there is no direct passphrase replacement because encrypted sync is retired. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
 
 Runtime dependency ownership after daemon cleanup:
@@ -351,20 +344,10 @@ Runtime dependency ownership after daemon cleanup:
 
 When changing `Cargo.toml` dependency ownership, run `rg -n "ureq|chrono_tz|chrono-tz" src tests`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
 
-### Low-value feature retirements
-
-Retired low-value command surfaces and replacements:
-
-| Retired commands | Replacement behavior |
-| --- | --- |
-| `--migrate`, `--dry-run` | Use `--config-migrate` to preview config changes and `--config-migrate-apply` to write migrated config with a backup. |
-| `--sync-backup`, `--sync-restore` | Use `--backup` and `--restore` for portable recovery and migration workflows. |
-| `--sync-passphrase` | No direct replacement; encrypted sync/backups are no longer supported. |
-
 ### CLI JSON/error contract
 
 - `--json` success responses are emitted to `stdout` as JSON and exit with code `0`.
-- `--json` failures are emitted to `stdout` as JSON (no mixed human text) and exit with a non-zero code; removed command paths include replacement guidance in `error.hint`.
+- `--json` failures are emitted to `stdout` as JSON (no mixed human text) and exit with a non-zero code; ordinary unsupported options omit `error.hint`.
 - `--status --watch --json` emits newline-delimited compact JSON snapshots continuously until interrupted, then exits cleanly after the current snapshot.
 - Text-mode failures are emitted to `stderr` for interactive readability.
 

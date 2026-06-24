@@ -98,7 +98,6 @@ struct RemovedCliCase {
     issue: &'static str,
     args: &'static [&'static str],
     removed_flag: &'static str,
-    replacement_hint: &'static str,
 }
 
 const REMOVED_CLI_CASES: &[RemovedCliCase] = &[
@@ -106,31 +105,26 @@ const REMOVED_CLI_CASES: &[RemovedCliCase] = &[
         issue: "#299",
         args: &["--migrate", "--json"],
         removed_flag: "--migrate",
-        replacement_hint: "--config-migrate",
     },
     RemovedCliCase {
         issue: "#299",
         args: &["--dry-run", "--json"],
         removed_flag: "--dry-run",
-        replacement_hint: "--config-migrate",
     },
     RemovedCliCase {
         issue: "#413",
         args: &["--sync-backup", "--json"],
         removed_flag: "--sync-backup",
-        replacement_hint: "--backup",
     },
     RemovedCliCase {
         issue: "#413",
         args: &["--sync-restore", "--json"],
         removed_flag: "--sync-restore",
-        replacement_hint: "--restore",
     },
     RemovedCliCase {
         issue: "#413",
         args: &["--sync-passphrase=secret", "--json"],
         removed_flag: "--sync-passphrase",
-        replacement_hint: "no direct replacement",
     },
 ];
 
@@ -159,19 +153,15 @@ fn v014_removed_cli_surfaces_stay_retired_with_json_usage_errors() {
         let error_message = payload["error"]["message"]
             .as_str()
             .expect("error message should be a string");
-        let error_hint = payload["error"]["hint"]
-            .as_str()
-            .expect("removed flag error should include a replacement hint");
         assert!(
             error_message.contains(case.removed_flag),
             "removed flag {} should be named in its error",
             case.removed_flag
         );
         assert!(
-            error_hint.contains(case.replacement_hint),
-            "removed flag {} should include replacement hint `{}`",
-            case.removed_flag,
-            case.replacement_hint
+            payload["error"].get("hint").is_none(),
+            "long-retired flag {} should use the plain unknown-option contract",
+            case.removed_flag
         );
     }
 }

@@ -2005,17 +2005,14 @@ fn parse_with_contract_marks_json_usage_errors() {
 }
 
 #[test]
-fn parse_with_contract_adds_replacement_hint_for_removed_options() {
+fn parse_with_contract_treats_long_retired_sync_flags_as_plain_unknown_options() {
     let error = parse_with_contract(&["--sync-restore", "--json"]).unwrap_err();
     assert_eq!(error.kind, CliErrorKind::Usage);
     assert_eq!(error.output, OutputMode::Json);
     assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
     assert_eq!(error.code, "cli.usage");
     assert!(error.message.contains("Unknown option `--sync-restore`"));
-    assert_eq!(
-        error.hint.as_deref(),
-        Some("Use `--restore` for local portable recovery workflows.")
-    );
+    assert!(error.hint.is_none());
 }
 
 #[test]
