@@ -287,7 +287,7 @@ Milestone policy:
 - **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites`, `automation_triggers` config is removed during migration, and neither legacy surface is re-persisted by runtime writes.
 - **v0.15.9:** standalone calendar sync and daemon local API command access are retired; calendar data remains optional schedule annotation context from supported caches, and dependency ownership reflects the removed refresh and daemon paths.
 - **v0.16.0:** daemon-owned runtime dependency cleanup is locked; WakaTime owns runtime HTTP and Basic auth while daemon-only local API server and direct random-token dependencies stay removed.
-- **v0.16.1:** feature inventory CLI export and committed generated inventory snapshots are retired; cleanup planning stays in GitHub roadmap issues, release notes, and static cleanup documentation.
+- **v0.16.1:** feature inventory CLI export and committed generated inventory snapshots are retired; legacy cleanup-specific regression gates are archived, and current cleanup contracts live in normal CI/module/integration tests.
 - **Future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
@@ -311,7 +311,8 @@ Roadmap direction:
 - Keep cleanup candidates tracked in GitHub roadmap issues first, with release
   notes and static documentation naming supported replacement behavior before
   paths are merged or retired. Generated feature inventory snapshots are no
-  longer part of release preparation.
+  longer part of release preparation, and cleanup-specific v0.14/v0.15 gates are
+  no longer part of release readiness.
 - Keep Broad integration lifecycle/capability hooks retired in favor of the
   supported WakaTime integration runtime calls for heartbeat polling,
   focus-running sync, elapsed focus tracking, and metadata updates.
