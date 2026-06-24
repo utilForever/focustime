@@ -122,6 +122,8 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Runtime dependency ownership after daemon cleanup",
         "GitHub roadmap issues",
         "static cleanup documentation",
+        "Generated feature inventory snapshots are no",
+        "Standalone feature inventory export (`--feature-inventory`)",
         "`ureq` JSON feature",
         "`chrono-tz`",
         "`base64`",
@@ -136,6 +138,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
     }
 
     assert!(changelog.contains("v0.15.x cleanup roadmap and deprecation notices"));
+    assert!(changelog.contains("Generated feature inventory artifact cleanup (#543)"));
     assert!(changelog.contains("Calendar dependency cleanup audit (#503)"));
     assert!(changelog.contains("Daemon-owned runtime dependency cleanup (#506)"));
     assert!(changelog.contains("Integration runtime hook narrowing (#453)"));
