@@ -92,7 +92,7 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Cleanup roadmap documentation names supported replacements",
         "Deprecated config compatibility fields stay visible in diagnostics",
         "Merged legacy profile names continue to migrate to canonical presets",
-        "Removed migration-window and encrypted sync flags stay unavailable",
+        "Long-retired migration-window and encrypted sync flags stay unavailable as plain unknown options",
         "Retired blocklist category config no longer adds config-doctor warnings",
         "Retired blocklist category config still migrates into profile-level `sites` and `allowlist_sites`",
         "Daemon local API lifecycle commands stay removed",
@@ -113,8 +113,6 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Legacy timer duration fields",
         "Legacy automation and blocklist top-level fields",
         "Retired blocklist category config is migration-only",
-        "Removed migration-window flags (`--migrate`, `--dry-run`)",
-        "Retired encrypted sync flags (`--sync-backup`, `--sync-restore`, `--sync-passphrase`)",
         "Duplicate schedule/session start entry points",
         "Retired local daemon API",
         "The local daemon API lifecycle commands (`--daemon-start`, `--daemon-status`, `--daemon-stop`, and `--daemon-port`) are removed",
@@ -302,15 +300,18 @@ strict_mode = true
 }
 
 #[test]
-fn v015_removed_command_paths_keep_supported_json_guidance_only() {
+fn v015_removed_command_paths_follow_plain_unknown_option_json_baseline() {
     let env = TestEnv::new("removed-commands");
 
-    for (flag, replacement) in [
-        ("--migrate", "--config-migrate"),
-        ("--dry-run", "--config-migrate"),
-        ("--sync-backup", "--backup"),
-        ("--sync-restore", "--restore"),
-        ("--sync-passphrase=secret", "no direct replacement"),
+    for flag in [
+        "--migrate",
+        "--dry-run",
+        "--sync-backup",
+        "--sync-restore",
+        "--sync-passphrase=secret",
+        "--usage-signals",
+        "--blocking-preview",
+        "--calendar-sync",
     ] {
         let output = env.run(&[flag, "--json"]);
         assert_eq!(output.status.code(), Some(2));
@@ -325,35 +326,8 @@ fn v015_removed_command_paths_keep_supported_json_guidance_only() {
         let message = payload["error"]["message"]
             .as_str()
             .expect("error message should be a string");
-        let hint = payload["error"]["hint"]
-            .as_str()
-            .expect("removed flag should include a replacement hint");
         assert!(
             message.contains(flag.split('=').next().unwrap_or(flag)),
-            "removed flag should be named in its error: {message}"
-        );
-        assert!(
-            hint.contains(replacement),
-            "removed flag should include replacement hint `{replacement}`: {hint}"
-        );
-    }
-
-    for flag in ["--usage-signals", "--blocking-preview", "--calendar-sync"] {
-        let output = env.run(&[flag, "--json"]);
-        assert_eq!(output.status.code(), Some(2));
-        assert!(
-            stderr_text(&output).trim().is_empty(),
-            "JSON usage errors should stay on stdout for {flag}"
-        );
-        let payload = parse_json_stdout(&output);
-        assert_eq!(payload["ok"], false);
-        assert_eq!(payload["error"]["kind"], "usage");
-        assert_eq!(payload["error"]["exit_code"], 2);
-        let message = payload["error"]["message"]
-            .as_str()
-            .expect("error message should be a string");
-        assert!(
-            message.contains(flag),
             "removed flag should be named in its error: {message}"
         );
         assert!(
@@ -364,27 +338,17 @@ fn v015_removed_command_paths_keep_supported_json_guidance_only() {
 }
 
 #[test]
-fn v015_removed_command_text_errors_keep_supported_replacement_guidance_only() {
+fn v015_removed_command_text_errors_follow_plain_unknown_option_baseline() {
     let env = TestEnv::new("removed-commands-text");
 
-    let (flag, expected_hint) = (
-        "--sync-backup",
-        "Hint: Use `--backup` for local portable recovery workflows.",
-    );
-    let output = env.run(&[flag]);
-
-    assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
-    let stderr = stderr_text(&output);
-    assert!(stderr.contains(&format!("Unknown option `{flag}`")));
-    assert!(stderr.contains(expected_hint));
-
-    let output = env.run(&["--usage-signals"]);
-    assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
-    let stderr = stderr_text(&output);
-    assert!(stderr.contains("Unknown option `--usage-signals`"));
-    assert!(!stderr.contains("Hint:"));
+    for flag in ["--sync-backup", "--usage-signals"] {
+        let output = env.run(&[flag]);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
+        let stderr = stderr_text(&output);
+        assert!(stderr.contains(&format!("Unknown option `{flag}`")));
+        assert!(!stderr.contains("Hint:"));
+    }
 }
 
 fn focustime_bin_path() -> PathBuf {
