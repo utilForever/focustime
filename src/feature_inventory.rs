@@ -434,23 +434,6 @@ const FEATURE_SEEDS: &[FeatureSeed] = &[
         failure_impact: 5,
     },
     FeatureSeed {
-        feature_id: "retired-low-value-command-guidance",
-        name: "Retired low-value command guidance",
-        surface: FeatureSurface::Integration,
-        description: "Keep retired migration-window and encrypted sync command paths mapped to supported replacement workflows.",
-        cli_flags: &[
-            "--migrate",
-            "--dry-run",
-            "--sync-backup",
-            "--sync-restore",
-            "--sync-passphrase",
-        ],
-        value: 1,
-        complexity: 4,
-        support_burden: 4,
-        failure_impact: 2,
-    },
-    FeatureSeed {
         feature_id: "calendar-busy-window-sync",
         name: "Calendar busy window annotations",
         surface: FeatureSurface::Integration,
