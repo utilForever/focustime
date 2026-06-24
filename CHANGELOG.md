@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-06-24
+
 ### Changed
 
 - **Config diagnostics command consolidation (#545):** retired the focused `--config-doctor`, `--config-migrate`, and `--config-migrate-apply` CLI surfaces while keeping config health and migration guidance in the canonical `--diagnostics` text/JSON workflow.
@@ -514,7 +516,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/utilForever/focustime/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/utilForever/focustime/compare/v0.15.9...v0.16.0
 [0.15.9]: https://github.com/utilForever/focustime/compare/v0.15.8...v0.15.9
 [0.15.8]: https://github.com/utilForever/focustime/compare/v0.15.7...v0.15.8
