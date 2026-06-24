@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Generated feature inventory artifact cleanup (#543):** removed the committed `FEATURE_INVENTORY.md` and `FEATURE_INVENTORY.json` snapshots from the release flow; cleanup planning now stays in GitHub roadmap issues, release notes, and static docs.
 - **Feature inventory CLI retirement (#542):** removed `--feature-inventory` parsing, help text, JSON/text output, and artifact export handling while pointing cleanup planning to GitHub roadmap issues, release notes, and static documentation.
 
 ## [0.16.0] - 2026-06-23
