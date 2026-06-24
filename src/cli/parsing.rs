@@ -62,8 +62,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::ScheduleDelay
             | ParsedToken::BreakGlassTrigger
             | ParsedToken::BreakGlassCancel
-            | ParsedToken::ConfigDoctor
-            | ParsedToken::ConfigMigrate { .. }
             | ParsedToken::Diagnostics
             | ParsedToken::Backup(_)
             | ParsedToken::Restore(_)
@@ -128,6 +126,12 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
             summary: "Standalone automation trigger commands were removed.",
             replacement: "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults.",
         }),
+        "--config-doctor" | "--config-migrate" | "--config-migrate-apply" => {
+            Some(RemovedOptionGuidance {
+                summary: "Dedicated config diagnostics commands were removed.",
+                replacement: "Use `focustime --diagnostics` for setup checks, config health, and migration guidance.",
+            })
+        }
         _ => None,
     }
 }
@@ -201,13 +205,6 @@ pub(super) fn parse_primary_command(
             ParsedToken::BreakGlassCancel => {
                 set_primary_command(&mut primary, PrimaryCommand::BreakGlassCancel)?
             }
-            ParsedToken::ConfigDoctor => {
-                set_primary_command(&mut primary, PrimaryCommand::ConfigDoctor)?
-            }
-            ParsedToken::ConfigMigrate { apply } => set_primary_command(
-                &mut primary,
-                PrimaryCommand::ConfigMigrate { apply: *apply },
-            )?,
             ParsedToken::Diagnostics => {
                 set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
             }
@@ -382,14 +379,6 @@ pub(super) fn finalize_cli_action(
         })),
         Some(PrimaryCommand::BreakGlassCancel) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::BreakGlassCancel,
-            output,
-        })),
-        Some(PrimaryCommand::ConfigDoctor) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::ConfigDoctor,
-            output,
-        })),
-        Some(PrimaryCommand::ConfigMigrate { apply }) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::ConfigMigrate { apply },
             output,
         })),
         Some(PrimaryCommand::Diagnostics) => Ok(CliAction::RunCommand(CliCommand {
@@ -620,9 +609,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::ScheduleDelay => "--schedule-delay",
         PrimaryCommand::BreakGlassTrigger => "--break-glass-trigger",
         PrimaryCommand::BreakGlassCancel => "--break-glass-cancel",
-        PrimaryCommand::ConfigDoctor => "--config-doctor",
-        PrimaryCommand::ConfigMigrate { apply: false } => "--config-migrate",
-        PrimaryCommand::ConfigMigrate { apply: true } => "--config-migrate-apply",
         PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Backup(_) => "--backup",

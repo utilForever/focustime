@@ -44,9 +44,7 @@ use data::{
     execute_backup_command, execute_export_command, execute_restore_command, stats_load_options,
     stats_save_options,
 };
-use diagnostics::{
-    execute_config_doctor_command, execute_config_migrate_command, execute_diagnostics_command,
-};
+use diagnostics::execute_diagnostics_command;
 use status::execute_status_command;
 #[cfg(test)]
 use status::{WATCH_INTERRUPTED, next_watch_deadline, wait_for_next_watch_tick};
@@ -96,12 +94,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::ScheduleDelay => execute_schedule_delay_command(cli_command.output),
         CommandKind::BreakGlassTrigger => execute_break_glass_trigger_command(cli_command.output),
         CommandKind::BreakGlassCancel => execute_break_glass_cancel_command(cli_command.output),
-        CommandKind::ConfigDoctor => {
-            execute_config_doctor_command(cli_command.output).map_err(UserMessage::from)
-        }
-        CommandKind::ConfigMigrate { apply } => {
-            execute_config_migrate_command(apply, cli_command.output).map_err(UserMessage::from)
-        }
         CommandKind::Diagnostics => {
             execute_diagnostics_command(cli_command.output).map_err(UserMessage::from)
         }
@@ -163,8 +155,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::ScheduleDelay => Some("schedule-delay"),
         CommandKind::BreakGlassTrigger => Some("break-glass-trigger"),
         CommandKind::BreakGlassCancel => Some("break-glass-cancel"),
-        CommandKind::ConfigDoctor => None,
-        CommandKind::ConfigMigrate { .. } => None,
         CommandKind::Diagnostics => Some("diagnostics"),
         CommandKind::Status { .. } => Some("status"),
         CommandKind::Backup { .. } => Some("backup"),

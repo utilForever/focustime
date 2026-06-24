@@ -49,15 +49,15 @@ use output::{
     build_diagnostics_command_output, build_schedule_inspection_output, display_input_value,
     effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_config_doctor_output, print_config_migration_output, print_diagnostics_command_output,
-    print_export_output, print_goal_carry_command_output, print_goal_command_output,
-    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
-    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
-    print_session_metadata_command_output, print_session_template_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output,
-    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
+    print_goal_command_output, print_history_dashboard_command_output, print_json,
+    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
+    print_schedule_delay_command_output, print_session_metadata_command_output,
+    print_session_template_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_temporary_site_add_command_output,
+    print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
@@ -125,9 +125,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --allowlist-site-edit=OLD=NEW [--json]
   focustime --blocklist-site-delete=HOSTNAME [--json]
   focustime --allowlist-site-delete=HOSTNAME [--json]
-  focustime --config-doctor [--json]
-  focustime --config-migrate [--json]
-  focustime --config-migrate-apply [--json]
   focustime --diagnostics [--json]
   focustime --status [--watch[=SECONDS]] [--json]
   focustime --backup[=DIR] [--json]
@@ -177,9 +174,6 @@ Options:
   --allowlist-site-edit       Replace allowlist hostname for the active blocklist profile using OLD=NEW
   --blocklist-site-delete     Delete blocklist hostname from the active blocklist profile
   --allowlist-site-delete     Delete allowlist hostname from the active blocklist profile
-  --config-doctor  Run config diagnostics (invalid/conflicting/stale settings) with remediation guidance
-  --config-migrate  Preview config migration assistant changes for deprecated/renamed keys
-  --config-migrate-apply  Apply config migration assistant changes and write migrated config.toml
   --diagnostics   Show setup diagnostics, blocking preview details, config health, and migration guidance
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
@@ -294,10 +288,6 @@ pub(crate) enum CommandKind {
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
-    ConfigDoctor,
-    ConfigMigrate {
-        apply: bool,
-    },
     Diagnostics,
     Status {
         watch_interval_secs: Option<u64>,
@@ -370,10 +360,6 @@ enum PrimaryCommand {
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
-    ConfigDoctor,
-    ConfigMigrate {
-        apply: bool,
-    },
     Diagnostics,
     Status,
     Backup(Option<PathBuf>),
@@ -432,10 +418,6 @@ enum ParsedToken {
     ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
-    ConfigDoctor,
-    ConfigMigrate {
-        apply: bool,
-    },
     Diagnostics,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
