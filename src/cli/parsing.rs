@@ -125,22 +125,6 @@ fn unknown_option_message(option: &str) -> String {
 fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuidance> {
     let flag = option.split('=').next().unwrap_or(option);
     match flag {
-        "--migrate" | "--dry-run" => Some(RemovedOptionGuidance {
-            summary: "This migration-window flag was removed.",
-            replacement: "Use `--config-migrate` to preview config migrations or `--config-migrate-apply` to write migrated config with a backup.",
-        }),
-        "--sync-backup" => Some(RemovedOptionGuidance {
-            summary: "Encrypted sync backups were removed.",
-            replacement: "Use `--backup` for local portable recovery workflows.",
-        }),
-        "--sync-restore" => Some(RemovedOptionGuidance {
-            summary: "Encrypted sync restores were removed.",
-            replacement: "Use `--restore` for local portable recovery workflows.",
-        }),
-        "--sync-passphrase" => Some(RemovedOptionGuidance {
-            summary: "Encrypted sync passphrases were removed.",
-            replacement: "no direct replacement is available because encrypted sync/backups are no longer supported.",
-        }),
         "--automation-triggers" | "--automation-triggers-set" => Some(RemovedOptionGuidance {
             summary: "Standalone automation trigger commands were removed.",
             replacement: "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults.",

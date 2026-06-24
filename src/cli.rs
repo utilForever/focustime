@@ -190,12 +190,6 @@ Options:
   --export        Export stats to current directory or DIR
   --feature-inventory  Export feature inventory scoring report to current directory or DIR
 
-Retired/legacy command guidance:
-  --migrate, --dry-run       Use --config-migrate to preview config migrations or --config-migrate-apply to write a migrated config with backup
-  --sync-backup              Use --backup for local portable recovery workflows
-  --sync-restore             Use --restore for local portable recovery workflows
-  --sync-passphrase          No direct replacement; encrypted sync/backups are no longer supported
-
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
 
