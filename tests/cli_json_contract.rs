@@ -633,6 +633,39 @@ fn feature_inventory_json_command_is_retired() {
     assert!(!report_dir.exists());
 }
 
+#[test]
+fn retired_options_emit_plain_json_usage_errors() {
+    let env = TestEnv::new("retired-options-json");
+
+    for flag in [
+        "--migrate",
+        "--dry-run",
+        "--sync-backup",
+        "--sync-restore",
+        "--sync-passphrase=secret",
+        "--usage-signals",
+    ] {
+        let output = env.run(&[flag, "--json"]);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(stderr_text(&output).trim().is_empty());
+        let expected_option = flag.split('=').next().unwrap_or(flag);
+
+        let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+        assert_eq!(payload["ok"], false);
+        assert_eq!(payload["error"]["kind"], "usage");
+        assert_eq!(payload["error"]["exit_code"], 2);
+        assert!(
+            payload["error"]["message"]
+                .as_str()
+                .is_some_and(|message| [flag, expected_option]
+                    .iter()
+                    .any(|option| message.contains(&format!("Unknown option `{option}`")))),
+            "retired option should be named in JSON usage error: {payload:#?}"
+        );
+        assert!(payload["error"].get("hint").is_none());
+    }
+}
+
 fn path_value(payload: &Value, key: &str) -> PathBuf {
     payload[key]
         .as_str()

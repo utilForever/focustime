@@ -84,19 +84,15 @@ The project uses Conventional Commit-style release commits:
 - Update [CHANGELOG.md](CHANGELOG.md) with release notes before creating a release commit/tag.
 
 Before preparing a release commit, make sure all CI jobs pass for the release changes.
-For cleanup, deprecation, migration, or facade/submodule work, also run the
-focused cleanup regression gate:
-
-```sh
-cargo test --test v014_regression_matrix
-cargo test --test v015_cleanup_regression
-```
+For cleanup, deprecation, migration, or facade/submodule work, make sure the
+affected current-surface module or integration tests are updated and covered by
+`cargo test --all`.
 
 Keep [REGRESSION_MATRIX.md](REGRESSION_MATRIX.md) aligned with any feature path
 that is merged, deprecated, or removed during release preparation.
-For v0.15.x cleanup releases, also keep the README roadmap, changelog entry, and
-deprecation notices aligned so every deprecated or retired path names supported
-replacement behavior before the tag is created.
+Also keep the README roadmap, changelog entry, and deprecation notices aligned
+so every deprecated or retired path names supported replacement behavior before
+the tag is created.
 
 To publish a release artifact set, create and push a `v*` tag (for example, `v0.16.0`).
 The release workflow will:
