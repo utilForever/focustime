@@ -287,6 +287,7 @@ Milestone policy:
 - **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites`, `automation_triggers` config is removed during migration, and neither legacy surface is re-persisted by runtime writes.
 - **v0.15.9:** standalone calendar sync and daemon local API command access are retired; calendar data remains optional schedule annotation context from supported caches, and dependency ownership reflects the removed refresh and daemon paths.
 - **v0.16.0:** daemon-owned runtime dependency cleanup is locked; WakaTime owns runtime HTTP and Basic auth while daemon-only local API server and direct random-token dependencies stay removed.
+- **v0.16.1:** feature inventory CLI export and committed generated inventory snapshots are retired; cleanup planning stays in GitHub roadmap issues, release notes, and static cleanup documentation.
 - **Future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
@@ -309,7 +310,8 @@ Roadmap direction:
 - Keep local backup/restore workflows as the supported portable recovery path.
 - Keep cleanup candidates tracked in GitHub roadmap issues first, with release
   notes and static documentation naming supported replacement behavior before
-  paths are merged or retired.
+  paths are merged or retired. Generated feature inventory snapshots are no
+  longer part of release preparation.
 - Keep Broad integration lifecycle/capability hooks retired in favor of the
   supported WakaTime integration runtime calls for heartbeat polling,
   focus-running sync, elapsed focus tracking, and metadata updates.
@@ -327,6 +329,7 @@ Early deprecation notices:
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Removed; use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Removed; use `--diagnostics` for blocking preview details alongside setup/config health. |
 | Standalone usage-signal command (`--usage-signals`) | Removed; use GitHub roadmap issues, release notes, and static cleanup documentation for planning while raw command/screen frequency summaries remain internal cleanup inputs. |
+| Standalone feature inventory export (`--feature-inventory`) | Removed; generated inventory snapshots are no longer committed or regenerated for releases. Use GitHub roadmap issues, release notes, and static cleanup documentation for planning. |
 | Standalone calendar refresh command (`--calendar-sync`) | Removed; scheduling only consumes an optional existing calendar annotation cache when it is enabled and available. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
@@ -760,6 +763,11 @@ The standalone `focustime --usage-signals` path has been removed; cleanup
 planning should use GitHub roadmap issues, release notes, and static cleanup
 documentation while treating raw usage-signal summaries as internal cleanup
 inputs.
+
+The standalone `focustime --feature-inventory` path and generated inventory
+snapshots have been removed. Releases no longer require regenerating
+`FEATURE_INVENTORY.md` or `FEATURE_INVENTORY.json`; keep cleanup planning in
+GitHub roadmap issues, release notes, and static cleanup documentation.
 
 The standalone `focustime --automation-triggers*` path has been removed. Scripts
 should configure profile schedules with `focustime --schedule-set`, delay active
