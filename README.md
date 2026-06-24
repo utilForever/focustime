@@ -224,10 +224,6 @@ cargo run -- --restore=./reports --json
 # Export stats to current directory or a target directory
 cargo run -- --export
 cargo run -- --export=./reports --json
-
-# Export feature inventory scoring report to current directory or a target directory
-cargo run -- --feature-inventory
-cargo run -- --feature-inventory=./reports --json
 ```
 
 ### Retired local daemon API
@@ -236,9 +232,9 @@ cargo run -- --feature-inventory=./reports --json
 - New automation should use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) or the TUI for interactive focus sessions.
 - The loopback `/v1/*` daemon endpoints are no longer a supported runtime surface.
 
-Backup/restore behavior:
+Backup/restore/export behavior:
 
-- `--backup`, `--export`, and `--feature-inventory` share the same target-directory handling: omitted directories use the current working directory and explicit targets are created before artifact files are written.
+- `--backup` and `--export` share the same target-directory handling: omitted directories use the current working directory and explicit targets are created before artifact files are written.
 - `--backup` creates the target directory if needed, then copies `config.toml` and `stats.toml` into it.
 - `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
 - Runtime persistence is canonical-path only; if only legacy `stats.toml` exists, copy it to the canonical stats path (the backup/restore commands can help).
@@ -285,7 +281,7 @@ Milestone policy:
 - **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config migration assistant + doctor commands remain available for focused config checks (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
 - **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
-- **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export/feature-inventory artifact workflows share target-directory handling.
+- **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export artifact workflows share target-directory handling.
 - **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency ownership stays documented, and WakaTime integration uses explicit supported runtime calls.
 - **v0.15.7:** standalone blocking preview access, Focus History dashboard customization paths, and dedicated status comparison guidance stay removed while diagnostics, the stable KPI dashboard, export artifacts, and Focus History remain the supported replacements.
 - **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites`, `automation_triggers` config is removed during migration, and neither legacy surface is re-persisted by runtime writes.
@@ -311,8 +307,9 @@ Roadmap direction:
 - Keep temporary allowlist exceptions and break-glass controls represented as
   one temporary override runtime model in status and recovery flows.
 - Keep local backup/restore workflows as the supported portable recovery path.
-- Keep cleanup candidates tracked in the feature inventory before they are
-  merged or retired.
+- Keep cleanup candidates tracked in GitHub roadmap issues first, with release
+  notes and static documentation naming supported replacement behavior before
+  paths are merged or retired.
 - Keep Broad integration lifecycle/capability hooks retired in favor of the
   supported WakaTime integration runtime calls for heartbeat polling,
   focus-running sync, elapsed focus tracking, and metadata updates.
@@ -329,7 +326,7 @@ Early deprecation notices:
 | Advanced status comparison slicing | Use `--export` artifacts for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Removed; use profile schedules for automatic focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Removed; use `--diagnostics` for blocking preview details alongside setup/config health. |
-| Standalone usage-signal command (`--usage-signals`) | Removed; use `--feature-inventory` for cleanup reporting while raw command/screen frequency summaries remain internal cleanup inputs. |
+| Standalone usage-signal command (`--usage-signals`) | Removed; use GitHub roadmap issues, release notes, and static cleanup documentation for planning while raw command/screen frequency summaries remain internal cleanup inputs. |
 | Standalone calendar refresh command (`--calendar-sync`) | Removed; scheduling only consumes an optional existing calendar annotation cache when it is enabled and available. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
@@ -510,10 +507,9 @@ Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
 CLI parity is available via `--focus-intention`, `--task-note`, `--schedule-delay`,
-`--session-template*`, `--feature-inventory`,
-`--break-glass-trigger`, and `--break-glass-cancel` for non-interactive
-inspection and in-session workflow control. `--history-dashboard` remains
-available for layout inspection.
+`--session-template*`, `--break-glass-trigger`, and `--break-glass-cancel` for
+non-interactive inspection and in-session workflow control. `--history-dashboard`
+remains available for layout inspection.
 
 Blocklist rules support exact hosts and wildcard subdomain rules. `*.example.com`
 matches `docs.example.com` and `api.example.com`, but does **not** match
@@ -761,8 +757,9 @@ should read the `blocking_preview` section from
 `focustime --diagnostics --json`.
 
 The standalone `focustime --usage-signals` path has been removed; cleanup
-scripts should use `focustime --feature-inventory --json` and treat raw
-usage-signal summaries as internal cleanup inputs.
+planning should use GitHub roadmap issues, release notes, and static cleanup
+documentation while treating raw usage-signal summaries as internal cleanup
+inputs.
 
 The standalone `focustime --automation-triggers*` path has been removed. Scripts
 should configure profile schedules with `focustime --schedule-set`, delay active
@@ -953,7 +950,6 @@ with focused submodules (updated in #240):
 - `src/main.rs`: composition root, CLI/TUI dispatch, terminal lifecycle, and event loop.
 - `src/app.rs` + `src/app/*.rs`: runtime state/orchestration split by domain (timer flow, planner, profiles, site manager, schedule, persistence, diagnostics, CLI API).
 - `src/cli.rs` + `src/cli/*.rs`: CLI args/parsing/execution/status/output pipeline.
-- `src/feature_inventory.rs`: deterministic feature inventory catalog, scoring model, and report export helpers.
 - `src/stats.rs` + `src/stats/*.rs`: stats persistence, analytics, trends, recording, planner state, and exports.
 - `src/ui.rs` + `src/ui/*.rs`: Ratatui rendering split by screen (timer, session planner, site manager, profile manager, history, setup diagnostics).
 - `src/config.rs` + `src/config/paths.rs`: config schema/normalization and environment-aware path resolution.

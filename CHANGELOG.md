@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Feature inventory CLI retirement (#542):** removed `--feature-inventory` parsing, help text, JSON/text output, and artifact export handling while pointing cleanup planning to GitHub roadmap issues, release notes, and static documentation.
+
 ## [0.16.0] - 2026-06-23
 
 ### Changed

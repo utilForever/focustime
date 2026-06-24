@@ -120,6 +120,8 @@ fn v015_cleanup_docs_keep_matrix_and_release_guidance_aligned() {
         "Broad integration lifecycle/capability hooks",
         "supported WakaTime integration runtime calls",
         "Runtime dependency ownership after daemon cleanup",
+        "GitHub roadmap issues",
+        "static cleanup documentation",
         "`ureq` JSON feature",
         "`chrono-tz`",
         "`base64`",
@@ -312,6 +314,7 @@ fn v015_removed_command_paths_follow_plain_unknown_option_json_baseline() {
         "--usage-signals",
         "--blocking-preview",
         "--calendar-sync",
+        "--feature-inventory",
     ] {
         let output = env.run(&[flag, "--json"]);
         assert_eq!(output.status.code(), Some(2));
@@ -341,7 +344,7 @@ fn v015_removed_command_paths_follow_plain_unknown_option_json_baseline() {
 fn v015_removed_command_text_errors_follow_plain_unknown_option_baseline() {
     let env = TestEnv::new("removed-commands-text");
 
-    for flag in ["--sync-backup", "--usage-signals"] {
+    for flag in ["--sync-backup", "--usage-signals", "--feature-inventory"] {
         let output = env.run(&[flag]);
         assert_eq!(output.status.code(), Some(2));
         assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
