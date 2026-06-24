@@ -30,7 +30,7 @@
 - Usage-signal dimensions retained: commands, screens
 - Usage-signal summary fields retained: total_events, unique_surfaces, top, rare
 - Standalone usage-signal CLI access: removed
-- Supported reporting workflow: `--feature-inventory`
+- Cleanup planning source: GitHub roadmap issues, release notes, and static cleanup documentation
 
 ## Release phase mapping (v0.14.x)
 
@@ -58,7 +58,7 @@
 | `site-rule-management` | Blocker | 5 | 4.00 | 1.25 | keep | --blocklist-sites, --allowlist-sites, --blocklist-site-add, --allowlist-site-add, --blocklist-site-edit, --allowlist-site-edit, --blocklist-site-delete, --allowlist-site-delete |
 | `temporary-allowlist-overrides` | Blocker | 3 | 3.60 | 0.83 | merge | --allowlist-site-add-temporary |
 | `backup-and-restore-workflows` | Stats | 4 | 4.25 | 0.94 | merge | --backup, --restore |
-| `feature-inventory-reporting` | Stats | 4 | 2.00 | 2.00 | keep | --feature-inventory |
+| `static-cleanup-planning` | Stats | 4 | 2.00 | 2.00 | keep | (none) |
 | `history-dashboard-curation` | Stats | 4 | 2.75 | 1.45 | keep | --history-dashboard |
 | `stats-export-artifacts` | Stats | 4 | 2.65 | 1.51 | keep | --export |
 | `status-snapshot-and-streaming` | Stats | 5 | 3.65 | 1.37 | keep | --status, --watch |

@@ -14,7 +14,6 @@ flowchart LR
     APP["app.rs + app/*<br/>runtime orchestration + state transitions"]
     UI["ui.rs + ui/*<br/>screen rendering"]
     ST["stats.rs + stats/*<br/>persistence/analytics/export"]
-    FI["feature_inventory.rs<br/>feature scoring/report export"]
     CFG["config.rs + config/paths.rs<br/>config model + path resolution"]
     TM["timer.rs<br/>Pomodoro state machine"]
     BL["blocker.rs<br/>multi-backend blocking (hosts + command fallback)"]
@@ -45,7 +44,6 @@ flowchart LR
     CLI --> APP
     CLI --> CFG
     CLI --> ST
-    CLI --> FI
     UI --> APP
     BL --> OS
     NT --> OS
@@ -58,9 +56,8 @@ flowchart LR
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `main.rs`                       | Composition root, CLI vs TUI dispatch, terminal setup/teardown, frame/tick loop                                                                                                                                                                                                                 | `cli`, `app`, `ui`, `crossterm`, `ratatui`                                                    |
 | `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`), with temporary allowlist and break-glass mapped into one temporary override recovery model | `timer`, `blocker`, `integration`, `notifications`, `schedule`, `calendar`, `stats`, `config` |
-| `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless timer/session/workflow controls, schedule delay/temporary override controls, and local backup/restore. The standalone calendar refresh and daemon local API lifecycle commands are retired.                    | `app`, `config`, `stats`, `blocker`                                     |
+| `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless timer/session/workflow controls, schedule delay/temporary override controls, and local backup/restore. The standalone calendar refresh, feature inventory export, and daemon local API lifecycle commands are retired.                    | `app`, `config`, `stats`, `blocker`                                     |
 | `stats.rs` + `stats/*`          | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers, including canonical-path persistence and legacy read-time compatibility handling during deprecation windows                                                                                          | `app`, `task_labels`, filesystem                                                              |
-| `feature_inventory.rs`          | Deterministic feature inventory catalog with value/maintenance scoring and JSON/Markdown report generation for keep/merge/remove roadmap decisions                                                                                                                                              | `cli`, filesystem                                                                             |
 | `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                                                              | `app`, `timer`, `integration`                                                                 |
 | `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including feature-flag compatibility defaults, runtime knob settings, and task-label-aware WakaTime metadata mapping rules                                                                                            | `app`, `cli`, filesystem/env                                                                  |
 | `timer.rs`                      | Pomodoro timer domain model and phase transitions                                                                                                                                                                                                                                               | `app`, `ui`                                                                                   |

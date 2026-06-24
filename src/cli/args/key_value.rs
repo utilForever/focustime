@@ -6,7 +6,7 @@ use crate::cli::{
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 33] = [
+    let parsers: [KeyValueParser; 32] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -25,7 +25,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_backup_key_value_arg,
         parse_restore_key_value_arg,
         parse_export_key_value_arg,
-        parse_feature_inventory_key_value_arg,
         parse_blocklist_profile_key_value_arg,
         parse_blocklist_profile_create_key_value_arg,
         parse_blocklist_profile_rename_key_value_arg,
@@ -200,15 +199,6 @@ fn parse_export_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> 
         "--export=",
         ParsedToken::Export,
         "`--export=` requires a target directory.",
-    )
-}
-
-fn parse_feature_inventory_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    parse_artifact_key_value_arg(
-        arg,
-        "--feature-inventory=",
-        ParsedToken::FeatureInventory,
-        "`--feature-inventory=` requires a target directory.",
     )
 }
 

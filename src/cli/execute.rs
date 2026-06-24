@@ -41,8 +41,8 @@ use blocklists::{execute_blocklist_profile_command, execute_blocklist_sites_comm
 pub(super) use dashboard::apply_history_dashboard_command;
 use dashboard::execute_history_dashboard_command;
 use data::{
-    execute_backup_command, execute_export_command, execute_feature_inventory_command,
-    execute_restore_command, stats_load_options, stats_save_options,
+    execute_backup_command, execute_export_command, execute_restore_command, stats_load_options,
+    stats_save_options,
 };
 use diagnostics::{
     execute_config_doctor_command, execute_config_migrate_command, execute_diagnostics_command,
@@ -118,9 +118,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Export { dir } => {
             execute_export_command(dir, cli_command.output).map_err(UserMessage::from)
         }
-        CommandKind::FeatureInventory { dir } => {
-            execute_feature_inventory_command(dir, cli_command.output).map_err(UserMessage::from)
-        }
         CommandKind::BlocklistProfile { command } => {
             execute_blocklist_profile_command(command, cli_command.output)
                 .map_err(UserMessage::from)
@@ -173,7 +170,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Backup { .. } => Some("backup"),
         CommandKind::Restore { .. } => Some("restore"),
         CommandKind::Export { .. } => Some("export"),
-        CommandKind::FeatureInventory { .. } => Some("feature-inventory"),
         CommandKind::BlocklistProfile { .. } => Some("blocklist-profile"),
         CommandKind::BlocklistSites { .. } => Some("blocklist-sites"),
         CommandKind::AllowlistSiteAddTemporary { .. } => Some("allowlist-site-add-temporary"),
@@ -888,8 +884,8 @@ mod tests {
             Some("status")
         );
         assert_eq!(
-            command_usage_surface_id(&CommandKind::FeatureInventory { dir: None }),
-            Some("feature-inventory")
+            command_usage_surface_id(&CommandKind::Export { dir: None }),
+            Some("export")
         );
     }
 

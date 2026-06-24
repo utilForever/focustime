@@ -50,15 +50,14 @@ use output::{
     effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
     print_blocklist_profile_command_output, print_break_glass_command_output,
     print_config_doctor_output, print_config_migration_output, print_diagnostics_command_output,
-    print_export_output, print_feature_inventory_output, print_goal_carry_command_output,
-    print_goal_command_output, print_history_dashboard_command_output, print_json,
-    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
-    print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_session_template_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output,
+    print_export_output, print_goal_carry_command_output, print_goal_command_output,
+    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_schedule_delay_command_output,
+    print_session_metadata_command_output, print_session_template_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
@@ -134,7 +133,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --backup[=DIR] [--json]
   focustime --restore[=DIR] [--json]
   focustime --export[=DIR] [--json]
-  focustime --feature-inventory[=DIR] [--json]
 
 Options:
   --start         Start a focus timer without launching TUI
@@ -188,7 +186,6 @@ Options:
   --backup        Back up config.toml and stats.toml to current directory or DIR
   --restore       Restore config.toml and stats.toml from current directory or DIR
   --export        Export stats to current directory or DIR
-  --feature-inventory  Export feature inventory scoring report to current directory or DIR
 
   --json          Emit machine-readable JSON output
   -h, --help      Show this help"#;
@@ -314,9 +311,6 @@ pub(crate) enum CommandKind {
     Export {
         dir: Option<PathBuf>,
     },
-    FeatureInventory {
-        dir: Option<PathBuf>,
-    },
     BlocklistProfile {
         command: BlocklistProfileCommandKind,
     },
@@ -385,7 +379,6 @@ enum PrimaryCommand {
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
     Export(Option<PathBuf>),
-    FeatureInventory(Option<PathBuf>),
     BlocklistProfile(Option<String>),
     BlocklistProfileCreate(String),
     BlocklistProfileRename(String),
@@ -447,7 +440,6 @@ enum ParsedToken {
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
     Export(Option<PathBuf>),
-    FeatureInventory(Option<PathBuf>),
     BlocklistProfile(Option<String>),
     BlocklistProfileCreate(String),
     BlocklistProfileRename(String),
@@ -698,17 +690,6 @@ struct ExportOutput {
     export_dir: PathBuf,
     json_path: PathBuf,
     csv_path: PathBuf,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct FeatureInventoryOutput {
-    export_dir: PathBuf,
-    json_path: PathBuf,
-    markdown_path: PathBuf,
-    total_features: usize,
-    keep_count: usize,
-    merge_count: usize,
-    remove_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

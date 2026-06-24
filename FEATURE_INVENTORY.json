@@ -81,7 +81,6 @@
       "--config-migrate-apply",
       "--diagnostics",
       "--export",
-      "--feature-inventory",
       "--focus-intention",
       "--goal",
       "--goal-carry",
@@ -125,7 +124,7 @@
       "top",
       "rare"
     ],
-    "replacement_cli_flag": "--feature-inventory"
+    "planning_source": "GitHub roadmap issues, release notes, and static cleanup documentation"
   },
   "features": [
     {
@@ -411,13 +410,11 @@
       "recommendation": "merge"
     },
     {
-      "feature_id": "feature-inventory-reporting",
-      "name": "Feature inventory reporting",
+      "feature_id": "static-cleanup-planning",
+      "name": "Static cleanup planning",
       "surface": "stats",
-      "description": "Generate scored feature inventory artifacts for keep, merge, and remove roadmap reviews.",
-      "cli_flags": [
-        "--feature-inventory"
-      ],
+      "description": "Track keep, merge, and remove roadmap decisions through GitHub issues, release notes, and static cleanup documentation.",
+      "cli_flags": [],
       "value": 4,
       "complexity": 2,
       "support_burden": 2,

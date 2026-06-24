@@ -547,10 +547,8 @@ fn artifact_workflows_json_create_target_dirs_and_preserve_path_fields() {
 
     let backup_dir = env.root.join("artifacts").join("backup").join("nested");
     let export_dir = env.root.join("artifacts").join("export").join("nested");
-    let inventory_dir = env.root.join("artifacts").join("inventory").join("nested");
     let backup_arg = format!("--backup={}", backup_dir.display());
     let export_arg = format!("--export={}", export_dir.display());
-    let inventory_arg = format!("--feature-inventory={}", inventory_dir.display());
 
     let backup_output = env.run(&[backup_arg.as_str(), "--json"]);
     assert_eq!(backup_output.status.code(), Some(0));
@@ -581,21 +579,6 @@ fn artifact_workflows_json_create_target_dirs_and_preserve_path_fields() {
         path_value(&export_payload, "csv_path"),
         export_dir.join("focustime-stats.csv")
     );
-
-    let inventory_output = env.run(&[inventory_arg.as_str(), "--json"]);
-    assert_eq!(inventory_output.status.code(), Some(0));
-    assert!(stderr_text(&inventory_output).trim().is_empty());
-    let inventory_payload: Value =
-        serde_json::from_slice(&inventory_output.stdout).expect("stdout should be JSON");
-    assert_eq!(path_value(&inventory_payload, "export_dir"), inventory_dir);
-    assert_eq!(
-        path_value(&inventory_payload, "json_path"),
-        inventory_dir.join("FEATURE_INVENTORY.json")
-    );
-    assert_eq!(
-        path_value(&inventory_payload, "markdown_path"),
-        inventory_dir.join("FEATURE_INVENTORY.md")
-    );
 }
 
 #[test]
@@ -605,15 +588,10 @@ fn artifact_workflows_json_report_consistent_target_directory_errors() {
     fs::write(&occupied_path, "not a directory").expect("failed to write occupied target");
     let backup_arg = format!("--backup={}", occupied_path.display());
     let export_arg = format!("--export={}", occupied_path.display());
-    let inventory_arg = format!("--feature-inventory={}", occupied_path.display());
 
     for (args, command_name) in [
         ([backup_arg.as_str(), "--json"], "Backup"),
         ([export_arg.as_str(), "--json"], "Export"),
-        (
-            [inventory_arg.as_str(), "--json"],
-            "Feature inventory export",
-        ),
     ] {
         let output = env.run(&args);
         assert_eq!(output.status.code(), Some(1));
@@ -634,51 +612,25 @@ fn artifact_workflows_json_report_consistent_target_directory_errors() {
 }
 
 #[test]
-fn feature_inventory_json_exports_scored_report_artifacts() {
-    let env = TestEnv::new("feature-inventory-json");
+fn feature_inventory_json_command_is_retired() {
+    let env = TestEnv::new("feature-inventory-json-retired");
     let report_dir = env.root.join("reports");
     let inventory_arg = format!("--feature-inventory={}", report_dir.display());
 
     let output = env.run(&[inventory_arg.as_str(), "--json"]);
-    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.status.code(), Some(2));
     assert!(stderr_text(&output).trim().is_empty());
 
     let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert!(payload.get("export_dir").is_some());
-    assert!(payload.get("json_path").is_some());
-    assert!(payload.get("markdown_path").is_some());
+    assert_eq!(payload["ok"], false);
+    assert_eq!(payload["error"]["kind"], "usage");
+    assert_eq!(payload["error"]["exit_code"], 2);
     assert!(
-        payload["total_features"]
-            .as_u64()
-            .is_some_and(|value| value > 0)
+        payload["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("Unknown option `--feature-inventory="))
     );
-    assert!(payload.get("keep_count").is_some());
-    assert!(payload.get("merge_count").is_some());
-    assert!(payload.get("remove_count").is_some());
-
-    assert!(report_dir.join("FEATURE_INVENTORY.json").is_file());
-    assert!(report_dir.join("FEATURE_INVENTORY.md").is_file());
-
-    let inventory_payload: Value = serde_json::from_slice(
-        &fs::read(report_dir.join("FEATURE_INVENTORY.json"))
-            .expect("failed to read exported feature inventory JSON"),
-    )
-    .expect("feature inventory export JSON should parse");
-    assert_eq!(inventory_payload["schema_version"], 6);
-    assert!(
-        inventory_payload["cleanup_signal_support"]
-            .get("deprecated_cli_flag")
-            .is_none()
-    );
-    assert_eq!(
-        inventory_payload["cleanup_signal_support"]["replacement_cli_flag"],
-        "--feature-inventory"
-    );
-    assert!(
-        inventory_payload["cleanup_signal_support"]["retained_dimensions"]
-            .as_array()
-            .is_some_and(|dimensions| dimensions.iter().any(|dimension| dimension == "commands"))
-    );
+    assert!(!report_dir.exists());
 }
 
 fn path_value(payload: &Value, key: &str) -> PathBuf {

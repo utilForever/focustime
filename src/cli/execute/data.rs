@@ -1,11 +1,9 @@
 use std::{env, fs, path::Path};
 
 use crate::cli::{
-    AppConfig, BackupOutput, DailyGoalSnapshot, ExportOutput, FeatureInventoryOutput, FocusStats,
-    OutputMode, PathBuf, RestoreOutput, print_backup_output, print_export_output,
-    print_feature_inventory_output, print_json, print_restore_output,
+    AppConfig, BackupOutput, DailyGoalSnapshot, ExportOutput, FocusStats, OutputMode, PathBuf,
+    RestoreOutput, print_backup_output, print_export_output, print_json, print_restore_output,
 };
-use crate::feature_inventory::{build_feature_inventory_report, export_feature_inventory_report};
 
 const CONFIG_FILE_NAME: &str = "config.toml";
 const STATS_FILE_NAME: &str = "stats.toml";
@@ -19,11 +17,6 @@ struct ArtifactDirectoryWorkflow {
 
 const EXPORT_ARTIFACTS: ArtifactDirectoryWorkflow = ArtifactDirectoryWorkflow {
     name: "Export",
-    role: "target",
-    create: true,
-};
-const FEATURE_INVENTORY_ARTIFACTS: ArtifactDirectoryWorkflow = ArtifactDirectoryWorkflow {
-    name: "Feature inventory export",
     role: "target",
     create: true,
 };
@@ -58,32 +51,6 @@ pub(super) fn execute_export_command(
     };
     match output {
         OutputMode::Text => print_export_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-pub(super) fn execute_feature_inventory_command(
-    dir: Option<PathBuf>,
-    output: OutputMode,
-) -> Result<(), String> {
-    let target_dir = resolve_artifact_directory(dir, FEATURE_INVENTORY_ARTIFACTS)?;
-
-    let report = build_feature_inventory_report();
-    let exported = export_feature_inventory_report(&target_dir, &report)
-        .map_err(|error| format!("Feature inventory export failed: {error}"))?;
-
-    let payload = FeatureInventoryOutput {
-        export_dir: target_dir,
-        json_path: exported.json_path,
-        markdown_path: exported.markdown_path,
-        total_features: report.summary.total_features,
-        keep_count: report.summary.keep_count,
-        merge_count: report.summary.merge_count,
-        remove_count: report.summary.remove_count,
-    };
-    match output {
-        OutputMode::Text => print_feature_inventory_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
