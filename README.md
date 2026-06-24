@@ -191,17 +191,6 @@ cargo run -- --break-glass-cancel
 cargo run -- --diagnostics
 cargo run -- --diagnostics --json
 
-# Run only the config-health section (invalid/conflicting/stale config remediation)
-cargo run -- --config-doctor
-cargo run -- --config-doctor --json
-
-# Preview/apply only config migration assistant changes for deprecated/renamed keys
-cargo run -- --config-migrate
-cargo run -- --config-migrate --json
-# Apply mode writes migrated config.toml and creates a backup first
-cargo run -- --config-migrate-apply
-cargo run -- --config-migrate-apply --json
-
 # Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary overrides, latest interruption summary, and `selected_task_goal` in JSON)
 cargo run -- --status
 cargo run -- --status --json
@@ -262,11 +251,12 @@ Set `enabled = []` to disable all built-in integrations.
 ### Legacy compatibility deprecation milestones
 
 `focustime --diagnostics` is the canonical diagnostics workflow for setup
-checks, config health, and migration guidance. `focustime --config-doctor`,
-`focustime --config-migrate`, and `focustime --config-migrate-apply` remain
-available when you need to run only one config section. The TUI Setup
-Diagnostics screen reports targeted setup deprecation warnings when legacy
-compatibility fields are detected.
+checks, config health, and migration guidance. The older focused config
+diagnostics commands have been retired, so scripts should read the
+`config_doctor` and `config_migration` sections from
+`focustime --diagnostics --json`. The TUI Setup Diagnostics screen reports
+targeted setup deprecation warnings when legacy compatibility fields are
+detected.
 
 | Legacy field/path                                                                    | Canonical replacement                                                                                                                             | Removal milestone |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -278,7 +268,7 @@ Milestone policy:
 
 - **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
-- **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config migration assistant + doctor commands remain available for focused config checks (`--config-migrate`, `--config-migrate-apply`, `--config-doctor`).
+- **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config health and migration guidance are included in the canonical diagnostics payload.
 - **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export artifact workflows share target-directory handling.
@@ -303,8 +293,7 @@ Roadmap direction:
 - Keep profile-oriented timer settings as the primary timer configuration path.
 - Keep one focus-entry runtime path for scheduled, templated, and manual starts.
 - Keep `--diagnostics` as the supported way to inspect setup health, config
-  health, and migration guidance together; keep config migration and doctor
-  commands for focused repair workflows.
+  health, and migration guidance together.
 - Keep temporary allowlist exceptions and break-glass controls represented as
   one temporary override runtime model in status and recovery flows.
 - Keep local backup/restore workflows as the supported portable recovery path.
@@ -321,9 +310,9 @@ Early deprecation notices:
 
 | Deprecated or overlapping path | Supported replacement behavior |
 | --- | --- |
-| Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--config-migrate` or `--config-migrate-apply` when stale keys are reported. |
-| Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--config-doctor`. |
-| Retired blocklist category config is migration-only | `--config-migrate-apply` still folds category `sites` and `allowlist_sites` into profile-level lists, then manage hostnames directly with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`. |
+| Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--diagnostics` when stale keys are reported. |
+| Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--diagnostics`. |
+| Retired blocklist category config is migration-only | `--diagnostics` reports migration guidance for folding category `sites` and `allowlist_sites` into profile-level lists; manage hostnames directly with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`. |
 | Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields are no longer emitted by runtime persistence or `--status --json`. |
 | Focus History dashboard customization (`[history_dashboard]`, retired customization CLI paths) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands are removed from help text and command parsing. |
 | Advanced status comparison slicing | Use `--export` artifacts for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
@@ -721,9 +710,9 @@ Allowlist entries act as explicit exceptions: effective focus blocking is comput
 wildcard rule matching.
 
 Older blocklist category config is accepted only as migration input.
-`--config-migrate-apply` folds category `sites` and `allowlist_sites` into each
-parent `[[blocklist_profiles]]` entry, and runtime saves persist only
-profile-level `sites` and `allowlist_sites`.
+`--diagnostics` reports guidance for folding category `sites` and
+`allowlist_sites` into each parent `[[blocklist_profiles]]` entry, and runtime
+saves persist only profile-level `sites` and `allowlist_sites`.
 
 For hosts-based blocking to apply reliably, keep DNS-over-HTTPS disabled in your browser.
 If you configure the command backend, ensure your custom commands enforce equivalent restrictions.
