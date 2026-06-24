@@ -666,6 +666,34 @@ fn retired_options_emit_plain_json_usage_errors() {
     }
 }
 
+#[test]
+fn retired_config_diagnostics_commands_emit_json_usage_guidance() {
+    let env = TestEnv::new("retired-config-diagnostics");
+
+    for flag in [
+        "--config-doctor",
+        "--config-migrate",
+        "--config-migrate-apply",
+    ] {
+        let output = env.run(&[flag, "--json"]);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(stderr_text(&output).trim().is_empty());
+
+        let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+        assert_eq!(payload["ok"], false);
+        assert_eq!(payload["error"]["kind"], "usage");
+        assert_eq!(payload["error"]["exit_code"], 2);
+        assert!(payload["error"]["message"].as_str().is_some_and(|message| {
+            message.contains(&format!("Unknown option `{flag}`"))
+                && message.contains("Dedicated config diagnostics commands were removed.")
+        }));
+        assert_eq!(
+            payload["error"]["hint"],
+            "Use `focustime --diagnostics` for setup checks, config health, and migration guidance."
+        );
+    }
+}
+
 fn path_value(payload: &Value, key: &str) -> PathBuf {
     payload[key]
         .as_str()

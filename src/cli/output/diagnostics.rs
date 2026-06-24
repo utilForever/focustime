@@ -21,12 +21,6 @@ pub(in crate::cli) fn build_schedule_inspection_output(
     }
 }
 
-pub(in crate::cli) fn print_config_doctor_output(payload: &ConfigDoctorReport) {
-    println!("Diagnostics workflow: {}", payload.action);
-    print_config_health_section(payload);
-    print_canonical_diagnostics_hint();
-}
-
 fn print_config_health_section(payload: &ConfigDoctorReport) {
     println!("Config health: {}", config_health_status_id(payload.status));
     println!(
@@ -47,12 +41,6 @@ fn print_config_health_section(payload: &ConfigDoctorReport) {
     println!("Current schema version: {}", payload.current_schema_version);
     print_migration_steps(&payload.migration_steps);
     print_config_health_findings(&payload.findings);
-}
-
-pub(in crate::cli) fn print_config_migration_output(payload: &ConfigMigrationReport) {
-    println!("Diagnostics workflow: {}", payload.action);
-    print_config_migration_section(payload);
-    print_canonical_diagnostics_hint();
 }
 
 fn print_config_migration_section(payload: &ConfigMigrationReport) {
@@ -184,12 +172,6 @@ fn print_diagnostics_blocking_preview_section(payload: &DiagnosticsBlockingPrevi
     if let Some(preview) = payload.preview.as_ref() {
         print_blocking_preview_fields(preview);
     }
-}
-
-fn print_canonical_diagnostics_hint() {
-    println!(
-        "Canonical diagnostics: run `focustime --diagnostics` for setup, blocking preview, config health, and migration guidance."
-    );
 }
 
 fn print_diagnostics_check(label: &str, check: &SetupCheckOutput) {

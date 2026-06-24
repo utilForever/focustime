@@ -75,7 +75,7 @@ pub(crate) fn run_config_doctor() -> ConfigDoctorReport {
 }
 
 pub(super) fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> ConfigDoctorReport {
-    let action = "config-doctor";
+    let action = "config-health";
     let mut detected_schema_version = None;
     let mut migration_steps = Vec::new();
     let mut findings = Vec::new();
@@ -204,7 +204,7 @@ pub(super) fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> Confi
                 "Config schema version {schema_version} is older than current schema version {}.",
                 CURRENT_CONFIG_SCHEMA_VERSION
             ),
-            "Run `focustime --config-migrate` to preview migration and `focustime --config-migrate-apply` to apply it.",
+            "Run `focustime --diagnostics` to review migration guidance, then update config.toml to the current schema.",
         ));
     }
 
@@ -212,7 +212,7 @@ pub(super) fn run_config_doctor_with_path(config_path: Option<PathBuf>) -> Confi
         findings.push(config_health_warning(
             "config.legacy_profile_token",
             advice,
-            "Run `focustime --config-migrate` to preview canonical profile-key migrations.",
+            "Run `focustime --diagnostics` to review canonical profile-key migration guidance.",
         ));
     }
     let disk: AppConfigDisk = match migrated_toml.try_into() {
@@ -266,9 +266,9 @@ pub(super) fn run_config_migration_assistant_with_path(
     config_path: Option<PathBuf>,
 ) -> ConfigMigrationReport {
     let action = if apply {
-        "config-migrate-apply"
+        "config-migration-apply"
     } else {
-        "config-migrate"
+        "config-migration-guidance"
     };
     let mut detected_schema_version = None;
     let mut backup_path = None;
@@ -301,7 +301,7 @@ pub(super) fn run_config_migration_assistant_with_path(
         findings.push(config_health_warning(
             "config.file_missing",
             format!("Config file `{}` does not exist.", path.display()),
-            "Run focustime once (or create config.toml), then rerun config migration.",
+            "Run focustime once (or create config.toml), then rerun diagnostics.",
         ));
         return ConfigMigrationReport {
             action,
@@ -323,7 +323,7 @@ pub(super) fn run_config_migration_assistant_with_path(
             findings.push(config_health_error(
                 "config.read_failed",
                 format!("Failed to read `{}`: {error}", path.display()),
-                "Check filesystem permissions and path accessibility, then rerun migration.",
+                "Check filesystem permissions and path accessibility, then rerun diagnostics.",
             ));
             return ConfigMigrationReport {
                 action,
@@ -346,7 +346,7 @@ pub(super) fn run_config_migration_assistant_with_path(
             findings.push(config_health_error(
                 "config.toml_parse_error",
                 format!("config.toml is not valid TOML: {error}"),
-                "Fix the TOML syntax error and rerun config migration.",
+                "Fix the TOML syntax error and rerun diagnostics.",
             ));
             return ConfigMigrationReport {
                 action,

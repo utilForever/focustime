@@ -2,31 +2,9 @@ use crate::app::App;
 use crate::cli::{
     OutputMode, build_diagnostics_blocking_preview_error,
     build_diagnostics_blocking_preview_output, build_diagnostics_command_output,
-    print_config_doctor_output, print_config_migration_output, print_diagnostics_command_output,
-    print_json,
+    print_diagnostics_command_output, print_json,
 };
 use crate::config::{run_config_doctor, run_config_migration_assistant};
-
-pub(super) fn execute_config_doctor_command(output: OutputMode) -> Result<(), String> {
-    let payload = run_config_doctor();
-    match output {
-        OutputMode::Text => print_config_doctor_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-pub(super) fn execute_config_migrate_command(
-    apply: bool,
-    output: OutputMode,
-) -> Result<(), String> {
-    let payload = run_config_migration_assistant(apply);
-    match output {
-        OutputMode::Text => print_config_migration_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
 
 pub(super) fn execute_diagnostics_command(output: OutputMode) -> Result<(), String> {
     let mut app = App::new();

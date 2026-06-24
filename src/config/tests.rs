@@ -1439,7 +1439,7 @@ fn config_doctor_reports_parse_errors() {
     let report = run_config_doctor_with_path(Some(config_path.clone()));
     let _ = fs::remove_dir_all(&temp_base);
 
-    assert_eq!(report.action, "config-doctor");
+    assert_eq!(report.action, "config-health");
     assert_eq!(report.status, ConfigHealthStatus::Error);
     assert!(
         report
@@ -1608,7 +1608,7 @@ selected_profile = "deep_work"
     let persisted = fs::read_to_string(&config_path).unwrap();
     let _ = fs::remove_dir_all(&temp_base);
 
-    assert_eq!(report.action, "config-migrate");
+    assert_eq!(report.action, "config-migration-guidance");
     assert!(!report.applied);
     assert!(report.changed);
     assert!(report.backup_path.is_none());
@@ -1636,7 +1636,7 @@ selected_profile = "deep_work"
     let backup = fs::read_to_string(&backup_path).unwrap();
     let _ = fs::remove_dir_all(&temp_base);
 
-    assert_eq!(report.action, "config-migrate-apply");
+    assert_eq!(report.action, "config-migration-apply");
     assert!(report.applied);
     assert!(report.changed);
     assert!(migrated.contains("schema_version = 2"));

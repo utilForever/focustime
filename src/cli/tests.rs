@@ -18,7 +18,7 @@ fn parse_with_contract(values: &[&str]) -> Result<CliAction, CliError> {
 
 fn test_config_doctor_report() -> ConfigDoctorReport {
     ConfigDoctorReport {
-        action: "config-doctor",
+        action: "config-health",
         config_path: None,
         detected_schema_version: None,
         current_schema_version: 2,
@@ -30,7 +30,7 @@ fn test_config_doctor_report() -> ConfigDoctorReport {
 
 fn test_config_migration_report() -> ConfigMigrationReport {
     ConfigMigrationReport {
-        action: "config-migrate",
+        action: "config-migration-guidance",
         applied: false,
         config_path: None,
         backup_path: None,
@@ -163,6 +163,19 @@ fn usage_text_omits_retired_daemon_lifecycle_options() {
     ] {
         assert!(!usage.contains(retired));
     }
+}
+
+#[test]
+fn usage_text_omits_retired_config_diagnostics_commands() {
+    let usage = usage_text();
+    for retired in [
+        "--config-doctor",
+        "--config-migrate",
+        "--config-migrate-apply",
+    ] {
+        assert!(!usage.contains(retired));
+    }
+    assert!(usage.contains("--diagnostics"));
 }
 
 #[test]
@@ -806,47 +819,27 @@ fn parse_diagnostics_supports_json_mode() {
 }
 
 #[test]
-fn parse_config_doctor_supports_json_mode() {
-    let parsed = parse(&["--config-doctor", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::ConfigDoctor,
-            output: OutputMode::Json
-        })
-    );
-}
-
-#[test]
-fn parse_config_migrate_supports_text_mode() {
-    let parsed = parse(&["--config-migrate"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::ConfigMigrate { apply: false },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_config_migrate_apply_supports_json_mode() {
-    let parsed = parse(&["--config-migrate-apply", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::ConfigMigrate { apply: true },
-            output: OutputMode::Json
-        })
-    );
-}
-
-#[test]
-fn parse_rejects_config_migrate_and_apply_combination() {
-    let error = parse(&["--config-migrate", "--config-migrate-apply"]).unwrap_err();
-    assert!(error.contains("Multiple primary commands"));
-    assert!(error.contains("--config-migrate"));
-    assert!(error.contains("--config-migrate-apply"));
+fn parse_rejects_retired_config_diagnostics_commands_with_guidance() {
+    for flag in [
+        "--config-doctor",
+        "--config-migrate",
+        "--config-migrate-apply",
+    ] {
+        let error = parse_with_contract(&[flag, "--json"]).unwrap_err();
+        assert_eq!(error.output, OutputMode::Json);
+        assert!(error.message.contains(&format!("Unknown option `{flag}`")));
+        assert!(
+            error
+                .message
+                .contains("Dedicated config diagnostics commands were removed.")
+        );
+        assert_eq!(
+            error.hint.as_deref(),
+            Some(
+                "Use `focustime --diagnostics` for setup checks, config health, and migration guidance."
+            )
+        );
+    }
 }
 
 #[test]
@@ -871,9 +864,9 @@ fn diagnostics_output_includes_config_health_and_migration_guidance() {
     assert_eq!(preview.action, "block");
     assert!(preview.would_change);
     assert_eq!(preview.effective_blocked_sites, vec!["example.com"]);
-    assert_eq!(payload.config_doctor.action, "config-doctor");
+    assert_eq!(payload.config_doctor.action, "config-health");
     assert_eq!(payload.config_doctor.status, ConfigHealthStatus::Ok);
-    assert_eq!(payload.config_migration.action, "config-migrate");
+    assert_eq!(payload.config_migration.action, "config-migration-guidance");
     assert!(!payload.config_migration.applied);
 }
 
