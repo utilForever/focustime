@@ -320,7 +320,7 @@ fn scheduled_weight_minutes_for_day(
     exception_dates: &HashSet<NaiveDate>,
 ) -> u64 {
     let exception_applies = exception_dates.contains(&day);
-    let recurring_minutes = if exception_applies {
+    if exception_applies {
         0
     } else {
         schedule
@@ -334,14 +334,7 @@ fn scheduled_weight_minutes_for_day(
             })
             .map(|window| window_duration_minutes(&window.start, &window.end))
             .sum()
-    };
-    let one_time_minutes: u64 = schedule
-        .one_time_windows
-        .iter()
-        .filter(|window| parse_schedule_date(&window.date) == Some(day))
-        .map(|window| window_duration_minutes(&window.start, &window.end))
-        .sum();
-    recurring_minutes.saturating_add(one_time_minutes)
+    }
 }
 
 fn weekday_token_matches(token: &str, weekday: Weekday) -> bool {

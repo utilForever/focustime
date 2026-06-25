@@ -435,8 +435,7 @@ fn build_session_template_command_output(
             task_label: template.task_label.clone(),
             profile: profile_id(template.profile),
             blocklist_profile: template.blocklist_profile.clone(),
-            schedule_windows_count: template.schedule.windows.len()
-                + template.schedule.one_time_windows.len(),
+            schedule_windows_count: template.schedule.windows.len(),
         }
     }));
     SessionTemplateCommandOutput {

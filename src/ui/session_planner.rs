@@ -183,8 +183,7 @@ fn render_session_planner_templates(frame: &mut Frame, app: &App, area: Rect) {
             } else {
                 " "
             };
-            let schedule_windows =
-                template.schedule.windows.len() + template.schedule.one_time_windows.len();
+            let schedule_windows = template.schedule.windows.len();
             ListItem::new(format!(
                 " {marker} {} ({}, {}, {}, {}w)",
                 template.name,

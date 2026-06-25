@@ -15,18 +15,17 @@ use crate::config::{
     AppConfig, AutoStartConfig, BlockingBackendConfig, BlockingBackendPolicyConfig,
     BlocklistProfileConfig, CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig,
     FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig, MonthlyGoalConfig,
-    NotificationConfig, OneTimeFocusWindowConfig, ProfileAutomationConfig,
-    ProfileAutomationSettingsConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, ScheduleRuntimeConfig, SessionTemplateConfig, StatsRetentionConfig,
-    ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig, WeeklyGoalConfig,
+    NotificationConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
+    RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
+    SessionTemplateConfig, StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig,
+    WakatimeRuntimeConfig, WeeklyGoalConfig,
 };
 use crate::integration::IntegrationRuntime;
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
-    OneTimeWindow, RecurringWindow, WindowOccurrence, active_occurrence,
-    active_one_time_occurrence, compile_exception_dates, compile_one_time_windows, compile_windows,
+    RecurringWindow, WindowOccurrence, active_occurrence, compile_exception_dates, compile_windows,
     format_schedule_conflict, inspect_schedule_conflicts_from_config, next_occurrence_after,
-    next_one_time_occurrence_after, occurrence_key, pick_active_occurrence, pick_next_occurrence,
+    occurrence_key,
 };
 use crate::stats::{
     BreakGlassOverrideEvent, ComparisonDimension, DailyGoalSnapshot, DailyStats,
@@ -82,17 +81,15 @@ pub(crate) use profile_edit::{
     PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX, PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX,
     PROFILE_EDIT_FIELD_LABELS, PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX,
-    PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX, PROFILE_EDIT_ONE_TIME_DATE_INDEX,
-    PROFILE_EDIT_ONE_TIME_END_INDEX, PROFILE_EDIT_ONE_TIME_START_INDEX,
-    PROFILE_EDIT_ONE_TIME_WINDOW_INDEX, PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX,
-    PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
-    PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
-    PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX,
-    PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
-    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX,
-    PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX, PROFILE_EDIT_WAKATIME_PROJECT_INDEX,
-    PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
-    PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, ProfileEditSnapshot,
+    PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX,
+    PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX, PROFILE_EDIT_SCHEDULE_DAY_INDEX,
+    PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX,
+    PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX,
+    PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
+    PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX,
+    PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX,
+    ProfileEditSnapshot,
 };
 pub(crate) use setup_diagnostics::{
     BlockingPreviewSnapshot, SetupCheck, SetupCheckLevel, SetupDiagnostics,
@@ -512,7 +509,6 @@ pub(crate) struct App {
     profile_edit_schedule_window: usize,
     profile_edit_schedule_day: usize,
     profile_edit_schedule_exception: usize,
-    profile_edit_one_time_window: usize,
     profile_edit_snapshot: Option<ProfileEditSnapshot>,
     notification_settings: NotificationConfig,
     auto_start: AutoStartConfig,
@@ -520,7 +516,6 @@ pub(crate) struct App {
     schedule_runtime: ScheduleRuntimeConfig,
     recurring_windows: Vec<RecurringWindow>,
     recurring_exception_dates: HashSet<NaiveDate>,
-    one_time_windows: Vec<OneTimeWindow>,
     schedule_armed_occurrence_key: Option<String>,
     schedule_delayed_occurrence_key: Option<String>,
     schedule_delay_until: Option<DateTime<Local>>,
@@ -582,7 +577,6 @@ impl App {
         let recurring_windows = compile_windows(&recurring_schedule.windows);
         let recurring_exception_dates =
             compile_exception_dates(&recurring_schedule.exception_dates);
-        let one_time_windows = compile_one_time_windows(&recurring_schedule.one_time_windows);
         let strict_mode = selected_automation.strict_mode;
         let schedule_runtime = config.schedule_runtime;
         let break_glass_duration_secs = config.break_glass_duration_secs;
@@ -722,7 +716,6 @@ impl App {
             profile_edit_schedule_window: 0,
             profile_edit_schedule_day: 0,
             profile_edit_schedule_exception: 0,
-            profile_edit_one_time_window: 0,
             profile_edit_snapshot: None,
             notification_settings,
             auto_start,
@@ -730,7 +723,6 @@ impl App {
             schedule_runtime,
             recurring_windows,
             recurring_exception_dates,
-            one_time_windows,
             schedule_armed_occurrence_key: None,
             schedule_delayed_occurrence_key: None,
             schedule_delay_until: None,
@@ -1523,15 +1515,6 @@ fn sort_schedule_exception_dates(dates: &mut Vec<String>) {
         sorted.insert(date.format("%Y-%m-%d").to_string());
     }
     *dates = sorted.into_iter().collect();
-}
-
-fn sort_one_time_windows(windows: &mut [OneTimeFocusWindowConfig]) {
-    windows.sort_by(|left, right| {
-        left.date
-            .cmp(&right.date)
-            .then(left.start.cmp(&right.start))
-            .then(left.end.cmp(&right.end))
-    });
 }
 
 fn format_schedule_days_for_display(days: &[String]) -> String {

@@ -278,13 +278,8 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         26 => "Exception selector",
         27 => "Exception date",
         28 => "Exception add/remove",
-        29 => "One-time selector",
-        30 => "One-time date",
-        31 => "One-time start",
-        32 => "One-time end",
-        33 => "One-time add/remove",
-        34 => "Conflict inspector",
-        35 => "Theme preset",
+        29 => "Conflict inspector",
+        30 => "Theme preset",
         _ => "",
     }
 }

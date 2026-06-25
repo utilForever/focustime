@@ -185,14 +185,6 @@ pub(super) fn print_schedule_command_output(payload: &ScheduleCommandOutput) {
             payload.schedule.exception_dates.join(", ")
         );
     }
-    if payload.schedule.one_time_windows.is_empty() {
-        println!("One-time windows: none");
-    } else {
-        println!("One-time windows:");
-        for window in &payload.schedule.one_time_windows {
-            println!("  - {} {}-{}", window.date, window.start, window.end);
-        }
-    }
     if payload.inspection.conflicts.is_empty() {
         println!("Schedule conflicts: none");
     } else {

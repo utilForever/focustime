@@ -4,7 +4,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use chrono::{Local, NaiveDate};
+use chrono::NaiveDate;
 use serde::{Deserialize, Deserializer, Serialize};
 
 mod blocklists;
@@ -351,13 +351,12 @@ pub(crate) struct AutoStartConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct RecurringScheduleConfig {
     #[serde(default)]
     pub(crate) windows: Vec<RecurringFocusWindowConfig>,
     #[serde(default)]
     pub(crate) exception_dates: Vec<String>,
-    #[serde(default)]
-    pub(crate) one_time_windows: Vec<OneTimeFocusWindowConfig>,
 }
 
 impl RecurringScheduleConfig {
@@ -377,27 +376,9 @@ impl RecurringScheduleConfig {
             })
             .collect();
         let exception_dates = normalize_schedule_exception_dates(&self.exception_dates);
-        let one_time_windows = self
-            .one_time_windows
-            .iter()
-            .map(OneTimeFocusWindowConfig::normalized)
-            .filter(|window| {
-                if parse_schedule_exception_date(&window.date).is_none() {
-                    return false;
-                }
-                let Some(start_minutes) = parse_schedule_time_minutes(&window.start) else {
-                    return false;
-                };
-                let Some(end_minutes) = parse_schedule_time_minutes(&window.end) else {
-                    return false;
-                };
-                start_minutes < end_minutes
-            })
-            .collect();
         Self {
             windows,
             exception_dates,
-            one_time_windows,
         }
     }
 }
@@ -551,36 +532,6 @@ impl Default for RecurringFocusWindowConfig {
     fn default() -> Self {
         Self {
             days: default_schedule_window_days(),
-            start: default_schedule_window_start(),
-            end: default_schedule_window_end(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct OneTimeFocusWindowConfig {
-    #[serde(default)]
-    pub(crate) date: String,
-    #[serde(default = "default_schedule_window_start")]
-    pub(crate) start: String,
-    #[serde(default = "default_schedule_window_end")]
-    pub(crate) end: String,
-}
-
-impl OneTimeFocusWindowConfig {
-    pub(crate) fn normalized(&self) -> Self {
-        Self {
-            date: self.date.trim().to_string(),
-            start: self.start.trim().to_string(),
-            end: self.end.trim().to_string(),
-        }
-    }
-}
-
-impl Default for OneTimeFocusWindowConfig {
-    fn default() -> Self {
-        Self {
-            date: default_one_time_schedule_date(),
             start: default_schedule_window_start(),
             end: default_schedule_window_end(),
         }
@@ -849,10 +800,6 @@ fn default_schedule_window_start() -> String {
 
 fn default_schedule_window_end() -> String {
     "10:00".to_string()
-}
-
-fn default_one_time_schedule_date() -> String {
-    Local::now().date_naive().format("%Y-%m-%d").to_string()
 }
 
 fn default_break_glass_duration_secs() -> u64 {

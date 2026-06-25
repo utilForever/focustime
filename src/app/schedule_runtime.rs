@@ -1,8 +1,7 @@
 use crate::app::{
     App, DateTime, FocusStartOutcome, Local, ScheduleDisplayState, ShortcutAction, TimerPhase,
-    TimerState, TimerStatus, WindowOccurrence, active_occurrence, active_one_time_occurrence,
-    format_duration_label, next_occurrence_after, next_one_time_occurrence_after, occurrence_key,
-    pick_active_occurrence, pick_next_occurrence,
+    TimerState, TimerStatus, WindowOccurrence, active_occurrence, format_duration_label,
+    next_occurrence_after, occurrence_key,
 };
 
 struct ScheduleShortcutLabels {
@@ -35,26 +34,19 @@ impl App {
     fn schedule_display_state_at(&self, now: DateTime<Local>) -> ScheduleDisplayState {
         let today = now.date_naive();
         let active_window = self.active_schedule_occurrence_at(now);
-        let recurring_next = next_occurrence_after(
+        let next_window = next_occurrence_after(
             now,
             &self.recurring_windows,
             &self.recurring_exception_dates,
         );
-        let one_time_next = next_one_time_occurrence_after(now, &self.one_time_windows);
-        let has_one_time_window_today = self
-            .one_time_windows
-            .iter()
-            .any(|window| window.date == today);
         let delayed_until = active_window.as_ref().and_then(|occurrence| {
             self.schedule_delay_until_for_occurrence_key(&occurrence_key(occurrence), now)
         });
         ScheduleDisplayState {
-            has_schedule_windows: !(self.recurring_windows.is_empty()
-                && self.one_time_windows.is_empty()),
+            has_schedule_windows: !self.recurring_windows.is_empty(),
             active_window,
-            next_window: pick_next_occurrence(recurring_next, one_time_next),
-            is_exception_today: self.recurring_exception_dates.contains(&today)
-                && !has_one_time_window_today,
+            next_window,
+            is_exception_today: self.recurring_exception_dates.contains(&today),
             is_armed: self.schedule_armed_occurrence_key.is_some(),
             delayed_until,
             has_selected_task: self.has_selectable_task_label_for_focus(),
@@ -67,13 +59,11 @@ impl App {
         &self,
         now: DateTime<Local>,
     ) -> Option<WindowOccurrence> {
-        let recurring_active = active_occurrence(
+        active_occurrence(
             now,
             &self.recurring_windows,
             &self.recurring_exception_dates,
-        );
-        let one_time_active = active_one_time_occurrence(now, &self.one_time_windows);
-        pick_active_occurrence(recurring_active, one_time_active)
+        )
     }
 
     pub(super) fn sync_recurring_schedule(&mut self, now: DateTime<Local>) {
@@ -81,7 +71,7 @@ impl App {
         let active_occurrence_key = active_window.as_ref().map(occurrence_key);
         self.last_active_schedule_occurrence_key = active_occurrence_key.clone();
 
-        if self.recurring_windows.is_empty() && self.one_time_windows.is_empty() {
+        if self.recurring_windows.is_empty() {
             self.schedule_armed_occurrence_key = None;
             self.clear_schedule_delay_state();
             return;
