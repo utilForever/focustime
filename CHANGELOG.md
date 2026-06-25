@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Blocklist category config cleanup (#496):** flattened deprecated blocklist category `sites` and `allowlist_sites` into profile-level rules during config migration, removed category fields from runtime persistence, and updated doctor guidance for profile-level blocklist configs.
-- **Automation trigger compatibility cleanup (#498):** removed standalone `--automation-triggers*` command parsing/output, dropped `automation_triggers` config/runtime persistence during migration, and kept schedules, `--schedule-delay`, and session templates as the supported automation model.
+- **Automation trigger compatibility cleanup (#498):** removed standalone `--automation-triggers*` command parsing/output, dropped `automation_triggers` config/runtime persistence during migration, and kept schedules, supported timer controls, and session templates as the supported automation model.
 - **Cleanup migration and doctor warning simplification (#499):** removed config doctor and migration assistant warnings for retired blocklist category cleanup paths while preserving migration steps for canonical config changes.
 - **Temporary override field cleanup (#500):** removed legacy `temporary_allowlist_*` status JSON fields and duplicate break-glass/temporary allowlist workflow persistence fields so status and recovery use canonical `temporary_overrides`.
 
@@ -82,8 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Calendar sync simplification (#444):** narrowed calendar busy-window support to an opt-in schedule annotation cache, marked standalone `--calendar-sync` output with deprecation/replacement guidance, and documented deterministic schedule behavior when calendar data is absent or disabled.
-- **Automation trigger deprecation (#443):** marked standalone `automation_triggers` and `--automation-triggers*` as deprecated compatibility surfaces, routed guidance to schedule windows, `--schedule-delay`, and session templates, and removed standalone trigger execution from schedule/timer runtime paths.
-- **Weekday rule shim cleanup (#497):** removed `--weekday-rules*` command parsing/output and the deprecated `weekday_profile_rules` runtime shim; config migration now removes the legacy key while schedule windows, `--schedule-delay`, and session templates remain the supported replacement.
+- **Automation trigger deprecation (#443):** marked standalone `automation_triggers` and `--automation-triggers*` as deprecated compatibility surfaces, routed guidance to schedule windows, supported timer controls, and session templates, and removed standalone trigger execution from schedule/timer runtime paths.
+- **Weekday rule shim cleanup (#497):** removed `--weekday-rules*` command parsing/output and the deprecated `weekday_profile_rules` runtime shim; config migration now removes the legacy key while schedule windows, supported timer controls, and session templates remain the supported replacement.
 
 ## [0.15.2] - 2026-06-10
 
@@ -273,7 +273,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Expanded runtime recovery scope and startup reconciliation notices (#294):** recovery now includes schedule arming continuity and strict-reset pending confirmation alongside existing timer/schedule-delay/break-glass artifacts, with deterministic partial-recovery startup notices when saved runtime fragments are dropped.
+- **Expanded runtime recovery scope and startup reconciliation notices (#294):** recovery now includes schedule arming continuity and strict-reset pending confirmation alongside existing timer/break-glass artifacts, with deterministic partial-recovery startup notices when saved runtime fragments are dropped.
 - **Dual-read/dual-write stats persistence compatibility path (#291):** added canonical data/state stats persistence with legacy-path read fallback and dual-write mirroring controls, including CLI backup/restore and diagnostics visibility updates for migration windows.
 - **Migration tooling with dry-run and rollback safety (#292):** added `--migrate` with explicit `--dry-run` preview mode, structured migration step reporting, and rollback-aware migration execution/diagnostics for stats-path compatibility finalization.
 - **Deprecation warnings and migration docs for legacy fields/paths (#293):** added targeted setup/CLI diagnostics warnings for detected legacy config and stats-path compatibility usage, plus README mapping and planned removal milestones.
@@ -282,7 +282,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **CLI schedule-delay and break-glass workflow controls (#282):** added reusable app APIs and non-interactive CLI commands to delay active schedule windows and toggle break-glass mode across invocations.
+- **CLI workflow controls (#282):** added reusable app APIs and non-interactive CLI commands for workflow controls and break-glass mode across invocations.
 - **Runtime-tunable schedule and WakaTime queue knobs (#283):** added config/runtime controls for schedule granularity and WakaTime retry queue replay behavior, with validation and runtime application.
 - **Headless session start command contract (#284):** made `--start` fully non-interactive and documented/tested the process-safe contract for CLI-driven session start/recovery flows.
 - **Configurable navigation and edit shortcuts (#285):** added user-configurable navigation/edit key bindings and propagated those bindings through timer note prompts and related UI interactions.
