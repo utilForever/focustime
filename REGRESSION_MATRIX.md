@@ -20,7 +20,7 @@ contracts now live in normal module and integration tests that run with
 | Artifacts | Backup and stats export artifact workflows share target-directory creation and JSON path/error contracts. | `artifact_workflows_json_create_target_dirs_and_preserve_path_fields`, `artifact_workflows_json_report_consistent_target_directory_errors` |
 | Integration runtime | Daemon local API lifecycle paths remain removed; CLI timer/session/workflow commands and the TUI remain the supported automation/runtime surface. | `parse_rejects_retired_daemon_lifecycle_options`, `retired_daemon_lifecycle_commands_emit_json_usage_errors`, `usage_text_keeps_supported_cli_automation_replacements` |
 | WakaTime runtime | WakaTime exposes only supported runtime calls for heartbeat polling, focus-running sync, elapsed focus tracking, and metadata updates. | `poll_wakatime_events_applies_async_updates`, `disabled_wakatime_runtime_ignores_supported_hooks` |
-| Dependency ownership | Runtime HTTP and Basic auth stay owned by WakaTime, while removed daemon and calendar paths do not reintroduce direct runtime ownership. | `Cargo.toml`, `Cargo.lock`, `src/wakatime/transport.rs`, plus `rg -n "ureq|chrono_tz|chrono-tz" src tests` during dependency cleanup |
+| Dependency ownership | Runtime HTTP and Basic auth stay owned by WakaTime, while removed daemon and calendar paths do not reintroduce direct runtime ownership. | `Cargo.toml`, `Cargo.lock`, `src/wakatime/transport.rs`, plus `rg -n "ureq\|chrono_tz\|chrono-tz" src tests` during dependency cleanup |
 
 ## Release Readiness
 
