@@ -170,7 +170,6 @@ fn round_trip_full_config() {
             time_step_minutes: 20,
             delay_secs: 15 * 60,
         },
-        calendar_sync: CalendarSyncConfig::default(),
         profile_automation: Some(ProfileAutomationSettingsConfig {
             basic: Some(ProfileAutomationConfig {
                 notifications: NotificationConfig {
@@ -298,6 +297,7 @@ fn round_trip_full_config() {
     assert!(!root.contains_key("auto_start"));
     assert!(!root.contains_key("strict_mode"));
     assert!(!root.contains_key("recurring_schedule"));
+    assert!(!root.contains_key("calendar_sync"));
     assert!(!root.contains_key("weekday_profile_rules"));
     assert!(!root.contains_key("history_dashboard"));
 
@@ -910,7 +910,6 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
         schedule_runtime: ScheduleRuntimeConfig::default(),
-        calendar_sync: CalendarSyncConfig::default(),
         profile_automation: None,
         strict_mode: false,
         break_glass_duration_secs: default_break_glass_duration_secs(),
@@ -1102,8 +1101,8 @@ fn load_with_env_defaults_do_not_emit_deprecation_warnings() {
 }
 
 #[test]
-fn load_with_env_reports_calendar_sync_annotation_cache_guidance() {
-    let temp_base = unique_temp_base("calendar-sync-deprecation-guidance");
+fn load_with_env_ignores_legacy_calendar_sync_without_warning() {
+    let temp_base = unique_temp_base("legacy-calendar-sync-ignored");
     let app_dir = temp_base.join("focustime");
     fs::create_dir_all(&app_dir).unwrap();
     fs::write(
@@ -1129,16 +1128,7 @@ url = "https://example.com/work.ics"
     });
     let _ = fs::remove_dir_all(&temp_base);
 
-    assert!(
-        warnings
-            .iter()
-            .any(|warning| warning.contains("opt-in schedule annotation cache"))
-    );
-    assert!(
-        warnings
-            .iter()
-            .any(|warning| warning.contains("disabled or absent"))
-    );
+    assert!(warnings.is_empty());
 }
 
 #[test]
@@ -1703,6 +1693,50 @@ fn save_with_env_writes_current_schema_version() {
 }
 
 #[test]
+fn save_with_env_omits_legacy_calendar_sync_section() {
+    let temp_base = unique_temp_base("save-omits-legacy-calendar-sync");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(
+        app_dir.join("config.toml"),
+        r#"
+[calendar_sync]
+enabled = true
+lookahead_days = 30
+
+[[calendar_sync.sources]]
+name = "Work"
+provider = "google"
+url = "https://example.com/work.ics"
+"#,
+    )
+    .unwrap();
+
+    let cfg = AppConfig::load_with_env(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    cfg.save_with_env(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    })
+    .unwrap();
+
+    let saved = fs::read_to_string(app_dir.join("config.toml")).unwrap();
+    let saved_toml: toml::Value = toml::from_str(&saved).unwrap();
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert!(saved_toml.get("calendar_sync").is_none());
+    assert!(!saved.contains("[calendar_sync]"));
+}
+
+#[test]
 fn wakatime_metadata_normalizes_blank_fields_to_defaults() {
     let cfg: AppConfig = toml::from_str(
         r#"
@@ -1755,79 +1789,6 @@ project = "Ignored"
             language: None,
         }]
     );
-}
-
-#[test]
-fn calendar_sync_normalization_clamps_runtime_bounds() {
-    let min_bounded = CalendarSyncConfig {
-        enabled: true,
-        refresh_secs: 0,
-        lookahead_days: 0,
-        sources: Vec::new(),
-    }
-    .normalized();
-    assert_eq!(min_bounded.refresh_secs, 300);
-    assert_eq!(min_bounded.lookahead_days, 1);
-
-    let max_bounded = CalendarSyncConfig {
-        enabled: true,
-        refresh_secs: u64::MAX,
-        lookahead_days: u16::MAX,
-        sources: Vec::new(),
-    }
-    .normalized();
-    assert_eq!(max_bounded.refresh_secs, 86_400);
-    assert_eq!(max_bounded.lookahead_days, 90);
-}
-
-#[test]
-fn calendar_sync_normalization_deduplicates_sources_and_autonames_blanks() {
-    let normalized = CalendarSyncConfig {
-        enabled: true,
-        refresh_secs: 1800,
-        lookahead_days: 14,
-        sources: vec![
-            CalendarSourceConfig {
-                name: "   ".to_string(),
-                provider: CalendarProviderConfig::Ics,
-                url: " https://example.com/A.ics ".to_string(),
-                enabled: true,
-            },
-            CalendarSourceConfig {
-                name: "Work".to_string(),
-                provider: CalendarProviderConfig::Ics,
-                url: "https://example.com/a.ics".to_string(),
-                enabled: false,
-            },
-            CalendarSourceConfig {
-                name: "".to_string(),
-                provider: CalendarProviderConfig::Google,
-                url: "https://example.com/a.ics".to_string(),
-                enabled: true,
-            },
-            CalendarSourceConfig {
-                name: "Ignored".to_string(),
-                provider: CalendarProviderConfig::Outlook,
-                url: "   ".to_string(),
-                enabled: true,
-            },
-        ],
-    }
-    .normalized();
-
-    assert_eq!(normalized.sources.len(), 2);
-    assert_eq!(normalized.sources[0].name, "calendar-source-1");
-    assert_eq!(normalized.sources[0].provider, CalendarProviderConfig::Ics);
-    assert_eq!(normalized.sources[0].url, "https://example.com/A.ics");
-    assert!(normalized.sources[0].enabled);
-
-    assert_eq!(normalized.sources[1].name, "calendar-source-2");
-    assert_eq!(
-        normalized.sources[1].provider,
-        CalendarProviderConfig::Google
-    );
-    assert_eq!(normalized.sources[1].url, "https://example.com/a.ics");
-    assert!(normalized.sources[1].enabled);
 }
 
 #[test]

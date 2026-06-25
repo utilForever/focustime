@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Calendar annotation cache cleanup (#546):** removed calendar annotation cache runtime handling, dropped `[calendar_sync]` from normalized config persistence/examples, and kept schedule output deterministic without calendar-derived busy/overlap text.
+
 ## [0.16.1] - 2026-06-24
 
 ### Changed

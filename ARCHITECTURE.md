@@ -21,7 +21,6 @@ flowchart LR
     WK["wakatime.rs<br/>heartbeat tracking"]
     NT["notifications.rs<br/>phase notifications"]
     SCH["schedule.rs<br/>window compilation/selection"]
-    CAL["calendar.rs<br/>cache loading + overlap helpers for schedule annotations"]
     REC["session_recovery.rs<br/>runtime snapshot I/O"]
     TL["task_labels.rs<br/>task label normalization/indexing"]
     OS["OS / filesystem / hosts / notifications"]
@@ -37,7 +36,6 @@ flowchart LR
     IG --> WK
     APP --> NT
     APP --> SCH
-    APP --> CAL
     APP --> ST
     APP --> TL
     APP --> REC
@@ -55,7 +53,7 @@ flowchart LR
 | Module                          | Responsibility                                                                                                                                                                                                                                                                                  | Main collaborators                                                                            |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `main.rs`                       | Composition root, CLI vs TUI dispatch, terminal setup/teardown, frame/tick loop                                                                                                                                                                                                                 | `cli`, `app`, `ui`, `crossterm`, `ratatui`                                                    |
-| `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`), with temporary allowlist and break-glass mapped into one temporary override recovery model | `timer`, `blocker`, `integration`, `notifications`, `schedule`, `calendar`, `stats`, `config` |
+| `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `session_planner`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `break_glass`, `cli_api`, `mode_keys`), with temporary allowlist and break-glass mapped into one temporary override recovery model | `timer`, `blocker`, `integration`, `notifications`, `schedule`, `stats`, `config` |
 | `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless timer/session/workflow controls, schedule delay/temporary override controls, and local backup/restore. The standalone calendar refresh, feature inventory export, and daemon local API lifecycle commands are retired.                    | `app`, `config`, `stats`, `blocker`                                     |
 | `stats.rs` + `stats/*`          | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers, including canonical-path persistence and legacy read-time compatibility handling during deprecation windows                                                                                          | `app`, `task_labels`, filesystem                                                              |
 | `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, `session_planner`, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                                                              | `app`, `timer`, `integration`                                                                 |
@@ -64,7 +62,6 @@ flowchart LR
 | `blocker.rs`                    | Blocking backend orchestration (hosts + command), deterministic fallback selection, preview generation, and backend diagnostics                                                                                                                                                                 | `app`, `cli`, OS/filesystem                                                                   |
 | `integration.rs`                | Narrow WakaTime integration runtime: config-driven activation plus supported calls for heartbeat polling, focus-running sync, elapsed focus tracking, heartbeat metadata updates, and runtime status access                                                                                    | `app`, `config`, `wakatime`                                                                   |
 | `schedule.rs`                   | Recurring/one-time schedule compile and conflict/occurrence logic                                                                                                                                                                                                                               | `app`, `cli`, `config`                                                                        |
-| `calendar.rs`                   | Optional calendar busy-window cache loading and overlap helpers used only as schedule annotations. Retired ICS parsing and `TZID` coverage remain test-only unless refresh support is reintroduced.                                                                                                                               | `app`, `config`, filesystem                                             |
 | `session_recovery.rs`           | Runtime recovery snapshot read/write, transient runtime artifact reconciliation, and startup warning notices for dropped invalid fragments                                                                                                                                                      | `app`, `cli`, filesystem                                                                      |
 | `task_labels.rs`                | Task-label normalization, canonicalization, and index helpers                                                                                                                                                                                                                                   | `app`, `stats`, `cli`                                                                         |
 | `wakatime.rs`                   | WakaTime config parsing and heartbeat scheduling/sending with retry, bounded offline queueing, and replay orchestration                                                                                                                                                                         | `app`, HTTP (`ureq`)                                                                          |
@@ -111,7 +108,7 @@ sequenceDiagram
    processes keyboard/paste input through `App` key handlers.
 3. A 100ms cadence accumulates elapsed time; each elapsed second advances
    `App::on_tick()` and applies phase-driven side effects.
-4. `App` keeps blocking, notifications, scheduling (including optional calendar busy/overlap annotations), and supported WakaTime tracking in sync with
+4. `App` keeps blocking, notifications, scheduling, and supported WakaTime tracking in sync with
    timer state; side effects are isolated in dedicated modules.
 5. Headless automation routes through CLI timer/session/workflow commands; the
    daemon local API lifecycle and loopback `/v1/*` endpoints are retired.

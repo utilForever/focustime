@@ -1,9 +1,8 @@
 use crate::app::*;
 use crate::blocker;
-use crate::calendar::CalendarBusyWindow;
 use crate::config::{
-    CalendarProviderConfig, FeatureFlagsConfig, HistoryDashboardConfig, HistoryKpiCardId,
-    ShortcutConfig, StatsRetentionConfig,
+    FeatureFlagsConfig, HistoryDashboardConfig, HistoryKpiCardId, ShortcutConfig,
+    StatsRetentionConfig,
 };
 use crate::error::UserFacingError;
 use crate::session_recovery::{
@@ -161,7 +160,6 @@ fn selected_builtin_profile_is_applied_on_startup() {
         auto_start: AutoStartConfig::default(),
         recurring_schedule: RecurringScheduleConfig::default(),
         schedule_runtime: ScheduleRuntimeConfig::default(),
-        calendar_sync: crate::config::CalendarSyncConfig::default(),
         profile_automation: None,
         strict_mode: false,
         break_glass_duration_secs: 5 * 60,
@@ -2876,39 +2874,7 @@ fn recurring_schedule_status_text_shows_ready_for_upcoming_window() {
 }
 
 #[test]
-fn recurring_schedule_next_window_text_flags_calendar_overlap() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "11:00".to_string(),
-                end: "12:00".to_string(),
-            }],
-            ..RecurringScheduleConfig::default()
-        },
-        calendar_sync: crate::config::CalendarSyncConfig {
-            enabled: true,
-            ..crate::config::CalendarSyncConfig::default()
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.set_calendar_busy_windows_for_tests(vec![CalendarBusyWindow {
-        source_name: "work".to_string(),
-        provider: CalendarProviderConfig::Google,
-        summary: "Team meeting".to_string(),
-        start_epoch_secs: local_datetime_today(11, 15).timestamp(),
-        end_epoch_secs: local_datetime_today(11, 45).timestamp(),
-    }]);
-
-    let next_text = app.recurring_schedule_texts_at(now).0;
-    assert!(next_text.contains("calendar overlap"));
-    assert!(next_text.contains("Team meeting"));
-}
-
-#[test]
-fn recurring_schedule_text_omits_calendar_annotations_when_disabled_or_absent() {
+fn recurring_schedule_text_has_no_calendar_annotations() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {
         recurring_schedule: RecurringScheduleConfig {
@@ -2921,56 +2887,12 @@ fn recurring_schedule_text_omits_calendar_annotations_when_disabled_or_absent() 
         },
         ..AppConfig::default()
     };
-    let absent_app = App::from_config(config.clone());
-    let (absent_next_text, absent_status_text) = absent_app.recurring_schedule_texts_at(now);
-    assert!(!absent_next_text.contains("calendar"));
-    assert!(!absent_status_text.contains("calendar"));
-
-    let mut app = App::from_config(config);
-    app.set_calendar_busy_windows_for_tests(vec![CalendarBusyWindow {
-        source_name: "work".to_string(),
-        provider: CalendarProviderConfig::Google,
-        summary: "Disabled calendar cache".to_string(),
-        start_epoch_secs: local_datetime_today(11, 15).timestamp(),
-        end_epoch_secs: local_datetime_today(11, 45).timestamp(),
-    }]);
+    let app = App::from_config(config);
 
     let (next_text, status_text) = app.recurring_schedule_texts_at(now);
 
     assert!(!next_text.contains("calendar"));
     assert!(!status_text.contains("calendar"));
-}
-
-#[test]
-fn recurring_schedule_status_text_mentions_active_calendar_busy_window() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "10:00".to_string(),
-                end: "11:00".to_string(),
-            }],
-            ..RecurringScheduleConfig::default()
-        },
-        calendar_sync: crate::config::CalendarSyncConfig {
-            enabled: true,
-            ..crate::config::CalendarSyncConfig::default()
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.set_calendar_busy_windows_for_tests(vec![CalendarBusyWindow {
-        source_name: "work".to_string(),
-        provider: CalendarProviderConfig::Outlook,
-        summary: "Client call".to_string(),
-        start_epoch_secs: local_datetime_today(10, 0).timestamp(),
-        end_epoch_secs: local_datetime_today(10, 30).timestamp(),
-    }]);
-
-    let status_text = app.recurring_schedule_texts_at(now).1;
-    assert!(status_text.contains("calendar busy"));
-    assert!(status_text.contains("Client call"));
 }
 
 #[test]
@@ -3191,46 +3113,6 @@ fn recurring_schedule_auto_starts_focus_when_window_begins_and_task_is_selected(
     let mut app = App::from_config(config);
     app.task_labels = vec!["Coding".to_string()];
     app.selected_task_label = Some("Coding".to_string());
-
-    app.sync_recurring_schedule(now);
-
-    assert_eq!(app.timer.phase, TimerPhase::Focus);
-    assert_eq!(app.timer.status, TimerStatus::Running);
-    assert_eq!(
-        app.phase_notification.as_deref(),
-        Some("Scheduled window started. Focus auto-started.")
-    );
-    assert!(app.schedule_armed_occurrence_key.is_none());
-}
-
-#[test]
-fn recurring_schedule_auto_start_ignores_cached_calendar_overlap() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "10:00".to_string(),
-                end: "11:00".to_string(),
-            }],
-            ..RecurringScheduleConfig::default()
-        },
-        calendar_sync: crate::config::CalendarSyncConfig {
-            enabled: true,
-            ..crate::config::CalendarSyncConfig::default()
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.task_labels = vec!["Coding".to_string()];
-    app.selected_task_label = Some("Coding".to_string());
-    app.set_calendar_busy_windows_for_tests(vec![CalendarBusyWindow {
-        source_name: "work".to_string(),
-        provider: CalendarProviderConfig::Google,
-        summary: "Team meeting".to_string(),
-        start_epoch_secs: local_datetime_today(10, 0).timestamp(),
-        end_epoch_secs: local_datetime_today(10, 30).timestamp(),
-    }]);
 
     app.sync_recurring_schedule(now);
 
