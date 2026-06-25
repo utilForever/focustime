@@ -214,7 +214,6 @@ fn applying_profile_loads_profile_scoped_automation_rules() {
             end: "11:00".to_string(),
         }],
         exception_dates: Vec::new(),
-        one_time_windows: Vec::new(),
     };
     let config = AppConfig {
         selected_profile: ProfileId::Classic,
@@ -280,7 +279,6 @@ fn applying_profile_with_missing_automation_uses_neutral_defaults() {
             end: "10:00".to_string(),
         }],
         exception_dates: vec!["2026-12-25".to_string()],
-        one_time_windows: Vec::new(),
     };
     app.profile_automation.standard = None;
 
@@ -733,36 +731,6 @@ fn editing_schedule_exception_fields_updates_and_persists_settings() {
     assert_eq!(
         persisted.recurring_schedule.exception_dates,
         vec![expected_date]
-    );
-}
-
-/// Verifies one-time schedule editor changes are persisted.
-#[test]
-fn editing_one_time_schedule_fields_updates_and_persists_settings() {
-    let mut app = App::default();
-    app.current_frame_now = local_datetime_today(10, 15);
-
-    app.handle_key(key(KeyCode::Char('p')));
-    app.handle_key(key(KeyCode::Char('e')));
-    app.profile_edit_field = PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX;
-    app.handle_key(key(KeyCode::Right)); // add one-time window for today
-    app.profile_edit_field = PROFILE_EDIT_ONE_TIME_DATE_INDEX;
-    app.handle_key(key(KeyCode::Right)); // move to tomorrow
-    app.profile_edit_field = PROFILE_EDIT_ONE_TIME_START_INDEX;
-    app.handle_key(key(KeyCode::Right)); // 09:00 -> 09:15
-    app.profile_edit_field = PROFILE_EDIT_ONE_TIME_END_INDEX;
-    app.handle_key(key(KeyCode::Right)); // 10:00 -> 10:15
-    app.handle_key(key(KeyCode::Enter));
-
-    assert_eq!(app.recurring_schedule.one_time_windows.len(), 1);
-    let window = &app.recurring_schedule.one_time_windows[0];
-    assert_eq!(window.start, "09:15");
-    assert_eq!(window.end, "10:15");
-
-    let persisted = app.persisted_config();
-    assert_eq!(
-        persisted.recurring_schedule.one_time_windows,
-        app.recurring_schedule.one_time_windows
     );
 }
 
@@ -2672,32 +2640,6 @@ fn recurring_schedule_next_window_text_shows_upcoming_window_for_today() {
 }
 
 #[test]
-fn one_time_schedule_next_window_text_shows_upcoming_window_for_today() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            one_time_windows: vec![OneTimeFocusWindowConfig {
-                date: now.date_naive().format("%Y-%m-%d").to_string(),
-                start: "11:00".to_string(),
-                end: "12:00".to_string(),
-            }],
-            ..RecurringScheduleConfig::default()
-        },
-        ..AppConfig::default()
-    };
-    let app = App::from_config(config);
-
-    assert_eq!(
-        app.recurring_schedule_texts_at(now).0,
-        "🗓  Next schedule: today 11:00-12:00"
-    );
-    assert_eq!(
-        app.recurring_schedule_texts_at(now).1,
-        "⚙  Schedule status: ready for next window"
-    );
-}
-
-#[test]
 fn recurring_schedule_next_window_text_shows_active_window_then_next_window() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {
@@ -2909,68 +2851,6 @@ fn adjusting_schedule_exception_date_to_existing_entry_deduplicates_and_selects_
 }
 
 #[test]
-fn adjusting_one_time_date_to_existing_entry_deduplicates_and_selects_existing() {
-    let mut app = App::default();
-    app.recurring_schedule.one_time_windows = vec![
-        OneTimeFocusWindowConfig {
-            date: "2026-05-10".to_string(),
-            start: "09:00".to_string(),
-            end: "10:00".to_string(),
-        },
-        OneTimeFocusWindowConfig {
-            date: "2026-05-11".to_string(),
-            start: "09:00".to_string(),
-            end: "10:00".to_string(),
-        },
-    ];
-    app.profile_edit_one_time_window = 0;
-
-    app.adjust_selected_one_time_date(true);
-
-    assert_eq!(app.recurring_schedule.one_time_windows.len(), 1);
-    assert_eq!(
-        app.recurring_schedule.one_time_windows[0],
-        OneTimeFocusWindowConfig {
-            date: "2026-05-11".to_string(),
-            start: "09:00".to_string(),
-            end: "10:00".to_string(),
-        }
-    );
-    assert_eq!(app.profile_edit_one_time_window, 0);
-}
-
-#[test]
-fn adjusting_one_time_start_to_existing_entry_deduplicates_and_selects_existing() {
-    let mut app = App::default();
-    app.recurring_schedule.one_time_windows = vec![
-        OneTimeFocusWindowConfig {
-            date: "2026-05-10".to_string(),
-            start: "09:00".to_string(),
-            end: "10:00".to_string(),
-        },
-        OneTimeFocusWindowConfig {
-            date: "2026-05-10".to_string(),
-            start: "09:15".to_string(),
-            end: "10:00".to_string(),
-        },
-    ];
-    app.profile_edit_one_time_window = 0;
-
-    app.adjust_selected_one_time_time(true, true);
-
-    assert_eq!(app.recurring_schedule.one_time_windows.len(), 1);
-    assert_eq!(
-        app.recurring_schedule.one_time_windows[0],
-        OneTimeFocusWindowConfig {
-            date: "2026-05-10".to_string(),
-            start: "09:15".to_string(),
-            end: "10:00".to_string(),
-        }
-    );
-    assert_eq!(app.profile_edit_one_time_window, 0);
-}
-
-#[test]
 fn profile_edit_schedule_conflict_summary_reports_overlap() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {
@@ -3018,7 +2898,6 @@ fn recurring_schedule_status_text_shows_exception_skip_for_today() {
                 },
             ],
             exception_dates: vec![today.format("%Y-%m-%d").to_string()],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3046,7 +2925,6 @@ fn recurring_schedule_does_not_trigger_on_exception_date() {
                 end: "11:00".to_string(),
             }],
             exception_dates: vec![today.format("%Y-%m-%d").to_string()],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3060,40 +2938,6 @@ fn recurring_schedule_does_not_trigger_on_exception_date() {
     assert_eq!(app.timer.status, TimerStatus::Idle);
     assert!(app.schedule_armed_occurrence_key.is_none());
     assert!(app.phase_notification.is_none());
-}
-
-#[test]
-fn one_time_schedule_triggers_on_recurring_exception_date() {
-    let now = local_datetime_today(10, 15);
-    let today = now.date_naive();
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(today.weekday()).to_string()],
-                start: "10:00".to_string(),
-                end: "11:00".to_string(),
-            }],
-            exception_dates: vec![today.format("%Y-%m-%d").to_string()],
-            one_time_windows: vec![OneTimeFocusWindowConfig {
-                date: today.format("%Y-%m-%d").to_string(),
-                start: "10:00".to_string(),
-                end: "11:00".to_string(),
-            }],
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.task_labels = vec!["Coding".to_string()];
-    app.selected_task_label = Some("Coding".to_string());
-
-    app.sync_recurring_schedule(now);
-
-    assert_eq!(app.timer.phase, TimerPhase::Focus);
-    assert_eq!(app.timer.status, TimerStatus::Running);
-    assert_eq!(
-        app.phase_notification.as_deref(),
-        Some("Scheduled window started. Focus auto-started.")
-    );
 }
 
 #[test]
@@ -6036,7 +5880,6 @@ fn startup_recovery_rehydrates_profile_automation_runtime_for_snapshot_profile()
             end: "11:00".to_string(),
         }],
         exception_dates: vec!["2026-12-25".to_string()],
-        one_time_windows: Vec::new(),
     };
     let config = AppConfig {
         selected_profile: ProfileId::Custom,

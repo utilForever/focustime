@@ -136,11 +136,6 @@ fn round_trip_full_config() {
                     end: "11:00".to_string(),
                 }],
                 exception_dates: vec!["2026-04-27".to_string()],
-                one_time_windows: vec![OneTimeFocusWindowConfig {
-                    date: "2026-05-10".to_string(),
-                    start: "14:00".to_string(),
-                    end: "15:00".to_string(),
-                }],
             },
         }],
         selected_session_template: "Morning deep work".to_string(),
@@ -160,11 +155,6 @@ fn round_trip_full_config() {
                 end: "11:00".to_string(),
             }],
             exception_dates: vec!["2026-04-27".to_string(), "2026-05-05".to_string()],
-            one_time_windows: vec![OneTimeFocusWindowConfig {
-                date: "2026-05-10".to_string(),
-                start: "14:00".to_string(),
-                end: "15:00".to_string(),
-            }],
         },
         schedule_runtime: ScheduleRuntimeConfig {
             time_step_minutes: 20,
@@ -200,11 +190,6 @@ fn round_trip_full_config() {
                         end: "11:00".to_string(),
                     }],
                     exception_dates: vec!["2026-04-27".to_string(), "2026-05-05".to_string()],
-                    one_time_windows: vec![OneTimeFocusWindowConfig {
-                        date: "2026-05-10".to_string(),
-                        start: "14:00".to_string(),
-                        end: "15:00".to_string(),
-                    }],
                 },
             }),
             advanced: Some(ProfileAutomationConfig {
@@ -631,37 +616,21 @@ start = "08:30"
     assert_eq!(window.end, default_schedule_window_end());
     assert_eq!(window.days, default_schedule_window_days());
     assert!(cfg.recurring_schedule.exception_dates.is_empty());
-    assert!(cfg.recurring_schedule.one_time_windows.is_empty());
 }
 
 #[test]
-fn partial_one_time_schedule_window_uses_defaults_for_missing_fields() {
+fn recurring_schedule_rejects_one_time_windows_config() {
     let partial = r#"
 [recurring_schedule]
 [[recurring_schedule.one_time_windows]]
 date = "2026-04-27"
-"#;
-    let cfg: AppConfig = toml::from_str(partial).unwrap();
-
-    assert_eq!(cfg.recurring_schedule.one_time_windows.len(), 1);
-    let window = &cfg.recurring_schedule.one_time_windows[0];
-    assert_eq!(window.date, "2026-04-27");
-    assert_eq!(window.start, default_schedule_window_start());
-    assert_eq!(window.end, default_schedule_window_end());
-}
-
-#[test]
-fn normalize_drops_one_time_window_without_date_in_config() {
-    let partial = r#"
-[recurring_schedule]
-[[recurring_schedule.one_time_windows]]
 start = "09:00"
 end = "10:00"
 "#;
-    let cfg: AppConfig = toml::from_str(partial).unwrap();
-    let normalized = cfg.normalize();
 
-    assert!(normalized.recurring_schedule.one_time_windows.is_empty());
+    let error = toml::from_str::<AppConfig>(partial).unwrap_err();
+
+    assert!(error.to_string().contains("one_time_windows"));
 }
 
 #[test]
@@ -681,7 +650,6 @@ fn normalize_drops_recurring_windows_with_invalid_time_ranges() {
                 },
             ],
             exception_dates: Vec::new(),
-            one_time_windows: Vec::new(),
         },
         ..AppConfig::default()
     }
@@ -704,7 +672,6 @@ fn normalize_recurring_schedule_exception_dates_dedupes_and_drops_invalid_entrie
                 "2026-12-25".to_string(),
                 "not-a-date".to_string(),
             ],
-            one_time_windows: Vec::new(),
         },
         ..AppConfig::default()
     }
@@ -714,53 +681,6 @@ fn normalize_recurring_schedule_exception_dates_dedupes_and_drops_invalid_entrie
         cfg.recurring_schedule.exception_dates,
         vec!["2026-01-01".to_string(), "2026-12-25".to_string()]
     );
-}
-
-#[test]
-fn normalize_drops_one_time_windows_with_invalid_entries() {
-    let cfg = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: Vec::new(),
-            exception_dates: Vec::new(),
-            one_time_windows: vec![
-                OneTimeFocusWindowConfig {
-                    date: "2026-04-27".to_string(),
-                    start: "10:00".to_string(),
-                    end: "11:00".to_string(),
-                },
-                OneTimeFocusWindowConfig {
-                    date: "not-a-date".to_string(),
-                    start: "10:00".to_string(),
-                    end: "11:00".to_string(),
-                },
-                OneTimeFocusWindowConfig {
-                    date: "2026-04-28".to_string(),
-                    start: "12:00".to_string(),
-                    end: "11:00".to_string(),
-                },
-                OneTimeFocusWindowConfig {
-                    date: "2026-04-29".to_string(),
-                    start: "25:00".to_string(),
-                    end: "26:00".to_string(),
-                },
-                OneTimeFocusWindowConfig {
-                    date: String::new(),
-                    start: "09:00".to_string(),
-                    end: "10:00".to_string(),
-                },
-            ],
-        },
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.recurring_schedule.one_time_windows.len(), 1);
-    assert_eq!(
-        cfg.recurring_schedule.one_time_windows[0].date,
-        "2026-04-27"
-    );
-    assert_eq!(cfg.recurring_schedule.one_time_windows[0].start, "10:00");
-    assert_eq!(cfg.recurring_schedule.one_time_windows[0].end, "11:00");
 }
 
 #[test]
@@ -2067,11 +1987,6 @@ fn normalize_migrates_legacy_automation_into_per_profile_settings() {
             end: "10:30".to_string(),
         }],
         exception_dates: vec!["2026-12-25".to_string()],
-        one_time_windows: vec![OneTimeFocusWindowConfig {
-            date: "2026-05-02".to_string(),
-            start: "14:00".to_string(),
-            end: "16:00".to_string(),
-        }],
     };
     let cfg = AppConfig {
         selected_profile: ProfileId::DeepWork,
@@ -2142,7 +2057,6 @@ fn normalize_selected_profile_automation_keeps_top_level_legacy_fields() {
                 end: "15:00".to_string(),
             }],
             exception_dates: Vec::new(),
-            one_time_windows: Vec::new(),
         },
     };
 
@@ -2186,7 +2100,6 @@ fn normalize_legacy_automation_fields_do_not_override_profile_automation() {
                 end: "15:00".to_string(),
             }],
             exception_dates: Vec::new(),
-            one_time_windows: Vec::new(),
         },
     };
     let cfg = AppConfig {

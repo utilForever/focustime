@@ -721,7 +721,6 @@ fn parse_schedule_set_accepts_json_payload() {
                         end: "11:00".to_string(),
                     }],
                     exception_dates: vec!["2026-12-25".to_string()],
-                    one_time_windows: Vec::new(),
                 }),
             },
             output: OutputMode::Text
@@ -729,28 +728,13 @@ fn parse_schedule_set_accepts_json_payload() {
     );
 }
 
-/// Verifies schedule JSON payloads can include one-time windows.
 #[test]
-fn parse_schedule_set_accepts_one_time_windows_payload() {
+fn parse_schedule_set_rejects_one_time_windows_payload() {
     let payload = r#"{"windows":[],"exception_dates":[],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"15:30"}]}"#;
-    let parsed = parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Schedule {
-                schedule: Some(RecurringScheduleConfig {
-                    windows: Vec::new(),
-                    exception_dates: Vec::new(),
-                    one_time_windows: vec![OneTimeFocusWindowConfig {
-                        date: "2026-05-02".to_string(),
-                        start: "14:00".to_string(),
-                        end: "15:30".to_string(),
-                    }],
-                }),
-            },
-            output: OutputMode::Text
-        })
-    );
+    let error = parse_args([OsString::from("--schedule-set"), OsString::from(payload)])
+        .expect_err("one-time schedule windows should be rejected");
+
+    assert!(error.contains("one_time_windows"));
 }
 
 #[test]
@@ -1499,7 +1483,6 @@ fn classify_key_value_arg_accepts_schedule_set_equals_value() {
                 end: "11:00".to_string(),
             }],
             exception_dates: Vec::new(),
-            one_time_windows: Vec::new(),
         }))
     );
 }
@@ -1813,11 +1796,11 @@ fn parse_rejects_schedule_set_with_invalid_exception_date() {
 }
 
 #[test]
-fn parse_rejects_schedule_set_with_invalid_one_time_date() {
-    let payload = r#"{"windows":[],"exception_dates":[],"one_time_windows":[{"date":"2026-99-99","start":"09:00","end":"10:00"}]}"#;
+fn parse_rejects_schedule_set_with_deprecated_one_time_windows() {
+    let payload = r#"{"windows":[],"exception_dates":[],"one_time_windows":[]}"#;
     let error =
         parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
-    assert!(error.contains("Invalid one-time window"));
+    assert!(error.contains("one_time_windows"));
 }
 
 #[test]
