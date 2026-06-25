@@ -1,7 +1,6 @@
 use crate::cli::{
-    DailyGoalConfig, MonthlyGoalConfig, NaiveDate, OneTimeFocusWindowConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, SiteEditValue, ThemePreset,
-    WeeklyGoalConfig,
+    DailyGoalConfig, MonthlyGoalConfig, NaiveDate, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, SiteEditValue, ThemePreset, WeeklyGoalConfig,
 };
 
 use super::{invalid_usage, require_nonempty_key_value};
@@ -133,7 +132,7 @@ pub(in crate::cli) fn parse_site_edit_value(value: &str) -> Result<SiteEditValue
 pub(in crate::cli) fn parse_schedule_value(value: &str) -> Result<RecurringScheduleConfig, String> {
     let schedule = serde_json::from_str::<RecurringScheduleConfig>(value).map_err(|error| {
         invalid_usage(&format!(
-            "Invalid schedule JSON payload: {error}. Use `--schedule-set='{{\"windows\":[...],\"exception_dates\":[...],\"one_time_windows\":[...]}}'`."
+            "Invalid schedule JSON payload: {error}. Use `--schedule-set='{{\"windows\":[...],\"exception_dates\":[...]}}'`."
         ))
     })?;
     validate_schedule_value(&schedule)?;
@@ -146,9 +145,6 @@ fn validate_schedule_value(schedule: &RecurringScheduleConfig) -> Result<(), Str
     }
     for (index, date) in schedule.exception_dates.iter().enumerate() {
         validate_schedule_exception_date(date, index)?;
-    }
-    for (index, window) in schedule.one_time_windows.iter().enumerate() {
-        validate_one_time_schedule_window(window, index)?;
     }
     Ok(())
 }
@@ -197,39 +193,6 @@ fn validate_schedule_exception_date(value: &str, index: usize) -> Result<(), Str
             "Invalid exception date at index {index}: `{value}` must be YYYY-MM-DD."
         ))
     })?;
-    Ok(())
-}
-
-fn validate_one_time_schedule_window(
-    window: &OneTimeFocusWindowConfig,
-    index: usize,
-) -> Result<(), String> {
-    NaiveDate::parse_from_str(window.date.trim(), "%Y-%m-%d").map_err(|_| {
-        invalid_usage(&format!(
-            "Invalid one-time window at index {index}: date `{}` must be YYYY-MM-DD.",
-            window.date
-        ))
-    })?;
-
-    let start_minutes = parse_schedule_minutes(&window.start).ok_or_else(|| {
-        invalid_usage(&format!(
-            "Invalid one-time window at index {index}: start `{}` must be HH:MM in 24-hour format.",
-            window.start
-        ))
-    })?;
-    let end_minutes = parse_schedule_minutes(&window.end).ok_or_else(|| {
-        invalid_usage(&format!(
-            "Invalid one-time window at index {index}: end `{}` must be HH:MM in 24-hour format.",
-            window.end
-        ))
-    })?;
-
-    if start_minutes >= end_minutes {
-        return Err(invalid_usage(&format!(
-            "Invalid one-time window at index {index}: start must be earlier than end."
-        )));
-    }
-
     Ok(())
 }
 

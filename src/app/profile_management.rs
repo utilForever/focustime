@@ -3,20 +3,17 @@ use crate::app::{
     PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX, PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX,
     PROFILE_EDIT_FIELD_LABELS, PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX,
-    PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX, PROFILE_EDIT_ONE_TIME_DATE_INDEX,
-    PROFILE_EDIT_ONE_TIME_END_INDEX, PROFILE_EDIT_ONE_TIME_START_INDEX,
-    PROFILE_EDIT_ONE_TIME_WINDOW_INDEX, PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX,
-    PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX, PROFILE_EDIT_SCHEDULE_DAY_INDEX,
-    PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX,
-    PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX,
-    PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
-    PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX,
-    PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
-    PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, PROFILE_IDS,
-    ProfileAutomationConfig, ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState,
-    WakatimeHeartbeatMetadata, adjust_daily_goal_minutes, adjust_daily_goal_pomodoros,
-    adjust_duration_minutes, compile_exception_dates, compile_one_time_windows, compile_windows,
-    profile_for_index, profile_index, profile_spec_for,
+    PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
+    PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
+    PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX,
+    PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
+    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX,
+    PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX, PROFILE_EDIT_WAKATIME_PROJECT_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, PROFILE_IDS, ProfileAutomationConfig,
+    ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState, WakatimeHeartbeatMetadata,
+    adjust_daily_goal_minutes, adjust_daily_goal_pomodoros, adjust_duration_minutes,
+    compile_exception_dates, compile_windows, profile_for_index, profile_index, profile_spec_for,
 };
 
 const PROFILE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 2] = [
@@ -29,7 +26,6 @@ impl App {
         self.recurring_windows = compile_windows(&self.recurring_schedule.windows);
         self.recurring_exception_dates =
             compile_exception_dates(&self.recurring_schedule.exception_dates);
-        self.one_time_windows = compile_one_time_windows(&self.recurring_schedule.one_time_windows);
     }
 
     pub(super) fn selected_profile_automation(&self) -> ProfileAutomationConfig {
@@ -111,7 +107,6 @@ impl App {
         self.profile_edit_schedule_window = 0;
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
-        self.profile_edit_one_time_window = 0;
         self.profile_edit_snapshot = None;
         self.profile_selection_index = profile_index(self.selected_profile);
         self.clamp_profile_selection();
@@ -228,7 +223,6 @@ impl App {
         self.profile_edit_schedule_window = 0;
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
-        self.profile_edit_one_time_window = 0;
         self.clamp_profile_edit_schedule_selection();
     }
 
@@ -254,7 +248,6 @@ impl App {
         self.profile_edit_schedule_window = 0;
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
-        self.profile_edit_one_time_window = 0;
         self.clamp_profile_edit_schedule_selection();
     }
 
@@ -282,7 +275,6 @@ impl App {
         self.profile_edit_schedule_window = 0;
         self.profile_edit_schedule_day = 0;
         self.profile_edit_schedule_exception = 0;
-        self.profile_edit_one_time_window = 0;
         self.clamp_profile_edit_schedule_selection();
         self.profile_edit_snapshot = None;
     }
@@ -431,21 +423,6 @@ impl App {
             }
             PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX => {
                 self.adjust_schedule_exceptions_collection(increase);
-            }
-            PROFILE_EDIT_ONE_TIME_WINDOW_INDEX => {
-                self.cycle_one_time_window(increase);
-            }
-            PROFILE_EDIT_ONE_TIME_DATE_INDEX => {
-                self.adjust_selected_one_time_date(increase);
-            }
-            PROFILE_EDIT_ONE_TIME_START_INDEX => {
-                self.adjust_selected_one_time_time(true, increase);
-            }
-            PROFILE_EDIT_ONE_TIME_END_INDEX => {
-                self.adjust_selected_one_time_time(false, increase);
-            }
-            PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX => {
-                self.adjust_one_time_windows_collection(increase);
             }
             PROFILE_EDIT_WAKATIME_PROJECT_INDEX | PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => {}
             _ => {}

@@ -15,8 +15,8 @@ use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, Si
 use crate::config::HistoryKpiCardId;
 use crate::config::{
     AppConfig, BlocklistProfileConfig, ConfigDoctorReport, ConfigMigrationReport,
-    CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig, OneTimeFocusWindowConfig, ProfileId,
-    RecurringFocusWindowConfig, RecurringScheduleConfig, ThemePreset, WeeklyGoalConfig,
+    CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, ThemePreset, WeeklyGoalConfig,
 };
 use crate::error::UserMessage;
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
@@ -151,7 +151,7 @@ Options:
   --goal-carry-monthly  Show monthly goal carry-over, or set on/off
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
-  --schedule-set  Replace selected profile schedule (recurring + one-time) from JSON payload
+  --schedule-set  Replace selected profile schedule from JSON payload
   --schedule-delay  Delay the current active schedule window start by 10 minutes
   --break-glass-trigger  Trigger temporary override workflow for break-glass (first call arms, second confirms)
   --break-glass-cancel   Cancel a pending break-glass confirmation

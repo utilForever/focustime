@@ -4,7 +4,7 @@ use crate::config::{
     WeeklyGoalConfig,
 };
 
-pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 36] = [
+pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 31] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -34,11 +34,6 @@ pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 36] = [
     "Schedule exception",
     "Exception date",
     "Exception add/remove",
-    "One-time window",
-    "One-time date",
-    "One-time start",
-    "One-time end",
-    "One-time add/remove",
     "Schedule conflicts",
     "Theme preset",
 ];
@@ -62,13 +57,8 @@ pub(crate) const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 25;
 pub(crate) const PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX: usize = 26;
 pub(crate) const PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX: usize = 27;
 pub(crate) const PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX: usize = 28;
-pub(crate) const PROFILE_EDIT_ONE_TIME_WINDOW_INDEX: usize = 29;
-pub(crate) const PROFILE_EDIT_ONE_TIME_DATE_INDEX: usize = 30;
-pub(crate) const PROFILE_EDIT_ONE_TIME_START_INDEX: usize = 31;
-pub(crate) const PROFILE_EDIT_ONE_TIME_END_INDEX: usize = 32;
-pub(crate) const PROFILE_EDIT_ONE_TIME_ADD_REMOVE_INDEX: usize = 33;
-pub(crate) const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 34;
-pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 35;
+pub(crate) const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 29;
+pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 30;
 pub(crate) const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 pub(crate) const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 

@@ -2,15 +2,11 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, TimeZone, Timelike};
 
-use super::{OneTimeWindow, RecurringWindow, WindowOccurrence, WindowOccurrenceKind};
+use super::{RecurringWindow, WindowOccurrence};
 
 pub(crate) fn occurrence_key(occurrence: &WindowOccurrence) -> String {
-    let kind_key = match occurrence.kind {
-        WindowOccurrenceKind::Recurring => "r",
-        WindowOccurrenceKind::OneTime => "o",
-    };
     format!(
-        "{kind_key}-{}-{}",
+        "r-{}-{}",
         occurrence.window_index,
         occurrence.start.timestamp()
     )
@@ -46,7 +42,6 @@ pub(crate) fn active_occurrence(
         }
 
         let candidate = WindowOccurrence {
-            kind: WindowOccurrenceKind::Recurring,
             window_index,
             start,
             end,
@@ -94,7 +89,6 @@ pub(crate) fn next_occurrence_after(
                 continue;
             };
             let candidate = WindowOccurrence {
-                kind: WindowOccurrenceKind::Recurring,
                 window_index,
                 start,
                 end,
@@ -109,117 +103,6 @@ pub(crate) fn next_occurrence_after(
     }
 
     selected
-}
-
-pub(crate) fn active_one_time_occurrence(
-    now: DateTime<Local>,
-    windows: &[OneTimeWindow],
-) -> Option<WindowOccurrence> {
-    let now_minutes = now.hour() as u16 * 60 + now.minute() as u16;
-    let today = now.date_naive();
-    let mut selected: Option<WindowOccurrence> = None;
-
-    for (window_index, window) in windows.iter().enumerate() {
-        if window.date != today {
-            continue;
-        }
-        if now_minutes < window.start_minutes || now_minutes >= window.end_minutes {
-            continue;
-        }
-        let Some(start) = local_datetime_on(today, window.start_minutes) else {
-            continue;
-        };
-        let Some(end) = local_datetime_on(today, window.end_minutes) else {
-            continue;
-        };
-        if now < start || now >= end {
-            continue;
-        }
-
-        let candidate = WindowOccurrence {
-            kind: WindowOccurrenceKind::OneTime,
-            window_index,
-            start,
-            end,
-        };
-        let should_replace = selected
-            .as_ref()
-            .is_none_or(|existing| active_occurrence_is_higher_priority(&candidate, existing));
-        if should_replace {
-            selected = Some(candidate);
-        }
-    }
-
-    selected
-}
-
-pub(crate) fn next_one_time_occurrence_after(
-    now: DateTime<Local>,
-    windows: &[OneTimeWindow],
-) -> Option<WindowOccurrence> {
-    let mut selected: Option<WindowOccurrence> = None;
-
-    for (window_index, window) in windows.iter().enumerate() {
-        let Some(start) = local_datetime_on(window.date, window.start_minutes) else {
-            continue;
-        };
-        if start <= now {
-            continue;
-        }
-        let Some(end) = local_datetime_on(window.date, window.end_minutes) else {
-            continue;
-        };
-        let candidate = WindowOccurrence {
-            kind: WindowOccurrenceKind::OneTime,
-            window_index,
-            start,
-            end,
-        };
-        let should_replace = selected
-            .as_ref()
-            .is_none_or(|existing| next_occurrence_is_higher_priority(&candidate, existing));
-        if should_replace {
-            selected = Some(candidate);
-        }
-    }
-
-    selected
-}
-
-pub(crate) fn pick_active_occurrence(
-    first: Option<WindowOccurrence>,
-    second: Option<WindowOccurrence>,
-) -> Option<WindowOccurrence> {
-    match (first, second) {
-        (Some(first), Some(second)) => {
-            if active_occurrence_is_higher_priority(&first, &second) {
-                Some(first)
-            } else {
-                Some(second)
-            }
-        }
-        (Some(first), None) => Some(first),
-        (None, Some(second)) => Some(second),
-        (None, None) => None,
-    }
-}
-
-pub(crate) fn pick_next_occurrence(
-    first: Option<WindowOccurrence>,
-    second: Option<WindowOccurrence>,
-) -> Option<WindowOccurrence> {
-    match (first, second) {
-        (Some(first), Some(second)) => {
-            if next_occurrence_is_higher_priority(&first, &second) {
-                Some(first)
-            } else {
-                Some(second)
-            }
-        }
-        (Some(first), None) => Some(first),
-        (None, Some(second)) => Some(second),
-        (None, None) => None,
-    }
 }
 
 fn active_occurrence_is_higher_priority(
@@ -239,9 +122,6 @@ fn next_occurrence_is_higher_priority(
 }
 
 fn occurrence_tie_break(candidate: &WindowOccurrence, existing: &WindowOccurrence) -> bool {
-    if candidate.kind != existing.kind {
-        return candidate.kind == WindowOccurrenceKind::OneTime;
-    }
     candidate.window_index < existing.window_index
 }
 

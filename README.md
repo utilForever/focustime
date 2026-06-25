@@ -176,7 +176,7 @@ cargo run -- --allowlist-site-delete reddit.com
 
 # Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
-cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"16:00"}]}'
+cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"]}'
 cargo run -- --schedule-delay
 cargo run -- --schedule --json
 
@@ -580,10 +580,6 @@ exception_dates = ["2026-12-25", "2027-01-01"]
 days = ["mon", "tue", "wed", "thu", "fri"]
 start = "09:00"
 end = "11:00"
-[[profile_automation.advanced.recurring_schedule.one_time_windows]]
-date = "2026-05-02"
-start = "14:00"
-end = "16:00"
 
 [schedule_runtime]
 time_step_minutes = 15
@@ -777,10 +773,8 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - `profile_automation.<preset>.recurring_schedule.windows[].days` accepts day tokens (`mon`..`sun`, case-insensitive)
 - `profile_automation.<preset>.recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
 - `profile_automation.<preset>.recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
-- `profile_automation.<preset>.recurring_schedule.one_time_windows[]` accepts one-time date windows with `date` (`YYYY-MM-DD`) plus `start`/`end` (`HH:MM`)
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
 - while a schedule window is active and focus is not already running, press `z` to delay the scheduled start (configurable via `[schedule_runtime].delay_secs`, default `10m`, clamped `60..43200` seconds)
-- recurring exception dates only skip recurring windows; one-time windows still apply on their configured date
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
 - standalone `automation_triggers[]` config entries are removed by config migration; schedule windows provide automatic focus starts, `--schedule-delay` handles postponed active windows, and session templates carry task/profile/blocklist defaults
@@ -804,10 +798,6 @@ You can configure notification and auto-start settings directly from the TUI:
   - **Schedule exception**: `←/→` changes which exception date is selected
   - **Exception date**: `←/→` moves selected exception date backward/forward by 1 day
   - **Exception add/remove**: `→` adds a date (starting from today), `←` removes selected date
-  - **One-time window**: `←/→` changes which one-time window is selected
-  - **One-time date**: `←/→` moves selected one-time window date backward/forward by 1 day
-  - **One-time start/end**: adjust one-time window times in `[schedule_runtime].time_step_minutes` steps (default `15`, clamped `1..60`)
-  - **One-time add/remove**: `→` adds a one-time window (starting from today), `←` removes selected window
   - **Automation trigger**: deprecated compatibility fields for older trigger rules
   - **Automation condition/time/action**: deprecated compatibility fields for older event/time rules
   - **Automation add/remove**: deprecated compatibility controls for older trigger rules
