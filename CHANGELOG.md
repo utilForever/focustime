@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-06-26
+
 ### Changed
 
 - **Schedule exception date cleanup (#549):** removed schedule exception-date config, runtime skipping, CLI text output, and profile editor controls so recurring schedules are represented only as recurring windows.
@@ -522,7 +524,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.16.2...HEAD
+[0.16.2]: https://github.com/utilForever/focustime/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/utilForever/focustime/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/utilForever/focustime/compare/v0.15.9...v0.16.0
 [0.15.9]: https://github.com/utilForever/focustime/compare/v0.15.8...v0.15.9
