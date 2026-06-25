@@ -275,8 +275,7 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         23 => "Start time",
         24 => "End time",
         25 => "Add/remove",
-        26 => "Conflict inspector",
-        27 => "Theme preset",
+        26 => "Theme preset",
         _ => "",
     }
 }
