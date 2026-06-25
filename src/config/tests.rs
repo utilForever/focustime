@@ -156,7 +156,6 @@ fn round_trip_full_config() {
         },
         schedule_runtime: ScheduleRuntimeConfig {
             time_step_minutes: 20,
-            delay_secs: 15 * 60,
         },
         profile_automation: Some(ProfileAutomationSettingsConfig {
             basic: Some(ProfileAutomationConfig {
@@ -656,11 +655,10 @@ fn normalize_drops_recurring_windows_with_invalid_time_ranges() {
 }
 
 #[test]
-fn normalize_clamps_schedule_runtime_knobs_to_safe_bounds() {
+fn normalize_clamps_schedule_runtime_time_step_to_safe_bounds() {
     let cfg = AppConfig {
         schedule_runtime: ScheduleRuntimeConfig {
             time_step_minutes: 0,
-            delay_secs: 0,
         },
         ..AppConfig::default()
     }
@@ -670,14 +668,12 @@ fn normalize_clamps_schedule_runtime_knobs_to_safe_bounds() {
         cfg.schedule_runtime,
         ScheduleRuntimeConfig {
             time_step_minutes: 1,
-            delay_secs: 60,
         }
     );
 
     let cfg = AppConfig {
         schedule_runtime: ScheduleRuntimeConfig {
             time_step_minutes: 200,
-            delay_secs: 24 * 60 * 60,
         },
         ..AppConfig::default()
     }
@@ -687,7 +683,6 @@ fn normalize_clamps_schedule_runtime_knobs_to_safe_bounds() {
         cfg.schedule_runtime,
         ScheduleRuntimeConfig {
             time_step_minutes: 60,
-            delay_secs: 12 * 60 * 60,
         }
     );
 }

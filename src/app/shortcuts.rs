@@ -17,7 +17,6 @@ pub(crate) enum ShortcutAction {
     OpenSetupDiagnostics,
     TimerEditNote,
     BreakGlassOverride,
-    DelayScheduleStart,
     BackSiteManager,
     ToggleSiteListMode,
     SiteAdd,
@@ -73,7 +72,7 @@ enum ShortcutKey {
     Delete,
 }
 
-const TIMER_SCOPE_ACTIONS: [ShortcutAction; 11] = [
+const TIMER_SCOPE_ACTIONS: [ShortcutAction; 10] = [
     ShortcutAction::TimerTogglePause,
     ShortcutAction::TimerStopReset,
     ShortcutAction::TimerNextPhase,
@@ -84,7 +83,6 @@ const TIMER_SCOPE_ACTIONS: [ShortcutAction; 11] = [
     ShortcutAction::OpenSetupDiagnostics,
     ShortcutAction::TimerEditNote,
     ShortcutAction::BreakGlassOverride,
-    ShortcutAction::DelayScheduleStart,
 ];
 
 const SITE_MANAGER_SCOPE_ACTIONS: [ShortcutAction; 10] = [
@@ -337,7 +335,6 @@ impl ShortcutBindings {
             open_setup_diagnostics: key_token(self.key(ShortcutAction::OpenSetupDiagnostics)),
             timer_edit_note: key_token(self.key(ShortcutAction::TimerEditNote)),
             break_glass_override: key_token(self.key(ShortcutAction::BreakGlassOverride)),
-            delay_schedule_start: key_token(self.key(ShortcutAction::DelayScheduleStart)),
             back_site_manager: key_token(self.key(ShortcutAction::BackSiteManager)),
             toggle_site_list_mode: key_token(self.key(ShortcutAction::ToggleSiteListMode)),
             site_add: key_token(self.key(ShortcutAction::SiteAdd)),
@@ -528,7 +525,6 @@ fn requested_shortcut_char(config: &ShortcutConfig, action: ShortcutAction) -> c
         ShortcutAction::OpenSetupDiagnostics => &config.open_setup_diagnostics,
         ShortcutAction::TimerEditNote => &config.timer_edit_note,
         ShortcutAction::BreakGlassOverride => &config.break_glass_override,
-        ShortcutAction::DelayScheduleStart => &config.delay_schedule_start,
         ShortcutAction::BackSiteManager => &config.back_site_manager,
         ShortcutAction::ToggleSiteListMode => &config.toggle_site_list_mode,
         ShortcutAction::SiteAdd => &config.site_add,
@@ -588,7 +584,6 @@ fn default_shortcut_char(action: ShortcutAction) -> char {
         ShortcutAction::OpenSetupDiagnostics => 'd',
         ShortcutAction::TimerEditNote => 'm',
         ShortcutAction::BreakGlassOverride => 'u',
-        ShortcutAction::DelayScheduleStart => 'z',
         ShortcutAction::BackSiteManager => 'b',
         ShortcutAction::ToggleSiteListMode => 'm',
         ShortcutAction::SiteAdd => 'a',

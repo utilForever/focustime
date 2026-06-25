@@ -391,9 +391,9 @@ fn task_goal_progress_summary_formats_state_and_metrics() {
 }
 
 #[test]
-fn timer_primary_hint_includes_schedule_delay_shortcut() {
+fn timer_primary_hint_omits_schedule_delay_shortcut() {
     let app = App::default();
-    assert!(timer_primary_hint(&app).contains("[z] Delay 10m"));
+    assert!(!timer_primary_hint(&app).contains("Delay 10m"));
 }
 
 #[test]

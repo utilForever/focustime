@@ -52,12 +52,11 @@ use output::{
     print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
     print_goal_command_output, print_history_dashboard_command_output, print_json,
     print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
-    print_schedule_delay_command_output, print_session_metadata_command_output,
-    print_session_template_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output,
+    print_session_metadata_command_output, print_session_template_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
@@ -103,7 +102,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
   focustime --schedule-set=JSON_PAYLOAD [--json]
-  focustime --schedule-delay [--json]
   focustime --break-glass-trigger [--json]
   focustime --break-glass-cancel [--json]
   focustime --blocklist-profile [PROFILE_NAME] [--json]
@@ -152,7 +150,6 @@ Options:
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
   --schedule-set  Replace selected profile schedule from JSON payload
-  --schedule-delay  Delay the current active schedule window start by 10 minutes
   --break-glass-trigger  Trigger temporary override workflow for break-glass (first call arms, second confirms)
   --break-glass-cancel   Cancel a pending break-glass confirmation
   --blocklist-profile         Show active blocklist profile, or set active profile
@@ -285,7 +282,6 @@ pub(crate) enum CommandKind {
     Schedule {
         schedule: Option<RecurringScheduleConfig>,
     },
-    ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
     Diagnostics,
@@ -357,7 +353,6 @@ enum PrimaryCommand {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
-    ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
     Diagnostics,
@@ -415,7 +410,6 @@ enum ParsedToken {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
-    ScheduleDelay,
     BreakGlassTrigger,
     BreakGlassCancel,
     Diagnostics,
@@ -703,13 +697,6 @@ struct TimerStateOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct TimerCommandOutput {
     action: &'static str,
-    timer: TimerStateOutput,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct ScheduleDelayCommandOutput {
-    action: &'static str,
-    delayed_until: String,
     timer: TimerStateOutput,
 }
 

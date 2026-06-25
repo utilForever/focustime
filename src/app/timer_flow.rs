@@ -168,7 +168,6 @@ impl App {
         self.clear_timer_note_input();
         self.active_focus_profile = Some(self.selected_profile);
         self.schedule_armed_occurrence_key = None;
-        self.clear_schedule_delay_state();
     }
 
     pub(super) fn clear_focus_runtime(&mut self) {

@@ -101,10 +101,6 @@ pub(crate) struct InProgressSessionSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub(crate) struct WorkflowStateSnapshot {
     #[serde(default)]
-    pub(crate) schedule_delayed_occurrence_key: Option<String>,
-    #[serde(default)]
-    pub(crate) schedule_delay_until_epoch_secs: Option<i64>,
-    #[serde(default)]
     pub(crate) schedule_armed_occurrence_key: Option<String>,
     #[serde(default)]
     pub(crate) last_schedule_occurrence_key: Option<String>,
@@ -1023,8 +1019,6 @@ checksum = "deadbeef"
     #[test]
     fn load_workflow_state_without_override_clears_saved_snapshot() {
         save_workflow_state(&WorkflowStateSnapshot {
-            schedule_delayed_occurrence_key: Some("recurring:0:2026-05-10".to_string()),
-            schedule_delay_until_epoch_secs: Some(1_700_000_000),
             schedule_armed_occurrence_key: None,
             last_schedule_occurrence_key: None,
             strict_reset_confirmation_pending: false,
@@ -1040,7 +1034,7 @@ checksum = "deadbeef"
     }
 
     #[test]
-    fn workflow_state_snapshot_deserializes_payload_without_temporary_overrides() {
+    fn workflow_state_snapshot_ignores_legacy_delay_payload() {
         let snapshot: WorkflowStateSnapshot = toml::from_str(
             r#"
 schedule_delayed_occurrence_key = "recurring:0:2026-05-10"
@@ -1049,14 +1043,6 @@ schedule_delay_until_epoch_secs = 1700000000
         )
         .expect("payload should deserialize");
 
-        assert_eq!(
-            snapshot.schedule_delayed_occurrence_key.as_deref(),
-            Some("recurring:0:2026-05-10")
-        );
-        assert_eq!(
-            snapshot.schedule_delay_until_epoch_secs,
-            Some(1_700_000_000)
-        );
         assert!(snapshot.schedule_armed_occurrence_key.is_none());
         assert!(snapshot.last_schedule_occurrence_key.is_none());
         assert!(!snapshot.strict_reset_confirmation_pending);

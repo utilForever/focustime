@@ -552,7 +552,6 @@ pub(super) fn timer_primary_hint(app: &App) -> String {
     let timer_next = app.shortcut_hint(ShortcutAction::TimerNextPhase);
     let timer_note = app.shortcut_hint(ShortcutAction::TimerEditNote);
     let timer_unblock = app.shortcut_hint(ShortcutAction::BreakGlassOverride);
-    let timer_delay = app.shortcut_hint(ShortcutAction::DelayScheduleStart);
 
     if app.timer_note_input_active() {
         format!(
@@ -562,23 +561,23 @@ pub(super) fn timer_primary_hint(app: &App) -> String {
         )
     } else if app.break_glass_confirmation_pending() {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note  {timer_unblock} Confirm unblock  {timer_delay} Delay 10m"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note  {timer_unblock} Confirm unblock"
         )
     } else if app.strict_reset_confirmation_pending() {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Confirm reset  {timer_next} Next (Locked)  {timer_note} Note  {timer_unblock} Unblock  {timer_delay} Delay 10m"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Confirm reset  {timer_next} Next (Locked)  {timer_note} Note  {timer_unblock} Unblock"
         )
     } else if app.strict_mode_enforced_for_focus() {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset (Confirm)  {timer_next} Next (Locked)  {timer_note} Note  {timer_unblock} Unblock  {timer_delay} Delay 10m"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset (Confirm)  {timer_next} Next (Locked)  {timer_note} Note  {timer_unblock} Unblock"
         )
     } else if app.can_edit_session_note() {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note  {timer_unblock} Unblock  {timer_delay} Delay 10m"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note  {timer_unblock} Unblock"
         )
     } else {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note (Focus only)  {timer_unblock} Unblock  {timer_delay} Delay 10m"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note (Focus only)  {timer_unblock} Unblock"
         )
     }
 }

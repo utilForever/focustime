@@ -1,5 +1,5 @@
 use crate::app::{
-    App, AppError, AppResult, BlockingPreview, FocusStartOutcome, Local, ProfileId,
+    App, AppError, AppResult, BlockingPreview, FocusStartOutcome, ProfileId,
     SessionInterruptionReason, ShortcutAction, TimerPhase, TimerState, TimerStatus,
     normalize_task_label, task_label_index,
 };
@@ -62,14 +62,6 @@ impl App {
             Some(SessionInterruptionReason::ManualSkip),
         );
         Ok(())
-    }
-
-    pub(crate) fn schedule_delay_for_cli(&mut self) -> AppResult<String> {
-        let now = Local::now();
-        self.current_frame_now = now;
-        let delayed_until = self.delay_active_schedule_start_for_workflow(now)?;
-        self.sync_cli_workflow_state()?;
-        Ok(delayed_until.format("%H:%M").to_string())
     }
 
     pub(crate) fn trigger_break_glass_for_cli(&mut self) -> AppResult<()> {
