@@ -213,7 +213,6 @@ fn applying_profile_loads_profile_scoped_automation_rules() {
             start: "09:00".to_string(),
             end: "11:00".to_string(),
         }],
-        exception_dates: Vec::new(),
     };
     let config = AppConfig {
         selected_profile: ProfileId::Classic,
@@ -278,7 +277,6 @@ fn applying_profile_with_missing_automation_uses_neutral_defaults() {
             start: "09:00".to_string(),
             end: "10:00".to_string(),
         }],
-        exception_dates: vec!["2026-12-25".to_string()],
     };
     app.profile_automation.standard = None;
 
@@ -703,37 +701,6 @@ fn editing_recurring_schedule_fields_updates_and_persists_settings() {
     assert_eq!(persisted.recurring_schedule, app.recurring_schedule);
 }
 
-#[test]
-fn editing_schedule_exception_fields_updates_and_persists_settings() {
-    let mut app = App::default();
-    let base_date = local_datetime_today(10, 15).date_naive();
-    app.current_frame_now = local_datetime_today(10, 15);
-
-    app.handle_key(key(KeyCode::Char('p')));
-    app.handle_key(key(KeyCode::Char('e')));
-    app.profile_edit_field = PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX;
-    app.handle_key(key(KeyCode::Right)); // add exception on base date
-    app.profile_edit_field = PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX;
-    app.handle_key(key(KeyCode::Right)); // shift to next day
-    app.handle_key(key(KeyCode::Enter));
-
-    let expected_date = base_date
-        .succ_opt()
-        .expect("next day should be representable")
-        .format("%Y-%m-%d")
-        .to_string();
-    assert_eq!(
-        app.recurring_schedule.exception_dates,
-        vec![expected_date.clone()]
-    );
-
-    let persisted = app.persisted_config();
-    assert_eq!(
-        persisted.recurring_schedule.exception_dates,
-        vec![expected_date]
-    );
-}
-
 /// Verifies daily goal editor changes are persisted.
 #[test]
 fn editing_daily_goal_fields_updates_and_persists_settings() {
@@ -822,7 +789,6 @@ fn cancelling_profile_edit_restores_recurring_schedule_settings() {
             start: "13:00".to_string(),
             end: "14:30".to_string(),
         }],
-        ..RecurringScheduleConfig::default()
     };
     let config = AppConfig {
         recurring_schedule: original_schedule.clone(),
@@ -1380,7 +1346,6 @@ fn weekly_daily_goal_allocation_uses_schedule_weights_for_remaining_days() {
                 start: "09:00".to_string(),
                 end: "12:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2627,7 +2592,6 @@ fn recurring_schedule_next_window_text_shows_upcoming_window_for_today() {
                 start: "11:00".to_string(),
                 end: "12:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2656,7 +2620,6 @@ fn recurring_schedule_next_window_text_shows_active_window_then_next_window() {
                     end: "15:00".to_string(),
                 },
             ],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2678,7 +2641,6 @@ fn recurring_schedule_display_texts_use_current_frame_timestamp() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2706,7 +2668,6 @@ fn recurring_schedule_status_text_guides_task_selection_when_active_and_armed() 
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2729,7 +2690,6 @@ fn recurring_schedule_status_text_guides_start_when_active_and_idle() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2753,7 +2713,6 @@ fn recurring_schedule_status_text_guides_resume_when_active_and_paused() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2779,7 +2738,6 @@ fn recurring_schedule_status_text_guides_switch_to_focus_when_active_in_break() 
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2803,7 +2761,6 @@ fn recurring_schedule_status_text_shows_ready_for_upcoming_window() {
                 start: "11:00".to_string(),
                 end: "12:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2825,7 +2782,6 @@ fn recurring_schedule_text_has_no_calendar_annotations() {
                 start: "11:00".to_string(),
                 end: "12:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2835,19 +2791,6 @@ fn recurring_schedule_text_has_no_calendar_annotations() {
 
     assert!(!next_text.contains("calendar"));
     assert!(!status_text.contains("calendar"));
-}
-
-#[test]
-fn adjusting_schedule_exception_date_to_existing_entry_deduplicates_and_selects_existing() {
-    let mut app = App::default();
-    app.recurring_schedule.exception_dates =
-        vec!["2026-05-10".to_string(), "2026-05-11".to_string()];
-    app.profile_edit_schedule_exception = 0;
-
-    app.adjust_selected_schedule_exception_date(true);
-
-    assert_eq!(app.recurring_schedule.exception_dates, vec!["2026-05-11"]);
-    assert_eq!(app.profile_edit_schedule_exception, 0);
 }
 
 #[test]
@@ -2867,7 +2810,6 @@ fn profile_edit_schedule_conflict_summary_reports_overlap() {
                     end: "12:00".to_string(),
                 },
             ],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2876,68 +2818,6 @@ fn profile_edit_schedule_conflict_summary_reports_overlap() {
     let summary = app.profile_edit_field_value(PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX);
     assert!(summary.contains("1 detected"));
     assert!(summary.contains("recurring #1 overlaps recurring #2"));
-}
-
-#[test]
-fn recurring_schedule_status_text_shows_exception_skip_for_today() {
-    let now = local_datetime_today(10, 15);
-    let today = now.date_naive();
-    let tomorrow = today.succ_opt().expect("tomorrow should be representable");
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![
-                crate::config::RecurringFocusWindowConfig {
-                    days: vec![weekday_token(today.weekday()).to_string()],
-                    start: "10:00".to_string(),
-                    end: "11:00".to_string(),
-                },
-                crate::config::RecurringFocusWindowConfig {
-                    days: vec![weekday_token(tomorrow.weekday()).to_string()],
-                    start: "09:00".to_string(),
-                    end: "10:00".to_string(),
-                },
-            ],
-            exception_dates: vec![today.format("%Y-%m-%d").to_string()],
-        },
-        ..AppConfig::default()
-    };
-    let app = App::from_config(config);
-
-    assert_eq!(
-        app.recurring_schedule_texts_at(now).0,
-        "🗓  Next schedule: tomorrow 09:00-10:00"
-    );
-    assert_eq!(
-        app.recurring_schedule_texts_at(now).1,
-        "⚙  Schedule status: skipped today (exception date)"
-    );
-}
-
-#[test]
-fn recurring_schedule_does_not_trigger_on_exception_date() {
-    let now = local_datetime_today(10, 15);
-    let today = now.date_naive();
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(today.weekday()).to_string()],
-                start: "10:00".to_string(),
-                end: "11:00".to_string(),
-            }],
-            exception_dates: vec![today.format("%Y-%m-%d").to_string()],
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.task_labels = vec!["Coding".to_string()];
-    app.selected_task_label = Some("Coding".to_string());
-
-    app.sync_recurring_schedule(now);
-
-    assert_eq!(app.timer.phase, TimerPhase::Focus);
-    assert_eq!(app.timer.status, TimerStatus::Idle);
-    assert!(app.schedule_armed_occurrence_key.is_none());
-    assert!(app.phase_notification.is_none());
 }
 
 #[test]
@@ -2950,7 +2830,6 @@ fn recurring_schedule_auto_starts_focus_when_window_begins_and_task_is_selected(
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -2979,7 +2858,6 @@ fn recurring_schedule_arms_when_window_begins_without_task_label() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3008,7 +2886,6 @@ fn recurring_schedule_arms_when_selected_task_label_is_archived() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3040,7 +2917,6 @@ fn schedule_delay_key_sets_delay_for_active_window() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3073,7 +2949,6 @@ fn schedule_delay_key_uses_configured_runtime_delay_duration() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         schedule_runtime: ScheduleRuntimeConfig {
             time_step_minutes: 15,
@@ -3113,7 +2988,6 @@ fn schedule_delay_clamps_until_active_window_end() {
                 start: "10:00".to_string(),
                 end: "10:20".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3140,7 +3014,6 @@ fn schedule_delay_suppresses_trigger_until_delay_expires() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3192,7 +3065,6 @@ fn recurring_schedule_status_text_shows_delayed_state() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3217,7 +3089,6 @@ fn schedule_editor_uses_configured_runtime_step_minutes() {
                 start: "09:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         schedule_runtime: ScheduleRuntimeConfig {
             time_step_minutes: 30,
@@ -3242,7 +3113,6 @@ fn recurring_schedule_auto_start_switches_idle_break_to_focus() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3274,7 +3144,6 @@ fn recurring_schedule_does_not_retrigger_within_same_window_occurrence() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3309,7 +3178,6 @@ fn recurring_schedule_triggers_overlapping_window_when_new_window_starts() {
                     end: "11:30".to_string(),
                 },
             ],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3350,7 +3218,6 @@ fn recurring_schedule_does_not_retrigger_within_same_overlapping_occurrence() {
                     end: "11:30".to_string(),
                 },
             ],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -3388,7 +3255,6 @@ fn schedule_window_transition_does_not_delay_schedule_runtime_without_delay_requ
                     end: "10:40".to_string(),
                 },
             ],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -4852,7 +4718,6 @@ fn cli_schedule_delay_sets_delay_for_active_window() {
                 start: "00:00".to_string(),
                 end: "23:59".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -4878,7 +4743,6 @@ fn cli_schedule_delay_persists_workflow_state() {
                 start: "00:00".to_string(),
                 end: "23:59".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -4907,7 +4771,6 @@ fn cli_workflow_snapshot_skips_last_occurrence_for_active_delayed_window() {
                 start: "00:00".to_string(),
                 end: "23:59".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -5097,7 +4960,6 @@ fn app_restores_schedule_arming_continuity_from_workflow_snapshot() {
                 start: "00:00".to_string(),
                 end: "23:59".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };
@@ -5879,7 +5741,6 @@ fn startup_recovery_rehydrates_profile_automation_runtime_for_snapshot_profile()
             start: "09:00".to_string(),
             end: "11:00".to_string(),
         }],
-        exception_dates: vec!["2026-12-25".to_string()],
     };
     let config = AppConfig {
         selected_profile: ProfileId::Custom,
