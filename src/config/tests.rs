@@ -135,7 +135,6 @@ fn round_trip_full_config() {
                     start: "09:15".to_string(),
                     end: "11:00".to_string(),
                 }],
-                exception_dates: vec!["2026-04-27".to_string()],
             },
         }],
         selected_session_template: "Morning deep work".to_string(),
@@ -154,7 +153,6 @@ fn round_trip_full_config() {
                 start: "09:15".to_string(),
                 end: "11:00".to_string(),
             }],
-            exception_dates: vec!["2026-04-27".to_string(), "2026-05-05".to_string()],
         },
         schedule_runtime: ScheduleRuntimeConfig {
             time_step_minutes: 20,
@@ -189,7 +187,6 @@ fn round_trip_full_config() {
                         start: "09:15".to_string(),
                         end: "11:00".to_string(),
                     }],
-                    exception_dates: vec!["2026-04-27".to_string(), "2026-05-05".to_string()],
                 },
             }),
             advanced: Some(ProfileAutomationConfig {
@@ -615,7 +612,6 @@ start = "08:30"
     assert_eq!(window.start, "08:30");
     assert_eq!(window.end, default_schedule_window_end());
     assert_eq!(window.days, default_schedule_window_days());
-    assert!(cfg.recurring_schedule.exception_dates.is_empty());
 }
 
 #[test]
@@ -649,7 +645,6 @@ fn normalize_drops_recurring_windows_with_invalid_time_ranges() {
                     end: "09:00".to_string(),
                 },
             ],
-            exception_dates: Vec::new(),
         },
         ..AppConfig::default()
     }
@@ -658,29 +653,6 @@ fn normalize_drops_recurring_windows_with_invalid_time_ranges() {
     assert_eq!(cfg.recurring_schedule.windows.len(), 1);
     assert_eq!(cfg.recurring_schedule.windows[0].start, "09:00");
     assert_eq!(cfg.recurring_schedule.windows[0].end, "11:00");
-}
-
-#[test]
-fn normalize_recurring_schedule_exception_dates_dedupes_and_drops_invalid_entries() {
-    let cfg = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: Vec::new(),
-            exception_dates: vec![
-                " 2026-12-25 ".to_string(),
-                "2026-02-30".to_string(),
-                "2026-01-01".to_string(),
-                "2026-12-25".to_string(),
-                "not-a-date".to_string(),
-            ],
-        },
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(
-        cfg.recurring_schedule.exception_dates,
-        vec!["2026-01-01".to_string(), "2026-12-25".to_string()]
-    );
 }
 
 #[test]
@@ -2018,7 +1990,6 @@ fn normalize_migrates_legacy_automation_into_per_profile_settings() {
             start: "09:00".to_string(),
             end: "10:30".to_string(),
         }],
-        exception_dates: vec!["2026-12-25".to_string()],
     };
     let cfg = AppConfig {
         selected_profile: ProfileId::DeepWork,
@@ -2088,7 +2059,6 @@ fn normalize_selected_profile_automation_keeps_top_level_legacy_fields() {
                 start: "13:00".to_string(),
                 end: "15:00".to_string(),
             }],
-            exception_dates: Vec::new(),
         },
     };
 
@@ -2131,7 +2101,6 @@ fn normalize_legacy_automation_fields_do_not_override_profile_automation() {
                 start: "13:00".to_string(),
                 end: "15:00".to_string(),
             }],
-            exception_dates: Vec::new(),
         },
     };
     let cfg = AppConfig {
@@ -2275,6 +2244,41 @@ allowlist_sites = []
     );
     assert!(steps.iter().any(|step| {
         step.summary == "Flatten deprecated blocklist category rules into profile-level site lists."
+    }));
+}
+
+#[test]
+fn config_migration_removes_schedule_exception_dates() {
+    let original: toml::Value = toml::from_str(
+        r#"
+schema_version = 2
+
+[recurring_schedule]
+exception_dates = ["2026-12-25"]
+
+[profile_automation.basic.recurring_schedule]
+exception_dates = ["2026-12-25"]
+
+[[session_templates]]
+name = "Morning"
+task_label = "Docs"
+profile = "basic"
+blocklist_profile = "Default"
+
+[session_templates.schedule]
+exception_dates = ["2026-12-25"]
+"#,
+    )
+    .unwrap();
+
+    let (migrated, _, steps) = migrate_config_toml_to_current_detailed(original).unwrap();
+    assert!(
+        !migrated.to_string().contains("exception_dates"),
+        "migrated config should not retain schedule exception date keys"
+    );
+    assert!(steps.iter().any(|step| {
+        step.summary
+            == "Remove deprecated schedule exception dates; schedules now use recurring windows only."
     }));
 }
 

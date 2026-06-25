@@ -32,13 +32,8 @@ impl App {
     }
 
     fn schedule_display_state_at(&self, now: DateTime<Local>) -> ScheduleDisplayState {
-        let today = now.date_naive();
         let active_window = self.active_schedule_occurrence_at(now);
-        let next_window = next_occurrence_after(
-            now,
-            &self.recurring_windows,
-            &self.recurring_exception_dates,
-        );
+        let next_window = next_occurrence_after(now, &self.recurring_windows);
         let delayed_until = active_window.as_ref().and_then(|occurrence| {
             self.schedule_delay_until_for_occurrence_key(&occurrence_key(occurrence), now)
         });
@@ -46,7 +41,6 @@ impl App {
             has_schedule_windows: !self.recurring_windows.is_empty(),
             active_window,
             next_window,
-            is_exception_today: self.recurring_exception_dates.contains(&today),
             is_armed: self.schedule_armed_occurrence_key.is_some(),
             delayed_until,
             has_selected_task: self.has_selectable_task_label_for_focus(),
@@ -59,11 +53,7 @@ impl App {
         &self,
         now: DateTime<Local>,
     ) -> Option<WindowOccurrence> {
-        active_occurrence(
-            now,
-            &self.recurring_windows,
-            &self.recurring_exception_dates,
-        )
+        active_occurrence(now, &self.recurring_windows)
     }
 
     pub(super) fn sync_recurring_schedule(&mut self, now: DateTime<Local>) {
@@ -295,10 +285,6 @@ fn schedule_status_text_from_state(
 
     if state.is_armed {
         return schedule_armed_status_text(state.has_selected_task, labels);
-    }
-
-    if state.is_exception_today {
-        return "⚙  Schedule status: skipped today (exception date)".to_string();
     }
 
     "⚙  Schedule status: ready for next window".to_string()

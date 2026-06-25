@@ -1,13 +1,11 @@
 use crate::app::{
     App, PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX,
     PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX, PROFILE_EDIT_SCHEDULE_DAY_INDEX,
-    PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX,
-    PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX, PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX,
-    PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
-    RecurringFocusWindowConfig, SCHEDULE_DAY_LABELS, SCHEDULE_DAY_TOKENS, bool_label, format_hhmm,
-    format_schedule_conflict, format_schedule_days_for_display,
-    inspect_schedule_conflicts_from_config, parse_hhmm_minutes, parse_schedule_exception_date,
-    sort_schedule_days, sort_schedule_exception_dates,
+    PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
+    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, RecurringFocusWindowConfig, SCHEDULE_DAY_LABELS,
+    SCHEDULE_DAY_TOKENS, bool_label, format_hhmm, format_schedule_conflict,
+    format_schedule_days_for_display, inspect_schedule_conflicts_from_config, parse_hhmm_minutes,
+    sort_schedule_days,
 };
 
 impl App {
@@ -28,14 +26,6 @@ impl App {
                 .map(|window| window.end.clone())
                 .unwrap_or_else(|| "n/a".to_string()),
             PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX => self.schedule_window_collection_value(),
-            PROFILE_EDIT_SCHEDULE_EXCEPTION_INDEX => self.schedule_exception_selector_value(),
-            PROFILE_EDIT_SCHEDULE_EXCEPTION_DATE_INDEX => self
-                .selected_schedule_exception_date()
-                .cloned()
-                .unwrap_or_else(|| "n/a".to_string()),
-            PROFILE_EDIT_SCHEDULE_EXCEPTION_ADD_REMOVE_INDEX => {
-                self.schedule_exception_collection_value()
-            }
             PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX => self.schedule_conflict_summary_value(),
             _ => String::new(),
         }
@@ -87,26 +77,6 @@ impl App {
         }
     }
 
-    fn schedule_exception_selector_value(&self) -> String {
-        if self.recurring_schedule.exception_dates.is_empty() {
-            "none".to_string()
-        } else {
-            format!(
-                "{}/{}",
-                self.profile_edit_schedule_exception.saturating_add(1),
-                self.recurring_schedule.exception_dates.len()
-            )
-        }
-    }
-
-    fn schedule_exception_collection_value(&self) -> String {
-        if self.recurring_schedule.exception_dates.is_empty() {
-            "→ Add date".to_string()
-        } else {
-            "← Remove · → Add".to_string()
-        }
-    }
-
     fn selected_schedule_window(&self) -> Option<&RecurringFocusWindowConfig> {
         self.recurring_schedule
             .windows
@@ -117,12 +87,6 @@ impl App {
         self.recurring_schedule
             .windows
             .get_mut(self.profile_edit_schedule_window)
-    }
-
-    fn selected_schedule_exception_date(&self) -> Option<&String> {
-        self.recurring_schedule
-            .exception_dates
-            .get(self.profile_edit_schedule_exception)
     }
 
     fn selected_schedule_day_token(&self) -> &'static str {
@@ -158,16 +122,6 @@ impl App {
         self.profile_edit_schedule_day = self
             .profile_edit_schedule_day
             .min(SCHEDULE_DAY_TOKENS.len().saturating_sub(1));
-        if self.recurring_schedule.exception_dates.is_empty() {
-            self.profile_edit_schedule_exception = 0;
-        } else {
-            self.profile_edit_schedule_exception = self.profile_edit_schedule_exception.min(
-                self.recurring_schedule
-                    .exception_dates
-                    .len()
-                    .saturating_sub(1),
-            );
-        }
     }
 
     pub(super) fn cycle_schedule_window(&mut self, increase: bool) {
@@ -192,22 +146,6 @@ impl App {
             self.profile_edit_schedule_day = total - 1;
         } else {
             self.profile_edit_schedule_day = self.profile_edit_schedule_day.saturating_sub(1);
-        }
-    }
-
-    pub(super) fn cycle_schedule_exception(&mut self, increase: bool) {
-        if self.recurring_schedule.exception_dates.is_empty() {
-            return;
-        }
-        let total = self.recurring_schedule.exception_dates.len();
-        if increase {
-            self.profile_edit_schedule_exception =
-                (self.profile_edit_schedule_exception + 1) % total;
-        } else if self.profile_edit_schedule_exception == 0 {
-            self.profile_edit_schedule_exception = total - 1;
-        } else {
-            self.profile_edit_schedule_exception =
-                self.profile_edit_schedule_exception.saturating_sub(1);
         }
     }
 
@@ -275,53 +213,6 @@ impl App {
         window.end = format_hhmm(end);
     }
 
-    pub(super) fn adjust_selected_schedule_exception_date(&mut self, increase: bool) {
-        let selected_index = self.profile_edit_schedule_exception;
-        let Some(current_value) = self.selected_schedule_exception_date().cloned() else {
-            return;
-        };
-        let Some(current_date) = parse_schedule_exception_date(&current_value) else {
-            return;
-        };
-        let next_date = if increase {
-            current_date.succ_opt().unwrap_or(current_date)
-        } else {
-            current_date.pred_opt().unwrap_or(current_date)
-        };
-        let next_value = next_date.format("%Y-%m-%d").to_string();
-        if let Some(existing_position) = self
-            .recurring_schedule
-            .exception_dates
-            .iter()
-            .position(|value| value == &next_value)
-        {
-            if existing_position != selected_index {
-                self.recurring_schedule
-                    .exception_dates
-                    .remove(selected_index);
-                self.profile_edit_schedule_exception =
-                    adjusted_index_after_removal(selected_index, existing_position);
-            }
-            return;
-        }
-        if let Some(target) = self
-            .recurring_schedule
-            .exception_dates
-            .get_mut(selected_index)
-        {
-            *target = next_value.clone();
-        }
-        sort_schedule_exception_dates(&mut self.recurring_schedule.exception_dates);
-        if let Some(position) = self
-            .recurring_schedule
-            .exception_dates
-            .iter()
-            .position(|value| value == &next_value)
-        {
-            self.profile_edit_schedule_exception = position;
-        }
-    }
-
     pub(super) fn adjust_schedule_windows_collection(&mut self, increase: bool) {
         if increase {
             self.recurring_schedule
@@ -338,51 +229,5 @@ impl App {
             .windows
             .remove(self.profile_edit_schedule_window);
         self.clamp_profile_edit_schedule_selection();
-    }
-
-    pub(super) fn adjust_schedule_exceptions_collection(&mut self, increase: bool) {
-        if increase {
-            let mut candidate = self.current_frame_now.date_naive();
-            let mut candidate_value = candidate.format("%Y-%m-%d").to_string();
-            while self
-                .recurring_schedule
-                .exception_dates
-                .iter()
-                .any(|value| value == &candidate_value)
-            {
-                let Some(next_candidate) = candidate.succ_opt() else {
-                    return;
-                };
-                candidate = next_candidate;
-                candidate_value = candidate.format("%Y-%m-%d").to_string();
-            }
-            self.recurring_schedule
-                .exception_dates
-                .push(candidate_value.clone());
-            sort_schedule_exception_dates(&mut self.recurring_schedule.exception_dates);
-            self.profile_edit_schedule_exception = self
-                .recurring_schedule
-                .exception_dates
-                .iter()
-                .position(|value| value == &candidate_value)
-                .unwrap_or(0);
-            return;
-        }
-
-        if self.recurring_schedule.exception_dates.is_empty() {
-            return;
-        }
-        self.recurring_schedule
-            .exception_dates
-            .remove(self.profile_edit_schedule_exception);
-        self.clamp_profile_edit_schedule_selection();
-    }
-}
-
-fn adjusted_index_after_removal(removed_index: usize, target_index: usize) -> usize {
-    if removed_index < target_index {
-        target_index.saturating_sub(1)
-    } else {
-        target_index
     }
 }

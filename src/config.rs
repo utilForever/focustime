@@ -4,7 +4,6 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use chrono::NaiveDate;
 use serde::{Deserialize, Deserializer, Serialize};
 
 mod blocklists;
@@ -355,8 +354,6 @@ pub(crate) struct AutoStartConfig {
 pub(crate) struct RecurringScheduleConfig {
     #[serde(default)]
     pub(crate) windows: Vec<RecurringFocusWindowConfig>,
-    #[serde(default)]
-    pub(crate) exception_dates: Vec<String>,
 }
 
 impl RecurringScheduleConfig {
@@ -375,11 +372,7 @@ impl RecurringScheduleConfig {
                 start_minutes < end_minutes
             })
             .collect();
-        let exception_dates = normalize_schedule_exception_dates(&self.exception_dates);
-        Self {
-            windows,
-            exception_dates,
-        }
+        Self { windows }
     }
 }
 
@@ -1355,26 +1348,6 @@ fn parse_schedule_time_minutes(value: &str) -> Option<u16> {
         return None;
     }
     Some(hour * 60 + minute)
-}
-
-fn normalize_schedule_exception_dates(dates: &[String]) -> Vec<String> {
-    let mut normalized = Vec::new();
-    let mut seen = HashSet::new();
-    for date in dates {
-        let Some(parsed) = parse_schedule_exception_date(date) else {
-            continue;
-        };
-        let canonical = parsed.format("%Y-%m-%d").to_string();
-        if seen.insert(canonical.clone()) {
-            normalized.push(canonical);
-        }
-    }
-    normalized.sort();
-    normalized
-}
-
-fn parse_schedule_exception_date(value: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()
 }
 
 fn normalize_session_templates(

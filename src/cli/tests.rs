@@ -708,7 +708,7 @@ fn parse_break_glass_cancel_defaults_to_text_mode() {
 
 #[test]
 fn parse_schedule_set_accepts_json_payload() {
-    let payload = r#"{"windows":[{"days":["mon","wed"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"]}"#;
+    let payload = r#"{"windows":[{"days":["mon","wed"],"start":"09:00","end":"11:00"}]}"#;
     let parsed = parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap();
     assert_eq!(
         parsed,
@@ -720,7 +720,6 @@ fn parse_schedule_set_accepts_json_payload() {
                         start: "09:00".to_string(),
                         end: "11:00".to_string(),
                     }],
-                    exception_dates: vec!["2026-12-25".to_string()],
                 }),
             },
             output: OutputMode::Text
@@ -730,7 +729,7 @@ fn parse_schedule_set_accepts_json_payload() {
 
 #[test]
 fn parse_schedule_set_rejects_one_time_windows_payload() {
-    let payload = r#"{"windows":[],"exception_dates":[],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"15:30"}]}"#;
+    let payload = r#"{"windows":[],"one_time_windows":[{"date":"2026-05-02","start":"14:00","end":"15:30"}]}"#;
     let error = parse_args([OsString::from("--schedule-set"), OsString::from(payload)])
         .expect_err("one-time schedule windows should be rejected");
 
@@ -763,7 +762,6 @@ fn schedule_inspection_output_reports_detected_conflicts() {
                 end: "12:00".to_string(),
             },
         ],
-        ..RecurringScheduleConfig::default()
     };
 
     let output = build_schedule_inspection_output(&schedule);
@@ -781,7 +779,6 @@ fn schedule_inspection_output_reports_no_conflicts() {
             start: "09:00".to_string(),
             end: "10:00".to_string(),
         }],
-        ..RecurringScheduleConfig::default()
     };
 
     let output = build_schedule_inspection_output(&schedule);
@@ -1472,7 +1469,8 @@ fn classify_key_value_arg_accepts_goal_carry_monthly_equals_value() {
 /// Verifies key-value parsing accepts inline schedule JSON payloads.
 #[test]
 fn classify_key_value_arg_accepts_schedule_set_equals_value() {
-    let payload = "--schedule-set={\"windows\":[{\"days\":[\"fri\"],\"start\":\"10:00\",\"end\":\"11:00\"}],\"exception_dates\":[]}";
+    let payload =
+        "--schedule-set={\"windows\":[{\"days\":[\"fri\"],\"start\":\"10:00\",\"end\":\"11:00\"}]}";
     let parsed = classify_key_value_arg(payload).unwrap();
     assert_eq!(
         parsed,
@@ -1482,7 +1480,6 @@ fn classify_key_value_arg_accepts_schedule_set_equals_value() {
                 start: "10:00".to_string(),
                 end: "11:00".to_string(),
             }],
-            exception_dates: Vec::new(),
         }))
     );
 }
@@ -1780,24 +1777,23 @@ fn parse_rejects_blocklist_site_edit_without_old_new_separator() {
 /// Verifies invalid schedule weekday tokens are rejected.
 #[test]
 fn parse_rejects_schedule_set_with_invalid_weekday() {
-    let payload =
-        r#"{"windows":[{"days":["nonday"],"start":"09:00","end":"10:00"}],"exception_dates":[]}"#;
+    let payload = r#"{"windows":[{"days":["nonday"],"start":"09:00","end":"10:00"}]}"#;
     let error =
         parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
     assert!(error.contains("unknown weekday"));
 }
 
 #[test]
-fn parse_rejects_schedule_set_with_invalid_exception_date() {
+fn parse_rejects_schedule_set_with_deprecated_exception_dates() {
     let payload = r#"{"windows":[{"days":["mon"],"start":"09:00","end":"10:00"}],"exception_dates":["2026-99-99"]}"#;
     let error =
         parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
-    assert!(error.contains("must be YYYY-MM-DD"));
+    assert!(error.contains("exception_dates"));
 }
 
 #[test]
 fn parse_rejects_schedule_set_with_deprecated_one_time_windows() {
-    let payload = r#"{"windows":[],"exception_dates":[],"one_time_windows":[]}"#;
+    let payload = r#"{"windows":[],"one_time_windows":[]}"#;
     let error =
         parse_args([OsString::from("--schedule-set"), OsString::from(payload)]).unwrap_err();
     assert!(error.contains("one_time_windows"));
@@ -2961,7 +2957,6 @@ fn build_status_output_includes_weekly_allocation_breakdown() {
                 start: "09:00".to_string(),
                 end: "10:00".to_string(),
             }],
-            ..RecurringScheduleConfig::default()
         },
         ..AppConfig::default()
     };

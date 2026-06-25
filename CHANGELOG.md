@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Schedule exception date cleanup (#549):** removed schedule exception-date config, runtime skipping, CLI text output, and profile editor controls so recurring schedules are represented only as recurring windows.
 - **Calendar timezone dependency cleanup (#547):** confirmed retired calendar timezone parsing no longer owns a runtime or test dependency, kept `chrono-tz` out of the manifest/lockfile, and updated dependency cleanup guidance before the v0.16.2 release.
 - **Calendar annotation cache cleanup (#546):** removed calendar annotation cache runtime handling, dropped `[calendar_sync]` from normalized config persistence/examples, and kept schedule output deterministic without calendar-derived busy/overlap text.
 

@@ -1102,7 +1102,7 @@ fn recurring_schedule_is_profile_scoped_via_cli_commands() {
     assert!(stderr_text(&select_deep_work).trim().is_empty());
 
     let set_schedule = env.run(&[
-        "--schedule-set={\"windows\":[{\"days\":[\"mon\"],\"start\":\"09:00\",\"end\":\"11:00\"}],\"exception_dates\":[]}",
+        "--schedule-set={\"windows\":[{\"days\":[\"mon\"],\"start\":\"09:00\",\"end\":\"11:00\"}]}",
         "--json",
     ]);
     assert_eq!(set_schedule.status.code(), Some(0));

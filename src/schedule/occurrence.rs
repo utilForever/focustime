@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use chrono::{DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, TimeZone, Timelike};
 
 use super::{RecurringWindow, WindowOccurrence};
@@ -15,13 +13,9 @@ pub(crate) fn occurrence_key(occurrence: &WindowOccurrence) -> String {
 pub(crate) fn active_occurrence(
     now: DateTime<Local>,
     windows: &[RecurringWindow],
-    exception_dates: &HashSet<NaiveDate>,
 ) -> Option<WindowOccurrence> {
     let now_minutes = now.hour() as u16 * 60 + now.minute() as u16;
     let today = now.date_naive();
-    if exception_dates.contains(&today) {
-        return None;
-    }
     let mut selected: Option<WindowOccurrence> = None;
 
     for (window_index, window) in windows.iter().enumerate() {
@@ -60,21 +54,12 @@ pub(crate) fn active_occurrence(
 pub(crate) fn next_occurrence_after(
     now: DateTime<Local>,
     windows: &[RecurringWindow],
-    exception_dates: &HashSet<NaiveDate>,
 ) -> Option<WindowOccurrence> {
     let mut selected: Option<WindowOccurrence> = None;
     let today = now.date_naive();
-    let future_exception_count = exception_dates
-        .iter()
-        .filter(|date| **date >= today)
-        .count();
-    let search_days = 7_i64.saturating_mul((future_exception_count as i64).saturating_add(1));
 
-    for day_offset in 0..=search_days {
+    for day_offset in 0..=7 {
         let date = today + Duration::days(day_offset);
-        if exception_dates.contains(&date) {
-            continue;
-        }
         for (window_index, window) in windows.iter().enumerate() {
             if !window.days.contains(&date.weekday()) {
                 continue;

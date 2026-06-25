@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
 
 use crate::app::{
@@ -304,37 +302,23 @@ fn remaining_days_in_current_iso_week(day: NaiveDate) -> Vec<NaiveDate> {
 }
 
 fn schedule_weights_for_days(days: &[NaiveDate], schedule: &RecurringScheduleConfig) -> Vec<u64> {
-    let exception_dates: HashSet<NaiveDate> = schedule
-        .exception_dates
-        .iter()
-        .filter_map(|value| parse_schedule_date(value))
-        .collect();
     days.iter()
-        .map(|day| scheduled_weight_minutes_for_day(*day, schedule, &exception_dates))
+        .map(|day| scheduled_weight_minutes_for_day(*day, schedule))
         .collect()
 }
 
-fn scheduled_weight_minutes_for_day(
-    day: NaiveDate,
-    schedule: &RecurringScheduleConfig,
-    exception_dates: &HashSet<NaiveDate>,
-) -> u64 {
-    let exception_applies = exception_dates.contains(&day);
-    if exception_applies {
-        0
-    } else {
-        schedule
-            .windows
-            .iter()
-            .filter(|window| {
-                window
-                    .days
-                    .iter()
-                    .any(|token| weekday_token_matches(token, day.weekday()))
-            })
-            .map(|window| window_duration_minutes(&window.start, &window.end))
-            .sum()
-    }
+fn scheduled_weight_minutes_for_day(day: NaiveDate, schedule: &RecurringScheduleConfig) -> u64 {
+    schedule
+        .windows
+        .iter()
+        .filter(|window| {
+            window
+                .days
+                .iter()
+                .any(|token| weekday_token_matches(token, day.weekday()))
+        })
+        .map(|window| window_duration_minutes(&window.start, &window.end))
+        .sum()
 }
 
 fn weekday_token_matches(token: &str, weekday: Weekday) -> bool {
@@ -348,10 +332,6 @@ fn weekday_token_matches(token: &str, weekday: Weekday) -> bool {
         Weekday::Sun => "sun",
     };
     token.eq_ignore_ascii_case(expected)
-}
-
-fn parse_schedule_date(value: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()
 }
 
 fn parse_schedule_time_minutes(value: &str) -> Option<u16> {

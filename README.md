@@ -176,7 +176,7 @@ cargo run -- --allowlist-site-delete reddit.com
 
 # Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
-cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}],"exception_dates":["2026-12-25"]}'
+cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}]}'
 cargo run -- --schedule-delay
 cargo run -- --schedule --json
 
@@ -574,8 +574,6 @@ sound = false
 focus_to_break = false
 break_to_focus = false
 
-[profile_automation.advanced.recurring_schedule]
-exception_dates = ["2026-12-25", "2027-01-01"]
 [[profile_automation.advanced.recurring_schedule.windows]]
 days = ["mon", "tue", "wed", "thu", "fri"]
 start = "09:00"
@@ -772,7 +770,6 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 
 - `profile_automation.<preset>.recurring_schedule.windows[].days` accepts day tokens (`mon`..`sun`, case-insensitive)
 - `profile_automation.<preset>.recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
-- `profile_automation.<preset>.recurring_schedule.exception_dates` accepts `YYYY-MM-DD` local dates and skips automatic schedule triggering on those days
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
 - while a schedule window is active and focus is not already running, press `z` to delay the scheduled start (configurable via `[schedule_runtime].delay_secs`, default `10m`, clamped `60..43200` seconds)
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
@@ -795,9 +792,6 @@ You can configure notification and auto-start settings directly from the TUI:
   - **Schedule window**: `←/→` changes which window is selected
   - **Schedule day** + **Schedule day enabled**: choose day cursor and toggle it `Off/On`
   - **Schedule start/end**: adjust times in `[schedule_runtime].time_step_minutes` steps (default `15`, clamped `1..60`)
-  - **Schedule exception**: `←/→` changes which exception date is selected
-  - **Exception date**: `←/→` moves selected exception date backward/forward by 1 day
-  - **Exception add/remove**: `→` adds a date (starting from today), `←` removes selected date
   - **Automation trigger**: deprecated compatibility fields for older trigger rules
   - **Automation condition/time/action**: deprecated compatibility fields for older event/time rules
   - **Automation add/remove**: deprecated compatibility controls for older trigger rules
