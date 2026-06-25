@@ -625,6 +625,6 @@ fn classify_schedule_set_arg(
         return Ok((ParsedToken::ScheduleSet(parse_schedule_value(next)?), 2));
     }
     Err(invalid_usage(
-        "`--schedule-set` requires a JSON payload. Use `--schedule-set='{\"windows\":[...],\"exception_dates\":[...]}'`.",
+        "`--schedule-set` requires a JSON payload. Use `--schedule-set='{\"windows\":[...]}'`.",
     ))
 }

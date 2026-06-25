@@ -1,6 +1,4 @@
-use std::collections::HashSet;
-
-use chrono::{DateTime, Local, NaiveDate, Weekday};
+use chrono::{DateTime, Local, Weekday};
 
 use crate::config::RecurringFocusWindowConfig;
 
@@ -13,7 +11,7 @@ pub(crate) use conflicts::inspect_schedule_conflicts;
 pub(crate) use conflicts::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
 pub(crate) use occurrence::{active_occurrence, next_occurrence_after, occurrence_key};
 
-use parsing::{parse_exception_date, parse_time_minutes, parse_weekdays};
+use parsing::{parse_time_minutes, parse_weekdays};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RecurringWindow {
@@ -44,13 +42,6 @@ pub(crate) fn compile_windows(
     config_windows
         .iter()
         .filter_map(RecurringWindow::from_config)
-        .collect()
-}
-
-pub(crate) fn compile_exception_dates(config_dates: &[String]) -> HashSet<NaiveDate> {
-    config_dates
-        .iter()
-        .filter_map(|value| parse_exception_date(value))
         .collect()
 }
 

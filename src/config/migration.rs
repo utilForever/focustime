@@ -70,6 +70,16 @@ pub(super) fn migrate_config_toml_to_current_detailed(
                 .to_string(),
         });
     }
+    let schedule_exception_dates_input = config_toml.clone();
+    remove_schedule_exception_dates(&mut config_toml);
+    if schedule_exception_dates_input != config_toml {
+        steps.push(ConfigMigrationStepReport {
+            from_schema_version,
+            to_schema_version: from_schema_version,
+            summary: "Remove deprecated schedule exception dates; schedules now use recurring windows only."
+                .to_string(),
+        });
+    }
     let blocklist_category_input = config_toml.clone();
     migrate_blocklist_categories_to_profile_rules(&mut config_toml);
     if blocklist_category_input != config_toml {
@@ -125,6 +135,63 @@ pub(super) fn remove_automation_triggers(config_toml: &mut toml::Value) {
         return;
     }
     table.remove("automation_triggers");
+}
+
+/// Removes retired schedule exception dates from all persisted schedule surfaces.
+pub(super) fn remove_schedule_exception_dates(config_toml: &mut toml::Value) {
+    let Some(table) = config_toml.as_table_mut() else {
+        return;
+    };
+    remove_exception_dates_from_named_schedule(table, "recurring_schedule");
+    remove_profile_automation_schedule_exception_dates(table);
+    remove_session_template_schedule_exception_dates(table);
+}
+
+fn remove_exception_dates_from_named_schedule(
+    table: &mut toml::map::Map<String, toml::Value>,
+    schedule_key: &str,
+) {
+    let Some(schedule) = table
+        .get_mut(schedule_key)
+        .and_then(toml::Value::as_table_mut)
+    else {
+        return;
+    };
+    schedule.remove("exception_dates");
+}
+
+fn remove_profile_automation_schedule_exception_dates(
+    table: &mut toml::map::Map<String, toml::Value>,
+) {
+    let Some(profile_automation) = table
+        .get_mut("profile_automation")
+        .and_then(toml::Value::as_table_mut)
+    else {
+        return;
+    };
+    for (_, preset) in profile_automation.iter_mut() {
+        let Some(preset) = preset.as_table_mut() else {
+            continue;
+        };
+        remove_exception_dates_from_named_schedule(preset, "recurring_schedule");
+    }
+}
+
+fn remove_session_template_schedule_exception_dates(
+    table: &mut toml::map::Map<String, toml::Value>,
+) {
+    let Some(templates) = table
+        .get_mut("session_templates")
+        .and_then(toml::Value::as_array_mut)
+    else {
+        return;
+    };
+    for template in templates {
+        let Some(template) = template.as_table_mut() else {
+            continue;
+        };
+        remove_exception_dates_from_named_schedule(template, "schedule");
+    }
 }
 
 /// Moves deprecated blocklist category rules into profile-level blocked-site entries.

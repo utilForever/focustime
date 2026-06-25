@@ -1,5 +1,5 @@
 use crate::cli::{
-    DailyGoalConfig, MonthlyGoalConfig, NaiveDate, ProfileId, RecurringFocusWindowConfig,
+    DailyGoalConfig, MonthlyGoalConfig, ProfileId, RecurringFocusWindowConfig,
     RecurringScheduleConfig, SiteEditValue, ThemePreset, WeeklyGoalConfig,
 };
 
@@ -132,7 +132,7 @@ pub(in crate::cli) fn parse_site_edit_value(value: &str) -> Result<SiteEditValue
 pub(in crate::cli) fn parse_schedule_value(value: &str) -> Result<RecurringScheduleConfig, String> {
     let schedule = serde_json::from_str::<RecurringScheduleConfig>(value).map_err(|error| {
         invalid_usage(&format!(
-            "Invalid schedule JSON payload: {error}. Use `--schedule-set='{{\"windows\":[...],\"exception_dates\":[...]}}'`."
+            "Invalid schedule JSON payload: {error}. Use `--schedule-set='{{\"windows\":[...]}}'`."
         ))
     })?;
     validate_schedule_value(&schedule)?;
@@ -142,9 +142,6 @@ pub(in crate::cli) fn parse_schedule_value(value: &str) -> Result<RecurringSched
 fn validate_schedule_value(schedule: &RecurringScheduleConfig) -> Result<(), String> {
     for (index, window) in schedule.windows.iter().enumerate() {
         validate_schedule_window(window, index)?;
-    }
-    for (index, date) in schedule.exception_dates.iter().enumerate() {
-        validate_schedule_exception_date(date, index)?;
     }
     Ok(())
 }
@@ -184,15 +181,6 @@ fn validate_schedule_window(
             "Invalid schedule window at index {index}: start must be earlier than end."
         )));
     }
-    Ok(())
-}
-
-fn validate_schedule_exception_date(value: &str, index: usize) -> Result<(), String> {
-    NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").map_err(|_| {
-        invalid_usage(&format!(
-            "Invalid exception date at index {index}: `{value}` must be YYYY-MM-DD."
-        ))
-    })?;
     Ok(())
 }
 

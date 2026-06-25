@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, Weekday};
+use chrono::Weekday;
 
 pub(super) fn parse_weekdays(raw_days: &[String]) -> Vec<Weekday> {
     let mut weekdays = Vec::new();
@@ -38,8 +38,4 @@ pub(super) fn parse_time_minutes(raw: &str) -> Option<u16> {
         return None;
     }
     Some(hour * 60 + minute)
-}
-
-pub(super) fn parse_exception_date(raw: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d").ok()
 }

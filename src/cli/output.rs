@@ -177,14 +177,6 @@ pub(super) fn print_schedule_command_output(payload: &ScheduleCommandOutput) {
             );
         }
     }
-    if payload.schedule.exception_dates.is_empty() {
-        println!("Exception dates: none");
-    } else {
-        println!(
-            "Exception dates: {}",
-            payload.schedule.exception_dates.join(", ")
-        );
-    }
     if payload.inspection.conflicts.is_empty() {
         println!("Schedule conflicts: none");
     } else {
