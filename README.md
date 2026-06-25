@@ -325,14 +325,14 @@ Early deprecation notices:
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
 
-Runtime dependency ownership after daemon cleanup:
+Runtime dependency ownership after daemon and calendar cleanup:
 
 | Dependency | Owning feature paths | Ownership note |
 | --- | --- | --- |
 | `ureq` JSON feature | WakaTime heartbeat transport. Retired calendar annotation and daemon paths no longer own runtime HTTP. | Keep while WakaTime heartbeat submission uses `send_json`; re-audit if the transport changes. |
 | `base64` | WakaTime Basic auth. | Keep while WakaTime uses Basic auth. |
 
-When changing `Cargo.toml` dependency ownership, run `rg -n "ureq|chrono_tz|chrono-tz" src tests`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
+When changing `Cargo.toml` dependency ownership, run `rg -n "chrono_tz|chrono-tz" src tests Cargo.toml Cargo.lock` to confirm retired calendar timezone parsing stays removed, then run `rg -n "ureq" src tests`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
 
 ### CLI JSON/error contract
 

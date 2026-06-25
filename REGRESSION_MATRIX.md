@@ -20,7 +20,7 @@ contracts now live in normal module and integration tests that run with
 | Artifacts | Backup and stats export artifact workflows share target-directory creation and JSON path/error contracts. | `artifact_workflows_json_create_target_dirs_and_preserve_path_fields`, `artifact_workflows_json_report_consistent_target_directory_errors` |
 | Integration runtime | Daemon local API lifecycle paths remain removed; CLI timer/session/workflow commands and the TUI remain the supported automation/runtime surface. | `parse_rejects_retired_daemon_lifecycle_options`, `retired_daemon_lifecycle_commands_emit_json_usage_errors`, `usage_text_keeps_supported_cli_automation_replacements` |
 | WakaTime runtime | WakaTime exposes only supported runtime calls for heartbeat polling, focus-running sync, elapsed focus tracking, and metadata updates. | `poll_wakatime_events_applies_async_updates`, `disabled_wakatime_runtime_ignores_supported_hooks` |
-| Dependency ownership | Runtime HTTP and Basic auth stay owned by WakaTime, while removed daemon and calendar paths do not reintroduce direct runtime ownership. | `Cargo.toml`, `Cargo.lock`, `src/wakatime/transport.rs`, plus `rg -n "ureq\|chrono_tz\|chrono-tz" src tests` during dependency cleanup |
+| Dependency ownership | Runtime HTTP and Basic auth stay owned by WakaTime, while removed daemon paths do not reintroduce direct runtime ownership and retired calendar timezone parsing stays absent. | `Cargo.toml`, `Cargo.lock`, `src/wakatime/transport.rs`, plus `rg -n "chrono_tz\|chrono-tz" src tests Cargo.toml Cargo.lock` and `rg -n "ureq" src tests` during dependency cleanup |
 
 ## Release Readiness
 
@@ -38,7 +38,8 @@ here and add or update the matching normal module or integration test before
 preparing the release commit. Documentation-only roadmap updates should still
 keep README, CHANGELOG.md, CONTRIBUTING.md, and this matrix aligned with
 supported replacement behavior.
-When cleanup work changes runtime dependencies, first confirm ownership with
-`rg -n "ureq|chrono_tz|chrono-tz" src tests`, then run `cargo check --all`,
-`cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and
-`cargo audit` before release tagging.
+When cleanup work changes runtime dependencies, first confirm retired calendar
+timezone parsing stays absent with `rg -n "chrono_tz|chrono-tz" src tests Cargo.toml Cargo.lock`
+and confirm WakaTime HTTP ownership with `rg -n "ureq" src tests`, then run
+`cargo check --all`, `cargo clippy --all-targets -- -D warnings`,
+`cargo test --all`, and `cargo audit` before release tagging.
