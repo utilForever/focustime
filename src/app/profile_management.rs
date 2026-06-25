@@ -50,7 +50,6 @@ impl App {
         self.rebuild_notifier();
         self.rebuild_recurring_schedule_runtime();
         self.schedule_armed_occurrence_key = None;
-        self.clear_schedule_delay_state();
         self.last_schedule_occurrence_key = None;
     }
 
@@ -309,7 +308,6 @@ impl App {
     ) {
         if schedule_changed {
             self.schedule_armed_occurrence_key = None;
-            self.clear_schedule_delay_state();
             self.last_schedule_occurrence_key = None;
             let now = Local::now();
             self.current_frame_now = now;

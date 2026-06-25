@@ -1,7 +1,6 @@
 use crate::cli::{
-    BreakGlassCommandOutput, FocusScoreOutput, GoalOutput, ScheduleDelayCommandOutput,
-    SessionMetadataCommandOutput, StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput,
-    TaskGoalOutput, TimerStateOutput,
+    BreakGlassCommandOutput, FocusScoreOutput, GoalOutput, SessionMetadataCommandOutput,
+    StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput, TaskGoalOutput, TimerStateOutput,
 };
 
 use super::{format_duration, format_expiry_clock_suffix};
@@ -375,14 +374,6 @@ pub(in crate::cli) fn print_timer_state_output(timer: &TimerStateOutput) {
         "Profile: {} ({})",
         timer.selected_profile.label, timer.selected_profile.id
     );
-}
-
-pub(in crate::cli) fn print_schedule_delay_command_output(payload: &ScheduleDelayCommandOutput) {
-    println!(
-        "Schedule delay applied: next scheduled start deferred until {}.",
-        payload.delayed_until
-    );
-    print_timer_state_output(&payload.timer);
 }
 
 pub(in crate::cli) fn print_break_glass_command_output(payload: &BreakGlassCommandOutput) {

@@ -68,8 +68,6 @@ impl App {
             return;
         };
         let WorkflowStateSnapshot {
-            schedule_delayed_occurrence_key,
-            schedule_delay_until_epoch_secs,
             schedule_armed_occurrence_key,
             last_schedule_occurrence_key,
             strict_reset_confirmation_pending,
@@ -78,11 +76,6 @@ impl App {
 
         self.reset_cli_workflow_runtime_state_for_restore();
         let mut ignored_runtime_artifacts: Vec<&'static str> = Vec::new();
-        self.restore_schedule_delay_runtime_state(
-            schedule_delayed_occurrence_key,
-            schedule_delay_until_epoch_secs,
-            &mut ignored_runtime_artifacts,
-        );
 
         let active_occurrence_key = self
             .active_schedule_occurrence_at(self.current_frame_now)
@@ -127,34 +120,11 @@ impl App {
 
     fn reset_cli_workflow_runtime_state_for_restore(&mut self) {
         self.current_frame_now = Local::now();
-        self.schedule_delayed_occurrence_key = None;
-        self.schedule_delay_until = None;
         self.schedule_armed_occurrence_key = None;
         self.last_schedule_occurrence_key = None;
         self.pending_timer_action = None;
         self.break_glass_expires_at = None;
         self.temporary_allowlist_entries.clear();
-    }
-
-    fn restore_schedule_delay_runtime_state(
-        &mut self,
-        schedule_delayed_occurrence_key: Option<String>,
-        schedule_delay_until_epoch_secs: Option<i64>,
-        ignored_runtime_artifacts: &mut Vec<&'static str>,
-    ) {
-        let has_saved_schedule_delay_state =
-            schedule_delayed_occurrence_key.is_some() || schedule_delay_until_epoch_secs.is_some();
-        if let (Some(delayed_key), Some(delay_until_epoch_secs)) = (
-            schedule_delayed_occurrence_key,
-            schedule_delay_until_epoch_secs,
-        ) && let Some(delay_until) = local_datetime_from_epoch_secs(delay_until_epoch_secs)
-            && delay_until > self.current_frame_now
-        {
-            self.schedule_delayed_occurrence_key = Some(delayed_key);
-            self.schedule_delay_until = Some(delay_until);
-        } else if has_saved_schedule_delay_state {
-            push_ignored_artifact(ignored_runtime_artifacts, "schedule delay state");
-        }
     }
 
     fn restore_schedule_continuity_runtime_state(
@@ -424,15 +394,6 @@ impl App {
         let active_occurrence_key = self
             .active_schedule_occurrence_at(now)
             .map(|occurrence| occurrence_key(&occurrence));
-        let schedule_state = match (
-            self.schedule_delayed_occurrence_key.clone(),
-            self.schedule_delay_until,
-        ) {
-            (Some(delayed_key), Some(delayed_until)) if delayed_until > now => {
-                Some((Some(delayed_key), Some(delayed_until.timestamp())))
-            }
-            _ => None,
-        };
 
         let break_glass_expires_at_epoch_secs = self
             .break_glass_expires_at
@@ -474,31 +435,18 @@ impl App {
         } else {
             None
         };
-        let delayed_occurrence_key = schedule_state
-            .as_ref()
-            .and_then(|(delayed_key, _)| delayed_key.as_deref());
-        let last_schedule_occurrence_key =
-            self.last_schedule_occurrence_key
-                .clone()
-                .filter(|last_key| {
-                    active_occurrence_key.as_deref() == Some(last_key.as_str())
-                        && delayed_occurrence_key != Some(last_key.as_str())
-                });
+        let last_schedule_occurrence_key = self
+            .last_schedule_occurrence_key
+            .clone()
+            .filter(|last_key| active_occurrence_key.as_deref() == Some(last_key.as_str()));
         let snapshot = WorkflowStateSnapshot {
-            schedule_delayed_occurrence_key: schedule_state
-                .as_ref()
-                .and_then(|(delayed_key, _)| delayed_key.clone()),
-            schedule_delay_until_epoch_secs: schedule_state
-                .as_ref()
-                .and_then(|(_, delayed_until)| *delayed_until),
             schedule_armed_occurrence_key,
             last_schedule_occurrence_key,
             strict_reset_confirmation_pending,
             temporary_overrides,
         };
 
-        let should_persist = snapshot.schedule_delayed_occurrence_key.is_some()
-            || snapshot.schedule_armed_occurrence_key.is_some()
+        let should_persist = snapshot.schedule_armed_occurrence_key.is_some()
             || snapshot.last_schedule_occurrence_key.is_some()
             || snapshot.strict_reset_confirmation_pending
             || !snapshot.temporary_overrides.is_empty();

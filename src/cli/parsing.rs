@@ -59,7 +59,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Strict(_)
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
-            | ParsedToken::ScheduleDelay
             | ParsedToken::BreakGlassTrigger
             | ParsedToken::BreakGlassCancel
             | ParsedToken::Diagnostics
@@ -124,7 +123,7 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
     match flag {
         "--automation-triggers" | "--automation-triggers-set" => Some(RemovedOptionGuidance {
             summary: "Standalone automation trigger commands were removed.",
-            replacement: "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, `--schedule-delay` for postponing active windows, and session templates for task/profile/blocklist defaults.",
+            replacement: "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, supported timer controls for active windows, and session templates for task/profile/blocklist defaults.",
         }),
         "--config-doctor" | "--config-migrate" | "--config-migrate-apply" => {
             Some(RemovedOptionGuidance {
@@ -195,9 +194,6 @@ pub(super) fn parse_primary_command(
             ParsedToken::Schedule => set_primary_command(&mut primary, PrimaryCommand::Schedule)?,
             ParsedToken::ScheduleSet(schedule) => {
                 set_primary_command(&mut primary, PrimaryCommand::ScheduleSet(schedule.clone()))?
-            }
-            ParsedToken::ScheduleDelay => {
-                set_primary_command(&mut primary, PrimaryCommand::ScheduleDelay)?
             }
             ParsedToken::BreakGlassTrigger => {
                 set_primary_command(&mut primary, PrimaryCommand::BreakGlassTrigger)?
@@ -367,10 +363,6 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Schedule {
                 schedule: Some(schedule),
             },
-            output,
-        })),
-        Some(PrimaryCommand::ScheduleDelay) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::ScheduleDelay,
             output,
         })),
         Some(PrimaryCommand::BreakGlassTrigger) => Ok(CliAction::RunCommand(CliCommand {
@@ -606,7 +598,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Strict(_) => "--strict",
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
-        PrimaryCommand::ScheduleDelay => "--schedule-delay",
         PrimaryCommand::BreakGlassTrigger => "--break-glass-trigger",
         PrimaryCommand::BreakGlassCancel => "--break-glass-cancel",
         PrimaryCommand::Diagnostics => "--diagnostics",

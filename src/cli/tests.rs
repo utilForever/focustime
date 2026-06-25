@@ -190,7 +190,6 @@ fn usage_text_keeps_supported_cli_automation_replacements() {
         "--task",
         "--focus-intention",
         "--task-note",
-        "--schedule-delay",
         "--break-glass-trigger",
         "--break-glass-cancel",
     ] {
@@ -668,18 +667,6 @@ fn parse_automation_triggers_is_retired() {
     let error = parse(&["--automation-triggers"]).unwrap_err();
     assert!(error.contains("Unknown option `--automation-triggers`"));
     assert!(error.contains("Standalone automation trigger commands were removed."));
-}
-
-#[test]
-fn parse_schedule_delay_supports_json_mode() {
-    let parsed = parse(&["--schedule-delay", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::ScheduleDelay,
-            output: OutputMode::Json
-        })
-    );
 }
 
 #[test]
@@ -1818,15 +1805,15 @@ fn parse_rejects_multiple_primary_commands_for_backup_and_export() {
 }
 
 #[test]
-fn parse_rejects_multiple_primary_commands_for_schedule_delay_and_break_glass() {
-    let error = parse(&["--schedule-delay", "--break-glass-trigger"]).unwrap_err();
-    assert!(error.contains("Multiple primary commands"));
-}
-
-#[test]
 fn parse_rejects_unknown_option() {
     let error = parse(&["--unknown"]).unwrap_err();
     assert!(error.contains("Unknown option"));
+}
+
+#[test]
+fn parse_schedule_delay_is_retired() {
+    let error = parse(&["--schedule-delay"]).unwrap_err();
+    assert!(error.contains("Unknown option `--schedule-delay`"));
 }
 
 #[test]

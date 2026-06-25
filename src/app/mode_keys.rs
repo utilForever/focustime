@@ -1,10 +1,9 @@
 use crate::app::{
     App, AppMode, FocusStartOutcome, KeyCode, KeyEvent, KeyModifiers, NavigationAction,
     PendingTimerAction, SessionInterruptionReason, ShortcutAction, TimerState,
-    format_duration_label,
 };
 
-const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 11] = [
+const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 10] = [
     ShortcutAction::TimerTogglePause,
     ShortcutAction::TimerStopReset,
     ShortcutAction::TimerNextPhase,
@@ -15,7 +14,6 @@ const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 11] = [
     ShortcutAction::OpenSetupDiagnostics,
     ShortcutAction::TimerEditNote,
     ShortcutAction::BreakGlassOverride,
-    ShortcutAction::DelayScheduleStart,
 ];
 
 impl App {
@@ -61,7 +59,6 @@ impl App {
             ShortcutAction::OpenSetupDiagnostics => self.open_setup_diagnostics(),
             ShortcutAction::TimerEditNote => self.start_timer_note_input(),
             ShortcutAction::BreakGlassOverride => self.handle_break_glass_key(),
-            ShortcutAction::DelayScheduleStart => self.delay_active_schedule_start(),
             _ => {}
         }
     }
@@ -201,22 +198,6 @@ impl App {
     pub(super) fn clear_timer_note_input(&mut self) {
         self.timer_note_input.clear();
         self.timer_note_input_active = false;
-    }
-
-    fn delay_active_schedule_start(&mut self) {
-        let now = self.current_frame_now;
-        match self.delay_active_schedule_start_for_workflow(now) {
-            Ok(delayed_until) => {
-                self.phase_notification = Some(format!(
-                    "Scheduled start delayed for {} (until {}).",
-                    format_duration_label(self.schedule_runtime.delay_secs),
-                    delayed_until.format("%H:%M")
-                ));
-            }
-            Err(message) => {
-                self.phase_notification = Some(message);
-            }
-        }
     }
 
     pub(super) fn handle_key_stats_history(&mut self, key: KeyEvent) {

@@ -2871,7 +2871,7 @@ fn recurring_schedule_arms_when_window_begins_without_task_label() {
     assert_eq!(
         app.phase_notification.as_deref(),
         Some(
-            "Scheduled window started. Select a task label with [t], then press [Space] to start focus or [z] to delay 10m."
+            "Scheduled window started. Select a task label with [t], then press [Space] to start focus."
         )
     );
 }
@@ -2902,182 +2902,9 @@ fn recurring_schedule_arms_when_selected_task_label_is_archived() {
     assert_eq!(
         app.phase_notification.as_deref(),
         Some(
-            "Scheduled window started. Select a task label with [t], then press [Space] to start focus or [z] to delay 10m."
+            "Scheduled window started. Select a task label with [t], then press [Space] to start focus."
         )
     );
-}
-
-#[test]
-fn schedule_delay_key_sets_delay_for_active_window() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "10:00".to_string(),
-                end: "11:00".to_string(),
-            }],
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.sync_recurring_schedule(now);
-    app.current_frame_now = now;
-
-    app.handle_key(key(KeyCode::Char('z')));
-
-    assert!(app.schedule_armed_occurrence_key.is_none());
-    assert!(app.schedule_delayed_occurrence_key.is_some());
-    assert!(
-        app.schedule_delay_until
-            .is_some_and(|delayed_until| delayed_until > now)
-    );
-    assert!(
-        app.phase_notification
-            .as_deref()
-            .is_some_and(|message| message.contains("delayed for 10m"))
-    );
-}
-
-#[test]
-fn schedule_delay_key_uses_configured_runtime_delay_duration() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "10:00".to_string(),
-                end: "11:00".to_string(),
-            }],
-        },
-        schedule_runtime: ScheduleRuntimeConfig {
-            time_step_minutes: 15,
-            delay_secs: 90,
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.sync_recurring_schedule(now);
-    app.current_frame_now = now;
-
-    app.handle_key(key(KeyCode::Char('z')));
-
-    assert_eq!(
-        app.schedule_delay_until,
-        Some(now + ChronoDuration::seconds(90))
-    );
-    assert!(
-        app.phase_notification
-            .as_deref()
-            .is_some_and(|message| message.contains("delayed for 1:30"))
-    );
-    assert!(
-        app.recurring_schedule_texts_at(now + ChronoDuration::seconds(30))
-            .1
-            .contains("delay 1:30")
-    );
-}
-
-#[test]
-fn schedule_delay_clamps_until_active_window_end() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "10:00".to_string(),
-                end: "10:20".to_string(),
-            }],
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.sync_recurring_schedule(now);
-    app.current_frame_now = now;
-
-    app.handle_key(key(KeyCode::Char('z')));
-
-    let delayed_until = app
-        .schedule_delay_until
-        .expect("schedule delay should be set for active window");
-    let window_end = local_datetime_today(10, 20);
-    assert_eq!(delayed_until, window_end);
-}
-
-#[test]
-fn schedule_delay_suppresses_trigger_until_delay_expires() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "10:00".to_string(),
-                end: "11:00".to_string(),
-            }],
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.sync_recurring_schedule(now);
-    app.current_frame_now = now;
-    app.handle_key(key(KeyCode::Char('z')));
-    app.task_labels = vec!["Coding".to_string()];
-    app.selected_task_label = Some("Coding".to_string());
-    app.phase_notification = None;
-
-    app.sync_recurring_schedule(now + ChronoDuration::minutes(5));
-
-    assert_eq!(app.timer.phase, TimerPhase::Focus);
-    assert_eq!(app.timer.status, TimerStatus::Idle);
-    assert!(app.phase_notification.is_none());
-    assert!(app.schedule_armed_occurrence_key.is_none());
-
-    app.sync_recurring_schedule(now + ChronoDuration::minutes(11));
-
-    assert_eq!(app.timer.phase, TimerPhase::Focus);
-    assert_eq!(app.timer.status, TimerStatus::Running);
-    assert_eq!(
-        app.phase_notification.as_deref(),
-        Some("Scheduled window started. Focus auto-started.")
-    );
-}
-
-#[test]
-fn schedule_delay_key_requires_active_schedule_window() {
-    let mut app = App::default();
-    app.current_frame_now = local_datetime_today(10, 15);
-
-    app.handle_key(key(KeyCode::Char('z')));
-
-    assert_eq!(
-        app.phase_notification.as_deref(),
-        Some("No active schedule window to delay.")
-    );
-}
-
-#[test]
-fn recurring_schedule_status_text_shows_delayed_state() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "10:00".to_string(),
-                end: "11:00".to_string(),
-            }],
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.sync_recurring_schedule(now);
-    app.current_frame_now = now;
-    app.handle_key(key(KeyCode::Char('z')));
-
-    let status = app
-        .recurring_schedule_texts_at(now + ChronoDuration::minutes(1))
-        .1;
-    assert!(status.contains("Schedule status: delayed until"));
-    assert!(status.contains("[z] to delay 10m"));
 }
 
 #[test]
@@ -3092,7 +2919,6 @@ fn schedule_editor_uses_configured_runtime_step_minutes() {
         },
         schedule_runtime: ScheduleRuntimeConfig {
             time_step_minutes: 30,
-            delay_secs: 10 * 60,
         },
         ..AppConfig::default()
     };
@@ -3238,7 +3064,7 @@ fn recurring_schedule_does_not_retrigger_within_same_overlapping_occurrence() {
 }
 
 #[test]
-fn schedule_window_transition_does_not_delay_schedule_runtime_without_delay_request() {
+fn schedule_window_transition_auto_starts_next_active_window() {
     let first_tick = local_datetime_today(10, 15);
     let overlap_transition_tick = local_datetime_today(10, 20);
     let config = AppConfig {
@@ -3270,7 +3096,6 @@ fn schedule_window_transition_does_not_delay_schedule_runtime_without_delay_requ
     app.sync_recurring_schedule(overlap_transition_tick);
 
     assert_eq!(app.timer.status, TimerStatus::Running);
-    assert_eq!(app.schedule_delay_until, None);
     assert!(app.phase_notification.as_deref().is_some_and(|message| {
         message.contains("Scheduled window started. Focus auto-started.")
     }));
@@ -4700,98 +4525,6 @@ fn cli_next_records_session_interruption_reason() {
 }
 
 #[test]
-fn cli_schedule_delay_requires_active_schedule_window() {
-    let mut app = App::default();
-
-    let error = app.schedule_delay_for_cli().unwrap_err();
-
-    assert_eq!(error, "No active schedule window to delay.");
-}
-
-#[test]
-fn cli_schedule_delay_sets_delay_for_active_window() {
-    let now = Local::now();
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "00:00".to_string(),
-                end: "23:59".to_string(),
-            }],
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-
-    let delayed_until = app.schedule_delay_for_cli().unwrap();
-
-    assert!(!delayed_until.is_empty());
-    assert!(app.schedule_delayed_occurrence_key.is_some());
-    assert!(
-        app.schedule_delay_until
-            .is_some_and(|delay_until| delay_until > now)
-    );
-}
-
-#[test]
-fn cli_schedule_delay_persists_workflow_state() {
-    let now = local_datetime_today(0, 0);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "00:00".to_string(),
-                end: "23:59".to_string(),
-            }],
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-
-    app.schedule_delay_for_cli().unwrap();
-
-    let snapshot = session_recovery::test_saved_workflow_snapshot()
-        .expect("workflow snapshot should be saved");
-    assert!(snapshot.schedule_delayed_occurrence_key.is_some());
-    assert!(
-        snapshot
-            .schedule_delay_until_epoch_secs
-            .is_some_and(|epoch| epoch > now.timestamp())
-    );
-    assert!(snapshot.temporary_overrides.is_empty());
-}
-
-#[test]
-fn cli_workflow_snapshot_skips_last_occurrence_for_active_delayed_window() {
-    let now = Local::now();
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![crate::config::RecurringFocusWindowConfig {
-                days: vec![weekday_token(now.weekday()).to_string()],
-                start: "00:00".to_string(),
-                end: "23:59".to_string(),
-            }],
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    let active_occurrence = app
-        .active_schedule_occurrence_at(now)
-        .expect("schedule window should be active");
-    let active_occurrence_key = occurrence_key(&active_occurrence);
-    app.schedule_delayed_occurrence_key = Some(active_occurrence_key.clone());
-    app.schedule_delay_until = Some(now + ChronoDuration::minutes(5));
-    app.last_schedule_occurrence_key = Some(active_occurrence_key);
-
-    app.sync_cli_workflow_state().unwrap();
-
-    let snapshot = session_recovery::test_saved_workflow_snapshot()
-        .expect("workflow snapshot should be saved");
-    assert!(snapshot.schedule_delayed_occurrence_key.is_some());
-    assert!(snapshot.last_schedule_occurrence_key.is_none());
-}
-
-#[test]
 fn cli_break_glass_trigger_requires_active_focus() {
     let config = AppConfig {
         blocked_sites: vec!["example.com".to_string()],
@@ -4880,7 +4613,6 @@ fn cli_break_glass_cancel_requires_pending_confirmation() {
 
 #[test]
 fn app_restores_cli_workflow_state_from_snapshot() {
-    let now = Local::now();
     session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
         TimerPhase::Focus,
         TimerStatus::Running,
@@ -4889,8 +4621,6 @@ fn app_restores_cli_workflow_state_from_snapshot() {
         ProfileId::Classic,
     )));
     session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
-        schedule_delayed_occurrence_key: Some("recurring:0:2026-05-10".to_string()),
-        schedule_delay_until_epoch_secs: Some((now + ChronoDuration::minutes(5)).timestamp()),
         schedule_armed_occurrence_key: None,
         last_schedule_occurrence_key: None,
         strict_reset_confirmation_pending: false,
@@ -4901,14 +4631,6 @@ fn app_restores_cli_workflow_state_from_snapshot() {
 
     let app = App::default();
 
-    assert_eq!(
-        app.schedule_delayed_occurrence_key.as_deref(),
-        Some("recurring:0:2026-05-10")
-    );
-    assert!(
-        app.schedule_delay_until
-            .is_some_and(|delay_until| delay_until > now)
-    );
     assert!(app.break_glass_confirmation_pending());
 }
 
@@ -4923,8 +4645,6 @@ fn app_restores_temporary_overrides_from_canonical_snapshot() {
         ProfileId::Classic,
     )));
     session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
-        schedule_delayed_occurrence_key: None,
-        schedule_delay_until_epoch_secs: None,
         schedule_armed_occurrence_key: None,
         last_schedule_occurrence_key: None,
         strict_reset_confirmation_pending: false,
@@ -4970,8 +4690,6 @@ fn app_restores_schedule_arming_continuity_from_workflow_snapshot() {
     let active_occurrence_key = occurrence_key(&active_occurrence);
 
     session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
-        schedule_delayed_occurrence_key: None,
-        schedule_delay_until_epoch_secs: None,
         schedule_armed_occurrence_key: Some(active_occurrence_key.clone()),
         last_schedule_occurrence_key: Some(active_occurrence_key.clone()),
         strict_reset_confirmation_pending: false,
@@ -5000,8 +4718,6 @@ fn app_restores_strict_reset_confirmation_from_workflow_snapshot() {
         ProfileId::Classic,
     )));
     session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
-        schedule_delayed_occurrence_key: None,
-        schedule_delay_until_epoch_secs: None,
         schedule_armed_occurrence_key: None,
         last_schedule_occurrence_key: None,
         strict_reset_confirmation_pending: true,
@@ -5019,10 +4735,6 @@ fn app_restores_strict_reset_confirmation_from_workflow_snapshot() {
 #[test]
 fn app_reports_partial_runtime_recovery_notice_for_ignored_workflow_artifacts() {
     session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
-        schedule_delayed_occurrence_key: Some("recurring:stale".to_string()),
-        schedule_delay_until_epoch_secs: Some(
-            (Local::now() - ChronoDuration::minutes(5)).timestamp(),
-        ),
         schedule_armed_occurrence_key: Some("recurring:stale".to_string()),
         last_schedule_occurrence_key: Some("recurring:stale".to_string()),
         strict_reset_confirmation_pending: true,
@@ -5038,7 +4750,6 @@ fn app_reports_partial_runtime_recovery_notice_for_ignored_workflow_artifacts() 
         .as_deref()
         .expect("partial recovery should emit a startup notice");
     assert!(notice.contains("Ignored saved runtime artifacts"));
-    assert!(notice.contains("schedule delay state"));
     assert!(notice.contains("schedule arm state"));
     assert!(notice.contains("schedule trigger continuity"));
     assert!(notice.contains("break-glass confirmation"));

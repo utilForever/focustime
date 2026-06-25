@@ -42,8 +42,6 @@ const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 2;
 const LEGACY_CONFIG_SCHEMA_VERSION: u32 = 0;
 const SCHEDULE_TIME_STEP_MIN_MINUTES: u16 = 1;
 const SCHEDULE_TIME_STEP_MAX_MINUTES: u16 = 60;
-const SCHEDULE_DELAY_MIN_SECS: u64 = 60;
-const SCHEDULE_DELAY_MAX_SECS: u64 = 12 * 60 * 60;
 
 /// Persistent application configuration stored as TOML.
 ///
@@ -107,7 +105,7 @@ pub(crate) struct AppConfig {
     /// Deprecated top-level automation mirror (legacy load-time compatibility field).
     #[serde(default, skip_serializing)]
     pub(crate) recurring_schedule: RecurringScheduleConfig,
-    /// Runtime tuning knobs for schedule editing and delay behavior.
+    /// Runtime tuning knobs for schedule editing behavior.
     #[serde(default)]
     pub(crate) schedule_runtime: ScheduleRuntimeConfig,
     /// Profile-scoped automation settings.
@@ -380,8 +378,6 @@ impl RecurringScheduleConfig {
 pub(crate) struct ScheduleRuntimeConfig {
     #[serde(default = "default_schedule_time_step_minutes")]
     pub(crate) time_step_minutes: u16,
-    #[serde(default = "default_schedule_delay_secs")]
-    pub(crate) delay_secs: u64,
 }
 
 impl ScheduleRuntimeConfig {
@@ -391,9 +387,6 @@ impl ScheduleRuntimeConfig {
                 SCHEDULE_TIME_STEP_MIN_MINUTES,
                 SCHEDULE_TIME_STEP_MAX_MINUTES,
             ),
-            delay_secs: self
-                .delay_secs
-                .clamp(SCHEDULE_DELAY_MIN_SECS, SCHEDULE_DELAY_MAX_SECS),
         }
     }
 }
@@ -402,7 +395,6 @@ impl Default for ScheduleRuntimeConfig {
     fn default() -> Self {
         Self {
             time_step_minutes: default_schedule_time_step_minutes(),
-            delay_secs: default_schedule_delay_secs(),
         }
     }
 }
@@ -770,10 +762,6 @@ fn default_notification_enabled() -> bool {
 
 fn default_schedule_time_step_minutes() -> u16 {
     15
-}
-
-fn default_schedule_delay_secs() -> u64 {
-    10 * 60
 }
 
 fn default_schedule_window_days() -> Vec<String> {

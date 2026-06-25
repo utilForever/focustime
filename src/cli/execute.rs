@@ -11,18 +11,18 @@ use crate::cli::{
     AppConfig, BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig,
     DailyGoalSnapshot, FocusStats, GoalCarryCommandOutput, GoalCommandOutput, MonthlyGoalConfig,
     OutputMode, ProfileId, ProfileOutput, ProfileView, RecurringScheduleConfig,
-    ScheduleCommandOutput, ScheduleDelayCommandOutput, SessionMetadataCommandOutput,
-    SessionTemplateCommandKind, SessionTemplateCommandOutput, SessionTemplateSummaryOutput,
-    StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput,
-    TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset,
-    TimerCommandOutput, TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
+    ScheduleCommandOutput, SessionMetadataCommandOutput, SessionTemplateCommandKind,
+    SessionTemplateCommandOutput, SessionTemplateSummaryOutput, StrictCommandOutput,
+    TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
+    TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
+    TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
     build_schedule_inspection_output, build_task_goal_output, print_break_glass_command_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_profile_output,
-    print_schedule_command_output, print_schedule_delay_command_output,
-    print_session_metadata_command_output, print_session_template_command_output,
-    print_strict_command_output, print_task_goal_command_output,
-    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
-    profile_id, profile_view, theme_preset_view, timer_phase_id, timer_status_id,
+    print_schedule_command_output, print_session_metadata_command_output,
+    print_session_template_command_output, print_strict_command_output,
+    print_task_goal_command_output, print_temporary_site_add_command_output,
+    print_theme_command_output, print_timer_state_output, profile_id, profile_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 mod blocklists;
@@ -91,7 +91,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Schedule { schedule } => {
             execute_schedule_command(schedule, cli_command.output)
         }
-        CommandKind::ScheduleDelay => execute_schedule_delay_command(cli_command.output),
         CommandKind::BreakGlassTrigger => execute_break_glass_trigger_command(cli_command.output),
         CommandKind::BreakGlassCancel => execute_break_glass_cancel_command(cli_command.output),
         CommandKind::Diagnostics => {
@@ -152,7 +151,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::GoalCarryMonthly { .. } => Some("goal-carry-monthly"),
         CommandKind::Strict { .. } => Some("strict"),
         CommandKind::Schedule { .. } => Some("schedule"),
-        CommandKind::ScheduleDelay => Some("schedule-delay"),
         CommandKind::BreakGlassTrigger => Some("break-glass-trigger"),
         CommandKind::BreakGlassCancel => Some("break-glass-cancel"),
         CommandKind::Diagnostics => Some("diagnostics"),
@@ -181,7 +179,6 @@ fn command_usage_records_via_app(command: &CommandKind) -> bool {
             | CommandKind::TaskNote { .. }
             | CommandKind::AllowlistSiteAddTemporary { .. }
             | CommandKind::SessionTemplate { .. }
-            | CommandKind::ScheduleDelay
             | CommandKind::BreakGlassTrigger
             | CommandKind::BreakGlassCancel
             | CommandKind::Diagnostics
@@ -714,14 +711,6 @@ fn execute_schedule_command(
     Ok(())
 }
 
-fn execute_schedule_delay_command(output: OutputMode) -> CliExecuteResult<()> {
-    let mut app = App::new();
-    app.record_command_usage_for_cli("schedule-delay");
-    let delayed_until = app.schedule_delay_for_cli()?;
-    emit_schedule_delay_command_output("schedule-delay", delayed_until, &app, output)?;
-    Ok(())
-}
-
 fn execute_break_glass_trigger_command(output: OutputMode) -> CliExecuteResult<()> {
     let mut app = App::new();
     app.record_command_usage_for_cli("break-glass-trigger");
@@ -773,24 +762,6 @@ fn emit_session_metadata_command_output(
     };
     match output {
         OutputMode::Text => print_session_metadata_command_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn emit_schedule_delay_command_output(
-    action: &'static str,
-    delayed_until: String,
-    app: &App,
-    output: OutputMode,
-) -> Result<(), String> {
-    let payload = ScheduleDelayCommandOutput {
-        action,
-        delayed_until,
-        timer: build_timer_state_output(app),
-    };
-    match output {
-        OutputMode::Text => print_schedule_delay_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

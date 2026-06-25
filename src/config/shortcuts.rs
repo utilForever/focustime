@@ -24,8 +24,6 @@ pub(crate) struct ShortcutConfig {
     pub(crate) timer_edit_note: String,
     #[serde(default = "default_shortcut_break_glass_override")]
     pub(crate) break_glass_override: String,
-    #[serde(default = "default_shortcut_delay_schedule_start")]
-    pub(crate) delay_schedule_start: String,
     #[serde(default = "default_shortcut_back_site_manager")]
     pub(crate) back_site_manager: String,
     #[serde(default = "default_shortcut_toggle_site_list_mode")]
@@ -158,10 +156,6 @@ impl ShortcutConfig {
             break_glass_override: normalize_shortcut_token(
                 &self.break_glass_override,
                 &default_shortcut_break_glass_override(),
-            ),
-            delay_schedule_start: normalize_shortcut_token(
-                &self.delay_schedule_start,
-                &default_shortcut_delay_schedule_start(),
             ),
             back_site_manager: normalize_shortcut_token(
                 &self.back_site_manager,
@@ -313,7 +307,6 @@ impl Default for ShortcutConfig {
             open_setup_diagnostics: default_shortcut_open_setup_diagnostics(),
             timer_edit_note: default_shortcut_timer_edit_note(),
             break_glass_override: default_shortcut_break_glass_override(),
-            delay_schedule_start: default_shortcut_delay_schedule_start(),
             back_site_manager: default_shortcut_back_site_manager(),
             toggle_site_list_mode: default_shortcut_toggle_site_list_mode(),
             site_add: default_shortcut_site_add(),
@@ -396,10 +389,6 @@ fn default_shortcut_timer_edit_note() -> String {
 
 fn default_shortcut_break_glass_override() -> String {
     "u".to_string()
-}
-
-fn default_shortcut_delay_schedule_start() -> String {
-    "z".to_string()
 }
 
 fn default_shortcut_back_site_manager() -> String {
