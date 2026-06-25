@@ -896,6 +896,38 @@ fn load_returns_default_when_config_file_is_corrupt() {
 }
 
 #[test]
+fn load_with_env_defaults_legacy_one_time_schedule_windows_config() {
+    let temp_base = unique_temp_base("legacy-one-time-schedule");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(
+        app_dir.join("config.toml"),
+        r#"
+focus_secs = 1800
+
+[recurring_schedule]
+[[recurring_schedule.one_time_windows]]
+date = "2026-05-02"
+start = "14:00"
+end = "16:00"
+"#,
+    )
+    .unwrap();
+
+    let cfg = AppConfig::load_with_env(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert_eq!(cfg.focus_secs, crate::timer::DEFAULT_FOCUS_SECS);
+    assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
+}
+
+#[test]
 fn load_with_env_migrates_legacy_config_without_schema_version() {
     let temp_base = unique_temp_base("legacy-no-version");
     let app_dir = temp_base.join("focustime");
