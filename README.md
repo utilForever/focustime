@@ -269,13 +269,13 @@ Milestone policy:
 - **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
 - **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config health and migration guidance are included in the canonical diagnostics payload.
-- **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows, `--schedule-delay`, session templates, and optional calendar annotations remain the supported behavior.
+- **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows, `--schedule-delay`, and session templates remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export artifact workflows share target-directory handling.
 - **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency ownership stays documented, and WakaTime integration uses explicit supported runtime calls.
 - **v0.15.7:** standalone blocking preview access, Focus History dashboard customization paths, and dedicated status comparison guidance stay removed while diagnostics, the stable KPI dashboard, export artifacts, and Focus History remain the supported replacements.
 - **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites`, `automation_triggers` config is removed during migration, and neither legacy surface is re-persisted by runtime writes.
-- **v0.15.9:** standalone calendar sync and daemon local API command access are retired; calendar data remains optional schedule annotation context from supported caches, and dependency ownership reflects the removed refresh and daemon paths.
+- **v0.15.9:** standalone calendar sync and daemon local API command access are retired, and dependency ownership reflects the removed refresh and daemon paths.
 - **v0.16.0:** daemon-owned runtime dependency cleanup is locked; WakaTime owns runtime HTTP and Basic auth while daemon-only local API server and direct random-token dependencies stay removed.
 - **v0.16.1:** focused config diagnostics commands are retired in favor of `--diagnostics`; feature inventory CLI export and committed generated inventory snapshots are retired; legacy cleanup-specific regression gates are archived, and current cleanup contracts live in normal CI/module/integration tests.
 - **Future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
@@ -321,7 +321,7 @@ Early deprecation notices:
 | Focused config diagnostics commands (`--config-doctor`, `--config-migrate`, `--config-migrate-apply`) | Removed; use `--diagnostics` for text guidance or `--diagnostics --json` for the `config_doctor` and `config_migration` sections. |
 | Standalone usage-signal command (`--usage-signals`) | Removed; use GitHub roadmap issues, release notes, and static cleanup documentation for planning while raw command/screen frequency summaries remain internal cleanup inputs. |
 | Standalone feature inventory export (`--feature-inventory`) | Removed; generated inventory snapshots are no longer committed or regenerated for releases. Use GitHub roadmap issues, release notes, and static cleanup documentation for planning. |
-| Standalone calendar refresh command (`--calendar-sync`) | Removed; scheduling only consumes an optional existing calendar annotation cache when it is enabled and available. |
+| Standalone calendar refresh command (`--calendar-sync`) and `[calendar_sync]` config | Removed; scheduling no longer reads calendar annotation caches or renders calendar-derived busy/overlap text. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--schedule-delay`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
 
@@ -329,8 +329,7 @@ Runtime dependency ownership after daemon cleanup:
 
 | Dependency | Owning feature paths | Ownership note |
 | --- | --- | --- |
-| `ureq` JSON feature | WakaTime heartbeat transport. Calendar annotations and the retired daemon path no longer own runtime HTTP after standalone refresh and daemon local API removal. | Keep while WakaTime heartbeat submission uses `send_json`; re-audit if the transport changes. |
-| `chrono-tz` | Retired calendar ICS `TZID` parsing coverage is currently test-only; runtime schedule annotations consume cached epoch windows without named-timezone conversion. | Before moving to `dev-dependencies` or removing it, confirm there is no non-test `chrono_tz` caller and decide whether future calendar cache refresh support might still need named `TZID` parsing support. |
+| `ureq` JSON feature | WakaTime heartbeat transport. Retired calendar annotation and daemon paths no longer own runtime HTTP. | Keep while WakaTime heartbeat submission uses `send_json`; re-audit if the transport changes. |
 | `base64` | WakaTime Basic auth. | Keep while WakaTime uses Basic auth. |
 
 When changing `Cargo.toml` dependency ownership, run `rg -n "ureq|chrono_tz|chrono-tz" src tests`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
@@ -590,23 +589,6 @@ end = "16:00"
 time_step_minutes = 15
 delay_secs = 600
 
-[calendar_sync]
-enabled = true
-refresh_secs = 1800
-lookahead_days = 14
-
-[[calendar_sync.sources]]
-name = "Google Work"
-provider = "google" # ics | google | outlook (all use ICS feed URLs)
-url = "https://calendar.google.com/calendar/ical/example/private-abc123/basic.ics"
-enabled = true
-
-[[calendar_sync.sources]]
-name = "Outlook Team"
-provider = "outlook"
-url = "https://outlook.office365.com/owa/calendar/example@contoso.com/private-xyz456/calendar.ics"
-enabled = true
-
 [daily_goal]
 minutes = 120
 pomodoros = 4
@@ -664,14 +646,11 @@ schedule runtime defaults (`time_step_minutes = 15`, `delay_secs = 600`).
 `time_step_minutes` is clamped to `1..60`; `delay_secs` is clamped to
 `60..43200`.
 
-`[calendar_sync]` is optional and remains a narrow opt-in cache for schedule
-annotations only. When omitted or disabled, schedule behavior stays
-deterministic without calendar data; no calendar busy/overlap annotations are
-loaded. Calendar data is treated only as optional schedule context, and
-`--diagnostics` remains the supported setup/config guidance workflow. Runtime
-normalization clamps `refresh_secs` to `300..86400` and `lookahead_days` to
-`1..90`, trims source names/URLs, auto-fills blank source names
-(`calendar-source-N`), and removes duplicate provider+URL sources.
+`[calendar_sync]` is retired. Existing configs that still contain this section
+are loaded without using calendar data, and runtime writes omit the section.
+Schedule output remains deterministic without calendar-derived busy or overlap
+annotations.
+
 
 `[wakatime_runtime]` is optional. When omitted, focustime keeps existing
 WakaTime runtime defaults (`retry_backoff_secs = [2, 5, 10]`,
@@ -807,8 +786,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - standalone `automation_triggers[]` config entries are removed by config migration; schedule windows provide automatic focus starts, `--schedule-delay` handles postponed active windows, and session templates carry task/profile/blocklist defaults
 - deprecated `weekday_profile_rules[]` config entries are removed by config migration; model weekday defaults with schedule windows, `--schedule-delay`, and session templates instead
 - the timer session overview shows the current/next scheduled window
-- when the opt-in calendar annotation cache is enabled and available, schedule text adds `calendar busy` for active calendar events and a `calendar overlap` warning for upcoming schedule collisions
-- the standalone `--calendar-sync` refresh command has been removed; runtime scheduling only reads optional calendar annotation cache data when a supported cache is already present
+- the standalone `--calendar-sync` refresh command and `[calendar_sync]` config are retired; runtime scheduling does not read calendar annotation cache data
 
 You can configure notification and auto-start settings directly from the TUI:
 
@@ -952,7 +930,7 @@ with focused submodules (updated in #240):
 - `src/stats.rs` + `src/stats/*.rs`: stats persistence, analytics, trends, recording, planner state, and exports.
 - `src/ui.rs` + `src/ui/*.rs`: Ratatui rendering split by screen (timer, session planner, site manager, profile manager, history, setup diagnostics).
 - `src/config.rs` + `src/config/paths.rs`: config schema/normalization and environment-aware path resolution.
-- Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/calendar.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, `src/integration.rs`, `src/wakatime.rs`, and `src/notifications.rs`.
+- Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, `src/integration.rs`, `src/wakatime.rs`, and `src/notifications.rs`.
 
 WakaTime tracking is optional and activates only when an API key is configured
 (read from `~/.wakatime.cfg`).
