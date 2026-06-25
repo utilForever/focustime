@@ -26,16 +26,8 @@ impl App {
             next_phase: self.shortcut_hint(ShortcutAction::TimerNextPhase),
             delay: self.shortcut_hint(ShortcutAction::DelayScheduleStart),
         };
-        let mut next_text = schedule_next_window_text_from_state(&state, now);
-        let mut status_text = schedule_status_text_from_state(&state, &labels, &delay_label);
-
-        if let Some(active_calendar) = self.active_calendar_busy_window(now) {
-            status_text.push_str(&format!(" · calendar busy: {}", active_calendar.summary));
-        } else if let Some(next_schedule) = state.next_window.as_ref()
-            && let Some(overlap) = self.calendar_overlap_for_occurrence(next_schedule)
-        {
-            next_text.push_str(&format!(" · ⚠ calendar overlap ({})", overlap.summary));
-        }
+        let next_text = schedule_next_window_text_from_state(&state, now);
+        let status_text = schedule_status_text_from_state(&state, &labels, &delay_label);
 
         (next_text, status_text)
     }

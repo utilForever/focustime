@@ -468,12 +468,6 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
         );
     }
 
-    if config.calendar_sync.enabled {
-        warnings.push(
-            "Deprecated standalone calendar sync behavior is enabled. Calendar data is now supported only as an opt-in schedule annotation cache; keep `[calendar_sync]` disabled or absent for deterministic schedule behavior without calendar data.".to_string(),
-        );
-    }
-
     warnings
 }
 

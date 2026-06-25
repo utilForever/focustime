@@ -45,10 +45,6 @@ const SCHEDULE_TIME_STEP_MIN_MINUTES: u16 = 1;
 const SCHEDULE_TIME_STEP_MAX_MINUTES: u16 = 60;
 const SCHEDULE_DELAY_MIN_SECS: u64 = 60;
 const SCHEDULE_DELAY_MAX_SECS: u64 = 12 * 60 * 60;
-const CALENDAR_SYNC_REFRESH_MIN_SECS: u64 = 5 * 60;
-const CALENDAR_SYNC_REFRESH_MAX_SECS: u64 = 24 * 60 * 60;
-const CALENDAR_SYNC_LOOKAHEAD_MIN_DAYS: u16 = 1;
-const CALENDAR_SYNC_LOOKAHEAD_MAX_DAYS: u16 = 90;
 
 /// Persistent application configuration stored as TOML.
 ///
@@ -115,9 +111,6 @@ pub(crate) struct AppConfig {
     /// Runtime tuning knobs for schedule editing and delay behavior.
     #[serde(default)]
     pub(crate) schedule_runtime: ScheduleRuntimeConfig,
-    /// External calendar sync settings (ICS feeds, including provider feeds).
-    #[serde(default)]
-    pub(crate) calendar_sync: CalendarSyncConfig,
     /// Profile-scoped automation settings.
     ///
     /// When absent, legacy global automation fields are used as shared defaults
@@ -438,78 +431,6 @@ impl Default for ScheduleRuntimeConfig {
             delay_secs: default_schedule_delay_secs(),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct CalendarSyncConfig {
-    #[serde(default)]
-    pub(crate) enabled: bool,
-    #[serde(default = "default_calendar_sync_refresh_secs")]
-    pub(crate) refresh_secs: u64,
-    #[serde(default = "default_calendar_sync_lookahead_days")]
-    pub(crate) lookahead_days: u16,
-    #[serde(default)]
-    pub(crate) sources: Vec<CalendarSourceConfig>,
-}
-
-impl CalendarSyncConfig {
-    pub(crate) fn normalized(&self) -> Self {
-        Self {
-            enabled: self.enabled,
-            refresh_secs: self.refresh_secs.clamp(
-                CALENDAR_SYNC_REFRESH_MIN_SECS,
-                CALENDAR_SYNC_REFRESH_MAX_SECS,
-            ),
-            lookahead_days: self.lookahead_days.clamp(
-                CALENDAR_SYNC_LOOKAHEAD_MIN_DAYS,
-                CALENDAR_SYNC_LOOKAHEAD_MAX_DAYS,
-            ),
-            sources: normalize_calendar_sources(&self.sources),
-        }
-    }
-}
-
-impl Default for CalendarSyncConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            refresh_secs: default_calendar_sync_refresh_secs(),
-            lookahead_days: default_calendar_sync_lookahead_days(),
-            sources: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct CalendarSourceConfig {
-    #[serde(default)]
-    pub(crate) name: String,
-    #[serde(default)]
-    pub(crate) provider: CalendarProviderConfig,
-    #[serde(default)]
-    pub(crate) url: String,
-    #[serde(default = "default_calendar_source_enabled")]
-    pub(crate) enabled: bool,
-}
-
-impl CalendarSourceConfig {
-    pub(crate) fn normalized(&self) -> Self {
-        Self {
-            name: self.name.trim().to_string(),
-            provider: self.provider,
-            url: self.url.trim().to_string(),
-            enabled: self.enabled,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum CalendarProviderConfig {
-    #[default]
-    Ics,
-    Google,
-    Outlook,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -911,18 +832,6 @@ fn default_schedule_delay_secs() -> u64 {
     10 * 60
 }
 
-fn default_calendar_sync_refresh_secs() -> u64 {
-    30 * 60
-}
-
-fn default_calendar_sync_lookahead_days() -> u16 {
-    14
-}
-
-fn default_calendar_source_enabled() -> bool {
-    true
-}
-
 fn default_schedule_window_days() -> Vec<String> {
     vec![
         "mon".to_string(),
@@ -1201,7 +1110,6 @@ impl Default for AppConfig {
             auto_start: AutoStartConfig::default(),
             recurring_schedule: RecurringScheduleConfig::default(),
             schedule_runtime: ScheduleRuntimeConfig::default(),
-            calendar_sync: CalendarSyncConfig::default(),
             profile_automation: None,
             strict_mode: false,
             break_glass_duration_secs: default_break_glass_duration_secs(),
@@ -1398,7 +1306,6 @@ impl AppConfig {
         );
         self.blocking_backend = self.blocking_backend.normalized();
         self.schedule_runtime = self.schedule_runtime.normalized();
-        self.calendar_sync = self.calendar_sync.normalized();
         self.history_dashboard = self.history_dashboard.normalized();
         self.wakatime = self.wakatime.normalized();
         self.wakatime_runtime = self.wakatime_runtime.normalized();
@@ -1461,31 +1368,6 @@ fn normalize_optional_nonempty_string(value: Option<&str>) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
-}
-
-fn normalize_calendar_sources(sources: &[CalendarSourceConfig]) -> Vec<CalendarSourceConfig> {
-    let mut normalized = Vec::new();
-    let mut seen_keys = HashSet::new();
-    for source in sources {
-        let source = source.normalized();
-        if source.url.is_empty() {
-            continue;
-        }
-        let key = format!("{:?}:{}", source.provider, source.url.to_ascii_lowercase());
-        if !seen_keys.insert(key) {
-            continue;
-        }
-        normalized.push(source);
-    }
-    if normalized.is_empty() {
-        return normalized;
-    }
-    for (index, source) in normalized.iter_mut().enumerate() {
-        if source.name.is_empty() {
-            source.name = format!("calendar-source-{}", index + 1);
-        }
-    }
-    normalized
 }
 
 fn normalize_schedule_days(days: &[String]) -> Vec<String> {
