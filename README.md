@@ -769,7 +769,7 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - `profile_automation.<preset>.recurring_schedule.windows[].start` / `end` use 24-hour `HH:MM` local time (`start < end`)
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
-- `--schedule` (text and JSON) reports detected schedule conflicts/overlaps without rejecting the schedule
+- `--schedule` (text and JSON) reports recurring window overlaps without rejecting the schedule
 - standalone `automation_triggers[]` config entries are removed by config migration; schedule windows provide automatic focus starts, supported timer controls handle active windows, and session templates carry task/profile/blocklist defaults
 - deprecated `weekday_profile_rules[]` config entries are removed by config migration; model weekday defaults with schedule windows and session templates instead
 - the timer session overview shows the current/next scheduled window
@@ -788,10 +788,6 @@ You can configure notification and auto-start settings directly from the TUI:
   - **Schedule window**: `←/→` changes which window is selected
   - **Schedule day** + **Schedule day enabled**: choose day cursor and toggle it `Off/On`
   - **Schedule start/end**: adjust times in `[schedule_runtime].time_step_minutes` steps (default `15`, clamped `1..60`)
-  - **Automation trigger**: deprecated compatibility fields for older trigger rules
-  - **Automation condition/time/action**: deprecated compatibility fields for older event/time rules
-  - **Automation add/remove**: deprecated compatibility controls for older trigger rules
-  - **Conflict inspector**: read-only summary of detected schedule overlaps/conflicts
 
 ## Session recovery
 

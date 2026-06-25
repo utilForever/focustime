@@ -4,7 +4,7 @@ use crate::config::{
     WeeklyGoalConfig,
 };
 
-pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 28] = [
+pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 27] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -31,7 +31,6 @@ pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 28] = [
     "Schedule start",
     "Schedule end",
     "Schedule add/remove",
-    "Schedule conflicts",
     "Theme preset",
 ];
 pub(crate) const PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX: usize = 9;
@@ -51,8 +50,7 @@ pub(crate) const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 22;
 pub(crate) const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 23;
 pub(crate) const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 24;
 pub(crate) const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 25;
-pub(crate) const PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX: usize = 26;
-pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 27;
+pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 26;
 pub(crate) const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 pub(crate) const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 

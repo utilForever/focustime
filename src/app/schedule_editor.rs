@@ -1,11 +1,9 @@
 use crate::app::{
-    App, PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX,
-    PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX, PROFILE_EDIT_SCHEDULE_DAY_INDEX,
-    PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
-    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, RecurringFocusWindowConfig, SCHEDULE_DAY_LABELS,
-    SCHEDULE_DAY_TOKENS, bool_label, format_hhmm, format_schedule_conflict,
-    format_schedule_days_for_display, inspect_schedule_conflicts_from_config, parse_hhmm_minutes,
-    sort_schedule_days,
+    App, PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
+    PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
+    PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
+    RecurringFocusWindowConfig, SCHEDULE_DAY_LABELS, SCHEDULE_DAY_TOKENS, bool_label, format_hhmm,
+    format_schedule_days_for_display, parse_hhmm_minutes, sort_schedule_days,
 };
 
 impl App {
@@ -26,25 +24,8 @@ impl App {
                 .map(|window| window.end.clone())
                 .unwrap_or_else(|| "n/a".to_string()),
             PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX => self.schedule_window_collection_value(),
-            PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX => self.schedule_conflict_summary_value(),
             _ => String::new(),
         }
-    }
-
-    fn schedule_conflict_messages(&self) -> Vec<String> {
-        inspect_schedule_conflicts_from_config(&self.recurring_schedule)
-            .into_iter()
-            .map(|conflict| format_schedule_conflict(&conflict))
-            .collect()
-    }
-
-    fn schedule_conflict_summary_value(&self) -> String {
-        let conflicts = self.schedule_conflict_messages();
-        if conflicts.is_empty() {
-            return "none detected".to_string();
-        }
-
-        format!("{} detected · {}", conflicts.len(), conflicts[0])
     }
 
     fn schedule_window_selector_value(&self) -> String {

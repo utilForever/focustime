@@ -2794,33 +2794,6 @@ fn recurring_schedule_text_has_no_calendar_annotations() {
 }
 
 #[test]
-fn profile_edit_schedule_conflict_summary_reports_overlap() {
-    let now = local_datetime_today(10, 15);
-    let config = AppConfig {
-        recurring_schedule: RecurringScheduleConfig {
-            windows: vec![
-                crate::config::RecurringFocusWindowConfig {
-                    days: vec![weekday_token(now.weekday()).to_string()],
-                    start: "09:00".to_string(),
-                    end: "11:00".to_string(),
-                },
-                crate::config::RecurringFocusWindowConfig {
-                    days: vec![weekday_token(now.weekday()).to_string()],
-                    start: "10:30".to_string(),
-                    end: "12:00".to_string(),
-                },
-            ],
-        },
-        ..AppConfig::default()
-    };
-    let app = App::from_config(config);
-
-    let summary = app.profile_edit_field_value(PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX);
-    assert!(summary.contains("1 detected"));
-    assert!(summary.contains("recurring #1 overlaps recurring #2"));
-}
-
-#[test]
 fn recurring_schedule_auto_starts_focus_when_window_begins_and_task_is_selected() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {

@@ -918,7 +918,8 @@ fn profile_editor_renders_schedule_fields() {
     assert!(text.contains("Window selector"));
     assert!(text.contains("Day selector"));
     assert!(text.contains("Start time"));
-    assert!(text.contains("Conflict inspector"));
+    assert!(text.contains("Add/remove"));
+    assert!(!text.contains("Conflict inspector"));
 }
 
 #[test]

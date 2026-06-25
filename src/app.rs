@@ -23,8 +23,7 @@ use crate::config::{
 use crate::integration::IntegrationRuntime;
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
-    RecurringWindow, WindowOccurrence, active_occurrence, compile_windows,
-    format_schedule_conflict, inspect_schedule_conflicts_from_config, next_occurrence_after,
+    RecurringWindow, WindowOccurrence, active_occurrence, compile_windows, next_occurrence_after,
     occurrence_key,
 };
 use crate::stats::{
@@ -81,13 +80,13 @@ pub(crate) use profile_edit::{
     PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX, PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX,
     PROFILE_EDIT_FIELD_LABELS, PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX,
-    PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX,
-    PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX, PROFILE_EDIT_SCHEDULE_DAY_INDEX,
-    PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
-    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX,
-    PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX, PROFILE_EDIT_WAKATIME_PROJECT_INDEX,
-    PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
-    PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, ProfileEditSnapshot,
+    PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
+    PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
+    PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
+    PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX,
+    PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX,
+    ProfileEditSnapshot,
 };
 pub(crate) use setup_diagnostics::{
     BlockingPreviewSnapshot, SetupCheck, SetupCheckLevel, SetupDiagnostics,
@@ -1056,7 +1055,7 @@ impl App {
     }
 
     pub(crate) fn profile_edit_field_value(&self, field_index: usize) -> String {
-        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_SCHEDULE_CONFLICTS_INDEX)
+        if (PROFILE_EDIT_SCHEDULE_WINDOW_INDEX..=PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX)
             .contains(&field_index)
         {
             return self.profile_edit_schedule_field_value(field_index);
