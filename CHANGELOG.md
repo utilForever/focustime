@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Calendar timezone dependency cleanup (#547):** confirmed retired calendar timezone parsing no longer owns a runtime or test dependency, kept `chrono-tz` out of the manifest/lockfile, and updated dependency cleanup guidance before the v0.16.2 release.
 - **Calendar annotation cache cleanup (#546):** removed calendar annotation cache runtime handling, dropped `[calendar_sync]` from normalized config persistence/examples, and kept schedule output deterministic without calendar-derived busy/overlap text.
 
 ## [0.16.1] - 2026-06-24
@@ -32,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Daemon local API command retirement (#504):** removed `--daemon-start`, `--daemon-status`, `--daemon-stop`, and `--daemon-port` parsing/execution plus the loopback daemon runtime surface; CLI timer/session/workflow commands remain the supported automation path.
 - **Calendar sync command cleanup (#501):** removed standalone `--calendar-sync` parsing/output while keeping calendar data as optional schedule annotation context when a supported cache is present.
-- **Calendar dependency cleanup audit (#503):** re-audited calendar-owned dependency notes after standalone refresh removal, documenting that runtime `ureq` is now owned by WakaTime heartbeats and `chrono-tz` is only test-owned unless calendar cache refresh support is reintroduced.
+- **Calendar dependency cleanup audit (#503):** re-audited calendar-owned dependency notes after standalone refresh removal, documenting that runtime `ureq` is now owned by WakaTime heartbeats while calendar timezone parsing remained a cleanup candidate for the later calendar cache retirement.
 
 ## [0.15.8] - 2026-06-20
 
