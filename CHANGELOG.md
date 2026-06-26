@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Session template workflow cleanup (#552):** removed `--session-template*` command parsing/help/output, dropped session template config/runtime persistence, and kept task, profile, schedule, and blocklist workflows available through their direct controls.
+
 ## [0.16.2] - 2026-06-26
 
 ### Changed
