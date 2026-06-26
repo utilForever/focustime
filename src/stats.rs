@@ -466,8 +466,6 @@ pub(crate) struct FocusSessionRecord {
     pub(crate) date: String,
     pub(crate) task_label: String,
     #[serde(default)]
-    pub(crate) focus_intention: String,
-    #[serde(default)]
     pub(crate) task_note: String,
     pub(crate) focused_seconds: u64,
     #[serde(default)]
@@ -481,7 +479,6 @@ pub(crate) struct FocusSessionRecord {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FocusSessionMetadata<'a> {
     pub(crate) task_label: Option<&'a str>,
-    pub(crate) focus_intention: Option<&'a str>,
     pub(crate) task_note: Option<&'a str>,
 }
 
@@ -508,8 +505,6 @@ pub(crate) struct SessionInterruptionEvent {
     pub(crate) reason: SessionInterruptionReason,
     #[serde(default)]
     pub(crate) task_label: Option<String>,
-    #[serde(default)]
-    pub(crate) focus_intention: Option<String>,
     #[serde(default)]
     pub(crate) task_note: Option<String>,
     #[serde(default)]
@@ -821,7 +816,6 @@ struct WeeklyExportRow {
 struct SessionExportRow {
     date: String,
     task_label: String,
-    focus_intention: String,
     task_note: String,
     focused_seconds: u64,
     focused_minutes: u64,
@@ -843,7 +837,6 @@ struct SessionInterruptionExportRow {
     date: String,
     reason: SessionInterruptionReason,
     task_label: Option<String>,
-    focus_intention: Option<String>,
     task_note: Option<String>,
     remaining_secs: u64,
     profile: Option<ProfileId>,
@@ -1015,7 +1008,6 @@ struct HistoryKpiLastInterruption {
     timestamp_epoch_secs: Option<u64>,
     reason: Option<SessionInterruptionReason>,
     task_label: Option<String>,
-    focus_intention: Option<String>,
     task_note: Option<String>,
     remaining_secs: Option<u64>,
     profile_name: Option<String>,
@@ -1065,7 +1057,6 @@ struct CsvExportRow {
     interruption_timestamp_epoch_secs: Option<u64>,
     interruption_reason: Option<SessionInterruptionReason>,
     interruption_remaining_secs: Option<u64>,
-    focus_intention: Option<String>,
     task_note: Option<String>,
     recent_window_start: Option<String>,
     recent_window_end: Option<String>,

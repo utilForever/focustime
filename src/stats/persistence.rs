@@ -75,14 +75,11 @@ impl FocusStats {
         let mut focus_sessions = Vec::new();
         for session in persisted.focus_sessions {
             if let Some(task_label) = normalize_task_label(&session.task_label) {
-                let focus_intention = normalize_session_metadata_text(&session.focus_intention);
                 let task_note = normalize_session_metadata_text(&session.task_note);
-                let focus_intention = focus_intention.unwrap_or_default();
                 let task_note = task_note.unwrap_or_default();
                 focus_sessions.push(FocusSessionRecord {
                     date: session.date.trim().to_string(),
                     task_label,
-                    focus_intention,
                     task_note,
                     focused_seconds: session.focused_seconds,
                     profile: session.profile,
@@ -103,9 +100,6 @@ impl FocusStats {
                 task_label: event
                     .task_label
                     .and_then(|label| normalize_task_label(&label)),
-                focus_intention: event
-                    .focus_intention
-                    .and_then(|value| normalize_session_metadata_text(&value)),
                 task_note: event
                     .task_note
                     .and_then(|value| normalize_session_metadata_text(&value)),
