@@ -263,7 +263,7 @@ Milestone policy:
 - **v0.16.0:** daemon-owned runtime dependency cleanup is locked; WakaTime owns runtime HTTP and Basic auth while daemon-only local API server and direct random-token dependencies stay removed.
 - **v0.16.1:** focused config diagnostics commands are retired in favor of `--diagnostics`; feature inventory CLI export and committed generated inventory snapshots are retired; legacy cleanup-specific regression gates are archived, and current cleanup contracts live in normal CI/module/integration tests.
 - **v0.16.2:** schedule exception dates, calendar annotation cache handling, and retired calendar timezone parsing stay removed; recurring schedule windows remain the supported schedule model, and `chrono-tz` stays out of the manifest and lockfile.
-- **v0.16.3:** task note metadata and `--task-note` command surfaces are retired; task labels are the supported session context in status, recovery, history, and exports.
+- **v0.16.3:** task note metadata, `--task-note` command surfaces, and per-task WakaTime mappings are retired; task labels are the supported session context in status, recovery, history, and exports, while WakaTime uses one global metadata configuration.
 - **Future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
@@ -570,15 +570,6 @@ language = "Pomodoro"
 retry_backoff_secs = [2, 5, 10]
 queue_capacity = 512
 queue_retry_delay_secs = 30
-
-[[wakatime.task_mappings]]
-task_label = "Docs"
-project = "Documentation"
-language = "Markdown"
-
-[[wakatime.task_mappings]]
-task_label = "Review"
-language = "Code Review"
 ```
 
 `schema_version` is managed by focustime when writing `config.toml`. Files
@@ -587,17 +578,7 @@ declares a newer schema version than the running binary supports, focustime
 attempts a best-effort load of known fields.
 
 `[wakatime]` is optional. If omitted (or set to blank values), `focustime` uses
-the defaults above for heartbeat metadata labels.
-
-`[[wakatime.task_mappings]]` is also optional. When present, focustime matches
-the active task label case-insensitively and overrides WakaTime metadata per
-field:
-
-- `project`: task-mapped value if provided, otherwise `[wakatime].project`
-- `language`: task-mapped value if provided, otherwise `[wakatime].language`
-
-Mappings with blank `task_label` or blank override values are ignored. If
-duplicate task labels are configured, the first valid mapping is used.
+the defaults above for one global heartbeat metadata configuration.
 
 `[schedule_runtime]` is optional. When omitted, focustime keeps existing
 schedule runtime defaults (`time_step_minutes = 15`).
