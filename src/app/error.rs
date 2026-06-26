@@ -99,9 +99,9 @@ impl UserFacingError for AppError {
             Self::ArchivedTaskLabel { label } => UserMessage::with_hint(
                 "app.task_label.archived",
                 format!(
-                    "Cannot select archived task label `{label}`. Unarchive it in Session Planner first."
+                    "Cannot select archived task label `{label}`. Unarchive it in task setup first."
                 ),
-                "Open Session Planner and unarchive the task before selecting it from the CLI.",
+                "Open task setup and unarchive the task before selecting it from the CLI.",
             ),
             Self::BlockingPreviewFailed { source } => UserMessage::with_hint(
                 "app.blocking_preview.failed",

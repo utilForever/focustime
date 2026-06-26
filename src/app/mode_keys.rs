@@ -9,7 +9,7 @@ const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 10] = [
     ShortcutAction::TimerNextPhase,
     ShortcutAction::OpenSiteManager,
     ShortcutAction::OpenProfileManager,
-    ShortcutAction::OpenSessionPlanner,
+    ShortcutAction::OpenTaskSetup,
     ShortcutAction::OpenStatsHistory,
     ShortcutAction::OpenSetupDiagnostics,
     ShortcutAction::TimerEditNote,
@@ -54,7 +54,7 @@ impl App {
                 }
                 self.open_profile_manager();
             }
-            ShortcutAction::OpenSessionPlanner => self.open_session_planner(),
+            ShortcutAction::OpenTaskSetup => self.open_session_planner(),
             ShortcutAction::OpenStatsHistory => self.open_stats_history(),
             ShortcutAction::OpenSetupDiagnostics => self.open_setup_diagnostics(),
             ShortcutAction::TimerEditNote => self.start_timer_note_input(),
@@ -92,8 +92,8 @@ impl App {
             Ok(FocusStartOutcome::Started) => {}
             Ok(FocusStartOutcome::MissingTaskLabel) => {
                 self.phase_notification = Some(format!(
-                    "Select a task label with {} before starting focus.",
-                    self.shortcut_hint(ShortcutAction::OpenSessionPlanner)
+                    "Select a task with {} before starting focus.",
+                    self.shortcut_hint(ShortcutAction::OpenTaskSetup)
                 ));
             }
             Ok(FocusStartOutcome::NotIdleFocusPhase) => {

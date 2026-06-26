@@ -119,7 +119,7 @@ impl App {
     }
 
     fn handle_session_planner_back_shortcut(&mut self, key: &KeyEvent) -> bool {
-        if !self.shortcut_matches(ShortcutAction::BackSessionPlanner, key) {
+        if !self.shortcut_matches(ShortcutAction::BackTaskSetup, key) {
             return false;
         }
         self.set_mode(AppMode::Timer);
@@ -127,7 +127,7 @@ impl App {
     }
 
     fn handle_session_planner_add_shortcut(&mut self, key: &KeyEvent) -> bool {
-        if !self.shortcut_matches(ShortcutAction::PlannerAdd, key) {
+        if !self.shortcut_matches(ShortcutAction::TaskSetupAdd, key) {
             return false;
         }
         self.start_planner_input();
@@ -135,7 +135,7 @@ impl App {
     }
 
     fn handle_session_planner_rename_shortcut(&mut self, key: &KeyEvent) -> bool {
-        if !self.shortcut_matches(ShortcutAction::PlannerRename, key) {
+        if !self.shortcut_matches(ShortcutAction::TaskSetupRename, key) {
             return false;
         }
         self.start_planner_rename_input();
@@ -143,7 +143,7 @@ impl App {
     }
 
     fn handle_session_planner_favorite_shortcut(&mut self, key: &KeyEvent) -> bool {
-        if !self.shortcut_matches(ShortcutAction::PlannerFavorite, key) {
+        if !self.shortcut_matches(ShortcutAction::TaskSetupFavorite, key) {
             return false;
         }
         self.toggle_planner_favorite();
@@ -151,7 +151,7 @@ impl App {
     }
 
     fn handle_session_planner_archive_shortcut(&mut self, key: &KeyEvent) -> bool {
-        if !self.shortcut_matches(ShortcutAction::PlannerArchive, key) {
+        if !self.shortcut_matches(ShortcutAction::TaskSetupArchive, key) {
             return false;
         }
         self.toggle_planner_archive();
@@ -160,7 +160,7 @@ impl App {
 
     fn handle_session_planner_delete_shortcut(&mut self, key: &KeyEvent) -> bool {
         if !(self.navigation_matches(NavigationAction::Delete, key)
-            || self.shortcut_matches(ShortcutAction::PlannerDelete, key))
+            || self.shortcut_matches(ShortcutAction::TaskSetupDelete, key))
         {
             return false;
         }
@@ -169,7 +169,7 @@ impl App {
     }
 
     fn handle_session_planner_select_recent_shortcut(&mut self, key: &KeyEvent) -> bool {
-        if !self.shortcut_matches(ShortcutAction::PlannerSelectRecent, key) {
+        if !self.shortcut_matches(ShortcutAction::TaskSetupSelectRecent, key) {
             return false;
         }
         self.select_recent_planner_label(0);
@@ -243,7 +243,7 @@ impl App {
                     PlannerFeedbackLevel::Warning,
                     format!(
                         "`{existing_label}` is archived; unarchive it with {} before selecting",
-                        self.shortcut_hint(ShortcutAction::PlannerArchive)
+                        self.shortcut_hint(ShortcutAction::TaskSetupArchive)
                     ),
                 );
                 return;
@@ -471,7 +471,7 @@ impl App {
                 PlannerFeedbackLevel::Warning,
                 format!(
                     "`{existing_label}` is archived; unarchive it with {} before selecting",
-                    self.shortcut_hint(ShortcutAction::PlannerArchive)
+                    self.shortcut_hint(ShortcutAction::TaskSetupArchive)
                 ),
             );
             return;
@@ -600,7 +600,7 @@ impl App {
     }
 
     pub(super) fn open_session_planner(&mut self) {
-        self.set_mode(AppMode::SessionPlanner);
+        self.set_mode(AppMode::TaskSetup);
         self.planner_feedback = None;
         self.planner_input.clear();
         self.planner_input_active = false;

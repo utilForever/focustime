@@ -11,7 +11,7 @@ pub(super) fn render_session_planner(frame: &mut Frame, app: &App) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Session Planner ")
+        .title(" Task Setup ")
         .title_alignment(Alignment::Center)
         .style(Style::default().fg(app_color(app, Color::Cyan)));
     frame.render_widget(block, outer);
@@ -79,7 +79,7 @@ fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
         frame.render_widget(
             Paragraph::new(format!(
                 "No task labels yet. Press {} to add one.",
-                app.shortcut_hint(ShortcutAction::PlannerAdd)
+                app.shortcut_hint(ShortcutAction::TaskSetupAdd)
             ))
             .style(Style::default().fg(app_color(app, Color::DarkGray)))
             .block(Block::default().borders(Borders::ALL).title(title)),
@@ -141,11 +141,11 @@ fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
         }
     } else {
         format!(
-            " Task input ({} add / {} rename / {} favorite / {} archive) ",
-            app.shortcut_hint(ShortcutAction::PlannerAdd),
-            app.shortcut_hint(ShortcutAction::PlannerRename),
-            app.shortcut_hint(ShortcutAction::PlannerFavorite),
-            app.shortcut_hint(ShortcutAction::PlannerArchive),
+            " Task labels ({} add / {} rename / {} favorite / {} archive) ",
+            app.shortcut_hint(ShortcutAction::TaskSetupAdd),
+            app.shortcut_hint(ShortcutAction::TaskSetupRename),
+            app.shortcut_hint(ShortcutAction::TaskSetupFavorite),
+            app.shortcut_hint(ShortcutAction::TaskSetupArchive),
         )
     };
     let input_text = if app.planner_input_active {
@@ -153,11 +153,11 @@ fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
     } else {
         format!(
             "Use {} add, {} rename, {} favorite, {} archive, {}/{} delete highlighted",
-            app.shortcut_hint(ShortcutAction::PlannerAdd),
-            app.shortcut_hint(ShortcutAction::PlannerRename),
-            app.shortcut_hint(ShortcutAction::PlannerFavorite),
-            app.shortcut_hint(ShortcutAction::PlannerArchive),
-            app.shortcut_hint(ShortcutAction::PlannerDelete),
+            app.shortcut_hint(ShortcutAction::TaskSetupAdd),
+            app.shortcut_hint(ShortcutAction::TaskSetupRename),
+            app.shortcut_hint(ShortcutAction::TaskSetupFavorite),
+            app.shortcut_hint(ShortcutAction::TaskSetupArchive),
+            app.shortcut_hint(ShortcutAction::TaskSetupDelete),
             app.navigation_hint(NavigationAction::Delete),
         )
     };
@@ -200,7 +200,7 @@ fn planner_recent_quick_pick_text(app: &App) -> String {
         if index == 0 {
             parts.push(format!(
                 "[{}/1] {label}",
-                app.shortcut_label(ShortcutAction::PlannerSelectRecent)
+                app.shortcut_label(ShortcutAction::TaskSetupSelectRecent)
             ));
         } else {
             parts.push(format!("[{}] {label}", index + 1));
@@ -241,15 +241,15 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
         ]
     } else {
         let planner_line = format!(
-            "Planner: {}/{} Move  {} Select  {} Add  {} Rename  {} Favorite  {} Archive  {}/{} Delete",
+            "Tasks: {}/{} Move  {} Select  {} Add  {} Rename  {} Favorite  {} Archive  {}/{} Delete",
             app.navigation_hint(NavigationAction::MoveUp),
             app.navigation_hint(NavigationAction::MoveDown),
             app.navigation_hint(NavigationAction::Confirm),
-            app.shortcut_hint(ShortcutAction::PlannerAdd),
-            app.shortcut_hint(ShortcutAction::PlannerRename),
-            app.shortcut_hint(ShortcutAction::PlannerFavorite),
-            app.shortcut_hint(ShortcutAction::PlannerArchive),
-            app.shortcut_hint(ShortcutAction::PlannerDelete),
+            app.shortcut_hint(ShortcutAction::TaskSetupAdd),
+            app.shortcut_hint(ShortcutAction::TaskSetupRename),
+            app.shortcut_hint(ShortcutAction::TaskSetupFavorite),
+            app.shortcut_hint(ShortcutAction::TaskSetupArchive),
+            app.shortcut_hint(ShortcutAction::TaskSetupDelete),
             app.navigation_hint(NavigationAction::Delete),
         );
         let detail_line = format!(
@@ -262,14 +262,14 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
                     "View: [{}/{}] Back  [{}/Ctrl-C] Quit (Locked)",
-                    app.shortcut_label(ShortcutAction::BackSessionPlanner),
+                    app.shortcut_label(ShortcutAction::BackTaskSetup),
                     app.navigation_label(NavigationAction::Cancel),
                     app.shortcut_label(ShortcutAction::Quit),
                 )
             } else {
                 format!(
                     "View: [{}/{}] Back  [{}/Ctrl-C] Quit",
-                    app.shortcut_label(ShortcutAction::BackSessionPlanner),
+                    app.shortcut_label(ShortcutAction::BackTaskSetup),
                     app.navigation_label(NavigationAction::Cancel),
                     app.shortcut_label(ShortcutAction::Quit),
                 )

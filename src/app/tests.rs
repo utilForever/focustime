@@ -2652,7 +2652,7 @@ fn recurring_schedule_display_texts_use_current_frame_timestamp() {
     assert!(next_text.starts_with("🗓  Next schedule: in progress until 11:00"));
     assert_eq!(
         status_text,
-        "⚙  Schedule status: window active; select [t], then press [Space]"
+        "⚙  Schedule status: window active; select a task with [t], then press [Space]"
     );
 }
 
@@ -2674,7 +2674,7 @@ fn recurring_schedule_status_text_guides_task_selection_when_active_and_armed() 
 
     assert_eq!(
         app.recurring_schedule_texts_at(now).1,
-        "⚙  Schedule status: window active; select [t], then press [Space]"
+        "⚙  Schedule status: window active; select a task with [t], then press [Space]"
     );
 }
 
@@ -2842,7 +2842,7 @@ fn recurring_schedule_arms_when_window_begins_without_task_label() {
     assert_eq!(
         app.phase_notification.as_deref(),
         Some(
-            "Scheduled window started. Select a task label with [t], then press [Space] to start focus."
+            "Scheduled window started. Select a task with [t], then press [Space] to start focus."
         )
     );
 }
@@ -2873,7 +2873,7 @@ fn recurring_schedule_arms_when_selected_task_label_is_archived() {
     assert_eq!(
         app.phase_notification.as_deref(),
         Some(
-            "Scheduled window started. Select a task label with [t], then press [Space] to start focus."
+            "Scheduled window started. Select a task with [t], then press [Space] to start focus."
         )
     );
 }
@@ -4010,7 +4010,7 @@ fn screen_mode_transitions_record_usage_counts() {
             .screens
             .top
             .iter()
-            .any(|entry| entry.surface == "session-planner")
+            .any(|entry| entry.surface == "task-setup")
     );
     assert!(
         summary
@@ -4168,7 +4168,7 @@ fn focus_does_not_start_without_selected_task_label() {
     assert_eq!(app.timer.status, TimerStatus::Idle);
     assert_eq!(
         app.phase_notification.as_deref(),
-        Some("Select a task label with [t] before starting focus.")
+        Some("Select a task with [t] before starting focus.")
     );
 }
 
@@ -4792,7 +4792,7 @@ fn session_planner_adds_label_and_allows_focus_start() {
     let mut app = App::default();
 
     app.handle_key(key(KeyCode::Char('t')));
-    assert_eq!(app.mode, AppMode::SessionPlanner);
+    assert_eq!(app.mode, AppMode::TaskSetup);
 
     app.handle_key(key(KeyCode::Char('a')));
     for c in "Docs".chars() {

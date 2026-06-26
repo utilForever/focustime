@@ -92,8 +92,8 @@ impl App {
         }
         if blocked_focus_autostart {
             self.phase_notification = Some(format!(
-                "Select a task label with {} before starting focus.",
-                self.shortcut_hint(ShortcutAction::OpenSessionPlanner)
+                "Select a task with {} before starting focus.",
+                self.shortcut_hint(ShortcutAction::OpenTaskSetup)
             ));
         }
     }

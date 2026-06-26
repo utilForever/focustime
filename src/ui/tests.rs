@@ -30,7 +30,7 @@ fn timer_secondary_hint_includes_setup_shortcut() {
 #[test]
 fn timer_secondary_hint_includes_planner_shortcut() {
     let app = App::default();
-    assert!(timer_secondary_hint(&app).contains("[t] Planner"));
+    assert!(timer_secondary_hint(&app).contains("[t] Tasks"));
 }
 
 #[test]
@@ -485,7 +485,7 @@ fn timer_secondary_hint_includes_planner_shortcut_in_strict_mode() {
     app.timer.phase = TimerPhase::Focus;
     app.timer.status = TimerStatus::Running;
 
-    assert!(timer_secondary_hint(&app).contains("[t] Planner"));
+    assert!(timer_secondary_hint(&app).contains("[t] Tasks"));
 }
 
 #[test]
@@ -928,14 +928,14 @@ fn session_planner_view_renders_title() {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
     let mut app = App::default();
-    app.mode = AppMode::SessionPlanner;
+    app.mode = AppMode::TaskSetup;
 
     terminal
         .draw(|frame| render(frame, &app))
         .expect("render should succeed");
 
     let text = terminal_text(&terminal, width, height);
-    assert!(text.contains("Session Planner"));
+    assert!(text.contains("Task Setup"));
 }
 
 #[test]
@@ -945,7 +945,7 @@ fn session_planner_view_renders_label_management_hints() {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
     let mut app = App::default();
-    app.mode = AppMode::SessionPlanner;
+    app.mode = AppMode::TaskSetup;
 
     terminal
         .draw(|frame| render(frame, &app))
@@ -954,7 +954,7 @@ fn session_planner_view_renders_label_management_hints() {
     let text = terminal_text(&terminal, width, height);
     assert!(text.contains("Rename"));
     assert!(text.contains("Delete"));
-    assert!(text.contains("Planner:"));
+    assert!(text.contains("Tasks:"));
 }
 
 #[test]
@@ -964,7 +964,7 @@ fn session_planner_view_renders_rename_input_title() {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
     let mut app = App::default();
-    app.mode = AppMode::SessionPlanner;
+    app.mode = AppMode::TaskSetup;
     app.planner_input_active = true;
     app.planner_input_mode = Some(PlannerInputMode::Rename);
     app.planner_input = "Docs".to_string();
