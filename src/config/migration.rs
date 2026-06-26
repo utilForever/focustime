@@ -65,7 +65,7 @@ pub(super) fn migrate_config_toml_to_current_detailed(
         steps.push(ConfigMigrationStepReport {
             from_schema_version,
             to_schema_version: from_schema_version,
-            summary: "Remove deprecated automation triggers; use profile schedules directly."
+            summary: "Remove deprecated automation triggers; use profile schedules for automatic starts and task/profile/blocklist controls for defaults."
                 .to_string(),
         });
     }
