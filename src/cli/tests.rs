@@ -188,7 +188,6 @@ fn usage_text_keeps_supported_cli_automation_replacements() {
         "--stop",
         "--next",
         "--task",
-        "--focus-intention",
         "--task-note",
         "--break-glass-trigger",
         "--break-glass-cancel",
@@ -336,32 +335,6 @@ fn parse_task_goal_with_colon_in_label_reads_specific_goal() {
             kind: CommandKind::TaskGoal {
                 label: Some("Docs:API".to_string()),
                 goal: None
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_focus_intention_without_value_reads_current_metadata() {
-    let parsed = parse(&["--focus-intention"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::FocusIntention { value: None },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_focus_intention_with_equals_sets_metadata() {
-    let parsed = parse(&["--focus-intention=Write docs"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::FocusIntention {
-                value: Some("Write docs".to_string())
             },
             output: OutputMode::Text
         })
@@ -1521,12 +1494,6 @@ fn parse_rejects_task_with_blank_value() {
 }
 
 #[test]
-fn parse_rejects_focus_intention_with_blank_value() {
-    let error = parse(&["--focus-intention", "   "]).unwrap_err();
-    assert!(error.contains("`--focus-intention` requires a value"));
-}
-
-#[test]
 fn parse_rejects_task_note_with_blank_equals_value() {
     let error = parse(&["--task-note="]).unwrap_err();
     assert!(error.contains("`--task-note=` requires a non-empty value."));
@@ -2530,9 +2497,7 @@ fn build_status_output_does_not_mirror_task_label_metadata() {
     let output = build_status_output(&config, &stats);
 
     assert_eq!(output.selected_task_label.as_deref(), Some("Docs"));
-    assert!(output.focus_intention.is_none());
     assert!(output.task_note.is_none());
-    assert!(output.live.focus_intention.is_none());
     assert!(output.live.task_note.is_none());
 }
 
@@ -2910,7 +2875,6 @@ fn build_status_output_uses_recovery_snapshot_for_live_state() {
         remaining_secs: 42,
         pomodoros_completed: 3,
         selected_task_label: Some("Docs".to_string()),
-        focus_intention: Some("Write docs".to_string()),
         task_note: Some("API section".to_string()),
         selected_profile: ProfileId::DeepWork,
         captured_at_epoch_secs: None,
@@ -2927,7 +2891,6 @@ fn build_status_output_uses_recovery_snapshot_for_live_state() {
     assert_eq!(output.live.remaining_secs, 42);
     assert_eq!(output.live.pomodoros_completed, 3);
     assert_eq!(output.live.selected_task_label.as_deref(), Some("Docs"));
-    assert_eq!(output.live.focus_intention.as_deref(), Some("Write docs"));
     assert_eq!(output.live.task_note.as_deref(), Some("API section"));
     assert_eq!(output.live.selected_profile.id, "standard");
     assert!(output.live.recovery_error.is_none());
@@ -2943,7 +2906,6 @@ fn build_status_output_reconciles_elapsed_running_recovery_snapshot() {
         remaining_secs: 1,
         pomodoros_completed: 0,
         selected_task_label: Some("Docs".to_string()),
-        focus_intention: Some("Write docs".to_string()),
         task_note: Some("API section".to_string()),
         selected_profile: ProfileId::Classic,
         captured_at_epoch_secs: Some(0),
@@ -2962,7 +2924,6 @@ fn build_status_output_reconciles_elapsed_running_recovery_snapshot() {
     assert_eq!(output.session.pomodoros_completed, 1);
     assert_eq!(output.session.focused_minutes, DEFAULT_FOCUS_SECS / 60);
     assert_eq!(output.live.selected_task_label.as_deref(), Some("Docs"));
-    assert!(output.live.focus_intention.is_none());
     assert!(output.live.task_note.is_none());
     assert!(!output.live.strict_mode_enforced);
 }
@@ -2976,7 +2937,6 @@ fn build_status_output_includes_latest_session_interruption() {
         crate::stats::SessionInterruptionReason::ManualSkip,
         crate::stats::FocusSessionMetadata {
             task_label: Some("Docs"),
-            focus_intention: Some("Write API docs"),
             task_note: Some("Skipped due urgent review"),
         },
         600,
