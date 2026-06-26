@@ -222,18 +222,6 @@ fn round_trip_full_config() {
         wakatime: WakatimeMetadataConfig {
             project: "Team Focus".to_string(),
             language: "Focus Session".to_string(),
-            task_mappings: vec![
-                WakatimeTaskMappingConfig {
-                    task_label: "Docs".to_string(),
-                    project: Some("Documentation".to_string()),
-                    language: Some("Markdown".to_string()),
-                },
-                WakatimeTaskMappingConfig {
-                    task_label: "Code".to_string(),
-                    project: Some("Engineering".to_string()),
-                    language: None,
-                },
-            ],
         },
         wakatime_runtime: WakatimeRuntimeConfig {
             retry_backoff_secs: vec![2, 5, 10],
@@ -1591,86 +1579,6 @@ language = ""
     .unwrap();
     let normalized = cfg.normalize();
     assert_eq!(normalized.wakatime, WakatimeMetadataConfig::default());
-}
-
-#[test]
-fn wakatime_task_mappings_normalize_filter_and_deduplicate() {
-    let cfg: AppConfig = toml::from_str(
-        r#"
-[wakatime]
-project = " Team Focus "
-language = " Focus Session "
-
-[[wakatime.task_mappings]]
-task_label = " Docs "
-project = " Documentation "
-
-[[wakatime.task_mappings]]
-task_label = "docs"
-language = "Rust"
-
-[[wakatime.task_mappings]]
-task_label = "Planning"
-project = "   "
-language = ""
-
-[[wakatime.task_mappings]]
-task_label = "   "
-project = "Ignored"
-"#,
-    )
-    .unwrap();
-
-    let normalized = cfg.normalize();
-    assert_eq!(normalized.wakatime.project, "Team Focus");
-    assert_eq!(normalized.wakatime.language, "Focus Session");
-    assert_eq!(
-        normalized.wakatime.task_mappings,
-        vec![WakatimeTaskMappingConfig {
-            task_label: "Docs".to_string(),
-            project: Some("Documentation".to_string()),
-            language: None,
-        }]
-    );
-}
-
-#[test]
-fn wakatime_task_mappings_resolve_with_per_field_fallback() {
-    let metadata = WakatimeMetadataConfig {
-        project: "Global Project".to_string(),
-        language: "Global Language".to_string(),
-        task_mappings: vec![
-            WakatimeTaskMappingConfig {
-                task_label: "Docs".to_string(),
-                project: Some("Documentation".to_string()),
-                language: None,
-            },
-            WakatimeTaskMappingConfig {
-                task_label: "Review".to_string(),
-                project: None,
-                language: Some("PR Review".to_string()),
-            },
-        ],
-    };
-
-    let (docs_project, docs_language) =
-        metadata.resolved_project_language_for_task_label(Some(" docs "));
-    assert_eq!(docs_project, "Documentation");
-    assert_eq!(docs_language, "Global Language");
-
-    let (review_project, review_language) =
-        metadata.resolved_project_language_for_task_label(Some("REVIEW"));
-    assert_eq!(review_project, "Global Project");
-    assert_eq!(review_language, "PR Review");
-
-    let (fallback_project, fallback_language) =
-        metadata.resolved_project_language_for_task_label(Some("Unknown"));
-    assert_eq!(fallback_project, "Global Project");
-    assert_eq!(fallback_language, "Global Language");
-
-    let (none_project, none_language) = metadata.resolved_project_language_for_task_label(None);
-    assert_eq!(none_project, "Global Project");
-    assert_eq!(none_language, "Global Language");
 }
 
 #[cfg(not(target_os = "windows"))]

@@ -34,8 +34,6 @@ use paths::{app_dir_with_env, stats_app_dir_with_env};
 #[cfg(test)]
 use paths::{config_dir_from_env, stats_state_dir_from_env};
 pub(crate) use shortcuts::ShortcutConfig;
-#[allow(unused_imports)]
-pub(crate) use wakatime::WakatimeTaskMappingConfig;
 pub(crate) use wakatime::{WakatimeMetadataConfig, WakatimeRuntimeConfig};
 
 const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 2;
@@ -1234,15 +1232,6 @@ fn normalize_nonempty_or_default_string(value: &str, default: &str) -> String {
         default.to_string()
     } else {
         trimmed.to_string()
-    }
-}
-
-fn normalize_optional_nonempty_string(value: Option<&str>) -> Option<String> {
-    let trimmed = value?.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
     }
 }
 

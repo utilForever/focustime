@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **WakaTime task mapping cleanup (#556):** removed per-task WakaTime metadata mappings so heartbeats use the global `[wakatime]` project/language configuration only.
 - **Task note metadata cleanup (#555):** removed `--task-note` CLI parsing/help/output, dropped task note editing, recovery, status, and stats/export fields, and kept task labels as the supported session context.
 - **Focus intention metadata cleanup (#554):** removed `--focus-intention` CLI parsing/help/output, dropped focus intention recovery and stats/export fields, and kept task labels as the supported session metadata.
 - **Session template workflow cleanup (#552):** removed `--session-template*` command parsing/help/output, dropped session template config/runtime persistence, and kept task, profile, schedule, and blocklist workflows available through their direct controls.
