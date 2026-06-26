@@ -12,8 +12,8 @@ pub(super) use value::{
 
 use crate::cli::{
     BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind,
-    HistoryDashboardCommandKind, OutputMode, ParsedToken, PrimaryCommand,
-    SessionTemplateCommandKind, SiteListTarget, USAGE_TEXT,
+    HistoryDashboardCommandKind, OutputMode, ParsedToken, PrimaryCommand, SiteListTarget,
+    USAGE_TEXT,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -69,11 +69,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::BlocklistProfileCreate(_)
             | ParsedToken::BlocklistProfileRename(_)
             | ParsedToken::BlocklistProfileDelete
-            | ParsedToken::SessionTemplate(_)
-            | ParsedToken::SessionTemplateApply(_)
-            | ParsedToken::SessionTemplateCreate(_)
-            | ParsedToken::SessionTemplateRename(_)
-            | ParsedToken::SessionTemplateDelete
             | ParsedToken::HistoryDashboard
             | ParsedToken::BlocklistSites
             | ParsedToken::AllowlistSites
@@ -123,7 +118,15 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
     match flag {
         "--automation-triggers" | "--automation-triggers-set" => Some(RemovedOptionGuidance {
             summary: "Standalone automation trigger commands were removed.",
-            replacement: "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, supported timer controls for active windows, and session templates for task/profile/blocklist defaults.",
+            replacement: "Use `--schedule`/`--schedule-set` for schedule-driven focus starts, supported timer controls for active windows, and task/profile/blocklist commands for defaults.",
+        }),
+        "--session-template"
+        | "--session-template-apply"
+        | "--session-template-create"
+        | "--session-template-rename"
+        | "--session-template-delete" => Some(RemovedOptionGuidance {
+            summary: "Session template commands were removed.",
+            replacement: "Use `--task`, `--profile`, `--schedule`/`--schedule-set`, and blocklist profile commands directly.",
         }),
         "--config-doctor" | "--config-migrate" | "--config-migrate-apply" => {
             Some(RemovedOptionGuidance {
@@ -227,24 +230,6 @@ pub(super) fn parse_primary_command(
             )?,
             ParsedToken::BlocklistProfileDelete => {
                 set_primary_command(&mut primary, PrimaryCommand::BlocklistProfileDelete)?
-            }
-            ParsedToken::SessionTemplate(name) => {
-                set_primary_command(&mut primary, PrimaryCommand::SessionTemplate(name.clone()))?
-            }
-            ParsedToken::SessionTemplateApply(name) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::SessionTemplateApply(name.clone()),
-            )?,
-            ParsedToken::SessionTemplateCreate(name) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::SessionTemplateCreate(name.clone()),
-            )?,
-            ParsedToken::SessionTemplateRename(name) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::SessionTemplateRename(name.clone()),
-            )?,
-            ParsedToken::SessionTemplateDelete => {
-                set_primary_command(&mut primary, PrimaryCommand::SessionTemplateDelete)?
             }
             ParsedToken::HistoryDashboard => {
                 set_primary_command(&mut primary, PrimaryCommand::HistoryDashboard)?
@@ -455,40 +440,6 @@ pub(super) fn finalize_cli_action(
             },
             output,
         })),
-        Some(PrimaryCommand::SessionTemplate(name)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SessionTemplate {
-                command: SessionTemplateCommandKind::Select { name },
-            },
-            output,
-        })),
-        Some(PrimaryCommand::SessionTemplateApply(name)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SessionTemplate {
-                command: SessionTemplateCommandKind::Apply { name },
-            },
-            output,
-        })),
-        Some(PrimaryCommand::SessionTemplateCreate(name)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::SessionTemplate {
-                    command: SessionTemplateCommandKind::Create { name },
-                },
-                output,
-            }))
-        }
-        Some(PrimaryCommand::SessionTemplateRename(name)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::SessionTemplate {
-                    command: SessionTemplateCommandKind::Rename { name },
-                },
-                output,
-            }))
-        }
-        Some(PrimaryCommand::SessionTemplateDelete) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SessionTemplate {
-                command: SessionTemplateCommandKind::Delete,
-            },
-            output,
-        })),
         Some(PrimaryCommand::HistoryDashboard) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::HistoryDashboard {
                 command: HistoryDashboardCommandKind::Show,
@@ -609,11 +560,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
         PrimaryCommand::BlocklistProfileRename(_) => "--blocklist-profile-rename",
         PrimaryCommand::BlocklistProfileDelete => "--blocklist-profile-delete",
-        PrimaryCommand::SessionTemplate(_) => "--session-template",
-        PrimaryCommand::SessionTemplateApply(_) => "--session-template-apply",
-        PrimaryCommand::SessionTemplateCreate(_) => "--session-template-create",
-        PrimaryCommand::SessionTemplateRename(_) => "--session-template-rename",
-        PrimaryCommand::SessionTemplateDelete => "--session-template-delete",
         PrimaryCommand::HistoryDashboard => "--history-dashboard",
         PrimaryCommand::BlocklistSites => "--blocklist-sites",
         PrimaryCommand::AllowlistSites => "--allowlist-sites",

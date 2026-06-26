@@ -1,4 +1,3 @@
-use crate::app::PlannerPane;
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
     ListItem, ListState, Modifier, NavigationAction, PLANNER_RECENT_LABEL_LIMIT, Paragraph,
@@ -22,20 +21,15 @@ pub(super) fn render_session_planner(frame: &mut Frame, app: &App) {
         .margin(2)
         .constraints([
             Constraint::Length(2), // current task + weekly allocation
-            Constraint::Min(4),    // task/template lists
+            Constraint::Min(4),    // task label list
             Constraint::Length(3), // task label input
             Constraint::Length(1), // feedback
             Constraint::Length(3), // hints
         ])
         .split(outer);
-    let lists = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
-        .split(inner[1]);
 
     render_session_planner_selected_task(frame, app, inner[0]);
-    render_session_planner_labels(frame, app, lists[0]);
-    render_session_planner_templates(frame, app, lists[1]);
+    render_session_planner_labels(frame, app, inner[1]);
     render_session_planner_input(frame, app, inner[2]);
     render_session_planner_feedback(frame, app, inner[3]);
     render_session_planner_hints(frame, app, inner[4]);
@@ -46,16 +40,8 @@ fn render_session_planner_selected_task(frame: &mut Frame, app: &App, area: Rect
         || "Selected task: none (required before focus starts)".to_string(),
         |label| format!("Selected task: {label}"),
     );
-    let selected_template = app
-        .active_session_template_name()
-        .map_or_else(|| "none".to_string(), str::to_string);
     let weekly_allocation = planner_weekly_allocation_summary(app);
-    let selected_text = vec![
-        Line::from(format!(
-            "{selected_task}   |   Active template: {selected_template}"
-        )),
-        Line::from(weekly_allocation),
-    ];
+    let selected_text = vec![Line::from(selected_task), Line::from(weekly_allocation)];
     frame.render_widget(
         Paragraph::new(selected_text)
             .style(Style::default().fg(app_color(app, Color::White)))
@@ -88,11 +74,7 @@ pub(super) fn planner_weekly_allocation_summary(app: &App) -> String {
 }
 
 fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
-    let title = if app.planner_pane == PlannerPane::Tasks {
-        " Task Labels * "
-    } else {
-        " Task Labels "
-    };
+    let title = " Task Labels ";
     if app.task_labels.is_empty() {
         frame.render_widget(
             Paragraph::new(format!(
@@ -151,112 +133,33 @@ fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-fn render_session_planner_templates(frame: &mut Frame, app: &App, area: Rect) {
-    let title = if app.planner_pane == PlannerPane::Templates {
-        " Session Templates * "
-    } else {
-        " Session Templates "
-    };
-    if app.session_templates.is_empty() {
-        frame.render_widget(
-            Paragraph::new(format!(
-                "No templates yet. Press {} to capture current task/profile/blocklist/schedule.",
-                app.shortcut_hint(ShortcutAction::PlannerAdd)
-            ))
-            .style(Style::default().fg(app_color(app, Color::DarkGray)))
-            .wrap(Wrap { trim: true })
-            .block(Block::default().borders(Borders::ALL).title(title)),
-            area,
-        );
-        return;
-    }
-
-    let items: Vec<ListItem> = app
-        .session_templates
-        .iter()
-        .map(|template| {
-            let marker = if app
-                .active_session_template_name()
-                .is_some_and(|active| active.eq_ignore_ascii_case(&template.name))
-            {
-                "✓"
-            } else {
-                " "
-            };
-            let schedule_windows = template.schedule.windows.len();
-            ListItem::new(format!(
-                " {marker} {} ({}, {}, {}, {}w)",
-                template.name,
-                template.profile.label(),
-                template.task_label,
-                template.blocklist_profile,
-                schedule_windows
-            ))
-        })
-        .collect();
-    let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(title))
-        .highlight_style(
-            Style::default()
-                .fg(app_color(app, Color::Black))
-                .bg(app_color(app, Color::White))
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol("▶ ");
-    let mut state = ListState::default();
-    state.select(Some(
-        app.planner_template_selection_index
-            .min(app.session_templates.len().saturating_sub(1)),
-    ));
-    frame.render_stateful_widget(list, area, &mut state);
-}
-
 fn render_session_planner_input(frame: &mut Frame, app: &App, area: Rect) {
     let input_title = if app.planner_input_active {
         match app.planner_input_mode {
             Some(PlannerInputMode::Rename) => " Rename task label ".to_string(),
-            Some(PlannerInputMode::CreateTemplate) => " Create session template ".to_string(),
-            Some(PlannerInputMode::RenameTemplate) => " Rename session template ".to_string(),
             _ => " Add task label ".to_string(),
         }
     } else {
-        match app.planner_pane {
-            PlannerPane::Tasks => format!(
-                " Task input ({} add / {} rename / {} favorite / {} archive) ",
-                app.shortcut_hint(ShortcutAction::PlannerAdd),
-                app.shortcut_hint(ShortcutAction::PlannerRename),
-                app.shortcut_hint(ShortcutAction::PlannerFavorite),
-                app.shortcut_hint(ShortcutAction::PlannerArchive),
-            ),
-            PlannerPane::Templates => format!(
-                " Template input ({} create / {} rename) ",
-                app.shortcut_hint(ShortcutAction::PlannerAdd),
-                app.shortcut_hint(ShortcutAction::PlannerRename),
-            ),
-        }
+        format!(
+            " Task input ({} add / {} rename / {} favorite / {} archive) ",
+            app.shortcut_hint(ShortcutAction::PlannerAdd),
+            app.shortcut_hint(ShortcutAction::PlannerRename),
+            app.shortcut_hint(ShortcutAction::PlannerFavorite),
+            app.shortcut_hint(ShortcutAction::PlannerArchive),
+        )
     };
     let input_text = if app.planner_input_active {
         format!("{}|", app.planner_input)
     } else {
-        match app.planner_pane {
-            PlannerPane::Tasks => format!(
-                "Use {} add, {} rename, {} favorite, {} archive, {}/{} delete highlighted",
-                app.shortcut_hint(ShortcutAction::PlannerAdd),
-                app.shortcut_hint(ShortcutAction::PlannerRename),
-                app.shortcut_hint(ShortcutAction::PlannerFavorite),
-                app.shortcut_hint(ShortcutAction::PlannerArchive),
-                app.shortcut_hint(ShortcutAction::PlannerDelete),
-                app.navigation_hint(NavigationAction::Delete),
-            ),
-            PlannerPane::Templates => format!(
-                "Use {} apply, {} create, {} rename, {}/{} delete highlighted",
-                app.navigation_hint(NavigationAction::Confirm),
-                app.shortcut_hint(ShortcutAction::PlannerAdd),
-                app.shortcut_hint(ShortcutAction::PlannerRename),
-                app.shortcut_hint(ShortcutAction::PlannerDelete),
-                app.navigation_hint(NavigationAction::Delete),
-            ),
-        }
+        format!(
+            "Use {} add, {} rename, {} favorite, {} archive, {}/{} delete highlighted",
+            app.shortcut_hint(ShortcutAction::PlannerAdd),
+            app.shortcut_hint(ShortcutAction::PlannerRename),
+            app.shortcut_hint(ShortcutAction::PlannerFavorite),
+            app.shortcut_hint(ShortcutAction::PlannerArchive),
+            app.shortcut_hint(ShortcutAction::PlannerDelete),
+            app.navigation_hint(NavigationAction::Delete),
+        )
     };
     frame.render_widget(
         Paragraph::new(input_text)
@@ -313,14 +216,6 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
                 "Input: rename label, then {}",
                 app.navigation_hint(NavigationAction::Confirm)
             ),
-            Some(PlannerInputMode::CreateTemplate) => format!(
-                "Input: type template name, then {}",
-                app.navigation_hint(NavigationAction::Confirm)
-            ),
-            Some(PlannerInputMode::RenameTemplate) => format!(
-                "Input: rename template, then {}",
-                app.navigation_hint(NavigationAction::Confirm)
-            ),
             _ => format!(
                 "Input: type task label, then {}",
                 app.navigation_hint(NavigationAction::Confirm)
@@ -345,43 +240,22 @@ fn render_session_planner_hints(frame: &mut Frame, app: &App, area: Rect) {
             }),
         ]
     } else {
-        let planner_line = match app.planner_pane {
-            PlannerPane::Tasks => format!(
-                "Planner: {}/{} Move  {}/{} Pane  {} Select  {} Add  {} Rename  {} Favorite  {} Archive  {}/{} Delete",
-                app.navigation_hint(NavigationAction::MoveUp),
-                app.navigation_hint(NavigationAction::MoveDown),
-                app.navigation_hint(NavigationAction::MoveLeft),
-                app.navigation_hint(NavigationAction::MoveRight),
-                app.navigation_hint(NavigationAction::Confirm),
-                app.shortcut_hint(ShortcutAction::PlannerAdd),
-                app.shortcut_hint(ShortcutAction::PlannerRename),
-                app.shortcut_hint(ShortcutAction::PlannerFavorite),
-                app.shortcut_hint(ShortcutAction::PlannerArchive),
-                app.shortcut_hint(ShortcutAction::PlannerDelete),
-                app.navigation_hint(NavigationAction::Delete),
-            ),
-            PlannerPane::Templates => format!(
-                "Planner: {}/{} Move  {}/{} Pane  {} Apply  {} Create  {} Rename  {}/{} Delete",
-                app.navigation_hint(NavigationAction::MoveUp),
-                app.navigation_hint(NavigationAction::MoveDown),
-                app.navigation_hint(NavigationAction::MoveLeft),
-                app.navigation_hint(NavigationAction::MoveRight),
-                app.navigation_hint(NavigationAction::Confirm),
-                app.shortcut_hint(ShortcutAction::PlannerAdd),
-                app.shortcut_hint(ShortcutAction::PlannerRename),
-                app.shortcut_hint(ShortcutAction::PlannerDelete),
-                app.navigation_hint(NavigationAction::Delete),
-            ),
-        };
-        let detail_line = match app.planner_pane {
-            PlannerPane::Tasks => format!(
-                "{}  |  Archived labels stay visible and cannot be selected",
-                planner_recent_quick_pick_text(app)
-            ),
-            PlannerPane::Templates => {
-                "Templates apply task + profile + blocklist + schedule together".to_string()
-            }
-        };
+        let planner_line = format!(
+            "Planner: {}/{} Move  {} Select  {} Add  {} Rename  {} Favorite  {} Archive  {}/{} Delete",
+            app.navigation_hint(NavigationAction::MoveUp),
+            app.navigation_hint(NavigationAction::MoveDown),
+            app.navigation_hint(NavigationAction::Confirm),
+            app.shortcut_hint(ShortcutAction::PlannerAdd),
+            app.shortcut_hint(ShortcutAction::PlannerRename),
+            app.shortcut_hint(ShortcutAction::PlannerFavorite),
+            app.shortcut_hint(ShortcutAction::PlannerArchive),
+            app.shortcut_hint(ShortcutAction::PlannerDelete),
+            app.navigation_hint(NavigationAction::Delete),
+        );
+        let detail_line = format!(
+            "{}  |  Archived labels stay visible and cannot be selected",
+            planner_recent_quick_pick_text(app)
+        );
         vec![
             Line::from(planner_line),
             Line::from(detail_line),

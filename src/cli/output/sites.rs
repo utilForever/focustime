@@ -1,6 +1,6 @@
 use crate::cli::{
-    BlocklistProfileCommandOutput, HistoryDashboardCommandOutput, SessionTemplateCommandOutput,
-    SiteAddCommandOutput, SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
+    BlocklistProfileCommandOutput, HistoryDashboardCommandOutput, SiteAddCommandOutput,
+    SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
     TemporarySiteAddCommandOutput,
 };
 
@@ -29,37 +29,6 @@ pub(in crate::cli) fn print_blocklist_profile_command_output(
             profile.blocklist_sites_count,
             profile.allowlist_sites_count,
             profile.effective_blocked_sites_count
-        );
-    }
-}
-
-pub(in crate::cli) fn print_session_template_command_output(
-    payload: &SessionTemplateCommandOutput,
-) {
-    if payload.updated {
-        println!("Session template updated.");
-    }
-    println!(
-        "Selected session template: {}",
-        payload
-            .selected_session_template
-            .as_deref()
-            .unwrap_or("none")
-    );
-    if payload.templates.is_empty() {
-        println!("Templates: none");
-        return;
-    }
-    println!("Templates:");
-    for template in &payload.templates {
-        let marker = if template.active { "*" } else { " " };
-        println!(
-            "  {marker} {} (task `{}`, profile {}, blocklist `{}`, windows {})",
-            template.name,
-            template.task_label,
-            template.profile,
-            template.blocklist_profile,
-            template.schedule_windows_count
         );
     }
 }

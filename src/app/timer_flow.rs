@@ -102,7 +102,6 @@ impl App {
         if self.timer.phase != TimerPhase::Focus || self.timer.status != TimerStatus::Idle {
             return Ok(FocusStartOutcome::NotIdleFocusPhase);
         }
-        self.apply_selected_session_template_before_start()?;
         if !self.has_selectable_task_label_for_focus() {
             return Ok(FocusStartOutcome::MissingTaskLabel);
         }

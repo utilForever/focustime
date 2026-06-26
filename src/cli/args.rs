@@ -60,7 +60,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 32] = [
+    let parsers: [(&str, ValueArgParser); 28] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
         ("--focus-intention", classify_focus_intention_arg),
@@ -87,19 +87,6 @@ fn classify_value_arg(
         (
             "--blocklist-profile-rename",
             classify_blocklist_profile_rename_arg,
-        ),
-        ("--session-template", classify_session_template_arg),
-        (
-            "--session-template-apply",
-            classify_session_template_apply_arg,
-        ),
-        (
-            "--session-template-create",
-            classify_session_template_create_arg,
-        ),
-        (
-            "--session-template-rename",
-            classify_session_template_rename_arg,
         ),
         ("--blocklist-site-add", classify_blocklist_site_add_arg),
         ("--allowlist-site-add", classify_allowlist_site_add_arg),
@@ -144,7 +131,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--break-glass-cancel" => Some(ParsedToken::BreakGlassCancel),
         "--diagnostics" => Some(ParsedToken::Diagnostics),
         "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
-        "--session-template-delete" => Some(ParsedToken::SessionTemplateDelete),
         "--history-dashboard" => Some(ParsedToken::HistoryDashboard),
         "--blocklist-sites" => Some(ParsedToken::BlocklistSites),
         "--allowlist-sites" => Some(ParsedToken::AllowlistSites),
@@ -343,71 +329,6 @@ fn classify_blocklist_profile_rename_arg(
     }
     Err(invalid_usage(
         "`--blocklist-profile-rename` requires a profile name. Use `--blocklist-profile-rename=NAME` or `--blocklist-profile-rename NAME`.",
-    ))
-}
-
-fn classify_session_template_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--session-template` requires a template name.")?;
-        return Ok((ParsedToken::SessionTemplate(Some(value.to_string())), 2));
-    }
-    Ok((ParsedToken::SessionTemplate(None), 1))
-}
-
-fn classify_session_template_apply_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(
-            next,
-            "`--session-template-apply` requires a template name when a value is provided.",
-        )?;
-        return Ok((
-            ParsedToken::SessionTemplateApply(Some(value.to_string())),
-            2,
-        ));
-    }
-    Ok((ParsedToken::SessionTemplateApply(None), 1))
-}
-
-fn classify_session_template_create_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--session-template-create` requires a name.")?;
-        return Ok((ParsedToken::SessionTemplateCreate(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--session-template-create` requires a template name. Use `--session-template-create=NAME` or `--session-template-create NAME`.",
-    ))
-}
-
-fn classify_session_template_rename_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--session-template-rename` requires a name.")?;
-        return Ok((ParsedToken::SessionTemplateRename(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--session-template-rename` requires a template name. Use `--session-template-rename=NAME` or `--session-template-rename NAME`.",
     ))
 }
 

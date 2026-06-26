@@ -11,9 +11,9 @@ pub(super) use diagnostics::{
 };
 pub(super) use sites::{
     print_blocklist_profile_command_output, print_history_dashboard_command_output,
-    print_session_template_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_temporary_site_add_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output,
+    print_temporary_site_add_command_output,
 };
 pub(super) use status::{
     print_break_glass_command_output, print_session_metadata_command_output, print_status_output,

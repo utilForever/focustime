@@ -55,9 +55,8 @@ pub(super) fn migrate_config_toml_to_current_detailed(
         steps.push(ConfigMigrationStepReport {
             from_schema_version,
             to_schema_version: from_schema_version,
-            summary:
-                "Remove deprecated weekday profile rules; use schedules and session templates."
-                    .to_string(),
+            summary: "Remove deprecated weekday profile rules; use profile schedules directly."
+                .to_string(),
         });
     }
     let automation_triggers_input = config_toml.clone();
@@ -66,7 +65,7 @@ pub(super) fn migrate_config_toml_to_current_detailed(
         steps.push(ConfigMigrationStepReport {
             from_schema_version,
             to_schema_version: from_schema_version,
-            summary: "Remove deprecated automation triggers; use schedules and session templates."
+            summary: "Remove deprecated automation triggers; use profile schedules directly."
                 .to_string(),
         });
     }
@@ -77,6 +76,16 @@ pub(super) fn migrate_config_toml_to_current_detailed(
             from_schema_version,
             to_schema_version: from_schema_version,
             summary: "Remove deprecated schedule exception dates; schedules now use recurring windows only."
+                .to_string(),
+        });
+    }
+    let session_templates_input = config_toml.clone();
+    remove_session_templates(&mut config_toml);
+    if session_templates_input != config_toml {
+        steps.push(ConfigMigrationStepReport {
+            from_schema_version,
+            to_schema_version: from_schema_version,
+            summary: "Remove retired session template persistence; use task, profile, schedule, and blocklist settings directly."
                 .to_string(),
         });
     }
@@ -112,7 +121,6 @@ pub(super) fn canonicalize_legacy_profile_aliases(config_toml: &mut toml::Value)
     };
     migrate_profile_value_in_table(table, "selected_profile");
     migrate_profile_automation_preset_keys(table);
-    migrate_profile_value_in_array_table(table, "session_templates", "profile");
 }
 
 /// Removes retired weekday profile rules without migrating them to replacement triggers.
@@ -144,7 +152,15 @@ pub(super) fn remove_schedule_exception_dates(config_toml: &mut toml::Value) {
     };
     remove_exception_dates_from_named_schedule(table, "recurring_schedule");
     remove_profile_automation_schedule_exception_dates(table);
-    remove_session_template_schedule_exception_dates(table);
+}
+
+/// Removes retired session template persistence fields.
+pub(super) fn remove_session_templates(config_toml: &mut toml::Value) {
+    let Some(table) = config_toml.as_table_mut() else {
+        return;
+    };
+    table.remove("session_templates");
+    table.remove("selected_session_template");
 }
 
 fn remove_exception_dates_from_named_schedule(
@@ -174,23 +190,6 @@ fn remove_profile_automation_schedule_exception_dates(
             continue;
         };
         remove_exception_dates_from_named_schedule(preset, "recurring_schedule");
-    }
-}
-
-fn remove_session_template_schedule_exception_dates(
-    table: &mut toml::map::Map<String, toml::Value>,
-) {
-    let Some(templates) = table
-        .get_mut("session_templates")
-        .and_then(toml::Value::as_array_mut)
-    else {
-        return;
-    };
-    for template in templates {
-        let Some(template) = template.as_table_mut() else {
-            continue;
-        };
-        remove_exception_dates_from_named_schedule(template, "schedule");
     }
 }
 
@@ -416,44 +415,11 @@ pub(super) fn collect_legacy_profile_rename_advice(config_toml: &toml::Value) ->
         push_legacy_profile_value_advice(&mut advice, "selected_profile", value);
     }
 
-    push_legacy_profile_value_array_advice(
-        &mut advice,
-        table,
-        "session_templates",
-        "profile",
-        "session_templates",
-    );
     push_legacy_profile_automation_key_advice(&mut advice, table);
 
     advice.sort_unstable();
     advice.dedup();
     advice
-}
-
-/// Adds profile-rename advice for every matching table in an array field.
-pub(super) fn push_legacy_profile_value_array_advice(
-    advice: &mut Vec<String>,
-    table: &toml::map::Map<String, toml::Value>,
-    array_key: &str,
-    field_key: &str,
-    location_prefix: &str,
-) {
-    let Some(array) = table.get(array_key).and_then(toml::Value::as_array) else {
-        return;
-    };
-    for (index, entry) in array.iter().enumerate() {
-        let Some(entry_table) = entry.as_table() else {
-            continue;
-        };
-        let Some(value) = entry_table.get(field_key).and_then(toml::Value::as_str) else {
-            continue;
-        };
-        push_legacy_profile_value_advice(
-            advice,
-            &format!("{location_prefix}[{index}].{field_key}"),
-            value,
-        );
-    }
 }
 
 /// Adds profile-rename advice for legacy profile automation preset keys.
@@ -573,32 +539,11 @@ pub(super) fn migrate_config_toml_v1_to_v2(mut config_toml: toml::Value) -> Opti
     let table = config_toml.as_table_mut()?;
     migrate_profile_value_in_table(table, "selected_profile");
     migrate_profile_automation_preset_keys(table);
-    migrate_profile_value_in_array_table(table, "session_templates", "profile");
     table.insert(
         "schema_version".to_string(),
         toml::Value::Integer(i64::from(CURRENT_CONFIG_SCHEMA_VERSION)),
     );
     Some(config_toml)
-}
-
-/// Canonicalizes profile values stored inside an array of TOML tables.
-pub(super) fn migrate_profile_value_in_array_table(
-    table: &mut toml::map::Map<String, toml::Value>,
-    array_key: &str,
-    field_key: &str,
-) {
-    let Some(array) = table
-        .get_mut(array_key)
-        .and_then(|value| value.as_array_mut())
-    else {
-        return;
-    };
-    for entry in array {
-        let Some(entry_table) = entry.as_table_mut() else {
-            continue;
-        };
-        migrate_profile_value_in_table(entry_table, field_key);
-    }
 }
 
 /// Canonicalizes one profile value stored directly in a TOML table.

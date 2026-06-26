@@ -27,8 +27,6 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.long_break_interval, 4);
     assert_eq!(cfg.selected_profile, ProfileId::Custom);
     assert!(cfg.custom_profile.is_none());
-    assert!(cfg.session_templates.is_empty());
-    assert!(cfg.selected_session_template.is_empty());
     assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
     assert!(cfg.blocked_sites.is_empty());
     assert_eq!(cfg.selected_blocklist_profile, "Default");
@@ -124,20 +122,6 @@ fn round_trip_full_config() {
             long_break_secs: 12 * 60,
             long_break_interval: 5,
         }),
-        session_templates: vec![SessionTemplateConfig {
-            name: "Morning deep work".to_string(),
-            task_label: "Docs".to_string(),
-            profile: ProfileId::DeepWork,
-            blocklist_profile: "Work".to_string(),
-            schedule: RecurringScheduleConfig {
-                windows: vec![RecurringFocusWindowConfig {
-                    days: vec!["mon".to_string(), "wed".to_string()],
-                    start: "09:15".to_string(),
-                    end: "11:00".to_string(),
-                }],
-            },
-        }],
-        selected_session_template: "Morning deep work".to_string(),
         selected_theme_preset: ThemePreset::HighContrast,
         notifications: NotificationConfig {
             enabled: true,
@@ -296,11 +280,6 @@ fn round_trip_full_config() {
     assert_eq!(parsed.blocking_backend, original.blocking_backend);
     assert_eq!(parsed.selected_profile, original.selected_profile);
     assert_eq!(parsed.custom_profile, original.custom_profile);
-    assert_eq!(parsed.session_templates, original.session_templates);
-    assert_eq!(
-        parsed.selected_session_template,
-        original.selected_session_template
-    );
     assert_eq!(parsed.selected_theme_preset, original.selected_theme_preset);
     assert_eq!(parsed.notifications, NotificationConfig::default());
     assert_eq!(parsed.auto_start, AutoStartConfig::default());
@@ -337,8 +316,6 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.long_break_interval, 4);
     assert_eq!(cfg.selected_profile, ProfileId::Custom);
     assert!(cfg.custom_profile.is_none());
-    assert!(cfg.session_templates.is_empty());
-    assert_eq!(cfg.selected_session_template, "");
     assert_eq!(cfg.selected_theme_preset, ThemePreset::Classic);
     assert!(cfg.blocked_sites.is_empty());
     assert!(cfg.blocklist_profiles.is_empty());
@@ -448,77 +425,6 @@ fn normalize_clamps_zero_break_glass_duration_to_default() {
         cfg.break_glass_duration_secs,
         default_break_glass_duration_secs()
     );
-}
-
-#[test]
-fn normalize_session_templates_deduplicates_and_filters_invalid_entries() {
-    let cfg = AppConfig {
-        blocklist_profiles: vec![
-            BlocklistProfileConfig {
-                name: "Work".to_string(),
-                sites: vec!["youtube.com".to_string()],
-                allowlist_sites: Vec::new(),
-            },
-            BlocklistProfileConfig {
-                name: "Study".to_string(),
-                sites: vec!["reddit.com".to_string()],
-                allowlist_sites: Vec::new(),
-            },
-        ],
-        session_templates: vec![
-            SessionTemplateConfig {
-                name: "Morning".to_string(),
-                task_label: "  Docs  ".to_string(),
-                profile: ProfileId::DeepWork,
-                blocklist_profile: "work".to_string(),
-                schedule: RecurringScheduleConfig::default(),
-            },
-            SessionTemplateConfig {
-                name: "morning".to_string(),
-                task_label: "Code".to_string(),
-                profile: ProfileId::Classic,
-                blocklist_profile: "missing".to_string(),
-                schedule: RecurringScheduleConfig::default(),
-            },
-            SessionTemplateConfig {
-                name: "No Task".to_string(),
-                task_label: "   ".to_string(),
-                profile: ProfileId::Custom,
-                blocklist_profile: "Study".to_string(),
-                schedule: RecurringScheduleConfig::default(),
-            },
-        ],
-        selected_session_template: "MORNING".to_string(),
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.session_templates.len(), 2);
-    assert_eq!(cfg.session_templates[0].name, "Morning");
-    assert_eq!(cfg.session_templates[0].task_label, "Docs");
-    assert_eq!(cfg.session_templates[0].blocklist_profile, "Work");
-    assert_eq!(cfg.session_templates[1].name, "morning (2)");
-    assert_eq!(cfg.session_templates[1].task_label, "Code");
-    assert_eq!(cfg.session_templates[1].blocklist_profile, "Work");
-    assert_eq!(cfg.selected_session_template, "Morning");
-}
-
-#[test]
-fn normalize_selected_session_template_clears_unknown_value() {
-    let cfg = AppConfig {
-        session_templates: vec![SessionTemplateConfig {
-            name: "Morning".to_string(),
-            task_label: "Docs".to_string(),
-            profile: ProfileId::DeepWork,
-            blocklist_profile: "Default".to_string(),
-            schedule: RecurringScheduleConfig::default(),
-        }],
-        selected_session_template: "Missing".to_string(),
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.selected_session_template, "");
 }
 
 #[test]
@@ -790,8 +696,6 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
             long_break_secs: 16 * 60,
             long_break_interval: 2,
         }),
-        session_templates: Vec::new(),
-        selected_session_template: String::new(),
         selected_theme_preset: ThemePreset::Classic,
         notifications: NotificationConfig::default(),
         auto_start: AutoStartConfig::default(),
@@ -1153,6 +1057,7 @@ fn migrate_config_toml_v1_to_v2_maps_profile_ids_and_profile_automation_keys() {
         r#"
 schema_version = 1
 selected_profile = "deep-work"
+selected_session_template = "Template"
 
 [[session_templates]]
 name = "Template"
@@ -1203,18 +1108,37 @@ strict_mode = false
     assert!(profile_automation.get("deep_work").is_none());
     assert!(profile_automation.get("custom").is_none());
 
-    let session_template_profile = root
-        .get("session_templates")
-        .and_then(toml::Value::as_array)
-        .and_then(|array| array.first())
-        .and_then(toml::Value::as_table)
-        .and_then(|template| template.get("profile"))
-        .and_then(toml::Value::as_str);
-    assert_eq!(session_template_profile, Some("advanced"));
-
+    assert!(root.get("session_templates").is_none());
+    assert!(root.get("selected_session_template").is_none());
     assert!(root.get("weekday_profile_rules").is_none());
 
     assert!(root.get("automation_triggers").is_none());
+}
+
+#[test]
+fn migrate_config_toml_removes_session_template_persistence() {
+    let original: toml::Value = toml::from_str(
+        r#"
+schema_version = 2
+selected_session_template = "Morning"
+
+[[session_templates]]
+name = "Morning"
+task_label = "Docs"
+profile = "basic"
+blocklist_profile = "Default"
+"#,
+    )
+    .unwrap();
+
+    let (migrated, _, steps) = migrate_config_toml_to_current_detailed(original).unwrap();
+    let root = migrated.as_table().expect("root should be a table");
+    assert!(root.get("session_templates").is_none());
+    assert!(root.get("selected_session_template").is_none());
+    assert!(steps.iter().any(|step| {
+        step.summary
+            == "Remove retired session template persistence; use task, profile, schedule, and blocklist settings directly."
+    }));
 }
 
 #[test]
@@ -2271,6 +2195,8 @@ exception_dates = ["2026-12-25"]
         !migrated.to_string().contains("exception_dates"),
         "migrated config should not retain schedule exception date keys"
     );
+    let root = migrated.as_table().expect("root should be a table");
+    assert!(root.get("session_templates").is_none());
     assert!(steps.iter().any(|step| {
         step.summary
             == "Remove deprecated schedule exception dates; schedules now use recurring windows only."

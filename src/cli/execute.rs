@@ -11,18 +11,16 @@ use crate::cli::{
     AppConfig, BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig,
     DailyGoalSnapshot, FocusStats, GoalCarryCommandOutput, GoalCommandOutput, MonthlyGoalConfig,
     OutputMode, ProfileId, ProfileOutput, ProfileView, RecurringScheduleConfig,
-    ScheduleCommandOutput, SessionMetadataCommandOutput, SessionTemplateCommandKind,
-    SessionTemplateCommandOutput, SessionTemplateSummaryOutput, StrictCommandOutput,
-    TaskCommandOutput, TaskGoalCommandOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
+    ScheduleCommandOutput, SessionMetadataCommandOutput, StrictCommandOutput, TaskCommandOutput,
+    TaskGoalCommandOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
     TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
     TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
     build_schedule_inspection_output, build_task_goal_output, print_break_glass_command_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_profile_output,
     print_schedule_command_output, print_session_metadata_command_output,
-    print_session_template_command_output, print_strict_command_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, profile_id, profile_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    profile_id, profile_view, theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 mod blocklists;
@@ -120,9 +118,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::AllowlistSiteAddTemporary { input } => {
             execute_allowlist_site_add_temporary_command(input, cli_command.output)
         }
-        CommandKind::SessionTemplate { command } => {
-            execute_session_template_command(command, cli_command.output)
-        }
         CommandKind::HistoryDashboard { command } => {
             execute_history_dashboard_command(command, cli_command.output)
                 .map_err(UserMessage::from)
@@ -161,7 +156,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::BlocklistProfile { .. } => Some("blocklist-profile"),
         CommandKind::BlocklistSites { .. } => Some("blocklist-sites"),
         CommandKind::AllowlistSiteAddTemporary { .. } => Some("allowlist-site-add-temporary"),
-        CommandKind::SessionTemplate { .. } => Some("session-template"),
         CommandKind::HistoryDashboard { .. } => Some("history-dashboard"),
     }
 }
@@ -178,7 +172,6 @@ fn command_usage_records_via_app(command: &CommandKind) -> bool {
             | CommandKind::FocusIntention { .. }
             | CommandKind::TaskNote { .. }
             | CommandKind::AllowlistSiteAddTemporary { .. }
-            | CommandKind::SessionTemplate { .. }
             | CommandKind::BreakGlassTrigger
             | CommandKind::BreakGlassCancel
             | CommandKind::Diagnostics
@@ -378,69 +371,6 @@ fn execute_allowlist_site_add_temporary_command(
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())
-}
-
-fn execute_session_template_command(
-    command: SessionTemplateCommandKind,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let mut app = App::new();
-    app.record_command_usage_for_cli("session-template");
-    let (action, updated) = match command {
-        SessionTemplateCommandKind::Select { name } => (
-            "session-template",
-            app.select_session_template_for_cli(name.as_deref())?,
-        ),
-        SessionTemplateCommandKind::Apply { name } => (
-            "session-template-apply",
-            app.apply_session_template_for_cli(name.as_deref())?,
-        ),
-        SessionTemplateCommandKind::Create { name } => (
-            "session-template-create",
-            app.create_session_template_for_cli(&name)?,
-        ),
-        SessionTemplateCommandKind::Rename { name } => (
-            "session-template-rename",
-            app.rename_active_session_template_for_cli(&name)?,
-        ),
-        SessionTemplateCommandKind::Delete => (
-            "session-template-delete",
-            app.delete_active_session_template_for_cli()?,
-        ),
-    };
-    let payload = build_session_template_command_output(&app, action, updated);
-    match output {
-        OutputMode::Text => print_session_template_command_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn build_session_template_command_output(
-    app: &App,
-    action: &'static str,
-    updated: bool,
-) -> SessionTemplateCommandOutput {
-    let selected_session_template = app.active_session_template_name().map(str::to_string);
-    let mut templates = Vec::with_capacity(app.session_template_count());
-    templates.extend(app.session_templates.iter().map(|template| {
-        SessionTemplateSummaryOutput {
-            name: template.name.clone(),
-            active: selected_session_template
-                .as_deref()
-                .is_some_and(|selected| selected.eq_ignore_ascii_case(&template.name)),
-            task_label: template.task_label.clone(),
-            profile: profile_id(template.profile),
-            blocklist_profile: template.blocklist_profile.clone(),
-            schedule_windows_count: template.schedule.windows.len(),
-        }
-    }));
-    SessionTemplateCommandOutput {
-        action,
-        updated,
-        selected_session_template,
-        templates,
-    }
 }
 
 fn execute_profile_command(profile: Option<ProfileId>, output: OutputMode) -> CliExecuteResult<()> {

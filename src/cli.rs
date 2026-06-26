@@ -52,11 +52,11 @@ use output::{
     print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
     print_goal_command_output, print_history_dashboard_command_output, print_json,
     print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
-    print_session_metadata_command_output, print_session_template_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output,
-    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_session_metadata_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_task_goal_command_output, print_temporary_site_add_command_output,
+    print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
@@ -108,11 +108,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --blocklist-profile-create=PROFILE_NAME [--json]
   focustime --blocklist-profile-rename=PROFILE_NAME [--json]
   focustime --blocklist-profile-delete [--json]
-  focustime --session-template [TEMPLATE_NAME] [--json]
-  focustime --session-template-apply [TEMPLATE_NAME] [--json]
-  focustime --session-template-create=TEMPLATE_NAME [--json]
-  focustime --session-template-rename=TEMPLATE_NAME [--json]
-  focustime --session-template-delete [--json]
   focustime --history-dashboard [--json]
   focustime --blocklist-sites [--json]
   focustime --allowlist-sites [--json]
@@ -156,11 +151,6 @@ Options:
   --blocklist-profile-create  Create a blocklist profile and select it
   --blocklist-profile-rename  Rename the active blocklist profile
   --blocklist-profile-delete  Delete the active blocklist profile
-  --session-template         Show active session template, or set active template
-  --session-template-apply   Apply a template by name (or apply active template)
-  --session-template-create  Capture current task/profile/blocklist/schedule as a template
-  --session-template-rename  Rename the active session template
-  --session-template-delete  Delete the active session template
   --history-dashboard       Show the stable default KPI dashboard layout
   --blocklist-sites           List blocklist sites for the active blocklist profile
   --allowlist-sites           List allowlist sites for the active blocklist profile
@@ -307,9 +297,6 @@ pub(crate) enum CommandKind {
     AllowlistSiteAddTemporary {
         input: String,
     },
-    SessionTemplate {
-        command: SessionTemplateCommandKind,
-    },
     HistoryDashboard {
         command: HistoryDashboardCommandKind,
     },
@@ -364,11 +351,6 @@ enum PrimaryCommand {
     BlocklistProfileCreate(String),
     BlocklistProfileRename(String),
     BlocklistProfileDelete,
-    SessionTemplate(Option<String>),
-    SessionTemplateApply(Option<String>),
-    SessionTemplateCreate(String),
-    SessionTemplateRename(String),
-    SessionTemplateDelete,
     HistoryDashboard,
     BlocklistSites,
     AllowlistSites,
@@ -420,11 +402,6 @@ enum ParsedToken {
     BlocklistProfileCreate(String),
     BlocklistProfileRename(String),
     BlocklistProfileDelete,
-    SessionTemplate(Option<String>),
-    SessionTemplateApply(Option<String>),
-    SessionTemplateCreate(String),
-    SessionTemplateRename(String),
-    SessionTemplateDelete,
     HistoryDashboard,
     BlocklistSites,
     AllowlistSites,
@@ -478,15 +455,6 @@ pub(crate) enum BlocklistSiteCommandKind {
     Add { input: String },
     Edit { value: SiteEditValue },
     Delete { site: String },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum SessionTemplateCommandKind {
-    Select { name: Option<String> },
-    Apply { name: Option<String> },
-    Create { name: String },
-    Rename { name: String },
-    Delete,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -845,24 +813,6 @@ struct BlocklistProfileCommandOutput {
     updated: bool,
     selected_blocklist_profile: String,
     profiles: Vec<BlocklistProfileSummaryOutput>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct SessionTemplateSummaryOutput {
-    name: String,
-    active: bool,
-    task_label: String,
-    profile: &'static str,
-    blocklist_profile: String,
-    schedule_windows_count: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct SessionTemplateCommandOutput {
-    action: &'static str,
-    updated: bool,
-    selected_session_template: Option<String>,
-    templates: Vec<SessionTemplateSummaryOutput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

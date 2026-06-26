@@ -498,8 +498,6 @@ impl App {
             blocking_backend,
             selected_profile: self.selected_profile,
             custom_profile: Some(custom_profile),
-            session_templates: self.session_templates.clone(),
-            selected_session_template: self.selected_session_template_for_persistence(),
             selected_theme_preset: self.selected_theme_preset,
             notifications: self.notification_settings,
             auto_start: self.auto_start,
