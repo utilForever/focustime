@@ -15,7 +15,6 @@ pub(crate) enum ShortcutAction {
     OpenTaskSetup,
     OpenStatsHistory,
     OpenSetupDiagnostics,
-    TimerEditNote,
     BreakGlassOverride,
     BackSiteManager,
     ToggleSiteListMode,
@@ -72,7 +71,7 @@ enum ShortcutKey {
     Delete,
 }
 
-const TIMER_SCOPE_ACTIONS: [ShortcutAction; 10] = [
+const TIMER_SCOPE_ACTIONS: [ShortcutAction; 9] = [
     ShortcutAction::TimerTogglePause,
     ShortcutAction::TimerStopReset,
     ShortcutAction::TimerNextPhase,
@@ -81,7 +80,6 @@ const TIMER_SCOPE_ACTIONS: [ShortcutAction; 10] = [
     ShortcutAction::OpenTaskSetup,
     ShortcutAction::OpenStatsHistory,
     ShortcutAction::OpenSetupDiagnostics,
-    ShortcutAction::TimerEditNote,
     ShortcutAction::BreakGlassOverride,
 ];
 
@@ -163,12 +161,6 @@ const PROFILE_EDIT_NAV_ACTIONS: [NavigationAction; 7] = [
     NavigationAction::MoveUp,
     NavigationAction::MoveLeft,
     NavigationAction::MoveRight,
-    NavigationAction::Confirm,
-    NavigationAction::Cancel,
-    NavigationAction::Backspace,
-];
-
-const NOTE_EDIT_NAV_ACTIONS: [NavigationAction; 3] = [
     NavigationAction::Confirm,
     NavigationAction::Cancel,
     NavigationAction::Backspace,
@@ -291,14 +283,6 @@ impl ShortcutBindings {
         resolve_navigation_scope(
             &mut navigation_keys,
             &command_keys,
-            &TIMER_SCOPE_ACTIONS,
-            &NOTE_EDIT_NAV_ACTIONS,
-            "note editor",
-            &mut diagnostics,
-        );
-        resolve_navigation_scope(
-            &mut navigation_keys,
-            &command_keys,
             &STATS_HISTORY_SCOPE_ACTIONS,
             &[NavigationAction::Cancel],
             "history view",
@@ -333,7 +317,6 @@ impl ShortcutBindings {
             open_session_planner: key_token(self.key(ShortcutAction::OpenTaskSetup)),
             open_stats_history: key_token(self.key(ShortcutAction::OpenStatsHistory)),
             open_setup_diagnostics: key_token(self.key(ShortcutAction::OpenSetupDiagnostics)),
-            timer_edit_note: key_token(self.key(ShortcutAction::TimerEditNote)),
             break_glass_override: key_token(self.key(ShortcutAction::BreakGlassOverride)),
             back_site_manager: key_token(self.key(ShortcutAction::BackSiteManager)),
             toggle_site_list_mode: key_token(self.key(ShortcutAction::ToggleSiteListMode)),
@@ -523,7 +506,6 @@ fn requested_shortcut_char(config: &ShortcutConfig, action: ShortcutAction) -> c
         ShortcutAction::OpenTaskSetup => &config.open_session_planner,
         ShortcutAction::OpenStatsHistory => &config.open_stats_history,
         ShortcutAction::OpenSetupDiagnostics => &config.open_setup_diagnostics,
-        ShortcutAction::TimerEditNote => &config.timer_edit_note,
         ShortcutAction::BreakGlassOverride => &config.break_glass_override,
         ShortcutAction::BackSiteManager => &config.back_site_manager,
         ShortcutAction::ToggleSiteListMode => &config.toggle_site_list_mode,
@@ -582,7 +564,6 @@ fn default_shortcut_char(action: ShortcutAction) -> char {
         ShortcutAction::OpenTaskSetup => 't',
         ShortcutAction::OpenStatsHistory => 'h',
         ShortcutAction::OpenSetupDiagnostics => 'd',
-        ShortcutAction::TimerEditNote => 'm',
         ShortcutAction::BreakGlassOverride => 'u',
         ShortcutAction::BackSiteManager => 'b',
         ShortcutAction::ToggleSiteListMode => 'm',

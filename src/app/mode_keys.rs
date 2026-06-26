@@ -1,9 +1,9 @@
 use crate::app::{
-    App, AppMode, FocusStartOutcome, KeyCode, KeyEvent, KeyModifiers, NavigationAction,
-    PendingTimerAction, SessionInterruptionReason, ShortcutAction, TimerState,
+    App, AppMode, FocusStartOutcome, KeyCode, KeyEvent, NavigationAction, PendingTimerAction,
+    SessionInterruptionReason, ShortcutAction, TimerState,
 };
 
-const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 10] = [
+const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 9] = [
     ShortcutAction::TimerTogglePause,
     ShortcutAction::TimerStopReset,
     ShortcutAction::TimerNextPhase,
@@ -12,17 +12,11 @@ const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 10] = [
     ShortcutAction::OpenTaskSetup,
     ShortcutAction::OpenStatsHistory,
     ShortcutAction::OpenSetupDiagnostics,
-    ShortcutAction::TimerEditNote,
     ShortcutAction::BreakGlassOverride,
 ];
 
 impl App {
     pub(super) fn handle_key_timer(&mut self, key: KeyEvent) {
-        if self.timer_note_input_active {
-            self.handle_timer_note_input_key(key);
-            return;
-        }
-
         if self.handle_quit_key(&key, true) {
             return;
         }
@@ -57,7 +51,6 @@ impl App {
             ShortcutAction::OpenTaskSetup => self.open_session_planner(),
             ShortcutAction::OpenStatsHistory => self.open_stats_history(),
             ShortcutAction::OpenSetupDiagnostics => self.open_setup_diagnostics(),
-            ShortcutAction::TimerEditNote => self.start_timer_note_input(),
             ShortcutAction::BreakGlassOverride => self.handle_break_glass_key(),
             _ => {}
         }
@@ -124,80 +117,6 @@ impl App {
             TimerState::next_phase,
             Some(SessionInterruptionReason::ManualSkip),
         );
-    }
-
-    fn start_timer_note_input(&mut self) {
-        if !self.focus_session_active_for_current_state() {
-            self.phase_notification = Some(
-                "Mid-session notes are available only during active or paused focus.".to_string(),
-            );
-            return;
-        }
-
-        self.timer_note_input = self
-            .current_task_note()
-            .map(str::to_string)
-            .unwrap_or_default();
-        self.timer_note_input_active = true;
-        self.phase_notification = Some(format!(
-            "Editing session note: type text, then press {} to save.",
-            self.navigation_hint(NavigationAction::Confirm)
-        ));
-    }
-
-    fn handle_timer_note_input_key(&mut self, key: KeyEvent) {
-        match key.code {
-            _ if self.navigation_matches(NavigationAction::Confirm, &key) => {
-                self.commit_timer_note_input();
-            }
-            _ if self.navigation_matches(NavigationAction::Cancel, &key) => {
-                self.clear_timer_note_input();
-                self.phase_notification = Some("Session note edit canceled.".to_string());
-            }
-            _ if self.navigation_matches(NavigationAction::Backspace, &key) => {
-                self.timer_note_input.pop();
-            }
-            KeyCode::Char(c)
-                if !key
-                    .modifiers
-                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
-            {
-                self.timer_note_input.push(c);
-            }
-            _ => {}
-        }
-    }
-
-    fn commit_timer_note_input(&mut self) {
-        if !self.focus_session_active_for_current_state() {
-            self.clear_timer_note_input();
-            self.phase_notification =
-                Some("Session note save failed: focus is no longer active.".to_string());
-            return;
-        }
-
-        let note = if self.timer_note_input.trim().is_empty() {
-            self.active_focus_task_label
-                .clone()
-                .or_else(|| self.selected_task_label.clone())
-        } else {
-            Some(self.timer_note_input.trim().to_string())
-        };
-
-        self.clear_timer_note_input();
-        if let Some(note) = note {
-            self.active_focus_task_note = Some(note);
-            self.sync_recovery_snapshot();
-            self.phase_notification = Some("Session note updated.".to_string());
-        } else {
-            self.phase_notification =
-                Some("Session note save failed: no task selected.".to_string());
-        }
-    }
-
-    pub(super) fn clear_timer_note_input(&mut self) {
-        self.timer_note_input.clear();
-        self.timer_note_input_active = false;
     }
 
     pub(super) fn handle_key_stats_history(&mut self, key: KeyEvent) {

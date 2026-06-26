@@ -275,7 +275,6 @@ struct FocusInterruptionContext {
     timestamp_epoch_secs: u64,
     reason: SessionInterruptionReason,
     task_label: Option<String>,
-    task_note: Option<String>,
     remaining_secs: u64,
     profile: Option<ProfileId>,
 }
@@ -445,9 +444,6 @@ pub(crate) struct App {
     pub(crate) planner_input_mode: Option<PlannerInputMode>,
     pub(crate) planner_feedback: Option<PlannerFeedback>,
     active_focus_task_label: Option<String>,
-    active_focus_task_note: Option<String>,
-    timer_note_input: String,
-    timer_note_input_active: bool,
     active_focus_profile: Option<ProfileId>,
     site_list_mode: SiteListMode,
     /// Index of the highlighted site in the SiteManager list.
@@ -641,9 +637,6 @@ impl App {
             planner_input_mode: None,
             planner_feedback: None,
             active_focus_task_label: None,
-            active_focus_task_note: None,
-            timer_note_input: String::new(),
-            timer_note_input_active: false,
             active_focus_profile: None,
             site_list_mode: SiteListMode::Blocklist,
             selected_site: 0,
@@ -793,24 +786,6 @@ impl App {
         }
     }
 
-    pub(crate) fn current_task_note(&self) -> Option<&str> {
-        if !self.focus_session_active_for_current_state() {
-            return None;
-        }
-        self.active_focus_task_note
-            .as_deref()
-            .or(self.active_focus_task_label.as_deref())
-            .or(self.selected_task_label.as_deref())
-    }
-
-    pub(crate) fn can_edit_session_note(&self) -> bool {
-        self.focus_session_active_for_current_state()
-    }
-
-    pub(crate) fn timer_note_input_active(&self) -> bool {
-        self.timer_note_input_active
-    }
-
     pub(super) fn shortcut_matches(&self, action: ShortcutAction, key: &KeyEvent) -> bool {
         self.shortcuts.matches(action, key)
     }
@@ -833,10 +808,6 @@ impl App {
 
     pub(crate) fn navigation_label(&self, action: NavigationAction) -> String {
         self.shortcuts.navigation_label(action)
-    }
-
-    pub(crate) fn timer_note_input_value(&self) -> &str {
-        &self.timer_note_input
     }
 
     pub(crate) fn profile_values(&self, profile: ProfileId) -> (u64, u64, u64, u32) {
@@ -1190,17 +1161,6 @@ impl App {
     }
 
     pub(crate) fn handle_paste(&mut self, text: String) {
-        if self.mode == AppMode::Timer && self.timer_note_input_active {
-            let sanitized = normalize_timer_note_paste(&text);
-            if !sanitized.is_empty() {
-                if !self.timer_note_input.is_empty() {
-                    self.timer_note_input.push(' ');
-                }
-                self.timer_note_input.push_str(&sanitized);
-            }
-            return;
-        }
-
         if self.mode != AppMode::SiteManager {
             return;
         }
@@ -1335,22 +1295,6 @@ fn adjust_duration_minutes(value: &mut u64, increase: bool) {
             .saturating_sub(CUSTOM_DURATION_STEP_SECS)
             .max(CUSTOM_DURATION_STEP_SECS);
     }
-}
-
-fn normalize_timer_note_paste(input: &str) -> String {
-    input
-        .chars()
-        .map(|c| {
-            if c == '\r' || c == '\n' || c.is_control() {
-                ' '
-            } else {
-                c
-            }
-        })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 fn adjust_daily_goal_minutes(value: &mut u64, increase: bool) {

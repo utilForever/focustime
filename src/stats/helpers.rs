@@ -132,11 +132,6 @@ pub(super) fn normalize_usage_counts(input: BTreeMap<String, u64>) -> BTreeMap<S
     normalized
 }
 
-pub(super) fn normalize_session_metadata_text(input: &str) -> Option<String> {
-    let trimmed = input.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_string())
-}
-
 pub(super) fn current_goal_streak(
     completed_days: &BTreeSet<chrono::NaiveDate>,
     today: chrono::NaiveDate,

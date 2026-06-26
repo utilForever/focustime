@@ -145,21 +145,6 @@ impl App {
         self.selected_task_label.clone()
     }
 
-    pub(crate) fn task_note_for_cli(&self) -> Option<String> {
-        if self.focus_session_active_for_current_state() {
-            return self.active_focus_task_note.clone();
-        }
-        None
-    }
-
-    pub(crate) fn set_task_note_for_cli(&mut self, value: &str) -> AppResult<()> {
-        self.ensure_focus_active_for_cli_metadata_update("--task-note")?;
-        let value = self.resolve_cli_metadata_value(value)?;
-        self.active_focus_task_note = Some(value);
-        self.sync_recovery_snapshot();
-        Ok(())
-    }
-
     pub(crate) fn timer_state_for_cli(&self) -> (TimerPhase, TimerStatus, u64, u32) {
         (
             self.timer.phase,
@@ -167,20 +152,5 @@ impl App {
             self.timer.remaining_secs,
             self.timer.pomodoros_completed,
         )
-    }
-
-    fn ensure_focus_active_for_cli_metadata_update(&self, command: &'static str) -> AppResult<()> {
-        if self.focus_session_active_for_current_state() {
-            Ok(())
-        } else {
-            Err(AppError::SessionMetadataInactive { command })
-        }
-    }
-
-    fn resolve_cli_metadata_value(&self, value: &str) -> AppResult<String> {
-        normalize_task_label(value)
-            .or_else(|| self.active_focus_task_label.clone())
-            .or_else(|| self.selected_task_label.clone())
-            .ok_or(AppError::SessionMetadataMissingTaskLabel)
     }
 }

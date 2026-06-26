@@ -323,11 +323,6 @@ impl App {
         } else {
             None
         };
-        self.active_focus_task_note = if focus_active {
-            reconciled_snapshot.normalized_task_note()
-        } else {
-            None
-        };
         self.active_focus_profile = if focus_active {
             Some(self.selected_profile)
         } else {
@@ -346,16 +341,9 @@ impl App {
         } else {
             self.selected_task_label.clone()
         };
-        let recovery_task_note = if focus_active {
-            self.active_focus_task_note.clone()
-        } else {
-            None
-        };
-
         let snapshot = InProgressSessionSnapshot::from_timer_state_with_metadata(
             &self.timer,
             recovery_task_label,
-            recovery_task_note,
             self.selected_profile,
         );
 

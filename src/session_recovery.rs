@@ -89,8 +89,6 @@ pub(crate) struct InProgressSessionSnapshot {
     #[serde(default)]
     pub(crate) pomodoros_completed: u32,
     pub(crate) selected_task_label: Option<String>,
-    #[serde(default)]
-    pub(crate) task_note: Option<String>,
     pub(crate) selected_profile: ProfileId,
     #[serde(default)]
     pub(crate) captured_at_epoch_secs: Option<i64>,
@@ -177,7 +175,6 @@ impl InProgressSessionSnapshot {
     pub(crate) fn from_timer_state_with_metadata(
         timer: &TimerState,
         selected_task_label: Option<String>,
-        task_note: Option<String>,
         selected_profile: ProfileId,
     ) -> Option<Self> {
         if timer.status == TimerStatus::Idle {
@@ -187,7 +184,6 @@ impl InProgressSessionSnapshot {
         let selected_task_label = selected_task_label
             .as_deref()
             .and_then(normalize_task_label)?;
-        let task_note = task_note.as_deref().and_then(normalize_metadata_text);
 
         Some(Self {
             phase: RecoveryTimerPhase::from_timer_phase(timer.phase),
@@ -195,7 +191,6 @@ impl InProgressSessionSnapshot {
             remaining_secs: timer.remaining_secs,
             pomodoros_completed: timer.pomodoros_completed,
             selected_task_label: Some(selected_task_label),
-            task_note,
             selected_profile,
             captured_at_epoch_secs: current_epoch_secs(),
         })
@@ -213,11 +208,6 @@ impl InProgressSessionSnapshot {
         self.selected_task_label
             .as_deref()
             .and_then(normalize_task_label)
-    }
-
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn normalized_task_note(&self) -> Option<String> {
-        self.task_note.as_deref().and_then(normalize_metadata_text)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
@@ -313,7 +303,6 @@ impl InProgressSessionSnapshot {
         }
 
         reconciled.status = RecoveryTimerStatus::Idle;
-        reconciled.task_note = None;
         reconciled
     }
 }
@@ -589,15 +578,6 @@ fn next_phase_after_focus(timer: &TimerState, completed_focus_count: u32) -> Tim
     }
 }
 
-fn normalize_metadata_text(value: &str) -> Option<String> {
-    let normalized = value.trim();
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized.to_string())
-    }
-}
-
 fn current_epoch_secs() -> Option<i64> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -707,7 +687,6 @@ mod tests {
             remaining_secs: 10,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: None,
         };
@@ -724,7 +703,6 @@ mod tests {
             remaining_secs: 0,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: None,
         };
@@ -741,7 +719,6 @@ mod tests {
             remaining_secs: 31,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: None,
         };
@@ -758,7 +735,6 @@ mod tests {
             remaining_secs: 50,
             pomodoros_completed: 0,
             selected_task_label: None,
-            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: None,
         };
@@ -775,7 +751,6 @@ mod tests {
             remaining_secs: 90,
             pomodoros_completed: 2,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::DeepWork,
             captured_at_epoch_secs: None,
         };
@@ -784,20 +759,21 @@ mod tests {
     }
 
     #[test]
-    fn metadata_remains_empty_for_legacy_snapshots_without_backfill() {
+    fn legacy_task_note_field_is_ignored() {
         let timer = TimerState::with_profile(60, 30, 90, 4);
-        let snapshot = InProgressSessionSnapshot {
-            phase: RecoveryTimerPhase::Focus,
-            status: RecoveryTimerStatus::Running,
-            remaining_secs: 60,
-            pomodoros_completed: 1,
-            selected_task_label: Some("Docs".to_string()),
-            task_note: None,
-            selected_profile: ProfileId::Classic,
-            captured_at_epoch_secs: None,
-        };
+        let snapshot: InProgressSessionSnapshot = toml::from_str(
+            r#"
+phase = "focus"
+status = "running"
+remaining_secs = 60
+pomodoros_completed = 1
+selected_task_label = "Docs"
+task_note = "legacy note"
+selected_profile = "classic"
+"#,
+        )
+        .expect("legacy payload should deserialize");
 
-        assert_eq!(snapshot.normalized_task_note(), None);
         assert!(snapshot.validate_for_timer(&timer).is_ok());
     }
 
@@ -810,7 +786,6 @@ mod tests {
             remaining_secs: 50,
             pomodoros_completed: 1,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("Section 1".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
         };
@@ -821,7 +796,7 @@ mod tests {
         assert_eq!(reconciled.status, RecoveryTimerStatus::Running);
         assert_eq!(reconciled.remaining_secs, 30);
         assert_eq!(reconciled.pomodoros_completed, 1);
-        assert_eq!(reconciled.task_note.as_deref(), Some("Section 1"));
+        assert_eq!(reconciled.selected_task_label.as_deref(), Some("Docs"));
     }
 
     #[test]
@@ -833,7 +808,6 @@ mod tests {
             remaining_secs: 10,
             pomodoros_completed: 1,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("Section 1".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
         };
@@ -844,7 +818,6 @@ mod tests {
         assert_eq!(reconciled.status, RecoveryTimerStatus::Idle);
         assert_eq!(reconciled.remaining_secs, 90);
         assert_eq!(reconciled.pomodoros_completed, 2);
-        assert!(reconciled.task_note.is_none());
         assert_eq!(reconciled.selected_task_label.as_deref(), Some("Docs"));
     }
 
@@ -857,7 +830,6 @@ mod tests {
             remaining_secs: 0,
             pomodoros_completed: 1,
             selected_task_label: Some("Docs".to_string()),
-            task_note: None,
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
         };
@@ -880,7 +852,6 @@ mod tests {
             remaining_secs: 0,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
         };
@@ -897,7 +868,6 @@ mod tests {
             remaining_secs: 50,
             pomodoros_completed: 1,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("Section 1".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
         };
@@ -934,7 +904,6 @@ selected_profile = "classic"
             remaining_secs: 120,
             pomodoros_completed: 2,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("API section".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(1_700_000_000),
         };
@@ -957,7 +926,6 @@ selected_profile = "classic"
             remaining_secs: 120,
             pomodoros_completed: 2,
             selected_task_label: Some("Docs".to_string()),
-            task_note: Some("API section".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(1_700_000_000),
         };

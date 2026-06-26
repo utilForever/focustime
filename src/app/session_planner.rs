@@ -353,13 +353,6 @@ impl App {
             .is_some_and(|active| active.eq_ignore_ascii_case(&current_label))
         {
             self.active_focus_task_label = Some(label.clone());
-            let should_sync_note_to_label = match self.active_focus_task_note.as_deref() {
-                None => true,
-                Some(note) => note.eq_ignore_ascii_case(&current_label),
-            };
-            if should_sync_note_to_label {
-                self.active_focus_task_note = Some(label.clone());
-            }
         }
         self.stats.rename_task_goal_target(&current_label, &label);
         if let Some(index) = self.planner_display_index_for_label(&label) {

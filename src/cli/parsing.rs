@@ -44,7 +44,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Next
             | ParsedToken::Task(_)
             | ParsedToken::TaskGoal { .. }
-            | ParsedToken::TaskNote(_)
             | ParsedToken::Status
             | ParsedToken::Watch(_)
             | ParsedToken::Profile(_)
@@ -133,6 +132,10 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
                 replacement: "Use `focustime --diagnostics` for setup checks, config health, and migration guidance.",
             })
         }
+        "--task-note" => Some(RemovedOptionGuidance {
+            summary: "Task note commands were removed.",
+            replacement: "Use `--task` to select the active task label; task labels are the supported session context.",
+        }),
         _ => None,
     }
 }
@@ -158,9 +161,6 @@ pub(super) fn parse_primary_command(
                     goal: *goal,
                 },
             )?,
-            ParsedToken::TaskNote(value) => {
-                set_primary_command(&mut primary, PrimaryCommand::TaskNote(value.clone()))?
-            }
             ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
             ParsedToken::Watch(_) => {}
             ParsedToken::Profile(profile) => {
@@ -382,10 +382,6 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::TaskGoal { label, goal },
             output,
         })),
-        Some(PrimaryCommand::TaskNote(value)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::TaskNote { value },
-            output,
-        })),
         Some(PrimaryCommand::Status) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Status {
                 watch_interval_secs,
@@ -528,7 +524,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Next => "--next",
         PrimaryCommand::Task(_) => "--task",
         PrimaryCommand::TaskGoal { .. } => "--task-goal",
-        PrimaryCommand::TaskNote(_) => "--task-note",
         PrimaryCommand::Profile(_) => "--profile",
         PrimaryCommand::Theme(_) => "--theme",
         PrimaryCommand::Goal(_) => "--goal",
