@@ -201,35 +201,6 @@ fn task_planner_label_states_normalize_and_drop_archived_selection() {
 }
 
 #[test]
-fn setting_task_goal_target_does_not_reselect_archived_label() {
-    let mut stats = FocusStats::default();
-    stats.update_task_planner_state_with_label_states(
-        vec!["Docs".to_string(), "Review".to_string()],
-        Some("Review".to_string()),
-        Vec::new(),
-        vec!["Docs".to_string()],
-    );
-
-    let target = DailyGoalSnapshot {
-        minutes: 30,
-        pomodoros: 1,
-    };
-    let canonical = stats
-        .set_task_goal_target("Docs", target)
-        .expect("task goal should be set");
-
-    assert_eq!(canonical, "Docs");
-    assert_eq!(stats.task_planner_state().1, Some("Review".to_string()));
-    assert_eq!(
-        stats
-            .task_goal_progress_for_label("Docs")
-            .expect("progress should be available")
-            .target,
-        target
-    );
-}
-
-#[test]
 fn recent_task_labels_returns_newest_first_unique_labels() {
     let mut stats = FocusStats::default();
     let goal = DailyGoalSnapshot {
@@ -301,83 +272,6 @@ fn task_totals_aggregate_focus_sessions_by_label() {
     assert_eq!(totals[1].task_label, "Project B");
     assert_eq!(totals[1].pomodoros_completed, 1);
     assert_eq!(totals[1].focused_minutes(), 40);
-}
-
-#[test]
-fn task_goal_progress_for_label_uses_cumulative_task_totals() {
-    let mut stats = FocusStats::default();
-    let daily_goal = DailyGoalSnapshot {
-        minutes: 25,
-        pomodoros: 1,
-    };
-    stats.record_completed_pomodoro_with_task(
-        "2026-04-01",
-        daily_goal,
-        Some("Docs"),
-        30 * 60,
-        None,
-    );
-    stats.record_completed_pomodoro_with_task(
-        "2026-04-02",
-        daily_goal,
-        Some("docs"),
-        30 * 60,
-        None,
-    );
-
-    let task_goal = DailyGoalSnapshot {
-        minutes: 60,
-        pomodoros: 2,
-    };
-    let canonical = stats.set_task_goal_target("docs", task_goal).unwrap();
-    assert_eq!(canonical, "Docs");
-
-    let progress = stats.task_goal_progress_for_label("DOCS").unwrap();
-    assert_eq!(progress.task_label, "Docs");
-    assert_eq!(progress.target, task_goal);
-    assert_eq!(progress.focused_minutes(), 60);
-    assert_eq!(progress.pomodoros_completed, 2);
-    assert!(progress.met);
-}
-
-#[test]
-fn task_goal_progress_lists_configured_targets_without_history() {
-    let mut stats = FocusStats::default();
-    let task_goal = DailyGoalSnapshot {
-        minutes: 120,
-        pomodoros: 4,
-    };
-    stats
-        .set_task_goal_target("Project A", task_goal)
-        .expect("task goal should be set");
-
-    let progress = stats.task_goal_progress(5);
-    assert_eq!(progress.len(), 1);
-    assert_eq!(progress[0].task_label, "Project A");
-    assert_eq!(progress[0].target, task_goal);
-    assert_eq!(progress[0].focused_minutes(), 0);
-    assert_eq!(progress[0].pomodoros_completed, 0);
-    assert!(!progress[0].met);
-}
-
-#[test]
-fn renaming_and_removing_task_goals_updates_lookup() {
-    let mut stats = FocusStats::default();
-    let task_goal = DailyGoalSnapshot {
-        minutes: 90,
-        pomodoros: 3,
-    };
-    stats
-        .set_task_goal_target("Docs", task_goal)
-        .expect("task goal should be set");
-    assert!(stats.rename_task_goal_target("Docs", "Writing"));
-
-    let renamed = stats.task_goal_progress_for_label("Writing").unwrap();
-    assert_eq!(renamed.target, task_goal);
-    assert!(stats.remove_task_goal_target("Writing"));
-
-    let removed = stats.task_goal_progress_for_label("Writing").unwrap();
-    assert_eq!(removed.target, DailyGoalSnapshot::default());
 }
 
 #[test]
@@ -1076,27 +970,6 @@ fn persisted_stats_round_trip_preserves_weekly_and_monthly_goal_snapshots() {
         restored.monthly_goal_snapshot_for_day(day),
         Some(monthly_goal)
     );
-}
-
-#[test]
-fn persisted_stats_round_trip_preserves_task_goal_targets() {
-    let mut original = FocusStats::default();
-    let task_goal = DailyGoalSnapshot {
-        minutes: 180,
-        pomodoros: 6,
-    };
-    original
-        .set_task_goal_target("Project A", task_goal)
-        .expect("task goal should be set");
-
-    let toml_str = toml::to_string_pretty(&original.to_persisted()).unwrap();
-    let restored = FocusStats::try_from_toml(&toml_str).unwrap();
-    let progress = restored
-        .task_goal_progress_for_label("project a")
-        .expect("task goal progress should exist");
-
-    assert_eq!(progress.task_label, "Project A");
-    assert_eq!(progress.target, task_goal);
 }
 
 #[test]

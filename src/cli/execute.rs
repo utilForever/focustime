@@ -8,18 +8,17 @@ use crate::app::App;
 use crate::error::UserMessage;
 
 use crate::cli::{
-    AppConfig, BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig,
-    DailyGoalSnapshot, FocusStats, GoalCarryCommandOutput, GoalCommandOutput, MonthlyGoalConfig,
-    OutputMode, ProfileId, ProfileOutput, ProfileView, RecurringScheduleConfig,
-    ScheduleCommandOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
-    TaskGoalOutput, TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput,
-    ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput, WeeklyGoalConfig,
-    available_theme_preset_views, build_schedule_inspection_output, build_task_goal_output,
-    print_break_glass_command_output, print_goal_carry_command_output, print_goal_command_output,
-    print_json, print_profile_output, print_schedule_command_output, print_strict_command_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output, profile_id, profile_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    AppConfig, BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig, FocusStats,
+    GoalCarryCommandOutput, GoalCommandOutput, MonthlyGoalConfig, OutputMode, ProfileId,
+    ProfileOutput, ProfileView, RecurringScheduleConfig, ScheduleCommandOutput,
+    StrictCommandOutput, TaskCommandOutput, TemporaryAllowlistStatusOutput,
+    TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
+    TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
+    build_schedule_inspection_output, print_break_glass_command_output,
+    print_goal_carry_command_output, print_goal_command_output, print_json, print_profile_output,
+    print_schedule_command_output, print_strict_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    profile_id, profile_view, theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 mod blocklists;
@@ -63,9 +62,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Stop => execute_stop_command(cli_command.output),
         CommandKind::Next => execute_next_command(cli_command.output),
         CommandKind::Task { label } => execute_task_command(label, cli_command.output),
-        CommandKind::TaskGoal { label, goal } => {
-            execute_task_goal_command(label, goal, cli_command.output)
-        }
         CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
         CommandKind::Theme { preset } => execute_theme_command(preset, cli_command.output),
         CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
@@ -128,7 +124,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Stop => Some("stop"),
         CommandKind::Next => Some("next"),
         CommandKind::Task { .. } => Some("task"),
-        CommandKind::TaskGoal { .. } => Some("task-goal"),
         CommandKind::Profile { .. } => Some("profile"),
         CommandKind::Theme { .. } => Some("theme"),
         CommandKind::Goal { .. } => Some("goal"),
@@ -247,61 +242,6 @@ fn execute_task_command(label: String, output: OutputMode) -> CliExecuteResult<(
             }
             print_timer_state_output(&payload.timer);
         }
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn execute_task_goal_command(
-    label: Option<String>,
-    goal: Option<DailyGoalConfig>,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let config = AppConfig::load().normalized();
-    let mut stats = FocusStats::load_with_options(stats_load_options(&config))?;
-    let selected_task_label = stats.task_planner_state().1;
-    let requested_label = label.or(selected_task_label).ok_or_else(|| {
-        "No task label selected. Use `--task LABEL` first or pass `--task-goal LABEL`.".to_string()
-    })?;
-
-    let mut updated = false;
-    let task_label = if let Some(goal) = goal {
-        let target = DailyGoalSnapshot {
-            minutes: goal.minutes,
-            pomodoros: goal.pomodoros,
-        };
-        let canonical = stats.set_task_goal_target(&requested_label, target)?;
-        stats
-            .save_with_options(stats_save_options(&config))
-            .map_err(|error| format!("Failed to save task goals: {error}"))?;
-        updated = true;
-        canonical
-    } else {
-        requested_label
-    };
-
-    let TaskGoalOutput {
-        task_label,
-        configured,
-        minutes_target,
-        pomodoros_target,
-        focused_minutes,
-        pomodoros_completed,
-        met,
-    } = build_task_goal_output(&stats, &task_label);
-    let payload = TaskGoalCommandOutput {
-        updated,
-        task_label,
-        configured,
-        minutes_target,
-        pomodoros_target,
-        focused_minutes,
-        pomodoros_completed,
-        met,
-    };
-
-    match output {
-        OutputMode::Text => print_task_goal_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

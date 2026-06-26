@@ -29,20 +29,6 @@ impl FocusStats {
         recent
     }
 
-    pub(super) fn task_totals_by_key(&self) -> BTreeMap<String, (u32, u64)> {
-        let mut by_task: BTreeMap<String, (u32, u64)> = BTreeMap::new();
-        for session in &self.focus_sessions {
-            let Some(task_label) = normalize_task_label(&session.task_label) else {
-                continue;
-            };
-            let key = task_label.to_ascii_lowercase();
-            let entry = by_task.entry(key).or_insert((0, 0));
-            entry.0 = entry.0.saturating_add(1);
-            entry.1 = entry.1.saturating_add(session.focused_seconds);
-        }
-        by_task
-    }
-
     #[cfg(test)]
     #[allow(dead_code)]
     pub(crate) fn recent_daily(&self, limit: usize) -> Vec<(String, DailyStats)> {

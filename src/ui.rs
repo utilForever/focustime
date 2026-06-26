@@ -23,7 +23,6 @@ mod history;
 use history::{
     format_history_focus_risk_line, format_history_goal_streak_line,
     format_history_interruption_line, format_history_weekly_allocation_line, format_month_label,
-    format_task_goal_progress_summary,
 };
 use history::{readable_goal_streak_text, render_stats_history};
 mod profile_manager;

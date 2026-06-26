@@ -258,43 +258,6 @@ fn weekly_allocation_lines_show_today_targets_when_weekly_goal_is_configured() {
 }
 
 #[test]
-fn task_goal_progress_summary_formats_state_and_metrics() {
-    let configured = crate::stats::TaskGoalProgress {
-        task_label: "Docs".to_string(),
-        target: crate::stats::DailyGoalSnapshot {
-            minutes: 120,
-            pomodoros: 4,
-        },
-        pomodoros_completed: 2,
-        focused_seconds: 60 * 60,
-        met: false,
-    };
-    let configured_text = format_task_goal_progress_summary(&configured);
-    assert_eq!(configured_text, "g:in");
-
-    let off = crate::stats::TaskGoalProgress {
-        task_label: "Docs".to_string(),
-        target: crate::stats::DailyGoalSnapshot::default(),
-        pomodoros_completed: 0,
-        focused_seconds: 0,
-        met: false,
-    };
-    assert_eq!(format_task_goal_progress_summary(&off), "g:off");
-
-    let met = crate::stats::TaskGoalProgress {
-        task_label: "Docs".to_string(),
-        target: crate::stats::DailyGoalSnapshot {
-            minutes: 60,
-            pomodoros: 2,
-        },
-        pomodoros_completed: 2,
-        focused_seconds: 60 * 60,
-        met: true,
-    };
-    assert_eq!(format_task_goal_progress_summary(&met), "g:met");
-}
-
-#[test]
 fn timer_primary_hint_omits_schedule_delay_shortcut() {
     let app = App::default();
     assert!(!timer_primary_hint(&app).contains("Delay 10m"));

@@ -19,10 +19,9 @@ use helpers::create_unique_temp_path;
 use helpers::{
     average_two_percentages, backfilled_time_of_day_bucket, best_goal_streak,
     consistency_score_from_active_days, current_goal_streak, daily_has_activity, days_in_month,
-    format_week_label, month_key_for_day, normalize_task_goal_targets,
-    normalize_task_planner_state, normalize_usage_counts, parse_week_label,
-    percentage_round_nearest, planner_state_labels_for_keys, profile_bucket_for, week_key_for_day,
-    weekly_completion_score_pct, write_atomic_bytes,
+    format_week_label, month_key_for_day, normalize_task_planner_state, normalize_usage_counts,
+    parse_week_label, percentage_round_nearest, planner_state_labels_for_keys, profile_bucket_for,
+    week_key_for_day, weekly_completion_score_pct, write_atomic_bytes,
 };
 mod analytics;
 mod export;
@@ -724,21 +723,6 @@ impl TaskTrend {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct TaskGoalProgress {
-    pub(crate) task_label: String,
-    pub(crate) target: DailyGoalSnapshot,
-    pub(crate) pomodoros_completed: u32,
-    pub(crate) focused_seconds: u64,
-    pub(crate) met: bool,
-}
-
-impl TaskGoalProgress {
-    pub(crate) fn focused_minutes(&self) -> u64 {
-        self.focused_seconds / 60
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TaskTrendWindow {
     recent_start: chrono::NaiveDate,
@@ -1096,8 +1080,6 @@ struct PersistedStats {
     #[serde(default)]
     break_glass_overrides: Vec<BreakGlassOverrideEvent>,
     #[serde(default)]
-    task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
-    #[serde(default)]
     command_usage_counts: BTreeMap<String, u64>,
     #[serde(default)]
     screen_usage_counts: BTreeMap<String, u64>,
@@ -1116,7 +1098,6 @@ pub(crate) struct FocusStats {
     focus_sessions: Vec<FocusSessionRecord>,
     session_interruptions: Vec<SessionInterruptionEvent>,
     break_glass_overrides: Vec<BreakGlassOverrideEvent>,
-    task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
     command_usage_counts: BTreeMap<String, u64>,
     screen_usage_counts: BTreeMap<String, u64>,
 }

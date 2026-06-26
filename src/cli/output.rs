@@ -22,7 +22,7 @@ pub(super) use status::{
 use crate::cli::{
     BackupOutput, BlocklistProfileConfig, ExportOutput, GoalCarryCommandOutput, GoalCommandOutput,
     ProfileOutput, RestoreOutput, ScheduleCommandOutput, Serialize, StrictCommandOutput,
-    TaskGoalCommandOutput, ThemeCommandOutput, Write, io,
+    ThemeCommandOutput, Write, io,
 };
 use chrono::{Local, TimeZone};
 
@@ -116,27 +116,6 @@ pub(super) fn print_goal_command_output(label: &str, payload: &GoalCommandOutput
     } else {
         println!("{label} goal: off");
     }
-}
-
-pub(super) fn print_task_goal_command_output(payload: &TaskGoalCommandOutput) {
-    if payload.updated {
-        println!("Task goal updated for `{}`.", payload.task_label);
-    }
-    if payload.configured {
-        println!(
-            "Task goal (`{}`): {} min, {} pomodoros ({})",
-            payload.task_label,
-            payload.minutes_target,
-            payload.pomodoros_target,
-            if payload.met { "met" } else { "in progress" }
-        );
-    } else {
-        println!("Task goal (`{}`): off", payload.task_label);
-    }
-    println!(
-        "Task progress (`{}`): {} min, {} pomodoros",
-        payload.task_label, payload.focused_minutes, payload.pomodoros_completed
-    );
 }
 
 pub(super) fn print_goal_carry_command_output(label: &str, payload: &GoalCarryCommandOutput) {

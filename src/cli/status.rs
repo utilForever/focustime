@@ -3,7 +3,7 @@ use crate::cli::{
     AppConfig, CustomProfileConfig, DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL,
     DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS, DailyGoalSnapshot, Datelike,
     FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput, NaiveDate, ProfileId, ProfileSpec,
-    ProfileView, SessionOutput, StatsRetentionStatusOutput, StatusOutput, TaskGoalOutput,
+    ProfileView, SessionOutput, StatsRetentionStatusOutput, StatusOutput,
     TemporaryOverrideStatusOutput, ThemePreset, ThemePresetView, TimerPhase, TimerStatus,
     TodayOutput, WeeklyAllocationDayOutput, WeeklyAllocationOutput, carry_over_goal_target,
     current_day_key, effective_blocked_sites_for_profile, session_recovery,
@@ -26,9 +26,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let goal_snapshot = effective_daily_goal_snapshot_for_day(config, stats, day_date);
     let weekly_goal_snapshot = effective_weekly_goal_snapshot(config, stats, day_date);
     let monthly_goal_snapshot = effective_monthly_goal_snapshot(config, stats, day_date);
-    let selected_task_goal = selected_task_label
-        .as_ref()
-        .map(|label| build_task_goal_output(stats, label));
     let active_sites_count = config
         .blocklist_profiles
         .iter()
@@ -114,7 +111,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
                 .is_met_by_totals(month.focused_minutes(), month.pomodoros_completed),
             carry_over: config.goal_carry_over.monthly,
         },
-        selected_task_goal,
         session: SessionOutput {
             focused_minutes: session.focused_minutes,
             pomodoros_completed: session.pomodoros_completed,
@@ -354,32 +350,6 @@ fn effective_daily_goal_snapshot_for_day(
         })
     });
     carry_over_goal_target(base, config.goal_carry_over.daily, previous)
-}
-
-pub(super) fn build_task_goal_output(stats: &FocusStats, label: &str) -> TaskGoalOutput {
-    match stats.task_goal_progress_for_label(label) {
-        Some(progress) => {
-            let focused_minutes = progress.focused_minutes();
-            TaskGoalOutput {
-                task_label: progress.task_label,
-                configured: progress.target.has_any_target(),
-                minutes_target: progress.target.minutes,
-                pomodoros_target: progress.target.pomodoros,
-                focused_minutes,
-                pomodoros_completed: progress.pomodoros_completed,
-                met: progress.met,
-            }
-        }
-        None => TaskGoalOutput {
-            task_label: label.to_string(),
-            configured: false,
-            minutes_target: 0,
-            pomodoros_target: 0,
-            focused_minutes: 0,
-            pomodoros_completed: 0,
-            met: false,
-        },
-    }
 }
 
 fn effective_weekly_goal_snapshot(

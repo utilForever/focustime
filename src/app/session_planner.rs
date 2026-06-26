@@ -306,29 +306,6 @@ impl App {
             return;
         }
 
-        let source_goal_target = self
-            .stats
-            .task_goal_progress_for_label(&current_label)
-            .map(|progress| progress.target)
-            .unwrap_or_default();
-        let destination_goal_target = self
-            .stats
-            .task_goal_progress_for_label(&label)
-            .map(|progress| progress.target)
-            .unwrap_or_default();
-        if !current_label.eq_ignore_ascii_case(&label)
-            && source_goal_target.has_any_target()
-            && destination_goal_target.has_any_target()
-        {
-            self.set_planner_feedback(
-                PlannerFeedbackLevel::Warning,
-                format!(
-                    "Cannot rename `{current_label}` -> `{label}`: destination task goal already exists"
-                ),
-            );
-            return;
-        }
-
         if let Some(target) = self.task_labels.get_mut(current_index) {
             *target = label.clone();
         }
@@ -354,7 +331,6 @@ impl App {
         {
             self.active_focus_task_label = Some(label.clone());
         }
-        self.stats.rename_task_goal_target(&current_label, &label);
         if let Some(index) = self.planner_display_index_for_label(&label) {
             self.planner_selection_index = index;
         }
@@ -387,7 +363,6 @@ impl App {
         let removed = self.task_labels.remove(removed_index);
         self.task_label_favorites.remove(&task_label_key(&removed));
         self.task_label_archived.remove(&task_label_key(&removed));
-        self.stats.remove_task_goal_target(&removed);
 
         let removed_was_selected = self
             .selected_task_label
