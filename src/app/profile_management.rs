@@ -411,9 +411,8 @@ impl App {
     }
 
     pub(super) fn sync_wakatime_metadata_to_tracker(&mut self) {
-        let (project, language) = self
-            .wakatime_metadata
-            .resolved_project_language_for_task_label(self.current_task_label());
+        let project = self.wakatime_metadata.project.clone();
+        let language = self.wakatime_metadata.language.clone();
         self.integrations
             .set_wakatime_metadata(WakatimeHeartbeatMetadata { project, language });
     }
