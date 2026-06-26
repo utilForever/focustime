@@ -151,15 +151,6 @@ cargo run -- --blocklist-profile-create Study
 cargo run -- --blocklist-profile-rename "Deep Work"
 cargo run -- --blocklist-profile-delete --json
 
-# Manage session templates (task/profile/blocklist/schedule bundles)
-cargo run -- --session-template
-cargo run -- --session-template "Deep Flow"
-cargo run -- --session-template-create "Deep Flow"
-cargo run -- --session-template-rename "Sprint Focus"
-cargo run -- --session-template-apply
-cargo run -- --session-template-apply "Deep Flow"
-cargo run -- --session-template-delete --json
-
 # Inspect the stable Focus History KPI dashboard layout
 cargo run -- --history-dashboard
 cargo run -- --history-dashboard --json
@@ -268,7 +259,7 @@ Milestone policy:
 - **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
 - **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config health and migration guidance are included in the canonical diagnostics payload.
-- **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows, supported timer controls, and session templates remain the supported behavior.
+- **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows and supported timer controls remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export artifact workflows share target-directory handling.
 - **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency ownership stays documented, and WakaTime integration uses explicit supported runtime calls.
@@ -291,7 +282,7 @@ release notes and diagnostics name the replacement behavior.
 Roadmap direction:
 
 - Keep profile-oriented timer settings as the primary timer configuration path.
-- Keep one focus-entry runtime path for scheduled, templated, and manual starts.
+- Keep one focus-entry runtime path for scheduled and manual starts.
 - Keep `--diagnostics` as the supported way to inspect setup health, config
   health, and migration guidance together.
 - Keep temporary allowlist exceptions and break-glass controls represented as
@@ -316,15 +307,15 @@ Early deprecation notices:
 | Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields are no longer emitted by runtime persistence or `--status --json`. |
 | Focus History dashboard customization (`[history_dashboard]`, retired customization CLI paths) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands are removed from help text and command parsing. |
 | Advanced status comparison slicing | Use `--export` artifacts for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
-| Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Removed; use profile schedules for automatic focus starts, supported timer controls for active windows, and session templates for task/profile/blocklist defaults. |
+| Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Removed; use profile schedules for automatic focus starts, supported timer controls for active windows, and task/profile/blocklist commands for defaults. |
 | Standalone blocking preview command (`--blocking-preview`) | Removed; use `--diagnostics` for blocking preview details alongside setup/config health. |
 | Focused config diagnostics commands (`--config-doctor`, `--config-migrate`, `--config-migrate-apply`) | Removed; use `--diagnostics` for text guidance or `--diagnostics --json` for the `config_doctor` and `config_migration` sections. |
 | Standalone usage-signal command (`--usage-signals`) | Removed; use GitHub roadmap issues, release notes, and static cleanup documentation for planning while raw command/screen frequency summaries remain internal cleanup inputs. |
 | Standalone feature inventory export (`--feature-inventory`) | Removed; generated inventory snapshots are no longer committed or regenerated for releases. Use GitHub roadmap issues, release notes, and static cleanup documentation for planning. |
-| Schedule exception dates | Removed; represent focus availability with recurring schedule windows, inspect overlaps with `--schedule`, and use supported timer controls or session templates for one-off workflow adjustments. |
+| Schedule exception dates | Removed; represent focus availability with recurring schedule windows, inspect overlaps with `--schedule`, and use supported timer controls for one-off workflow adjustments. |
 | Standalone calendar refresh command (`--calendar-sync`) and `[calendar_sync]` config | Removed; scheduling no longer reads calendar annotation caches or renders calendar-derived busy/overlap text. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
-| Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule or apply a session template, then start focus through the unified timer flow with `--start` or the TUI. |
+| Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule directly, then start focus through the unified timer flow with `--start` or the TUI. |
 
 Runtime dependency ownership after daemon and calendar cleanup:
 
@@ -463,15 +454,14 @@ automation settings are persisted in `config.toml`.
 
 Open the session planner from timer view with **`t`**.
 
-- `←/→` (default `navigate_left`/`navigate_right`): switch between **Task Labels** and **Session Templates** panes
-- `a`: in task pane, add a new task label; in template pane, capture a new template from current task/profile/blocklist/schedule
-- `e`: in task pane, rename highlighted task label; in template pane, rename highlighted session template
-- `d` or `Delete`: delete highlighted task label/template in the active pane
-- `Enter` (default `confirm`): in task pane, select highlighted task label (archived labels are visible but cannot be selected); in template pane, apply highlighted template
-- Task pane only: `f` toggle favorite (favorites are listed first), `x` toggle archive, `r` or `1-5` quick-pick recent labels
-- `↑/↓` (default `navigate_up`/`navigate_down`): move selection in the active pane
+- `a`: add a new task label
+- `e`: rename the highlighted task label
+- `d` or `Delete`: delete the highlighted task label
+- `Enter` (default `confirm`): select the highlighted task label (archived labels are visible but cannot be selected)
+- `f` toggle favorite (favorites are listed first), `x` toggle archive, `r` or `1-5` quick-pick recent labels
+- `↑/↓` (default `navigate_up`/`navigate_down`): move selection
 - `t` or `Esc` (default `cancel`): return to timer view
-- while adding/renaming a label or template, `Enter` (default `confirm`) saves and `Esc` (default `cancel`) cancels
+- while adding/renaming a label, `Enter` (default `confirm`) saves and `Esc` (default `cancel`) cancels
 
 Starting a focus session from idle now requires a selected task label. The timer
 view always shows the current task label (or a reminder to select one).
@@ -502,7 +492,7 @@ Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
 CLI parity is available via `--focus-intention`, `--task-note`,
-`--session-template*`, `--break-glass-trigger`, and `--break-glass-cancel` for
+`--break-glass-trigger`, and `--break-glass-cancel` for
 non-interactive inspection and in-session workflow control. `--history-dashboard`
 remains available for layout inspection.
 
@@ -515,7 +505,6 @@ matches `docs.example.com` and `api.example.com`, but does **not** match
 ```toml
 schema_version = 2
 selected_profile = "advanced"
-selected_session_template = "Deep Flow"
 selected_theme_preset = "classic"
 selected_blocklist_profile = "Work"
 
@@ -546,17 +535,6 @@ allowlist_sites = ["reddit.com"]
 name = "Study"
 sites = ["x.com", "news.ycombinator.com"]
 allowlist_sites = []
-
-[[session_templates]]
-name = "Deep Flow"
-task_label = "Docs"
-profile = "standard"
-blocklist_profile = "Work"
-
-[[session_templates.schedule.windows]]
-days = ["mon", "tue", "wed", "thu", "fri"]
-start = "09:00"
-end = "11:00"
 
 [custom_profile]
 focus_secs = 1800
@@ -735,8 +713,8 @@ GitHub roadmap issues, release notes, and static cleanup documentation.
 
 The standalone `focustime --automation-triggers*` path has been removed. Scripts
 should configure profile schedules with `focustime --schedule-set`, use supported
-timer controls for active windows, and store task/profile/blocklist defaults in
-session templates.
+timer controls for active windows, and select task/profile/blocklist defaults
+through their dedicated commands.
 
 Blocking backend policy is deterministic:
 
@@ -773,8 +751,8 @@ Recurring schedule windows can also trigger focus behavior at wall-clock times:
 - when a window begins, focus auto-starts if possible; otherwise schedule mode arms and shows a reminder until you manually start focus
 - if multiple windows overlap, the most recently started active window takes precedence; windows with the same start time are resolved deterministically
 - `--schedule` (text and JSON) reports recurring window overlaps without rejecting the schedule
-- standalone `automation_triggers[]` config entries are removed by config migration; schedule windows provide automatic focus starts, supported timer controls handle active windows, and session templates carry task/profile/blocklist defaults
-- deprecated `weekday_profile_rules[]` config entries are removed by config migration; model weekday defaults with schedule windows and session templates instead
+- standalone `automation_triggers[]` config entries are removed by config migration; schedule windows provide automatic focus starts and supported timer controls handle active windows
+- deprecated `weekday_profile_rules[]` config entries are removed by config migration; model weekday defaults with schedule windows and profile settings instead
 - the timer session overview shows the current/next scheduled window
 - the standalone `--calendar-sync` refresh command and `[calendar_sync]` config are retired; runtime scheduling does not read calendar annotation cache data
 
