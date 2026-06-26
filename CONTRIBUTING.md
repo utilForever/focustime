@@ -94,7 +94,7 @@ Also keep the README roadmap, changelog entry, and deprecation notices aligned
 so every deprecated or retired path names supported replacement behavior before
 the tag is created.
 
-To publish a release artifact set, create and push a `v*` tag (for example, `v0.16.1`).
+To publish a release artifact set, create and push a `v*` tag (for example, `v0.16.2`).
 The release workflow will:
 
 - run `cargo check --all --locked`, `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and `cargo test --all --locked`
@@ -125,4 +125,5 @@ Dependency guidelines:
   README runtime dependency ownership table with the owning path and run the
   release readiness checks in `REGRESSION_MATRIX.md`.
 - Before changing `Cargo.toml` for calendar-owned cleanup candidates, confirm
-  no calendar runtime dependency ownership is being reintroduced.
+  no calendar runtime dependency ownership is being reintroduced and
+  `chrono-tz` stays absent from the manifest and lockfile.
