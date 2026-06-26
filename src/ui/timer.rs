@@ -138,8 +138,8 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     } else {
         (
             format!(
-                "🎯 Task: not selected ({} Planner)",
-                app.shortcut_hint(ShortcutAction::OpenSessionPlanner)
+                "🎯 Task: not selected ({} Tasks)",
+                app.shortcut_hint(ShortcutAction::OpenTaskSetup)
             ),
             Style::default().fg(app_color(app, Color::Yellow)),
         )
@@ -583,7 +583,7 @@ pub(super) fn timer_primary_hint(app: &App) -> String {
 }
 
 pub(super) fn timer_secondary_hint(app: &App) -> String {
-    let planner = app.shortcut_hint(ShortcutAction::OpenSessionPlanner);
+    let tasks = app.shortcut_hint(ShortcutAction::OpenTaskSetup);
     let history = app.shortcut_hint(ShortcutAction::OpenStatsHistory);
     let sites = app.shortcut_hint(ShortcutAction::OpenSiteManager);
     let profiles = app.shortcut_hint(ShortcutAction::OpenProfileManager);
@@ -593,11 +593,11 @@ pub(super) fn timer_secondary_hint(app: &App) -> String {
         "Views: shortcuts paused while editing note".to_string()
     } else if app.strict_mode_enforced_for_focus() {
         format!(
-            "Views: {planner} Planner  {history} History  {sites} Sites  {profiles} Profiles (Locked)  {setup} Setup"
+            "Views: {tasks} Tasks  {history} History  {sites} Sites  {profiles} Profiles (Locked)  {setup} Setup"
         )
     } else {
         format!(
-            "Views: {planner} Planner  {history} History  {sites} Sites  {profiles} Profiles  {setup} Setup"
+            "Views: {tasks} Tasks  {history} History  {sites} Sites  {profiles} Profiles  {setup} Setup"
         )
     }
 }

@@ -67,7 +67,7 @@ pub(crate) fn render(frame: &mut Frame, app: &App) {
         AppMode::Timer => render_timer(frame, app),
         AppMode::SiteManager => render_site_manager(frame, app),
         AppMode::ProfileManager => render_profile_manager(frame, app),
-        AppMode::SessionPlanner => render_session_planner(frame, app),
+        AppMode::TaskSetup => render_session_planner(frame, app),
         AppMode::StatsHistory => render_stats_history(frame, app),
         AppMode::SetupDiagnostics => render_setup_diagnostics(frame, app),
     }

@@ -39,8 +39,8 @@ TUI-based application for **Pomodoro timing**, **distraction-site blocking**, an
       <p>Site Blocking - Active</p>
     </td>
     <td align="center">
-      <img src="./assets/demo_session_planner.png" alt="Session planner demo" width="600">
-      <p>Session Planner</p>
+      <img src="./assets/demo_session_planner.png" alt="Task setup demo" width="600">
+      <p>Task Setup</p>
     </td>
   </tr>
   <tr>
@@ -388,10 +388,10 @@ consistent screen structure:
 
 - **Timer view** prioritizes phase/countdown/progress first, then shows grouped
   session context (task, profile, schedule, stats, WakaTime, strict/break-glass).
-- **Manager/detail views** (sites, profiles, planner, history, diagnostics)
+- **Manager/detail views** (sites, profiles, task setup, history, diagnostics)
   follow a consistent pattern: context header, primary content block, feedback
   line, and compact command legend.
-- **Profiles, planner, and history** are now laid out to fit narrower and
+- **Profiles, task setup, and history** are now laid out to fit narrower and
   shorter terminal windows than before.
 - **Focus History** uses a redesigned structure with an overview block and
   dedicated task/trend/audit panels for faster scanning.
@@ -414,6 +414,7 @@ Example:
 ```toml
 [shortcuts]
 open_stats_history = "y"
+# Compatibility key: opens Task Setup.
 open_session_planner = "g"
 back_stats_history = "y"
 timer_stop_reset = "x"
@@ -450,9 +451,9 @@ Open profile manager from timer view with **`p`**.
 Preset selection, theme preset selection, custom durations, and preset-scoped
 automation settings are persisted in `config.toml`.
 
-## Session planner
+## Task setup
 
-Open the session planner from timer view with **`t`**.
+Open task setup from timer view with **`t`**.
 
 - `a`: add a new task label
 - `e`: rename the highlighted task label
@@ -522,6 +523,7 @@ break_glass_duration_secs = 300
 [shortcuts]
 timer_toggle_pause = "space"
 timer_stop_reset = "s"
+# Compatibility key: opens Task Setup.
 open_session_planner = "t"
 open_stats_history = "h"
 quit = "q"
@@ -882,10 +884,10 @@ downstream consumers can handle versioned contracts explicitly.
 with focused submodules (updated in #240):
 
 - `src/main.rs`: composition root, CLI/TUI dispatch, terminal lifecycle, and event loop.
-- `src/app.rs` + `src/app/*.rs`: runtime state/orchestration split by domain (timer flow, planner, profiles, site manager, schedule, persistence, diagnostics, CLI API).
+- `src/app.rs` + `src/app/*.rs`: runtime state/orchestration split by domain (timer flow, task setup, profiles, site manager, schedule, persistence, diagnostics, CLI API).
 - `src/cli.rs` + `src/cli/*.rs`: CLI args/parsing/execution/status/output pipeline.
 - `src/stats.rs` + `src/stats/*.rs`: stats persistence, analytics, trends, recording, planner state, and exports.
-- `src/ui.rs` + `src/ui/*.rs`: Ratatui rendering split by screen (timer, session planner, site manager, profile manager, history, setup diagnostics).
+- `src/ui.rs` + `src/ui/*.rs`: Ratatui rendering split by screen (timer, task setup, site manager, profile manager, history, setup diagnostics).
 - `src/config.rs` + `src/config/paths.rs`: config schema/normalization and environment-aware path resolution.
 - Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, `src/integration.rs`, `src/wakatime.rs`, and `src/notifications.rs`.
 
@@ -896,7 +898,7 @@ Runtime flow (high-level):
 
 1. `main` parses CLI args and either runs a CLI command path or starts the TUI loop.
 2. In TUI mode, each frame renders UI and reads keyboard/paste input.
-3. `App` handles key events (`start/pause`, `stop`, `next`, session planner actions, site manager actions).
+3. `App` handles key events (`start/pause`, `stop`, `next`, task setup actions, site manager actions).
 4. Timer ticks advance every elapsed second while running.
 5. Phase-completion notifications are dispatched asynchronously.
 6. Blocking is applied during focus phases and removed outside focus.

@@ -5,7 +5,7 @@ use crate::app::{
 };
 
 struct ScheduleShortcutLabels {
-    planner: String,
+    tasks: String,
     toggle_pause: String,
     next_phase: String,
 }
@@ -18,7 +18,7 @@ impl App {
     pub(super) fn recurring_schedule_texts_at(&self, now: DateTime<Local>) -> (String, String) {
         let state = self.schedule_display_state_at(now);
         let labels = ScheduleShortcutLabels {
-            planner: self.shortcut_hint(ShortcutAction::OpenSessionPlanner),
+            tasks: self.shortcut_hint(ShortcutAction::OpenTaskSetup),
             toggle_pause: self.shortcut_hint(ShortcutAction::TimerTogglePause),
             next_phase: self.shortcut_hint(ShortcutAction::TimerNextPhase),
         };
@@ -109,8 +109,8 @@ impl App {
     fn schedule_arm_notification(&self) -> String {
         if !self.has_selectable_task_label_for_focus() {
             format!(
-                "Scheduled window started. Select a task label with {}, then press {} to start focus.",
-                self.shortcut_hint(ShortcutAction::OpenSessionPlanner),
+                "Scheduled window started. Select a task with {}, then press {} to start focus.",
+                self.shortcut_hint(ShortcutAction::OpenTaskSetup),
                 self.shortcut_hint(ShortcutAction::TimerTogglePause),
             )
         } else {
@@ -203,8 +203,8 @@ fn schedule_idle_focus_status_text(
 ) -> String {
     if !has_selected_task {
         format!(
-            "⚙  Schedule status: window active; select {}, then press {}",
-            labels.planner, labels.toggle_pause
+            "⚙  Schedule status: window active; select a task with {}, then press {}",
+            labels.tasks, labels.toggle_pause
         )
     } else if is_armed {
         format!(
@@ -227,8 +227,8 @@ fn schedule_armed_status_text(has_selected_task: bool, labels: &ScheduleShortcut
         )
     } else {
         format!(
-            "⚙  Schedule status: armed; select {}, then press {}",
-            labels.planner, labels.toggle_pause
+            "⚙  Schedule status: armed; select a task with {}, then press {}",
+            labels.tasks, labels.toggle_pause
         )
     }
 }

@@ -107,7 +107,7 @@ pub(crate) enum AppMode {
     Timer,
     SiteManager,
     ProfileManager,
-    SessionPlanner,
+    TaskSetup,
     StatsHistory,
     SetupDiagnostics,
 }
@@ -1186,7 +1186,7 @@ impl App {
             AppMode::Timer => self.handle_key_timer(key),
             AppMode::SiteManager => self.handle_key_site_manager(key),
             AppMode::ProfileManager => self.handle_key_profile_manager(key),
-            AppMode::SessionPlanner => self.handle_key_session_planner(key),
+            AppMode::TaskSetup => self.handle_key_session_planner(key),
             AppMode::StatsHistory => self.handle_key_stats_history(key),
             AppMode::SetupDiagnostics => self.handle_key_setup_diagnostics(key),
         }
@@ -1323,7 +1323,7 @@ impl AppMode {
             Self::Timer => "timer",
             Self::SiteManager => "site-manager",
             Self::ProfileManager => "profile-manager",
-            Self::SessionPlanner => "session-planner",
+            Self::TaskSetup => "task-setup",
             Self::StatsHistory => "stats-history",
             Self::SetupDiagnostics => "setup-diagnostics",
         }

@@ -15,7 +15,7 @@ impl App {
         match self.try_start_focus_session().map_err(AppError::workflow)? {
             FocusStartOutcome::Started => Ok(()),
             FocusStartOutcome::MissingTaskLabel => Err(AppError::MissingTaskLabel {
-                shortcut_hint: self.shortcut_hint(ShortcutAction::OpenSessionPlanner),
+                shortcut_hint: self.shortcut_hint(ShortcutAction::OpenTaskSetup),
             }),
             FocusStartOutcome::NotIdleFocusPhase => Err(AppError::TimerNotIdleFocusPhase),
         }
