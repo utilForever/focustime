@@ -5,9 +5,9 @@ use crate::stats::fs;
 use crate::stats::{
     BreakGlassOverrideEvent, FocusSessionRecord, FocusStats, PersistedStats, STATS_FILE_NAME,
     SessionInterruptionEvent, SessionStats, StatsLoadOptions, StatsSaveOptions,
-    backfilled_time_of_day_bucket, io, normalize_session_metadata_text,
-    normalize_task_goal_targets, normalize_task_label, normalize_task_planner_state,
-    normalize_usage_counts, planner_state_labels_for_keys, write_atomic_bytes,
+    backfilled_time_of_day_bucket, io, normalize_task_goal_targets, normalize_task_label,
+    normalize_task_planner_state, normalize_usage_counts, planner_state_labels_for_keys,
+    write_atomic_bytes,
 };
 
 impl FocusStats {
@@ -75,12 +75,9 @@ impl FocusStats {
         let mut focus_sessions = Vec::new();
         for session in persisted.focus_sessions {
             if let Some(task_label) = normalize_task_label(&session.task_label) {
-                let task_note = normalize_session_metadata_text(&session.task_note);
-                let task_note = task_note.unwrap_or_default();
                 focus_sessions.push(FocusSessionRecord {
                     date: session.date.trim().to_string(),
                     task_label,
-                    task_note,
                     focused_seconds: session.focused_seconds,
                     profile: session.profile,
                     completion_timestamp_epoch_secs: session.completion_timestamp_epoch_secs,
@@ -100,9 +97,6 @@ impl FocusStats {
                 task_label: event
                     .task_label
                     .and_then(|label| normalize_task_label(&label)),
-                task_note: event
-                    .task_note
-                    .and_then(|value| normalize_session_metadata_text(&value)),
                 remaining_secs: event.remaining_secs,
                 profile: event.profile,
             });

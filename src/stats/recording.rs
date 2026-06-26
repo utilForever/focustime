@@ -1,8 +1,7 @@
 use crate::stats::{
     BTreeMap, BreakGlassOverrideEvent, DailyGoalSnapshot, FocusSessionMetadata, FocusSessionRecord,
     FocusStats, ProfileId, SessionInterruptionEvent, SessionInterruptionReason, TimeOfDayBucket,
-    month_key_for_day, normalize_session_metadata_text, normalize_task_label, task_label_index,
-    week_key_for_day,
+    month_key_for_day, normalize_task_label, task_label_index, week_key_for_day,
 };
 use chrono::Timelike;
 
@@ -38,10 +37,7 @@ impl FocusStats {
         self.record_completed_pomodoro_with_metadata(
             day_key,
             goal,
-            FocusSessionMetadata {
-                task_label,
-                task_note: task_label,
-            },
+            FocusSessionMetadata { task_label },
             focused_seconds,
             profile,
         );
@@ -84,14 +80,9 @@ impl FocusStats {
                 self.task_labels.push(task_label.clone());
             }
             self.selected_task_label = Some(task_label.clone());
-            let task_note = metadata
-                .task_note
-                .and_then(normalize_session_metadata_text)
-                .unwrap_or_else(|| task_label.clone());
             self.focus_sessions.push(FocusSessionRecord {
                 date: day_key.to_string(),
                 task_label,
-                task_note,
                 focused_seconds,
                 profile,
                 completion_timestamp_epoch_secs,
@@ -149,7 +140,6 @@ impl FocusStats {
             date: day_key.to_string(),
             reason,
             task_label: normalized_task_label,
-            task_note: metadata.task_note.and_then(normalize_session_metadata_text),
             remaining_secs,
             profile,
         });

@@ -1,8 +1,8 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Gauge, Layout, Line,
-    Local, Modifier, NavigationAction, Paragraph, Rect, ShortcutAction, Style, TimeZone,
-    TimerPhase, TimerStatus, WakatimeRuntimeState, Wrap, app_color, centered_rect,
-    format_timer_goal_streak_line, readable_goal_streak_text, render_hint_lines,
+    Local, Modifier, Paragraph, Rect, ShortcutAction, Style, TimeZone, TimerPhase, TimerStatus,
+    WakatimeRuntimeState, Wrap, app_color, centered_rect, format_timer_goal_streak_line,
+    readable_goal_streak_text, render_hint_lines,
 };
 
 pub(super) fn render_timer(frame: &mut Frame, app: &App) {
@@ -144,26 +144,6 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(app_color(app, Color::Yellow)),
         )
     };
-    let can_edit_session_note = app.can_edit_session_note();
-    let (note_text, note_style) = if let Some(note) = app.current_task_note() {
-        (
-            format!("📝 Note: {note}"),
-            Style::default().fg(app_color(app, Color::Cyan)),
-        )
-    } else if can_edit_session_note {
-        (
-            format!(
-                "📝 Note: none yet ({} Edit note)",
-                app.shortcut_hint(ShortcutAction::TimerEditNote)
-            ),
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        )
-    } else {
-        (
-            "📝 Note: unavailable (start or resume focus to edit)".to_string(),
-            Style::default().fg(app_color(app, Color::DarkGray)),
-        )
-    };
     let (stats_text, stats_style) = timer_stats_line(app);
     let goal_text = readable_goal_streak_text(&format_timer_goal_streak_line(app));
     let (waka_text, waka_color) = wakatime_status_line(app);
@@ -171,7 +151,6 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
 
     let mut lines = vec![
         Line::styled(task_text, task_style),
-        Line::styled(note_text, note_style),
         Line::styled(
             status_text,
             Style::default().fg(app_color(app, Color::Gray)),
@@ -398,19 +377,6 @@ fn render_timer_phase_notice(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn phase_notice_line(app: &App) -> (String, Style) {
-    if app.timer_note_input_active() {
-        let draft = app.timer_note_input_value().trim();
-        let draft = if draft.is_empty() { "<empty>" } else { draft };
-        return (
-            format!(
-                "📝 Note: {draft}   {} Save   {} Cancel",
-                app.navigation_hint(NavigationAction::Confirm),
-                app.navigation_hint(NavigationAction::Cancel)
-            ),
-            Style::default().fg(app_color(app, Color::Cyan)),
-        );
-    }
-
     if let Some(message) = app.phase_notification.as_ref() {
         (
             format!("🔔 {message}"),
@@ -422,11 +388,6 @@ fn phase_notice_line(app: &App) -> (String, Style) {
             Style::default().fg(app_color(app, Color::DarkGray)),
         )
     }
-}
-
-#[cfg(test)]
-pub(super) fn note_phase_notice_text(app: &App) -> String {
-    phase_notice_line(app).0
 }
 
 fn timer_stats_line(app: &App) -> (String, Style) {
@@ -550,34 +511,23 @@ pub(super) fn timer_primary_hint(app: &App) -> String {
     let timer_toggle = app.shortcut_hint(ShortcutAction::TimerTogglePause);
     let timer_stop = app.shortcut_hint(ShortcutAction::TimerStopReset);
     let timer_next = app.shortcut_hint(ShortcutAction::TimerNextPhase);
-    let timer_note = app.shortcut_hint(ShortcutAction::TimerEditNote);
     let timer_unblock = app.shortcut_hint(ShortcutAction::BreakGlassOverride);
 
-    if app.timer_note_input_active() {
+    if app.break_glass_confirmation_pending() {
         format!(
-            "Note: Type text  {} Save  {} Cancel",
-            app.navigation_hint(NavigationAction::Confirm),
-            app.navigation_hint(NavigationAction::Cancel)
-        )
-    } else if app.break_glass_confirmation_pending() {
-        format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note  {timer_unblock} Confirm unblock"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_unblock} Confirm unblock"
         )
     } else if app.strict_reset_confirmation_pending() {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Confirm reset  {timer_next} Next (Locked)  {timer_note} Note  {timer_unblock} Unblock"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Confirm reset  {timer_next} Next (Locked)  {timer_unblock} Unblock"
         )
     } else if app.strict_mode_enforced_for_focus() {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset (Confirm)  {timer_next} Next (Locked)  {timer_note} Note  {timer_unblock} Unblock"
-        )
-    } else if app.can_edit_session_note() {
-        format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note  {timer_unblock} Unblock"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset (Confirm)  {timer_next} Next (Locked)  {timer_unblock} Unblock"
         )
     } else {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_note} Note (Focus only)  {timer_unblock} Unblock"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_unblock} Unblock"
         )
     }
 }
@@ -589,9 +539,7 @@ pub(super) fn timer_secondary_hint(app: &App) -> String {
     let profiles = app.shortcut_hint(ShortcutAction::OpenProfileManager);
     let setup = app.shortcut_hint(ShortcutAction::OpenSetupDiagnostics);
 
-    if app.timer_note_input_active() {
-        "Views: shortcuts paused while editing note".to_string()
-    } else if app.strict_mode_enforced_for_focus() {
+    if app.strict_mode_enforced_for_focus() {
         format!(
             "Views: {tasks} Tasks  {history} History  {sites} Sites  {profiles} Profiles (Locked)  {setup} Setup"
         )
@@ -604,12 +552,7 @@ pub(super) fn timer_secondary_hint(app: &App) -> String {
 
 pub(super) fn timer_tertiary_hint(app: &App) -> String {
     let quit = app.shortcut_label(ShortcutAction::Quit);
-    if app.timer_note_input_active() {
-        format!(
-            "Note edit: {} Cancel",
-            app.navigation_hint(NavigationAction::Cancel)
-        )
-    } else if app.strict_mode_enforced_for_focus() {
+    if app.strict_mode_enforced_for_focus() {
         format!("Navigate: [{quit}/Esc] Quit (Locked during active focus)")
     } else {
         format!("Navigate: [{quit}/Esc] Quit")

@@ -162,16 +162,12 @@ impl App {
 
     fn start_focus_runtime(&mut self) {
         self.active_focus_task_label = self.selected_task_label.clone();
-        self.active_focus_task_note = self.selected_task_label.clone();
-        self.clear_timer_note_input();
         self.active_focus_profile = Some(self.selected_profile);
         self.schedule_armed_occurrence_key = None;
     }
 
     pub(super) fn clear_focus_runtime(&mut self) {
         self.active_focus_task_label = None;
-        self.active_focus_task_note = None;
-        self.clear_timer_note_input();
         self.active_focus_profile = None;
     }
 

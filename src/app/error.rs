@@ -13,8 +13,6 @@ pub(crate) enum AppError {
     StrictModeActive { action: &'static str },
     TimerAlreadyIdle,
     BreakGlassNoConfirmation,
-    SessionMetadataInactive { command: &'static str },
-    SessionMetadataMissingTaskLabel,
     TaskLabelEmpty,
     TaskLabelLookupFailed,
     ArchivedTaskLabel { label: String },
@@ -74,18 +72,6 @@ impl UserFacingError for AppError {
                 "app.break_glass.no_confirmation",
                 "Cannot cancel break-glass: no confirmation is pending.",
                 "Trigger break-glass first before trying to cancel the pending confirmation.",
-            ),
-            Self::SessionMetadataInactive { command } => UserMessage::with_hint(
-                "app.session_metadata.inactive",
-                format!(
-                    "Cannot set session metadata with `{command}`: focus session is not active or paused."
-                ),
-                "Start or pause a focus session before setting session metadata.",
-            ),
-            Self::SessionMetadataMissingTaskLabel => UserMessage::with_hint(
-                "app.session_metadata.missing_task_label",
-                "Cannot set session metadata: no task label is selected.",
-                "Select a task with `focustime --task LABEL` first.",
             ),
             Self::TaskLabelEmpty => UserMessage::with_hint(
                 "app.task_label.empty",

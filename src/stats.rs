@@ -19,10 +19,10 @@ use helpers::create_unique_temp_path;
 use helpers::{
     average_two_percentages, backfilled_time_of_day_bucket, best_goal_streak,
     consistency_score_from_active_days, current_goal_streak, daily_has_activity, days_in_month,
-    format_week_label, month_key_for_day, normalize_session_metadata_text,
-    normalize_task_goal_targets, normalize_task_planner_state, normalize_usage_counts,
-    parse_week_label, percentage_round_nearest, planner_state_labels_for_keys, profile_bucket_for,
-    week_key_for_day, weekly_completion_score_pct, write_atomic_bytes,
+    format_week_label, month_key_for_day, normalize_task_goal_targets,
+    normalize_task_planner_state, normalize_usage_counts, parse_week_label,
+    percentage_round_nearest, planner_state_labels_for_keys, profile_bucket_for, week_key_for_day,
+    weekly_completion_score_pct, write_atomic_bytes,
 };
 mod analytics;
 mod export;
@@ -35,7 +35,7 @@ mod trends;
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
 const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
-const EXPORT_SCHEMA_VERSION: u32 = 8;
+const EXPORT_SCHEMA_VERSION: u32 = 9;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -465,8 +465,6 @@ pub(crate) struct UsageSignalsSummary {
 pub(crate) struct FocusSessionRecord {
     pub(crate) date: String,
     pub(crate) task_label: String,
-    #[serde(default)]
-    pub(crate) task_note: String,
     pub(crate) focused_seconds: u64,
     #[serde(default)]
     pub(crate) profile: Option<ProfileId>,
@@ -479,7 +477,6 @@ pub(crate) struct FocusSessionRecord {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FocusSessionMetadata<'a> {
     pub(crate) task_label: Option<&'a str>,
-    pub(crate) task_note: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -505,8 +502,6 @@ pub(crate) struct SessionInterruptionEvent {
     pub(crate) reason: SessionInterruptionReason,
     #[serde(default)]
     pub(crate) task_label: Option<String>,
-    #[serde(default)]
-    pub(crate) task_note: Option<String>,
     #[serde(default)]
     pub(crate) remaining_secs: u64,
     #[serde(default)]
@@ -816,7 +811,6 @@ struct WeeklyExportRow {
 struct SessionExportRow {
     date: String,
     task_label: String,
-    task_note: String,
     focused_seconds: u64,
     focused_minutes: u64,
     profile: Option<ProfileId>,
@@ -837,7 +831,6 @@ struct SessionInterruptionExportRow {
     date: String,
     reason: SessionInterruptionReason,
     task_label: Option<String>,
-    task_note: Option<String>,
     remaining_secs: u64,
     profile: Option<ProfileId>,
 }
@@ -1008,7 +1001,6 @@ struct HistoryKpiLastInterruption {
     timestamp_epoch_secs: Option<u64>,
     reason: Option<SessionInterruptionReason>,
     task_label: Option<String>,
-    task_note: Option<String>,
     remaining_secs: Option<u64>,
     profile_name: Option<String>,
 }
@@ -1057,7 +1049,6 @@ struct CsvExportRow {
     interruption_timestamp_epoch_secs: Option<u64>,
     interruption_reason: Option<SessionInterruptionReason>,
     interruption_remaining_secs: Option<u64>,
-    task_note: Option<String>,
     recent_window_start: Option<String>,
     recent_window_end: Option<String>,
     previous_window_start: Option<String>,

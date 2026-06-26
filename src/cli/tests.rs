@@ -188,7 +188,6 @@ fn usage_text_keeps_supported_cli_automation_replacements() {
         "--stop",
         "--next",
         "--task",
-        "--task-note",
         "--break-glass-trigger",
         "--break-glass-cancel",
     ] {
@@ -342,29 +341,25 @@ fn parse_task_goal_with_colon_in_label_reads_specific_goal() {
 }
 
 #[test]
-fn parse_task_note_without_value_reads_current_metadata() {
-    let parsed = parse(&["--task-note"]).unwrap();
+fn parse_task_note_without_value_is_removed() {
+    let error = parse_with_contract(&["--task-note"]).unwrap_err();
+
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert!(error.message.contains("Unknown option `--task-note`."));
     assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::TaskNote { value: None },
-            output: OutputMode::Text
-        })
+        error.hint.as_deref(),
+        Some(
+            "Use `--task` to select the active task label; task labels are the supported session context."
+        )
     );
 }
 
 #[test]
-fn parse_task_note_with_value_sets_metadata() {
-    let parsed = parse(&["--task-note", "Capture blockers"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::TaskNote {
-                value: Some("Capture blockers".to_string())
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_task_note_with_value_is_removed() {
+    let error = parse_with_contract(&["--task-note", "Capture blockers"]).unwrap_err();
+
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert!(error.message.contains("Unknown option `--task-note`."));
 }
 
 #[test]
@@ -1494,9 +1489,9 @@ fn parse_rejects_task_with_blank_value() {
 }
 
 #[test]
-fn parse_rejects_task_note_with_blank_equals_value() {
+fn parse_rejects_task_note_with_blank_equals_value_as_removed_option() {
     let error = parse(&["--task-note="]).unwrap_err();
-    assert!(error.contains("`--task-note=` requires a non-empty value."));
+    assert!(error.contains("Unknown option `--task-note=`."));
 }
 
 #[test]
@@ -2497,8 +2492,7 @@ fn build_status_output_does_not_mirror_task_label_metadata() {
     let output = build_status_output(&config, &stats);
 
     assert_eq!(output.selected_task_label.as_deref(), Some("Docs"));
-    assert!(output.task_note.is_none());
-    assert!(output.live.task_note.is_none());
+    assert_eq!(output.live.selected_task_label.as_deref(), Some("Docs"));
 }
 
 #[test]
@@ -2875,7 +2869,6 @@ fn build_status_output_uses_recovery_snapshot_for_live_state() {
         remaining_secs: 42,
         pomodoros_completed: 3,
         selected_task_label: Some("Docs".to_string()),
-        task_note: Some("API section".to_string()),
         selected_profile: ProfileId::DeepWork,
         captured_at_epoch_secs: None,
     }));
@@ -2891,7 +2884,6 @@ fn build_status_output_uses_recovery_snapshot_for_live_state() {
     assert_eq!(output.live.remaining_secs, 42);
     assert_eq!(output.live.pomodoros_completed, 3);
     assert_eq!(output.live.selected_task_label.as_deref(), Some("Docs"));
-    assert_eq!(output.live.task_note.as_deref(), Some("API section"));
     assert_eq!(output.live.selected_profile.id, "standard");
     assert!(output.live.recovery_error.is_none());
     assert_eq!(output.session.pomodoros_completed, 3);
@@ -2906,7 +2898,6 @@ fn build_status_output_reconciles_elapsed_running_recovery_snapshot() {
         remaining_secs: 1,
         pomodoros_completed: 0,
         selected_task_label: Some("Docs".to_string()),
-        task_note: Some("API section".to_string()),
         selected_profile: ProfileId::Classic,
         captured_at_epoch_secs: Some(0),
     }));
@@ -2924,7 +2915,6 @@ fn build_status_output_reconciles_elapsed_running_recovery_snapshot() {
     assert_eq!(output.session.pomodoros_completed, 1);
     assert_eq!(output.session.focused_minutes, DEFAULT_FOCUS_SECS / 60);
     assert_eq!(output.live.selected_task_label.as_deref(), Some("Docs"));
-    assert!(output.live.task_note.is_none());
     assert!(!output.live.strict_mode_enforced);
 }
 
@@ -2937,7 +2927,6 @@ fn build_status_output_includes_latest_session_interruption() {
         crate::stats::SessionInterruptionReason::ManualSkip,
         crate::stats::FocusSessionMetadata {
             task_label: Some("Docs"),
-            task_note: Some("Skipped due urgent review"),
         },
         600,
         Some(ProfileId::Classic),

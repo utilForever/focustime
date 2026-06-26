@@ -52,11 +52,10 @@ use output::{
     print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
     print_goal_command_output, print_history_dashboard_command_output, print_json,
     print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
-    print_session_metadata_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_task_goal_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_task_goal_command_output,
+    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
@@ -80,8 +79,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --task=LABEL [--json]
   focustime --task-goal [LABEL|LABEL:MINUTES,POMODOROS] [--json]
   focustime --task-goal=LABEL[:MINUTES,POMODOROS] [--json]
-  focustime --task-note [TEXT] [--json]
-  focustime --task-note=TEXT [--json]
   focustime --profile [basic|standard|advanced] [--json]
   focustime --theme [classic|high-contrast|deuteranopia-friendly] [--json]
   focustime --goal [--json]
@@ -130,7 +127,6 @@ Options:
   --next          Skip to the next phase
   --task          Select task label (auto-creates unknown labels)
   --task-goal     Show or set per-task cumulative goal targets
-  --task-note        Show current task note, or set it for the active/paused focus session
   --profile       Show current profile, or set it when value is provided
   --theme         Show current theme preset, or set it when value is provided
   --goal          Show current daily goal, or set minutes/pomodoros targets
@@ -233,9 +229,6 @@ pub(crate) enum CommandKind {
         label: Option<String>,
         goal: Option<DailyGoalConfig>,
     },
-    TaskNote {
-        value: Option<String>,
-    },
     Profile {
         profile: Option<ProfileId>,
     },
@@ -321,7 +314,6 @@ enum PrimaryCommand {
         label: Option<String>,
         goal: Option<DailyGoalConfig>,
     },
-    TaskNote(Option<String>),
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
@@ -370,7 +362,6 @@ enum ParsedToken {
         label: Option<String>,
         goal: Option<DailyGoalConfig>,
     },
-    TaskNote(Option<String>),
     Status,
     Watch(Option<u64>),
     Profile(Option<ProfileId>),
@@ -538,7 +529,6 @@ struct LiveStatusOutput {
     pomodoros_completed: u32,
     selected_profile: ProfileView,
     selected_task_label: Option<String>,
-    task_note: Option<String>,
     strict_mode_enforced: bool,
 }
 
@@ -588,7 +578,6 @@ struct StatusOutput {
     selected_profile: ProfileView,
     selected_theme_preset: ThemePresetView,
     selected_task_label: Option<String>,
-    task_note: Option<String>,
     selected_blocklist_profile: String,
     blocked_sites_count: usize,
     temporary_overrides_active_count: usize,
@@ -648,7 +637,6 @@ struct TimerStateOutput {
     pomodoros_completed: u32,
     selected_profile: ProfileView,
     selected_task_label: Option<String>,
-    task_note: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -684,14 +672,6 @@ struct TaskGoalCommandOutput {
     focused_minutes: u64,
     pomodoros_completed: u32,
     met: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct SessionMetadataCommandOutput {
-    action: &'static str,
-    updated: bool,
-    task_note: Option<String>,
-    timer: TimerStateOutput,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

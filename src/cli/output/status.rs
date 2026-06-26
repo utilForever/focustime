@@ -1,24 +1,9 @@
 use crate::cli::{
-    BreakGlassCommandOutput, FocusScoreOutput, GoalOutput, SessionMetadataCommandOutput,
-    StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput, TaskGoalOutput, TimerStateOutput,
+    BreakGlassCommandOutput, FocusScoreOutput, GoalOutput, StatsGrowthSummary,
+    StatsRetentionStatusOutput, StatusOutput, TaskGoalOutput, TimerStateOutput,
 };
 
 use super::{format_duration, format_expiry_clock_suffix};
-
-pub(in crate::cli) fn print_session_metadata_command_output(
-    payload: &SessionMetadataCommandOutput,
-) {
-    if payload.updated {
-        println!("Session metadata updated: {}.", payload.action);
-    } else {
-        println!("Session metadata: {}.", payload.action);
-    }
-    println!(
-        "Task note: {}",
-        payload.task_note.as_deref().unwrap_or("none")
-    );
-    print_timer_state_output(&payload.timer);
-}
 
 pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
     println!("Date: {}", payload.day);
@@ -33,10 +18,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
     println!(
         "Task label: {}",
         payload.selected_task_label.as_deref().unwrap_or("none")
-    );
-    println!(
-        "Task note: {}",
-        payload.task_note.as_deref().unwrap_or("none")
     );
     println!(
         "Blocklist profile: {} ({} sites)",
@@ -81,10 +62,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
         payload.live.status,
         format_duration(payload.live.remaining_secs),
         payload.live.state_source
-    );
-    println!(
-        "Live task note: {}",
-        payload.live.task_note.as_deref().unwrap_or("none")
     );
     if let Some(error) = payload.live.recovery_error.as_deref() {
         println!("Live timer warning: {error}");
@@ -349,10 +326,6 @@ pub(in crate::cli) fn print_timer_state_output(timer: &TimerStateOutput) {
     println!(
         "Task label: {}",
         timer.selected_task_label.as_deref().unwrap_or("none")
-    );
-    println!(
-        "Task note: {}",
-        timer.task_note.as_deref().unwrap_or("none")
     );
     println!(
         "Profile: {} ({})",

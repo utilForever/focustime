@@ -20,8 +20,6 @@ pub(crate) struct ShortcutConfig {
     pub(crate) open_stats_history: String,
     #[serde(default = "default_shortcut_open_setup_diagnostics")]
     pub(crate) open_setup_diagnostics: String,
-    #[serde(default = "default_shortcut_timer_edit_note")]
-    pub(crate) timer_edit_note: String,
     #[serde(default = "default_shortcut_break_glass_override")]
     pub(crate) break_glass_override: String,
     #[serde(default = "default_shortcut_back_site_manager")]
@@ -148,10 +146,6 @@ impl ShortcutConfig {
             open_setup_diagnostics: normalize_shortcut_token(
                 &self.open_setup_diagnostics,
                 &default_shortcut_open_setup_diagnostics(),
-            ),
-            timer_edit_note: normalize_shortcut_token(
-                &self.timer_edit_note,
-                &default_shortcut_timer_edit_note(),
             ),
             break_glass_override: normalize_shortcut_token(
                 &self.break_glass_override,
@@ -305,7 +299,6 @@ impl Default for ShortcutConfig {
             open_session_planner: default_shortcut_open_session_planner(),
             open_stats_history: default_shortcut_open_stats_history(),
             open_setup_diagnostics: default_shortcut_open_setup_diagnostics(),
-            timer_edit_note: default_shortcut_timer_edit_note(),
             break_glass_override: default_shortcut_break_glass_override(),
             back_site_manager: default_shortcut_back_site_manager(),
             toggle_site_list_mode: default_shortcut_toggle_site_list_mode(),
@@ -381,10 +374,6 @@ fn default_shortcut_open_stats_history() -> String {
 
 fn default_shortcut_open_setup_diagnostics() -> String {
     "d".to_string()
-}
-
-fn default_shortcut_timer_edit_note() -> String {
-    "m".to_string()
 }
 
 fn default_shortcut_break_glass_override() -> String {

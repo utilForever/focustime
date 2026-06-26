@@ -11,16 +11,15 @@ use crate::cli::{
     AppConfig, BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig,
     DailyGoalSnapshot, FocusStats, GoalCarryCommandOutput, GoalCommandOutput, MonthlyGoalConfig,
     OutputMode, ProfileId, ProfileOutput, ProfileView, RecurringScheduleConfig,
-    ScheduleCommandOutput, SessionMetadataCommandOutput, StrictCommandOutput, TaskCommandOutput,
-    TaskGoalCommandOutput, TaskGoalOutput, TemporaryAllowlistStatusOutput,
-    TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
-    TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
-    build_schedule_inspection_output, build_task_goal_output, print_break_glass_command_output,
-    print_goal_carry_command_output, print_goal_command_output, print_json, print_profile_output,
-    print_schedule_command_output, print_session_metadata_command_output,
-    print_strict_command_output, print_task_goal_command_output,
-    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
-    profile_id, profile_view, theme_preset_view, timer_phase_id, timer_status_id,
+    ScheduleCommandOutput, StrictCommandOutput, TaskCommandOutput, TaskGoalCommandOutput,
+    TaskGoalOutput, TemporaryAllowlistStatusOutput, TemporarySiteAddCommandOutput,
+    ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput, WeeklyGoalConfig,
+    available_theme_preset_views, build_schedule_inspection_output, build_task_goal_output,
+    print_break_glass_command_output, print_goal_carry_command_output, print_goal_command_output,
+    print_json, print_profile_output, print_schedule_command_output, print_strict_command_output,
+    print_task_goal_command_output, print_temporary_site_add_command_output,
+    print_theme_command_output, print_timer_state_output, profile_id, profile_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 mod blocklists;
@@ -67,7 +66,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::TaskGoal { label, goal } => {
             execute_task_goal_command(label, goal, cli_command.output)
         }
-        CommandKind::TaskNote { value } => execute_task_note_command(value, cli_command.output),
         CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
         CommandKind::Theme { preset } => execute_theme_command(preset, cli_command.output),
         CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
@@ -131,7 +129,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Next => Some("next"),
         CommandKind::Task { .. } => Some("task"),
         CommandKind::TaskGoal { .. } => Some("task-goal"),
-        CommandKind::TaskNote { .. } => Some("task-note"),
         CommandKind::Profile { .. } => Some("profile"),
         CommandKind::Theme { .. } => Some("theme"),
         CommandKind::Goal { .. } => Some("goal"),
@@ -165,7 +162,6 @@ fn command_usage_records_via_app(command: &CommandKind) -> bool {
             | CommandKind::Stop
             | CommandKind::Next
             | CommandKind::Task { .. }
-            | CommandKind::TaskNote { .. }
             | CommandKind::AllowlistSiteAddTemporary { .. }
             | CommandKind::BreakGlassTrigger
             | CommandKind::BreakGlassCancel
@@ -308,18 +304,6 @@ fn execute_task_goal_command(
         OutputMode::Text => print_task_goal_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
-    Ok(())
-}
-
-fn execute_task_note_command(value: Option<String>, output: OutputMode) -> CliExecuteResult<()> {
-    let mut app = App::new();
-    app.record_command_usage_for_cli("task-note");
-    let mut updated = false;
-    if let Some(value) = value {
-        app.set_task_note_for_cli(&value)?;
-        updated = true;
-    }
-    emit_session_metadata_command_output("task-note", updated, &app, output)?;
     Ok(())
 }
 
@@ -657,25 +641,6 @@ fn emit_timer_command_output(
     Ok(())
 }
 
-fn emit_session_metadata_command_output(
-    action: &'static str,
-    updated: bool,
-    app: &App,
-    output: OutputMode,
-) -> Result<(), String> {
-    let payload = SessionMetadataCommandOutput {
-        action,
-        updated,
-        task_note: app.task_note_for_cli(),
-        timer: build_timer_state_output(app),
-    };
-    match output {
-        OutputMode::Text => print_session_metadata_command_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
 fn emit_break_glass_command_output(
     action: &'static str,
     app: &App,
@@ -701,7 +666,6 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
     let (focus_secs, short_break_secs, long_break_secs, long_break_interval) =
         app.profile_values(profile);
     let selected_task_label = app.selected_task_label_for_cli();
-    let task_note = app.task_note_for_cli();
 
     TimerStateOutput {
         phase: timer_phase_id(phase),
@@ -717,7 +681,6 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
             long_break_interval,
         },
         selected_task_label,
-        task_note,
     }
 }
 

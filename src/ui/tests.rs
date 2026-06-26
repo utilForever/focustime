@@ -55,9 +55,9 @@ fn timer_primary_hint_includes_break_glass_shortcut() {
 }
 
 #[test]
-fn timer_primary_hint_includes_note_shortcut() {
+fn timer_primary_hint_omits_note_shortcut() {
     let app = App::default();
-    assert!(timer_primary_hint(&app).contains("[m] Note"));
+    assert!(!timer_primary_hint(&app).contains("Note"));
 }
 
 #[test]
@@ -80,101 +80,6 @@ fn app_color_uses_deuteranopia_friendly_mapping() {
 
     assert_eq!(app_color(&app, Color::Red), Color::Blue);
     assert_eq!(app_color(&app, Color::Green), Color::Cyan);
-}
-
-#[test]
-fn timer_primary_hint_marks_note_as_focus_only_when_not_editable() {
-    let app = App::default();
-    assert!(timer_primary_hint(&app).contains("[m] Note (Focus only)"));
-}
-
-#[test]
-fn timer_hints_switch_when_note_edit_is_active() {
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char(' '),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('m'),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-
-    assert_eq!(
-        timer_primary_hint(&app),
-        "Note: Type text  [Enter] Save  [Esc] Cancel"
-    );
-    assert_eq!(
-        timer_secondary_hint(&app),
-        "Views: shortcuts paused while editing note"
-    );
-    assert_eq!(timer_tertiary_hint(&app), "Note edit: [Esc] Cancel");
-}
-
-#[test]
-fn timer_hints_allow_note_edit_while_focus_is_paused() {
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char(' '),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char(' '),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-    assert_eq!(app.timer.status, TimerStatus::Paused);
-    assert!(timer_primary_hint(&app).contains("[m] Note"));
-    assert!(!timer_primary_hint(&app).contains("Focus only"));
-
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('m'),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-    assert_eq!(
-        timer_primary_hint(&app),
-        "Note: Type text  [Enter] Save  [Esc] Cancel"
-    );
-    assert_eq!(
-        timer_secondary_hint(&app),
-        "Views: shortcuts paused while editing note"
-    );
-    assert_eq!(timer_tertiary_hint(&app), "Note edit: [Esc] Cancel");
-}
-
-#[test]
-fn timer_note_hints_reflect_custom_confirm_and_cancel_shortcuts() {
-    let mut app = App::from_config_for_tests(AppConfig {
-        shortcuts: ShortcutConfig {
-            confirm: "v".to_string(),
-            cancel: "o".to_string(),
-            ..ShortcutConfig::default()
-        },
-        ..AppConfig::default()
-    });
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char(' '),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('m'),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-
-    assert_eq!(
-        timer_primary_hint(&app),
-        "Note: Type text  [v] Save  [o] Cancel"
-    );
-    assert_eq!(
-        note_phase_notice_text(&app),
-        "📝 Note: Docs   [v] Save   [o] Cancel"
-    );
-    assert_eq!(timer_tertiary_hint(&app), "Note edit: [o] Cancel");
 }
 
 #[test]
@@ -813,71 +718,6 @@ fn timer_view_renders_selected_task_label() {
 
     let text = terminal_text(&terminal, width, height);
     assert!(text.contains("Task: Docs"));
-}
-
-#[test]
-fn timer_view_shows_note_unavailable_outside_active_focus() {
-    let width = 100;
-    let height = 24;
-    let backend = TestBackend::new(width, height);
-    let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
-    let app = App::default();
-
-    terminal
-        .draw(|frame| render(frame, &app))
-        .expect("render should succeed");
-
-    let text = terminal_text(&terminal, width, height);
-    assert!(text.contains("Note: unavailable"));
-}
-
-#[test]
-fn timer_view_renders_active_session_note() {
-    let width = 100;
-    let height = 24;
-    let backend = TestBackend::new(width, height);
-    let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char(' '),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-
-    terminal
-        .draw(|frame| render(frame, &app))
-        .expect("render should succeed");
-
-    let text = terminal_text(&terminal, width, height);
-    assert!(text.contains("Note: Docs"));
-}
-
-#[test]
-fn timer_view_renders_note_edit_notice() {
-    let width = 100;
-    let height = 24;
-    let backend = TestBackend::new(width, height);
-    let mut terminal = Terminal::new(backend).expect("test terminal should initialize");
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char(' '),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('m'),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-
-    terminal
-        .draw(|frame| render(frame, &app))
-        .expect("render should succeed");
-
-    let text = terminal_text(&terminal, width, height);
-    assert!(text.contains("[Enter] Save"));
-    assert!(text.contains("Cancel"));
 }
 
 #[test]

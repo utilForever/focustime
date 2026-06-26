@@ -89,14 +89,12 @@ fn snapshot_for_tests(
     task_label: Option<&str>,
     selected_profile: ProfileId,
 ) -> InProgressSessionSnapshot {
-    let metadata_value = task_label.map(str::to_string);
     InProgressSessionSnapshot {
         phase: RecoveryTimerPhase::from_timer_phase(phase),
         status: RecoveryTimerStatus::from_timer_status(status),
         remaining_secs,
         pomodoros_completed: 0,
-        selected_task_label: metadata_value.clone(),
-        task_note: metadata_value,
+        selected_task_label: task_label.map(str::to_string),
         selected_profile,
         captured_at_epoch_secs: None,
     }
@@ -2038,20 +2036,6 @@ fn site_manager_ctrl_c_quits_during_text_input_modes() {
     app.handle_key(ctrl_key(KeyCode::Char('c')));
 
     assert!(app.should_quit);
-}
-
-#[test]
-fn timer_note_paste_sanitizes_multiline_and_control_characters() {
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(key(KeyCode::Char(' ')));
-    app.handle_key(key(KeyCode::Char('m')));
-    app.timer_note_input.clear();
-
-    app.handle_paste("  line1\nline2\r\n\tline3\u{0007}  ".to_string());
-
-    assert_eq!(app.timer_note_input, "line1 line2 line3");
 }
 
 #[test]
@@ -4172,135 +4156,19 @@ fn focus_does_not_start_without_selected_task_label() {
 }
 
 #[test]
-fn mid_session_note_input_requires_active_focus() {
-    let mut app = App::default();
-    app.selected_task_label = Some("Docs".to_string());
-
-    app.handle_key(key(KeyCode::Char('m')));
-
-    assert!(!app.timer_note_input_active);
-    assert_eq!(
-        app.phase_notification.as_deref(),
-        Some("Mid-session notes are available only during active or paused focus.")
-    );
-}
-
-#[test]
-fn mid_session_note_input_commits_and_syncs_recovery_snapshot() {
+fn planner_rename_updates_active_focus_task_label() {
     let mut app = App::default();
     app.task_labels = vec!["Docs".to_string()];
     app.selected_task_label = Some("Docs".to_string());
     app.handle_key(key(KeyCode::Char(' ')));
-
-    app.handle_key(key(KeyCode::Char('m')));
-    assert!(app.timer_note_input_active);
-    assert_eq!(app.timer_note_input, "Docs");
-
-    app.timer_note_input = "Capture blockers for retro".to_string();
-    app.handle_key(key(KeyCode::Enter));
-
-    assert!(!app.timer_note_input_active);
-    assert_eq!(
-        app.active_focus_task_note.as_deref(),
-        Some("Capture blockers for retro")
-    );
-    let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
-    assert_eq!(
-        snapshot.task_note.as_deref(),
-        Some("Capture blockers for retro")
-    );
-}
-
-#[test]
-fn mid_session_note_input_uses_custom_confirm_shortcut() {
-    let config = AppConfig {
-        shortcuts: ShortcutConfig {
-            confirm: "v".to_string(),
-            ..ShortcutConfig::default()
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(key(KeyCode::Char(' ')));
-
-    app.handle_key(key(KeyCode::Char('m')));
-    assert!(app.timer_note_input_active);
-    assert_eq!(
-        app.phase_notification.as_deref(),
-        Some("Editing session note: type text, then press [v] to save.")
-    );
-    app.timer_note_input = "Capture blockers for retro".to_string();
-    app.handle_key(key(KeyCode::Char('v')));
-
-    assert!(!app.timer_note_input_active);
-    assert_eq!(
-        app.active_focus_task_note.as_deref(),
-        Some("Capture blockers for retro")
-    );
-}
-
-#[test]
-fn mid_session_note_input_empty_commit_falls_back_to_task_label() {
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(key(KeyCode::Char(' ')));
-
-    app.handle_key(key(KeyCode::Char('m')));
-    app.timer_note_input = "   ".to_string();
-    app.handle_key(key(KeyCode::Enter));
-
-    assert_eq!(app.active_focus_task_note.as_deref(), Some("Docs"));
-    let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
-    assert_eq!(snapshot.task_note.as_deref(), Some("Docs"));
-}
-
-#[test]
-fn mid_session_note_input_updates_interruption_metadata() {
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(key(KeyCode::Char(' ')));
-
-    app.handle_key(key(KeyCode::Char('m')));
-    app.timer_note_input = "Pulled into production incident".to_string();
-    app.handle_key(key(KeyCode::Enter));
-    app.timer.remaining_secs = 1_000;
-
-    app.handle_key(key(KeyCode::Char('s')));
-
-    let interruptions = app.recent_session_interruptions(1);
-    assert_eq!(interruptions.len(), 1);
-    assert_eq!(
-        interruptions[0].task_note.as_deref(),
-        Some("Pulled into production incident")
-    );
-}
-
-#[test]
-fn planner_rename_preserves_custom_mid_session_note() {
-    let mut app = App::default();
-    app.task_labels = vec!["Docs".to_string()];
-    app.selected_task_label = Some("Docs".to_string());
-    app.handle_key(key(KeyCode::Char(' ')));
-
-    app.handle_key(key(KeyCode::Char('m')));
-    app.timer_note_input = "Keep this custom note".to_string();
-    app.handle_key(key(KeyCode::Enter));
 
     app.open_session_planner();
     app.planner_selection_index = 0;
     app.commit_planner_rename_input("Writing".to_string());
 
     assert_eq!(app.active_focus_task_label.as_deref(), Some("Writing"));
-    assert_eq!(
-        app.active_focus_task_note.as_deref(),
-        Some("Keep this custom note")
-    );
     let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
-    assert_eq!(snapshot.task_note.as_deref(), Some("Keep this custom note"));
+    assert_eq!(snapshot.selected_task_label.as_deref(), Some("Writing"));
 }
 
 #[test]
@@ -4336,30 +4204,6 @@ fn cli_start_begins_focus_when_task_label_exists() {
     assert!(result.is_ok());
     assert_eq!(app.timer.status, TimerStatus::Running);
     assert_eq!(app.active_focus_task_label, Some("Docs".to_string()));
-}
-
-#[test]
-fn cli_metadata_update_requires_active_or_paused_focus() {
-    let mut app = App::default();
-
-    let note_error = app.set_task_note_for_cli("Capture blockers").unwrap_err();
-    assert_eq!(
-        note_error,
-        "Cannot set session metadata with `--task-note`: focus session is not active or paused."
-    );
-}
-
-#[test]
-fn cli_metadata_update_syncs_active_state_and_recovery_snapshot() {
-    let mut app = App::default();
-    app.selected_task_label = Some("Docs".to_string());
-    app.start_focus_for_cli().unwrap();
-
-    app.set_task_note_for_cli("Capture blockers").unwrap();
-
-    assert_eq!(app.task_note_for_cli().as_deref(), Some("Capture blockers"));
-    let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
-    assert_eq!(snapshot.task_note.as_deref(), Some("Capture blockers"));
 }
 
 #[test]
@@ -5180,7 +5024,6 @@ fn startup_reconciles_elapsed_recovery_time_while_session_is_running() {
         remaining_secs: 120,
         pomodoros_completed: 0,
         selected_task_label: Some("Docs".to_string()),
-        task_note: Some("Docs".to_string()),
         selected_profile: ProfileId::Classic,
         captured_at_epoch_secs: Some(now_epoch_secs - 10),
     }));
@@ -5201,7 +5044,6 @@ fn startup_reconciles_elapsed_recovery_time_when_phase_completed_offline() {
         remaining_secs: 1,
         pomodoros_completed: 0,
         selected_task_label: Some("Docs".to_string()),
-        task_note: Some("Section 1".to_string()),
         selected_profile: ProfileId::Classic,
         captured_at_epoch_secs: Some(0),
     }));
@@ -5213,7 +5055,6 @@ fn startup_reconciles_elapsed_recovery_time_when_phase_completed_offline() {
     assert_eq!(app.timer.remaining_secs, app.timer.short_break_secs);
     assert_eq!(app.timer.pomodoros_completed, 1);
     assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
-    assert!(app.active_focus_task_note.is_none());
     assert!(app.phase_notification.as_deref().is_some_and(|message| {
         message.contains("Recovered elapsed timer state into Short Break phase")
     }));
@@ -5279,7 +5120,6 @@ fn startup_restores_pomodoro_count_for_phase_cadence() {
         remaining_secs: 1,
         pomodoros_completed: 3,
         selected_task_label: Some("Docs".to_string()),
-        task_note: Some("Docs".to_string()),
         selected_profile: ProfileId::Classic,
         captured_at_epoch_secs: None,
     }));
@@ -5358,7 +5198,6 @@ fn recovery_snapshot_prefers_active_focus_label_over_selected_label() {
 
     let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
     assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task A"));
-    assert_eq!(snapshot.task_note.as_deref(), Some("Task A"));
 }
 
 #[test]
@@ -5380,7 +5219,6 @@ fn planner_label_change_during_running_break_updates_recovery_snapshot() {
 
     let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
     assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task B"));
-    assert_eq!(snapshot.task_note, None);
     assert_eq!(snapshot.phase, RecoveryTimerPhase::ShortBreak);
     assert_eq!(snapshot.status, RecoveryTimerStatus::Running);
 }

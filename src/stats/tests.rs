@@ -972,7 +972,6 @@ fn persisted_stats_round_trip_preserves_session_interruptions() {
         SessionInterruptionReason::ManualStop,
         FocusSessionMetadata {
             task_label: Some("Project A"),
-            task_note: Some("Urgent incident"),
         },
         720,
         Some(ProfileId::DeepWork),
@@ -988,7 +987,6 @@ fn persisted_stats_round_trip_preserves_session_interruptions() {
     assert_eq!(recent[0].timestamp_epoch_secs, 1_711_000_123);
     assert_eq!(recent[0].reason, SessionInterruptionReason::ManualStop);
     assert_eq!(recent[0].task_label.as_deref(), Some("Project A"));
-    assert_eq!(recent[0].task_note.as_deref(), Some("Urgent incident"));
     assert_eq!(recent[0].remaining_secs, 720);
     assert_eq!(recent[0].profile, Some(ProfileId::DeepWork));
 }
@@ -1002,7 +1000,6 @@ fn latest_session_interruption_prefers_greatest_timestamp() {
         SessionInterruptionReason::ManualStop,
         FocusSessionMetadata {
             task_label: Some("Project A"),
-            task_note: Some("Urgent incident"),
         },
         720,
         Some(ProfileId::Classic),
@@ -1013,7 +1010,6 @@ fn latest_session_interruption_prefers_greatest_timestamp() {
         SessionInterruptionReason::ManualSkip,
         FocusSessionMetadata {
             task_label: Some("Project B"),
-            task_note: Some("Interrupt"),
         },
         600,
         Some(ProfileId::DeepWork),
@@ -1135,7 +1131,8 @@ fn legacy_focus_sessions_keep_empty_metadata() {
     let export = restored.export_data();
     assert_eq!(export.sessions.len(), 1);
     assert_eq!(export.sessions[0].task_label, "Project A");
-    assert!(export.sessions[0].task_note.is_empty());
+    let value = serde_json::to_value(&export.sessions[0]).unwrap();
+    assert!(value.get("task_note").is_none());
 }
 
 #[test]
@@ -1213,7 +1210,7 @@ fn persisted_focus_session_uses_stored_time_of_day_bucket() {
 }
 
 #[test]
-fn session_export_preserves_persisted_metadata_fields() {
+fn session_export_omits_task_note_metadata_fields() {
     let mut stats = FocusStats::default();
     let goal = DailyGoalSnapshot {
         minutes: 25,
@@ -1225,7 +1222,6 @@ fn session_export_preserves_persisted_metadata_fields() {
         goal,
         FocusSessionMetadata {
             task_label: Some("Project A"),
-            task_note: Some("Capture blockers for follow-up"),
         },
         30 * 60,
         Some(ProfileId::Classic),
@@ -1234,10 +1230,8 @@ fn session_export_preserves_persisted_metadata_fields() {
     let export = stats.export_data();
     assert_eq!(export.sessions.len(), 1);
     assert_eq!(export.sessions[0].task_label, "Project A");
-    assert_eq!(
-        export.sessions[0].task_note,
-        "Capture blockers for follow-up"
-    );
+    let value = serde_json::to_value(&export.sessions[0]).unwrap();
+    assert!(value.get("task_note").is_none());
 }
 
 #[test]
@@ -1566,7 +1560,6 @@ fn productivity_comparison_groups_time_of_day_buckets_and_unknown() {
         goal,
         FocusSessionMetadata {
             task_label: Some("Docs"),
-            task_note: None,
         },
         30 * 60,
         Some(ProfileId::Classic),
@@ -1577,7 +1570,6 @@ fn productivity_comparison_groups_time_of_day_buckets_and_unknown() {
         goal,
         FocusSessionMetadata {
             task_label: Some("Build"),
-            task_note: None,
         },
         20 * 60,
         Some(ProfileId::DeepWork),
@@ -1588,7 +1580,6 @@ fn productivity_comparison_groups_time_of_day_buckets_and_unknown() {
         goal,
         FocusSessionMetadata {
             task_label: Some("Review"),
-            task_note: None,
         },
         10 * 60,
         Some(ProfileId::Custom),
@@ -1631,7 +1622,6 @@ fn productivity_comparison_applies_task_and_time_filters() {
         goal,
         FocusSessionMetadata {
             task_label: Some("Docs"),
-            task_note: None,
         },
         30 * 60,
         Some(ProfileId::Classic),
@@ -1642,7 +1632,6 @@ fn productivity_comparison_applies_task_and_time_filters() {
         goal,
         FocusSessionMetadata {
             task_label: Some("Docs"),
-            task_note: None,
         },
         20 * 60,
         Some(ProfileId::DeepWork),
@@ -1653,7 +1642,6 @@ fn productivity_comparison_applies_task_and_time_filters() {
         goal,
         FocusSessionMetadata {
             task_label: Some("Docs"),
-            task_note: None,
         },
         15 * 60,
         Some(ProfileId::Classic),
@@ -1664,7 +1652,6 @@ fn productivity_comparison_applies_task_and_time_filters() {
         goal,
         FocusSessionMetadata {
             task_label: Some("Coding"),
-            task_note: None,
         },
         40 * 60,
         Some(ProfileId::Classic),
@@ -1744,7 +1731,6 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         SessionInterruptionReason::ManualSkip,
         FocusSessionMetadata {
             task_label: Some("Project A"),
-            task_note: Some("Pulled into urgent review"),
         },
         600,
         Some(ProfileId::Classic),
@@ -1812,7 +1798,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     assert!(weekly.iter().any(|entry| entry["focused_minutes"] == 75));
     assert_eq!(sessions[0]["task_label"], "Project A");
     assert!(sessions[0].get("focus_intention").is_none());
-    assert_eq!(sessions[0]["task_note"], "Project A");
+    assert!(sessions[0].get("task_note").is_none());
     assert_eq!(sessions[0]["focused_minutes"], 30);
     assert_eq!(sessions[0]["profile"], "basic");
     assert_eq!(interruptions[0]["reason"], "manual_skip");
@@ -2033,7 +2019,6 @@ fn growth_summary_reports_sections_and_high_volume_groups() {
         SessionInterruptionReason::ManualStop,
         FocusSessionMetadata {
             task_label: Some("Docs"),
-            task_note: Some("API section"),
         },
         300,
         None,
@@ -2105,7 +2090,6 @@ fn apply_retention_policy_prunes_old_high_volume_entries() {
         SessionInterruptionReason::ManualStop,
         FocusSessionMetadata {
             task_label: Some("Docs"),
-            task_note: Some("Old note"),
         },
         600,
         None,
@@ -2116,7 +2100,6 @@ fn apply_retention_policy_prunes_old_high_volume_entries() {
         SessionInterruptionReason::ManualSkip,
         FocusSessionMetadata {
             task_label: Some("Docs"),
-            task_note: Some("Recent note"),
         },
         600,
         None,
