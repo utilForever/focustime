@@ -555,20 +555,6 @@ pub(super) fn format_task_trend_delta(trend: &crate::stats::TaskTrend) -> String
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
-pub(super) fn format_task_goal_progress_summary(
-    progress: &crate::stats::TaskGoalProgress,
-) -> String {
-    if !progress.target.has_any_target() {
-        return "g:off".to_string();
-    }
-    if progress.met {
-        "g:met".to_string()
-    } else {
-        "g:in".to_string()
-    }
-}
-
 fn heatmap_cell_symbol(app: &App, focused_minutes: u64, max_focused_minutes: u64) -> (char, Color) {
     if focused_minutes == 0 || max_focused_minutes == 0 {
         return ('.', app_color(app, Color::DarkGray));

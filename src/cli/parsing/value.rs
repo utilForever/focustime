@@ -3,7 +3,7 @@ use crate::cli::{
     RecurringScheduleConfig, SiteEditValue, ThemePreset, WeeklyGoalConfig,
 };
 
-use super::{invalid_usage, require_nonempty_key_value};
+use super::invalid_usage;
 
 pub(in crate::cli) fn parse_profile_id(value: &str) -> Result<ProfileId, String> {
     match value.trim().to_ascii_lowercase().as_str() {
@@ -30,28 +30,6 @@ pub(in crate::cli) fn parse_theme_preset(value: &str) -> Result<ThemePreset, Str
             "Invalid theme preset `{value}`. Use `classic`, `high-contrast`, or `deuteranopia-friendly`."
         ))),
     }
-}
-
-pub(in crate::cli) fn parse_task_goal_value(
-    value: &str,
-) -> Result<(String, Option<DailyGoalConfig>), String> {
-    let trimmed = value.trim();
-    if let Some((label_raw, goal_raw)) = trimmed.rsplit_once(':')
-        && goal_raw.contains(',')
-    {
-        let label =
-            require_nonempty_key_value(label_raw, "Task goal requires a task label before `:`.")?
-                .to_string();
-        let (minutes, pomodoros) = parse_goal_components(goal_raw, "--task-goal")?;
-        return Ok((label, Some(DailyGoalConfig { minutes, pomodoros })));
-    }
-
-    let label = require_nonempty_key_value(
-        trimmed,
-        "`--task-goal` requires `LABEL` or `LABEL:MINUTES,POMODOROS`.",
-    )?
-    .to_string();
-    Ok((label, None))
 }
 
 pub(in crate::cli) fn parse_goal_value(value: &str) -> Result<DailyGoalConfig, String> {

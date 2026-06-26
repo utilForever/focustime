@@ -100,22 +100,6 @@ pub(super) fn planner_state_labels_for_keys(
     values
 }
 
-pub(super) fn normalize_task_goal_targets(
-    task_goal_targets: BTreeMap<String, DailyGoalSnapshot>,
-) -> BTreeMap<String, DailyGoalSnapshot> {
-    let mut normalized = BTreeMap::new();
-    for (label, target) in task_goal_targets {
-        if !target.has_any_target() {
-            continue;
-        }
-        let Some(label) = normalize_task_label(&label) else {
-            continue;
-        };
-        normalized.insert(label.to_ascii_lowercase(), target);
-    }
-    normalized
-}
-
 pub(super) fn normalize_usage_counts(input: BTreeMap<String, u64>) -> BTreeMap<String, u64> {
     let mut normalized = BTreeMap::new();
     for (surface, count) in input {

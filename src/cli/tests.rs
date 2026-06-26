@@ -278,69 +278,6 @@ fn parse_task_with_value_sets_label() {
 }
 
 #[test]
-fn parse_task_goal_without_value_reads_selected_label_goal() {
-    let parsed = parse(&["--task-goal"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::TaskGoal {
-                label: None,
-                goal: None
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_task_goal_with_label_reads_specific_goal() {
-    let parsed = parse(&["--task-goal", "Docs"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::TaskGoal {
-                label: Some("Docs".to_string()),
-                goal: None
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_task_goal_with_label_and_target_sets_goal() {
-    let parsed = parse(&["--task-goal", "Docs:120,4"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::TaskGoal {
-                label: Some("Docs".to_string()),
-                goal: Some(DailyGoalConfig {
-                    minutes: 120,
-                    pomodoros: 4
-                })
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_task_goal_with_colon_in_label_reads_specific_goal() {
-    let parsed = parse(&["--task-goal", "Docs:API"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::TaskGoal {
-                label: Some("Docs:API".to_string()),
-                goal: None
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
 fn parse_task_note_without_value_is_removed() {
     let error = parse_with_contract(&["--task-note"]).unwrap_err();
 
@@ -350,6 +287,38 @@ fn parse_task_note_without_value_is_removed() {
         error.hint.as_deref(),
         Some(
             "Use `--task` to select the active task label; task labels are the supported session context."
+        )
+    );
+}
+
+#[test]
+fn parse_task_goal_without_value_is_removed() {
+    let error = parse_with_contract(&["--task-goal"]).unwrap_err();
+
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert!(error.message.contains("Unknown option `--task-goal`."));
+    assert_eq!(
+        error.hint.as_deref(),
+        Some(
+            "Use `--goal`, `--goal-weekly`, or `--goal-monthly` for global goals; task labels remain available through `--task`."
+        )
+    );
+}
+
+#[test]
+fn parse_task_goal_with_equals_value_is_removed() {
+    let error = parse_with_contract(&["--task-goal=Docs:120,4"]).unwrap_err();
+
+    assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+    assert!(
+        error
+            .message
+            .contains("Unknown option `--task-goal=Docs:120,4`.")
+    );
+    assert_eq!(
+        error.hint.as_deref(),
+        Some(
+            "Use `--goal`, `--goal-weekly`, or `--goal-monthly` for global goals; task labels remain available through `--task`."
         )
     );
 }
@@ -1200,33 +1169,6 @@ fn classify_key_value_arg_accepts_task_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_task_goal_equals_label() {
-    let parsed = classify_key_value_arg("--task-goal=Docs").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::TaskGoal {
-            label: Some("Docs".to_string()),
-            goal: None
-        })
-    );
-}
-
-#[test]
-fn classify_key_value_arg_accepts_task_goal_equals_label_and_target() {
-    let parsed = classify_key_value_arg("--task-goal=Docs:90,3").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::TaskGoal {
-            label: Some("Docs".to_string()),
-            goal: Some(DailyGoalConfig {
-                minutes: 90,
-                pomodoros: 3
-            })
-        })
-    );
-}
-
-#[test]
 fn classify_key_value_arg_rejects_empty_task_equals_value() {
     let error = classify_key_value_arg("--task=").unwrap_err();
     assert!(error.contains("`--task=` requires a task label."));
@@ -1495,27 +1437,9 @@ fn parse_rejects_task_note_with_blank_equals_value_as_removed_option() {
 }
 
 #[test]
-fn parse_rejects_task_goal_with_blank_label() {
-    let error = parse(&["--task-goal=:120,4"]).unwrap_err();
-    assert!(error.contains("Task goal requires a task label before `:`."));
-}
-
-#[test]
-fn parse_rejects_task_goal_with_non_numeric_pomodoros_suffix() {
-    let error = parse(&["--task-goal=Docs:120,abc"]).unwrap_err();
-    assert!(error.contains("Invalid goal pomodoros"));
-}
-
-#[test]
 fn parse_rejects_theme_with_unknown_value() {
     let error = parse(&["--theme=solarized"]).unwrap_err();
     assert!(error.contains("Invalid theme preset"));
-}
-
-#[test]
-fn parse_rejects_task_goal_with_extra_goal_components() {
-    let error = parse(&["--task-goal=Docs:120,4,5"]).unwrap_err();
-    assert!(error.contains("Invalid goal pomodoros"));
 }
 
 #[test]
@@ -2456,7 +2380,7 @@ fn build_status_output_daily_goal_uses_persisted_same_day_snapshot() {
 }
 
 #[test]
-fn build_status_output_includes_unconfigured_selected_task_goal() {
+fn build_status_output_keeps_selected_task_label_without_task_goal() {
     let mut stats = FocusStats::default();
     let changed =
         stats.update_task_planner_state(vec!["Docs".to_string()], Some("Docs".to_string()));
@@ -2464,17 +2388,8 @@ fn build_status_output_includes_unconfigured_selected_task_goal() {
     let config = AppConfig::default();
 
     let output = build_status_output(&config, &stats);
-    let selected_task_goal = output
-        .selected_task_goal
-        .expect("selected task goal should exist when a task is selected");
 
-    assert_eq!(selected_task_goal.task_label, "Docs");
-    assert!(!selected_task_goal.configured);
-    assert_eq!(selected_task_goal.minutes_target, 0);
-    assert_eq!(selected_task_goal.pomodoros_target, 0);
-    assert_eq!(selected_task_goal.focused_minutes, 0);
-    assert_eq!(selected_task_goal.pomodoros_completed, 0);
-    assert!(!selected_task_goal.met);
+    assert_eq!(output.selected_task_label.as_deref(), Some("Docs"));
     assert!(!output.focus_score.available);
     assert!(output.focus_score.focus_score_pct.is_none());
     assert!(!output.focus_risk.daily_goal.configured);

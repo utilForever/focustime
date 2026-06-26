@@ -31,8 +31,8 @@ use crate::stats::{
     ExportedStatsFiles, FocusRiskForecast, FocusSessionMetadata, FocusStats, GoalStreak,
     MonthlyHeatmap, MonthlyStats, ProfileBucket, ProfileEffectiveness, ProfileTotals,
     SessionInterruptionEvent, SessionInterruptionReason, SessionStats, StatsGrowthSummary,
-    StatsRetentionPruneResult, TaskGoalProgress, TaskTotals, TaskTrend, TimeOfDayBucket,
-    WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target, current_day_key,
+    StatsRetentionPruneResult, TaskTotals, TaskTrend, TimeOfDayBucket, WeeklyConsistency,
+    WeeklyFocusScore, WeeklyStats, carry_over_goal_target, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::temporary_allowlist::{
@@ -975,11 +975,6 @@ impl App {
     #[allow(dead_code)]
     pub(crate) fn task_focus_totals(&self, limit: usize) -> Vec<TaskTotals> {
         self.stats.task_totals(limit)
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn task_goal_progress_for_label(&self, label: &str) -> Option<TaskGoalProgress> {
-        self.stats.task_goal_progress_for_label(label)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]

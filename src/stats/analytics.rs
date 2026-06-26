@@ -682,11 +682,6 @@ impl FocusStats {
                 &self.break_glass_overrides,
             ),
             stats_growth_section(
-                "task_goal_targets",
-                self.task_goal_targets.len(),
-                &self.task_goal_targets,
-            ),
-            stats_growth_section(
                 "command_usage_counts",
                 self.command_usage_counts.len(),
                 &self.command_usage_counts,

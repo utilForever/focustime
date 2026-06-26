@@ -1,14 +1,13 @@
 use crate::cli::{
     KeyValueParser, ParsedToken, PathBuf, parse_goal_carry_value, parse_goal_value,
     parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
-    parse_strict_value, parse_task_goal_value, parse_theme_preset, parse_watch_interval_secs,
-    parse_weekly_goal_value, require_nonempty_key_value,
+    parse_strict_value, parse_theme_preset, parse_watch_interval_secs, parse_weekly_goal_value,
+    require_nonempty_key_value,
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 26] = [
+    let parsers: [KeyValueParser; 25] = [
         parse_task_key_value_arg,
-        parse_task_goal_key_value_arg,
         parse_profile_key_value_arg,
         parse_theme_key_value_arg,
         parse_goal_key_value_arg,
@@ -48,21 +47,6 @@ fn parse_task_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--task=") {
         let value = require_nonempty_key_value(value, "`--task=` requires a task label.")?;
         return Ok(Some(ParsedToken::Task(value.to_string())));
-    }
-    Ok(None)
-}
-
-fn parse_task_goal_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--task-goal=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--task-goal=` requires `LABEL` or `LABEL:MINUTES,POMODOROS`.",
-        )?;
-        let (label, goal) = parse_task_goal_value(value)?;
-        return Ok(Some(ParsedToken::TaskGoal {
-            label: Some(label),
-            goal,
-        }));
     }
     Ok(None)
 }

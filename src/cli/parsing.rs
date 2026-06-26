@@ -6,8 +6,8 @@ pub(super) use options::{
 };
 pub(super) use value::{
     parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_profile_id,
-    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_task_goal_value,
-    parse_theme_preset, parse_weekly_goal_value,
+    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_theme_preset,
+    parse_weekly_goal_value,
 };
 
 use crate::cli::{
@@ -43,7 +43,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Stop
             | ParsedToken::Next
             | ParsedToken::Task(_)
-            | ParsedToken::TaskGoal { .. }
             | ParsedToken::Status
             | ParsedToken::Watch(_)
             | ParsedToken::Profile(_)
@@ -136,6 +135,10 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
             summary: "Task note commands were removed.",
             replacement: "Use `--task` to select the active task label; task labels are the supported session context.",
         }),
+        "--task-goal" => Some(RemovedOptionGuidance {
+            summary: "Task goal commands were removed.",
+            replacement: "Use `--goal`, `--goal-weekly`, or `--goal-monthly` for global goals; task labels remain available through `--task`.",
+        }),
         _ => None,
     }
 }
@@ -154,13 +157,6 @@ pub(super) fn parse_primary_command(
             ParsedToken::Task(label) => {
                 set_primary_command(&mut primary, PrimaryCommand::Task(label.clone()))?
             }
-            ParsedToken::TaskGoal { label, goal } => set_primary_command(
-                &mut primary,
-                PrimaryCommand::TaskGoal {
-                    label: label.clone(),
-                    goal: *goal,
-                },
-            )?,
             ParsedToken::Status => set_primary_command(&mut primary, PrimaryCommand::Status)?,
             ParsedToken::Watch(_) => {}
             ParsedToken::Profile(profile) => {
@@ -378,10 +374,6 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Task { label },
             output,
         })),
-        Some(PrimaryCommand::TaskGoal { label, goal }) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::TaskGoal { label, goal },
-            output,
-        })),
         Some(PrimaryCommand::Status) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Status {
                 watch_interval_secs,
@@ -523,7 +515,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Stop => "--stop",
         PrimaryCommand::Next => "--next",
         PrimaryCommand::Task(_) => "--task",
-        PrimaryCommand::TaskGoal { .. } => "--task-goal",
         PrimaryCommand::Profile(_) => "--profile",
         PrimaryCommand::Theme(_) => "--theme",
         PrimaryCommand::Goal(_) => "--goal",

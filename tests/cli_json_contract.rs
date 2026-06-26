@@ -220,7 +220,7 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload["goal"].get("carry_over").is_some());
     assert!(payload["weekly_goal"].get("carry_over").is_some());
     assert!(payload["monthly_goal"].get("carry_over").is_some());
-    assert!(payload.get("selected_task_goal").is_some());
+    assert!(payload.get("selected_task_goal").is_none());
     assert!(payload.get("focus_score").is_some());
     assert!(payload["focus_score"].get("available").is_some());
     assert!(
@@ -276,57 +276,26 @@ fn temporary_allowlist_add_json_is_reflected_in_status_json() {
 }
 
 #[test]
-fn task_goal_json_sets_and_reads_per_task_target() {
-    let env = TestEnv::new("task-goal-json");
+fn task_goal_json_command_is_removed() {
+    let env = TestEnv::new("task-goal-json-removed");
+    let output = env.run(&["--task-goal=Docs:120,4", "--json"]);
 
-    let select_output = env.run(&["--task", "Docs", "--json"]);
-    assert_eq!(select_output.status.code(), Some(0));
-    assert!(stderr_text(&select_output).trim().is_empty());
-
-    let set_output = env.run(&["--task-goal", "Docs:120,4", "--json"]);
-    assert_eq!(set_output.status.code(), Some(0));
-    assert!(stderr_text(&set_output).trim().is_empty());
-    let set_payload: Value =
-        serde_json::from_slice(&set_output.stdout).expect("stdout should be JSON");
-    assert_eq!(set_payload["updated"], true);
-    assert_eq!(set_payload["task_label"], "Docs");
-    assert_eq!(set_payload["configured"], true);
-    assert_eq!(set_payload["minutes_target"], 120);
-    assert_eq!(set_payload["pomodoros_target"], 4);
-
-    let read_output = env.run(&["--task-goal", "Docs", "--json"]);
-    assert_eq!(read_output.status.code(), Some(0));
-    assert!(stderr_text(&read_output).trim().is_empty());
-    let read_payload: Value =
-        serde_json::from_slice(&read_output.stdout).expect("stdout should be JSON");
-    assert_eq!(read_payload["updated"], false);
-    assert_eq!(read_payload["task_label"], "Docs");
-    assert_eq!(read_payload["configured"], true);
-    assert_eq!(read_payload["minutes_target"], 120);
-    assert_eq!(read_payload["pomodoros_target"], 4);
-}
-
-#[test]
-fn task_goal_json_reads_unconfigured_selected_task_goal() {
-    let env = TestEnv::new("task-goal-json-unconfigured");
-
-    let select_output = env.run(&["--task", "Docs", "--json"]);
-    assert_eq!(select_output.status.code(), Some(0));
-    assert!(stderr_text(&select_output).trim().is_empty());
-
-    let read_output = env.run(&["--task-goal", "Docs", "--json"]);
-    assert_eq!(read_output.status.code(), Some(0));
-    assert!(stderr_text(&read_output).trim().is_empty());
-    let read_payload: Value =
-        serde_json::from_slice(&read_output.stdout).expect("stdout should be JSON");
-    assert_eq!(read_payload["updated"], false);
-    assert_eq!(read_payload["task_label"], "Docs");
-    assert_eq!(read_payload["configured"], false);
-    assert_eq!(read_payload["minutes_target"], 0);
-    assert_eq!(read_payload["pomodoros_target"], 0);
-    assert_eq!(read_payload["focused_minutes"], 0);
-    assert_eq!(read_payload["pomodoros_completed"], 0);
-    assert_eq!(read_payload["met"], false);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr_text(&output).trim().is_empty());
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(payload["ok"], false);
+    assert_eq!(payload["error"]["kind"], "usage");
+    assert_eq!(payload["error"]["exit_code"], 2);
+    assert!(
+        payload["error"]["message"]
+            .as_str()
+            .expect("error message should be a string")
+            .contains("Unknown option `--task-goal=Docs:120,4`")
+    );
+    assert_eq!(
+        payload["error"]["hint"],
+        "Use `--goal`, `--goal-weekly`, or `--goal-monthly` for global goals; task labels remain available through `--task`."
+    );
 }
 
 #[test]
@@ -427,10 +396,6 @@ fn backup_and_restore_json_round_trip_config_and_stats_files() {
     assert_eq!(set_goal_output.status.code(), Some(0));
     assert!(stderr_text(&set_goal_output).trim().is_empty());
 
-    let set_task_goal_output = env.run(&["--task-goal=Docs:90,3", "--json"]);
-    assert_eq!(set_task_goal_output.status.code(), Some(0));
-    assert!(stderr_text(&set_task_goal_output).trim().is_empty());
-
     let backup_output = env.run(&[backup_arg.as_str(), "--json"]);
     assert_eq!(backup_output.status.code(), Some(0));
     assert!(stderr_text(&backup_output).trim().is_empty());
@@ -446,10 +411,6 @@ fn backup_and_restore_json_round_trip_config_and_stats_files() {
     assert_eq!(mutate_goal_output.status.code(), Some(0));
     assert!(stderr_text(&mutate_goal_output).trim().is_empty());
 
-    let mutate_task_goal_output = env.run(&["--task-goal=Docs:30,1", "--json"]);
-    assert_eq!(mutate_task_goal_output.status.code(), Some(0));
-    assert!(stderr_text(&mutate_task_goal_output).trim().is_empty());
-
     let restore_output = env.run(&[restore_arg.as_str(), "--json"]);
     assert_eq!(restore_output.status.code(), Some(0));
     assert!(stderr_text(&restore_output).trim().is_empty());
@@ -464,12 +425,6 @@ fn backup_and_restore_json_round_trip_config_and_stats_files() {
     let goal_payload: Value = serde_json::from_slice(&goal_output.stdout).unwrap();
     assert_eq!(goal_payload["minutes_target"], 120);
     assert_eq!(goal_payload["pomodoros_target"], 4);
-
-    let task_goal_output = env.run(&["--task-goal", "Docs", "--json"]);
-    assert_eq!(task_goal_output.status.code(), Some(0));
-    let task_goal_payload: Value = serde_json::from_slice(&task_goal_output.stdout).unwrap();
-    assert_eq!(task_goal_payload["minutes_target"], 90);
-    assert_eq!(task_goal_payload["pomodoros_target"], 3);
 }
 
 #[test]
@@ -479,10 +434,6 @@ fn artifact_workflows_json_create_target_dirs_and_preserve_path_fields() {
     let set_goal_output = env.run(&["--goal=120,4", "--json"]);
     assert_eq!(set_goal_output.status.code(), Some(0));
     assert!(stderr_text(&set_goal_output).trim().is_empty());
-
-    let set_task_goal_output = env.run(&["--task-goal=Docs:90,3", "--json"]);
-    assert_eq!(set_task_goal_output.status.code(), Some(0));
-    assert!(stderr_text(&set_task_goal_output).trim().is_empty());
 
     let backup_dir = env.root.join("artifacts").join("backup").join("nested");
     let export_dir = env.root.join("artifacts").join("export").join("nested");
@@ -641,10 +592,10 @@ fn path_value(payload: &Value, key: &str) -> PathBuf {
 }
 
 #[test]
-fn task_goal_json_writes_stats_to_canonical_path_only() {
+fn task_json_writes_stats_to_canonical_path_only() {
     let env = TestEnv::new("stats-canonical-only");
 
-    let output = env.run(&["--task-goal=Docs:90,3", "--json"]);
+    let output = env.run(&["--task", "Docs", "--json"]);
     assert_eq!(output.status.code(), Some(0));
     assert!(stderr_text(&output).trim().is_empty());
 

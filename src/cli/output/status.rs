@@ -1,6 +1,6 @@
 use crate::cli::{
     BreakGlassCommandOutput, FocusScoreOutput, GoalOutput, StatsGrowthSummary,
-    StatsRetentionStatusOutput, StatusOutput, TaskGoalOutput, TimerStateOutput,
+    StatsRetentionStatusOutput, StatusOutput, TimerStateOutput,
 };
 
 use super::{format_duration, format_expiry_clock_suffix};
@@ -36,7 +36,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
     print_status_goal_line("Weekly goal", &payload.weekly_goal);
     print_status_weekly_allocation_line(&payload.weekly_allocation);
     print_status_goal_line("Monthly goal", &payload.monthly_goal);
-    print_status_task_goal_line(payload.selected_task_goal.as_ref());
     println!(
         "Session: {} focused minutes, {} pomodoros",
         payload.session.focused_minutes, payload.session.pomodoros_completed
@@ -159,29 +158,6 @@ fn print_status_goal_line(label: &str, goal: &GoalOutput) {
             if goal.carry_over { "on" } else { "off" }
         );
     }
-}
-
-fn print_status_task_goal_line(task_goal: Option<&TaskGoalOutput>) {
-    let Some(task_goal) = task_goal else {
-        println!("Selected task goal: none");
-        return;
-    };
-
-    if task_goal.configured {
-        println!(
-            "Selected task goal (`{}`): {} min, {} pomodoros ({})",
-            task_goal.task_label,
-            task_goal.minutes_target,
-            task_goal.pomodoros_target,
-            if task_goal.met { "met" } else { "in progress" }
-        );
-    } else {
-        println!("Selected task goal (`{}`): off", task_goal.task_label);
-    }
-    println!(
-        "Selected task progress (`{}`): {} min, {} pomodoros",
-        task_goal.task_label, task_goal.focused_minutes, task_goal.pomodoros_completed
-    );
 }
 
 fn print_status_focus_score_line(focus_score: &FocusScoreOutput) {

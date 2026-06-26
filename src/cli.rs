@@ -54,19 +54,19 @@ use output::{
     print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
     print_site_add_command_output, print_site_delete_command_output,
     print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_task_goal_command_output,
-    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
+    print_strict_command_output, print_temporary_site_add_command_output,
+    print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
     parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_primary_command,
     parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
-    parse_task_goal_value, parse_theme_preset, parse_watch_interval_option,
-    parse_watch_interval_secs, parse_weekly_goal_value, require_nonempty_key_value,
+    parse_theme_preset, parse_watch_interval_option, parse_watch_interval_secs,
+    parse_weekly_goal_value, require_nonempty_key_value,
 };
 use status::{
-    available_theme_preset_views, build_status_output, build_task_goal_output, profile_id,
-    profile_view, theme_preset_view, timer_phase_id, timer_status_id,
+    available_theme_preset_views, build_status_output, profile_id, profile_view, theme_preset_view,
+    timer_phase_id, timer_status_id,
 };
 
 const USAGE_TEXT: &str = r#"Usage:
@@ -77,8 +77,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --stop [--json]
   focustime --next [--json]
   focustime --task=LABEL [--json]
-  focustime --task-goal [LABEL|LABEL:MINUTES,POMODOROS] [--json]
-  focustime --task-goal=LABEL[:MINUTES,POMODOROS] [--json]
   focustime --profile [basic|standard|advanced] [--json]
   focustime --theme [classic|high-contrast|deuteranopia-friendly] [--json]
   focustime --goal [--json]
@@ -126,7 +124,6 @@ Options:
   --stop          Stop/reset the current phase
   --next          Skip to the next phase
   --task          Select task label (auto-creates unknown labels)
-  --task-goal     Show or set per-task cumulative goal targets
   --profile       Show current profile, or set it when value is provided
   --theme         Show current theme preset, or set it when value is provided
   --goal          Show current daily goal, or set minutes/pomodoros targets
@@ -225,10 +222,6 @@ pub(crate) enum CommandKind {
     Task {
         label: String,
     },
-    TaskGoal {
-        label: Option<String>,
-        goal: Option<DailyGoalConfig>,
-    },
     Profile {
         profile: Option<ProfileId>,
     },
@@ -310,10 +303,6 @@ enum PrimaryCommand {
     Stop,
     Next,
     Task(String),
-    TaskGoal {
-        label: Option<String>,
-        goal: Option<DailyGoalConfig>,
-    },
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
@@ -358,10 +347,6 @@ enum ParsedToken {
     Stop,
     Next,
     Task(String),
-    TaskGoal {
-        label: Option<String>,
-        goal: Option<DailyGoalConfig>,
-    },
     Status,
     Watch(Option<u64>),
     Profile(Option<ProfileId>),
@@ -488,17 +473,6 @@ struct GoalOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct TaskGoalOutput {
-    task_label: String,
-    configured: bool,
-    minutes_target: u64,
-    pomodoros_target: u32,
-    focused_minutes: u64,
-    pomodoros_completed: u32,
-    met: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct SessionOutput {
     focused_minutes: u64,
     pomodoros_completed: u32,
@@ -587,7 +561,6 @@ struct StatusOutput {
     weekly_goal: GoalOutput,
     weekly_allocation: WeeklyAllocationOutput,
     monthly_goal: GoalOutput,
-    selected_task_goal: Option<TaskGoalOutput>,
     session: SessionOutput,
     today: TodayOutput,
     latest_interruption: Option<SessionInterruptionEvent>,
@@ -660,18 +633,6 @@ struct TaskCommandOutput {
     created: bool,
     selected_task_label: String,
     timer: TimerStateOutput,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct TaskGoalCommandOutput {
-    updated: bool,
-    task_label: String,
-    configured: bool,
-    minutes_target: u64,
-    pomodoros_target: u32,
-    focused_minutes: u64,
-    pomodoros_completed: u32,
-    met: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
