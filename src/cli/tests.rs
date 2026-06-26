@@ -1481,10 +1481,15 @@ fn parse_automation_triggers_set_equals_is_retired() {
 fn parse_session_template_commands_are_retired() {
     for option in [
         "--session-template",
+        "--session-template=Deep Flow",
         "--session-template-apply",
+        "--session-template-apply=Deep Flow",
+        "--session-template-create",
         "--session-template-create=Deep Flow",
+        "--session-template-rename",
         "--session-template-rename=Deep Flow",
         "--session-template-delete",
+        "--session-template-delete=Deep Flow",
     ] {
         let error = parse(&[option]).unwrap_err();
         assert!(error.contains("Session template commands were removed."));
