@@ -6,10 +6,9 @@ use crate::cli::{
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 28] = [
+    let parsers: [KeyValueParser; 27] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
-        parse_focus_intention_key_value_arg,
         parse_task_note_key_value_arg,
         parse_profile_key_value_arg,
         parse_theme_key_value_arg,
@@ -65,15 +64,6 @@ fn parse_task_goal_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, Strin
             label: Some(label),
             goal,
         }));
-    }
-    Ok(None)
-}
-
-fn parse_focus_intention_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--focus-intention=") {
-        let value =
-            require_nonempty_key_value(value, "`--focus-intention=` requires a non-empty value.")?;
-        return Ok(Some(ParsedToken::FocusIntention(Some(value.to_string()))));
     }
     Ok(None)
 }

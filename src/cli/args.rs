@@ -60,10 +60,9 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 28] = [
+    let parsers: [(&str, ValueArgParser); 27] = [
         ("--task", classify_task_arg),
         ("--task-goal", classify_task_goal_arg),
-        ("--focus-intention", classify_focus_intention_arg),
         ("--task-note", classify_task_note_arg),
         ("--profile", classify_profile_arg),
         ("--theme", classify_theme_arg),
@@ -194,22 +193,6 @@ fn classify_theme_arg(args: &[String], index: usize) -> Result<(ParsedToken, usi
         return Ok((ParsedToken::Theme(Some(selected)), 2));
     }
     Ok((ParsedToken::Theme(None), 1))
-}
-
-fn classify_focus_intention_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(
-            next,
-            "`--focus-intention` requires a value when one is provided.",
-        )?;
-        return Ok((ParsedToken::FocusIntention(Some(value.to_string())), 2));
-    }
-    Ok((ParsedToken::FocusIntention(None), 1))
 }
 
 fn classify_task_note_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {

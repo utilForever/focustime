@@ -40,7 +40,6 @@ impl FocusStats {
             goal,
             FocusSessionMetadata {
                 task_label,
-                focus_intention: task_label,
                 task_note: task_label,
             },
             focused_seconds,
@@ -85,10 +84,6 @@ impl FocusStats {
                 self.task_labels.push(task_label.clone());
             }
             self.selected_task_label = Some(task_label.clone());
-            let focus_intention = metadata
-                .focus_intention
-                .and_then(normalize_session_metadata_text)
-                .unwrap_or_else(|| task_label.clone());
             let task_note = metadata
                 .task_note
                 .and_then(normalize_session_metadata_text)
@@ -96,7 +91,6 @@ impl FocusStats {
             self.focus_sessions.push(FocusSessionRecord {
                 date: day_key.to_string(),
                 task_label,
-                focus_intention,
                 task_note,
                 focused_seconds,
                 profile,
@@ -155,9 +149,6 @@ impl FocusStats {
             date: day_key.to_string(),
             reason,
             task_label: normalized_task_label,
-            focus_intention: metadata
-                .focus_intention
-                .and_then(normalize_session_metadata_text),
             task_note: metadata.task_note.and_then(normalize_session_metadata_text),
             remaining_secs,
             profile,

@@ -353,7 +353,6 @@ impl App {
             .is_some_and(|active| active.eq_ignore_ascii_case(&current_label))
         {
             self.active_focus_task_label = Some(label.clone());
-            self.active_focus_intention = Some(label.clone());
             let should_sync_note_to_label = match self.active_focus_task_note.as_deref() {
                 None => true,
                 Some(note) => note.eq_ignore_ascii_case(&current_label),

@@ -193,9 +193,6 @@ impl FocusStats {
                 task_label: latest_interruption
                     .as_ref()
                     .and_then(|event| event.task_label.clone()),
-                focus_intention: latest_interruption
-                    .as_ref()
-                    .and_then(|event| event.focus_intention.clone()),
                 task_note: latest_interruption
                     .as_ref()
                     .and_then(|event| event.task_note.clone()),
@@ -264,7 +261,6 @@ impl FocusStats {
             .map(|session| SessionExportRow {
                 date: session.date.clone(),
                 task_label: session.task_label.clone(),
-                focus_intention: session.focus_intention.clone(),
                 task_note: session.task_note.clone(),
                 focused_seconds: session.focused_seconds,
                 focused_minutes: session.focused_seconds / 60,
@@ -281,7 +277,6 @@ impl FocusStats {
                 date: event.date.clone(),
                 reason: event.reason,
                 task_label: event.task_label.clone(),
-                focus_intention: event.focus_intention.clone(),
                 task_note: event.task_note.clone(),
                 remaining_secs: event.remaining_secs,
                 profile: event.profile,
@@ -577,7 +572,6 @@ impl StatsExport {
             interruption_timestamp_epoch_secs: None,
             interruption_reason: None,
             interruption_remaining_secs: None,
-            focus_intention: None,
             task_note: None,
             recent_window_start: None,
             recent_window_end: None,
@@ -652,7 +646,6 @@ impl StatsExport {
                 focused_seconds: session.focused_seconds,
                 focused_minutes: session.focused_minutes,
                 task_label: Some(session.task_label.clone()),
-                focus_intention: Some(session.focus_intention.clone()),
                 task_note: Some(session.task_note.clone()),
                 profile_name: session.profile.map(|profile| profile.label().to_string()),
                 ..Self::csv_row_defaults("focus_session")
@@ -666,7 +659,6 @@ impl StatsExport {
                 interruption_timestamp_epoch_secs: Some(interruption.timestamp_epoch_secs),
                 interruption_reason: Some(interruption.reason),
                 interruption_remaining_secs: Some(interruption.remaining_secs),
-                focus_intention: interruption.focus_intention.clone(),
                 task_note: interruption.task_note.clone(),
                 profile_name: interruption
                     .profile

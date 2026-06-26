@@ -26,10 +26,6 @@ impl App {
             timestamp_epoch_secs,
             reason,
             task_label: task_label.clone(),
-            focus_intention: self
-                .active_focus_intention
-                .clone()
-                .or_else(|| task_label.clone()),
             task_note: self.active_focus_task_note.clone().or(task_label),
             remaining_secs: self.timer.remaining_secs,
             profile: self.active_focus_profile.or(Some(self.selected_profile)),
@@ -43,7 +39,6 @@ impl App {
             context.reason,
             FocusSessionMetadata {
                 task_label: context.task_label.as_deref(),
-                focus_intention: context.focus_intention.as_deref(),
                 task_note: context.task_note.as_deref(),
             },
             context.remaining_secs,
@@ -62,10 +57,6 @@ impl App {
         let day_key = current_day_key();
         let goal = self.current_goal_snapshot();
         if let Some(active_task_label) = self.active_focus_task_label.clone() {
-            let focus_intention = self
-                .active_focus_intention
-                .clone()
-                .unwrap_or_else(|| active_task_label.clone());
             let task_note = self
                 .active_focus_task_note
                 .clone()
@@ -75,7 +66,6 @@ impl App {
                 goal,
                 FocusSessionMetadata {
                     task_label: Some(active_task_label.as_str()),
-                    focus_intention: Some(focus_intention.as_str()),
                     task_note: Some(task_note.as_str()),
                 },
                 focused_seconds,

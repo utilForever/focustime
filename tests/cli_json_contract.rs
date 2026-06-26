@@ -198,7 +198,7 @@ fn status_json_success_emits_payload_on_stdout() {
 
     let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
     assert!(payload.get("day").is_some());
-    assert!(payload.get("focus_intention").is_some());
+    assert!(payload.get("focus_intention").is_none());
     assert!(payload.get("task_note").is_some());
     assert!(payload.get("goal").is_some());
     assert!(payload.get("weekly_goal").is_some());
@@ -231,7 +231,7 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload["focus_score"].get("completion_score_pct").is_some());
     assert!(payload["focus_score"].get("focus_score_pct").is_some());
     assert!(payload.get("live").is_some());
-    assert!(payload["live"].get("focus_intention").is_some());
+    assert!(payload["live"].get("focus_intention").is_none());
     assert!(payload["live"].get("task_note").is_some());
     assert!(payload.get("comparison").is_none());
 }
@@ -337,15 +337,15 @@ fn session_metadata_json_does_not_fallback_from_selected_task_label() {
     assert_eq!(select_output.status.code(), Some(0));
     assert!(stderr_text(&select_output).trim().is_empty());
 
-    let read_output = env.run(&["--focus-intention", "--json"]);
+    let read_output = env.run(&["--task-note", "--json"]);
     assert_eq!(read_output.status.code(), Some(0));
     assert!(stderr_text(&read_output).trim().is_empty());
 
     let payload: Value =
         serde_json::from_slice(&read_output.stdout).expect("stdout should be JSON");
-    assert_eq!(payload["action"], "focus-intention");
+    assert_eq!(payload["action"], "task-note");
     assert_eq!(payload["updated"], false);
-    assert!(payload["focus_intention"].is_null());
+    assert!(payload.get("focus_intention").is_none());
     assert!(payload["task_note"].is_null());
     assert_eq!(payload["timer"]["selected_task_label"], "Docs");
 }
@@ -373,18 +373,8 @@ selected_profile = "classic"
         serde_json::from_slice(&set_note_output.stdout).expect("stdout should be JSON");
     assert_eq!(set_note_payload["action"], "task-note");
     assert_eq!(set_note_payload["updated"], true);
-    assert_eq!(set_note_payload["focus_intention"], "Write docs");
+    assert!(set_note_payload.get("focus_intention").is_none());
     assert_eq!(set_note_payload["task_note"], "Capture blockers");
-
-    let set_focus_output = env.run(&["--focus-intention=Deep Work", "--json"]);
-    assert_eq!(set_focus_output.status.code(), Some(0));
-    assert!(stderr_text(&set_focus_output).trim().is_empty());
-    let set_focus_payload: Value =
-        serde_json::from_slice(&set_focus_output.stdout).expect("stdout should be JSON");
-    assert_eq!(set_focus_payload["action"], "focus-intention");
-    assert_eq!(set_focus_payload["updated"], true);
-    assert_eq!(set_focus_payload["focus_intention"], "Deep Work");
-    assert_eq!(set_focus_payload["task_note"], "Capture blockers");
 
     let read_output = env.run(&["--task-note", "--json"]);
     assert_eq!(read_output.status.code(), Some(0));
@@ -392,14 +382,14 @@ selected_profile = "classic"
     let read_payload: Value = serde_json::from_slice(&read_output.stdout).expect("stdout JSON");
     assert_eq!(read_payload["action"], "task-note");
     assert_eq!(read_payload["updated"], false);
-    assert_eq!(read_payload["focus_intention"], "Deep Work");
+    assert!(read_payload.get("focus_intention").is_none());
     assert_eq!(read_payload["task_note"], "Capture blockers");
 }
 
 #[test]
 fn session_metadata_set_json_requires_active_focus_session() {
     let env = TestEnv::new("metadata-json-set-requires-active-session");
-    let output = env.run(&["--focus-intention", "Write docs", "--json"]);
+    let output = env.run(&["--task-note", "Write docs", "--json"]);
 
     assert_eq!(output.status.code(), Some(1));
     assert!(stderr_text(&output).trim().is_empty());
@@ -875,7 +865,7 @@ captured_at_epoch_secs = 0
     assert_eq!(payload["live"]["status"], "idle");
     assert_eq!(payload["live"]["pomodoros_completed"], 1);
     assert_eq!(payload["live"]["selected_task_label"], "Docs");
-    assert!(payload["live"]["focus_intention"].is_null());
+    assert!(payload["live"].get("focus_intention").is_none());
     assert!(payload["live"]["task_note"].is_null());
     assert!(
         payload["live"]["remaining_secs"]
@@ -976,7 +966,7 @@ fn runtime_errors_in_json_mode_preserve_contract_across_command_families() {
         (&["--pause", "--json"], "Cannot pause"),
         (&["--resume", "--json"], "Cannot resume"),
         (
-            &["--focus-intention", "Write docs", "--json"],
+            &["--task-note", "Write docs", "--json"],
             "focus session is not active or paused",
         ),
     ];

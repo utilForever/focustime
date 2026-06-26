@@ -67,9 +67,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::TaskGoal { label, goal } => {
             execute_task_goal_command(label, goal, cli_command.output)
         }
-        CommandKind::FocusIntention { value } => {
-            execute_focus_intention_command(value, cli_command.output)
-        }
         CommandKind::TaskNote { value } => execute_task_note_command(value, cli_command.output),
         CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
         CommandKind::Theme { preset } => execute_theme_command(preset, cli_command.output),
@@ -134,7 +131,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Next => Some("next"),
         CommandKind::Task { .. } => Some("task"),
         CommandKind::TaskGoal { .. } => Some("task-goal"),
-        CommandKind::FocusIntention { .. } => Some("focus-intention"),
         CommandKind::TaskNote { .. } => Some("task-note"),
         CommandKind::Profile { .. } => Some("profile"),
         CommandKind::Theme { .. } => Some("theme"),
@@ -169,7 +165,6 @@ fn command_usage_records_via_app(command: &CommandKind) -> bool {
             | CommandKind::Stop
             | CommandKind::Next
             | CommandKind::Task { .. }
-            | CommandKind::FocusIntention { .. }
             | CommandKind::TaskNote { .. }
             | CommandKind::AllowlistSiteAddTemporary { .. }
             | CommandKind::BreakGlassTrigger
@@ -313,21 +308,6 @@ fn execute_task_goal_command(
         OutputMode::Text => print_task_goal_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
-    Ok(())
-}
-
-fn execute_focus_intention_command(
-    value: Option<String>,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let mut app = App::new();
-    app.record_command_usage_for_cli("focus-intention");
-    let mut updated = false;
-    if let Some(value) = value {
-        app.set_focus_intention_for_cli(&value)?;
-        updated = true;
-    }
-    emit_session_metadata_command_output("focus-intention", updated, &app, output)?;
     Ok(())
 }
 
@@ -686,7 +666,6 @@ fn emit_session_metadata_command_output(
     let payload = SessionMetadataCommandOutput {
         action,
         updated,
-        focus_intention: app.focus_intention_for_cli(),
         task_note: app.task_note_for_cli(),
         timer: build_timer_state_output(app),
     };
@@ -722,7 +701,6 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
     let (focus_secs, short_break_secs, long_break_secs, long_break_interval) =
         app.profile_values(profile);
     let selected_task_label = app.selected_task_label_for_cli();
-    let focus_intention = app.focus_intention_for_cli();
     let task_note = app.task_note_for_cli();
 
     TimerStateOutput {
@@ -739,7 +717,6 @@ fn build_timer_state_output(app: &App) -> TimerStateOutput {
             long_break_interval,
         },
         selected_task_label,
-        focus_intention,
         task_note,
     }
 }

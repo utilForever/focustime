@@ -14,10 +14,6 @@ pub(in crate::cli) fn print_session_metadata_command_output(
         println!("Session metadata: {}.", payload.action);
     }
     println!(
-        "Focus intention: {}",
-        payload.focus_intention.as_deref().unwrap_or("none")
-    );
-    println!(
         "Task note: {}",
         payload.task_note.as_deref().unwrap_or("none")
     );
@@ -37,10 +33,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
     println!(
         "Task label: {}",
         payload.selected_task_label.as_deref().unwrap_or("none")
-    );
-    println!(
-        "Focus intention: {}",
-        payload.focus_intention.as_deref().unwrap_or("none")
     );
     println!(
         "Task note: {}",
@@ -89,10 +81,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
         payload.live.status,
         format_duration(payload.live.remaining_secs),
         payload.live.state_source
-    );
-    println!(
-        "Live focus intention: {}",
-        payload.live.focus_intention.as_deref().unwrap_or("none")
     );
     println!(
         "Live task note: {}",
@@ -361,10 +349,6 @@ pub(in crate::cli) fn print_timer_state_output(timer: &TimerStateOutput) {
     println!(
         "Task label: {}",
         timer.selected_task_label.as_deref().unwrap_or("none")
-    );
-    println!(
-        "Focus intention: {}",
-        timer.focus_intention.as_deref().unwrap_or("none")
     );
     println!(
         "Task note: {}",

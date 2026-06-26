@@ -80,8 +80,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --task=LABEL [--json]
   focustime --task-goal [LABEL|LABEL:MINUTES,POMODOROS] [--json]
   focustime --task-goal=LABEL[:MINUTES,POMODOROS] [--json]
-  focustime --focus-intention [TEXT] [--json]
-  focustime --focus-intention=TEXT [--json]
   focustime --task-note [TEXT] [--json]
   focustime --task-note=TEXT [--json]
   focustime --profile [basic|standard|advanced] [--json]
@@ -132,7 +130,6 @@ Options:
   --next          Skip to the next phase
   --task          Select task label (auto-creates unknown labels)
   --task-goal     Show or set per-task cumulative goal targets
-  --focus-intention  Show current focus intention, or set it for the active/paused focus session
   --task-note        Show current task note, or set it for the active/paused focus session
   --profile       Show current profile, or set it when value is provided
   --theme         Show current theme preset, or set it when value is provided
@@ -236,9 +233,6 @@ pub(crate) enum CommandKind {
         label: Option<String>,
         goal: Option<DailyGoalConfig>,
     },
-    FocusIntention {
-        value: Option<String>,
-    },
     TaskNote {
         value: Option<String>,
     },
@@ -327,7 +321,6 @@ enum PrimaryCommand {
         label: Option<String>,
         goal: Option<DailyGoalConfig>,
     },
-    FocusIntention(Option<String>),
     TaskNote(Option<String>),
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
@@ -377,7 +370,6 @@ enum ParsedToken {
         label: Option<String>,
         goal: Option<DailyGoalConfig>,
     },
-    FocusIntention(Option<String>),
     TaskNote(Option<String>),
     Status,
     Watch(Option<u64>),
@@ -546,7 +538,6 @@ struct LiveStatusOutput {
     pomodoros_completed: u32,
     selected_profile: ProfileView,
     selected_task_label: Option<String>,
-    focus_intention: Option<String>,
     task_note: Option<String>,
     strict_mode_enforced: bool,
 }
@@ -597,7 +588,6 @@ struct StatusOutput {
     selected_profile: ProfileView,
     selected_theme_preset: ThemePresetView,
     selected_task_label: Option<String>,
-    focus_intention: Option<String>,
     task_note: Option<String>,
     selected_blocklist_profile: String,
     blocked_sites_count: usize,
@@ -658,7 +648,6 @@ struct TimerStateOutput {
     pomodoros_completed: u32,
     selected_profile: ProfileView,
     selected_task_label: Option<String>,
-    focus_intention: Option<String>,
     task_note: Option<String>,
 }
 
@@ -701,7 +690,6 @@ struct TaskGoalCommandOutput {
 struct SessionMetadataCommandOutput {
     action: &'static str,
     updated: bool,
-    focus_intention: Option<String>,
     task_note: Option<String>,
     timer: TimerStateOutput,
 }
