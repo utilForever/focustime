@@ -96,7 +96,6 @@ fn snapshot_for_tests(
         remaining_secs,
         pomodoros_completed: 0,
         selected_task_label: metadata_value.clone(),
-        focus_intention: metadata_value.clone(),
         task_note: metadata_value,
         selected_profile,
         captured_at_epoch_secs: None,
@@ -4296,7 +4295,6 @@ fn planner_rename_preserves_custom_mid_session_note() {
     app.commit_planner_rename_input("Writing".to_string());
 
     assert_eq!(app.active_focus_task_label.as_deref(), Some("Writing"));
-    assert_eq!(app.active_focus_intention.as_deref(), Some("Writing"));
     assert_eq!(
         app.active_focus_task_note.as_deref(),
         Some("Keep this custom note")
@@ -4344,12 +4342,6 @@ fn cli_start_begins_focus_when_task_label_exists() {
 fn cli_metadata_update_requires_active_or_paused_focus() {
     let mut app = App::default();
 
-    let focus_error = app.set_focus_intention_for_cli("Write docs").unwrap_err();
-    assert_eq!(
-        focus_error,
-        "Cannot set session metadata with `--focus-intention`: focus session is not active or paused."
-    );
-
     let note_error = app.set_task_note_for_cli("Capture blockers").unwrap_err();
     assert_eq!(
         note_error,
@@ -4363,16 +4355,10 @@ fn cli_metadata_update_syncs_active_state_and_recovery_snapshot() {
     app.selected_task_label = Some("Docs".to_string());
     app.start_focus_for_cli().unwrap();
 
-    app.set_focus_intention_for_cli("Write API docs").unwrap();
     app.set_task_note_for_cli("Capture blockers").unwrap();
 
-    assert_eq!(
-        app.focus_intention_for_cli().as_deref(),
-        Some("Write API docs")
-    );
     assert_eq!(app.task_note_for_cli().as_deref(), Some("Capture blockers"));
     let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
-    assert_eq!(snapshot.focus_intention.as_deref(), Some("Write API docs"));
     assert_eq!(snapshot.task_note.as_deref(), Some("Capture blockers"));
 }
 
@@ -5194,7 +5180,6 @@ fn startup_reconciles_elapsed_recovery_time_while_session_is_running() {
         remaining_secs: 120,
         pomodoros_completed: 0,
         selected_task_label: Some("Docs".to_string()),
-        focus_intention: Some("Docs".to_string()),
         task_note: Some("Docs".to_string()),
         selected_profile: ProfileId::Classic,
         captured_at_epoch_secs: Some(now_epoch_secs - 10),
@@ -5216,7 +5201,6 @@ fn startup_reconciles_elapsed_recovery_time_when_phase_completed_offline() {
         remaining_secs: 1,
         pomodoros_completed: 0,
         selected_task_label: Some("Docs".to_string()),
-        focus_intention: Some("Write docs".to_string()),
         task_note: Some("Section 1".to_string()),
         selected_profile: ProfileId::Classic,
         captured_at_epoch_secs: Some(0),
@@ -5229,7 +5213,6 @@ fn startup_reconciles_elapsed_recovery_time_when_phase_completed_offline() {
     assert_eq!(app.timer.remaining_secs, app.timer.short_break_secs);
     assert_eq!(app.timer.pomodoros_completed, 1);
     assert_eq!(app.selected_task_label.as_deref(), Some("Docs"));
-    assert!(app.active_focus_intention.is_none());
     assert!(app.active_focus_task_note.is_none());
     assert!(app.phase_notification.as_deref().is_some_and(|message| {
         message.contains("Recovered elapsed timer state into Short Break phase")
@@ -5296,7 +5279,6 @@ fn startup_restores_pomodoro_count_for_phase_cadence() {
         remaining_secs: 1,
         pomodoros_completed: 3,
         selected_task_label: Some("Docs".to_string()),
-        focus_intention: Some("Docs".to_string()),
         task_note: Some("Docs".to_string()),
         selected_profile: ProfileId::Classic,
         captured_at_epoch_secs: None,
@@ -5376,7 +5358,6 @@ fn recovery_snapshot_prefers_active_focus_label_over_selected_label() {
 
     let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
     assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task A"));
-    assert_eq!(snapshot.focus_intention.as_deref(), Some("Task A"));
     assert_eq!(snapshot.task_note.as_deref(), Some("Task A"));
 }
 
@@ -5399,7 +5380,6 @@ fn planner_label_change_during_running_break_updates_recovery_snapshot() {
 
     let snapshot = session_recovery::test_saved_snapshot().expect("snapshot should be saved");
     assert_eq!(snapshot.selected_task_label.as_deref(), Some("Task B"));
-    assert_eq!(snapshot.focus_intention, None);
     assert_eq!(snapshot.task_note, None);
     assert_eq!(snapshot.phase, RecoveryTimerPhase::ShortBreak);
     assert_eq!(snapshot.status, RecoveryTimerStatus::Running);

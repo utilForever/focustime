@@ -145,26 +145,11 @@ impl App {
         self.selected_task_label.clone()
     }
 
-    pub(crate) fn focus_intention_for_cli(&self) -> Option<String> {
-        if self.focus_session_active_for_current_state() {
-            return self.active_focus_intention.clone();
-        }
-        None
-    }
-
     pub(crate) fn task_note_for_cli(&self) -> Option<String> {
         if self.focus_session_active_for_current_state() {
             return self.active_focus_task_note.clone();
         }
         None
-    }
-
-    pub(crate) fn set_focus_intention_for_cli(&mut self, value: &str) -> AppResult<()> {
-        self.ensure_focus_active_for_cli_metadata_update("--focus-intention")?;
-        let value = self.resolve_cli_metadata_value(value)?;
-        self.active_focus_intention = Some(value);
-        self.sync_recovery_snapshot();
-        Ok(())
     }
 
     pub(crate) fn set_task_note_for_cli(&mut self, value: &str) -> AppResult<()> {

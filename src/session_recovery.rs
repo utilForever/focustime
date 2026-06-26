@@ -90,8 +90,6 @@ pub(crate) struct InProgressSessionSnapshot {
     pub(crate) pomodoros_completed: u32,
     pub(crate) selected_task_label: Option<String>,
     #[serde(default)]
-    pub(crate) focus_intention: Option<String>,
-    #[serde(default)]
     pub(crate) task_note: Option<String>,
     pub(crate) selected_profile: ProfileId,
     #[serde(default)]
@@ -179,7 +177,6 @@ impl InProgressSessionSnapshot {
     pub(crate) fn from_timer_state_with_metadata(
         timer: &TimerState,
         selected_task_label: Option<String>,
-        focus_intention: Option<String>,
         task_note: Option<String>,
         selected_profile: ProfileId,
     ) -> Option<Self> {
@@ -190,7 +187,6 @@ impl InProgressSessionSnapshot {
         let selected_task_label = selected_task_label
             .as_deref()
             .and_then(normalize_task_label)?;
-        let focus_intention = focus_intention.as_deref().and_then(normalize_metadata_text);
         let task_note = task_note.as_deref().and_then(normalize_metadata_text);
 
         Some(Self {
@@ -199,7 +195,6 @@ impl InProgressSessionSnapshot {
             remaining_secs: timer.remaining_secs,
             pomodoros_completed: timer.pomodoros_completed,
             selected_task_label: Some(selected_task_label),
-            focus_intention,
             task_note,
             selected_profile,
             captured_at_epoch_secs: current_epoch_secs(),
@@ -218,13 +213,6 @@ impl InProgressSessionSnapshot {
         self.selected_task_label
             .as_deref()
             .and_then(normalize_task_label)
-    }
-
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn normalized_focus_intention(&self) -> Option<String> {
-        self.focus_intention
-            .as_deref()
-            .and_then(normalize_metadata_text)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
@@ -325,7 +313,6 @@ impl InProgressSessionSnapshot {
         }
 
         reconciled.status = RecoveryTimerStatus::Idle;
-        reconciled.focus_intention = None;
         reconciled.task_note = None;
         reconciled
     }
@@ -720,7 +707,6 @@ mod tests {
             remaining_secs: 10,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: None,
@@ -738,7 +724,6 @@ mod tests {
             remaining_secs: 0,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: None,
@@ -756,7 +741,6 @@ mod tests {
             remaining_secs: 31,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: None,
@@ -774,7 +758,6 @@ mod tests {
             remaining_secs: 50,
             pomodoros_completed: 0,
             selected_task_label: None,
-            focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: None,
@@ -792,7 +775,6 @@ mod tests {
             remaining_secs: 90,
             pomodoros_completed: 2,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::DeepWork,
             captured_at_epoch_secs: None,
@@ -810,13 +792,11 @@ mod tests {
             remaining_secs: 60,
             pomodoros_completed: 1,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: None,
             task_note: None,
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: None,
         };
 
-        assert_eq!(snapshot.normalized_focus_intention(), None);
         assert_eq!(snapshot.normalized_task_note(), None);
         assert!(snapshot.validate_for_timer(&timer).is_ok());
     }
@@ -830,7 +810,6 @@ mod tests {
             remaining_secs: 50,
             pomodoros_completed: 1,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Write docs".to_string()),
             task_note: Some("Section 1".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
@@ -842,7 +821,6 @@ mod tests {
         assert_eq!(reconciled.status, RecoveryTimerStatus::Running);
         assert_eq!(reconciled.remaining_secs, 30);
         assert_eq!(reconciled.pomodoros_completed, 1);
-        assert_eq!(reconciled.focus_intention.as_deref(), Some("Write docs"));
         assert_eq!(reconciled.task_note.as_deref(), Some("Section 1"));
     }
 
@@ -855,7 +833,6 @@ mod tests {
             remaining_secs: 10,
             pomodoros_completed: 1,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Write docs".to_string()),
             task_note: Some("Section 1".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
@@ -867,7 +844,6 @@ mod tests {
         assert_eq!(reconciled.status, RecoveryTimerStatus::Idle);
         assert_eq!(reconciled.remaining_secs, 90);
         assert_eq!(reconciled.pomodoros_completed, 2);
-        assert!(reconciled.focus_intention.is_none());
         assert!(reconciled.task_note.is_none());
         assert_eq!(reconciled.selected_task_label.as_deref(), Some("Docs"));
     }
@@ -881,7 +857,6 @@ mod tests {
             remaining_secs: 0,
             pomodoros_completed: 1,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: None,
             task_note: None,
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
@@ -905,7 +880,6 @@ mod tests {
             remaining_secs: 0,
             pomodoros_completed: 0,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Docs".to_string()),
             task_note: Some("Docs".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
@@ -923,7 +897,6 @@ mod tests {
             remaining_secs: 50,
             pomodoros_completed: 1,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Write docs".to_string()),
             task_note: Some("Section 1".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(100),
@@ -961,7 +934,6 @@ selected_profile = "classic"
             remaining_secs: 120,
             pomodoros_completed: 2,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Write docs".to_string()),
             task_note: Some("API section".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(1_700_000_000),
@@ -985,7 +957,6 @@ selected_profile = "classic"
             remaining_secs: 120,
             pomodoros_completed: 2,
             selected_task_label: Some("Docs".to_string()),
-            focus_intention: Some("Write docs".to_string()),
             task_note: Some("API section".to_string()),
             selected_profile: ProfileId::Classic,
             captured_at_epoch_secs: Some(1_700_000_000),
