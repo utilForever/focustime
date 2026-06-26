@@ -184,34 +184,6 @@ impl App {
         )
     }
 
-    pub(crate) fn select_session_template_for_cli(
-        &mut self,
-        name: Option<&str>,
-    ) -> AppResult<bool> {
-        self.select_session_template(name)
-            .map_err(AppError::workflow)
-    }
-
-    pub(crate) fn apply_session_template_for_cli(&mut self, name: Option<&str>) -> AppResult<bool> {
-        self.apply_session_template(name)
-            .map_err(AppError::workflow)
-    }
-
-    pub(crate) fn create_session_template_for_cli(&mut self, name: &str) -> AppResult<bool> {
-        self.capture_session_template(name)
-            .map_err(AppError::workflow)
-    }
-
-    pub(crate) fn rename_active_session_template_for_cli(&mut self, name: &str) -> AppResult<bool> {
-        self.rename_active_session_template(name)
-            .map_err(AppError::workflow)
-    }
-
-    pub(crate) fn delete_active_session_template_for_cli(&mut self) -> AppResult<bool> {
-        self.delete_active_session_template()
-            .map_err(AppError::workflow)
-    }
-
     fn ensure_focus_active_for_cli_metadata_update(&self, command: &'static str) -> AppResult<()> {
         if self.focus_session_active_for_current_state() {
             Ok(())

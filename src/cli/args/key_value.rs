@@ -6,7 +6,7 @@ use crate::cli::{
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 32] = [
+    let parsers: [KeyValueParser; 28] = [
         parse_task_key_value_arg,
         parse_task_goal_key_value_arg,
         parse_focus_intention_key_value_arg,
@@ -28,10 +28,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_blocklist_profile_key_value_arg,
         parse_blocklist_profile_create_key_value_arg,
         parse_blocklist_profile_rename_key_value_arg,
-        parse_session_template_key_value_arg,
-        parse_session_template_apply_key_value_arg,
-        parse_session_template_create_key_value_arg,
-        parse_session_template_rename_key_value_arg,
         parse_blocklist_site_add_key_value_arg,
         parse_allowlist_site_add_key_value_arg,
         parse_allowlist_site_add_temporary_key_value_arg,
@@ -273,46 +269,6 @@ fn parse_blocklist_profile_rename_key_value_arg(arg: &str) -> Result<Option<Pars
             "`--blocklist-profile-rename=` requires a profile name.",
         )?;
         return Ok(Some(ParsedToken::BlocklistProfileRename(value.to_string())));
-    }
-    Ok(None)
-}
-
-fn parse_session_template_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--session-template=") {
-        let value =
-            require_nonempty_key_value(value, "`--session-template=` requires a template name.")?;
-        return Ok(Some(ParsedToken::SessionTemplate(Some(value.to_string()))));
-    }
-    Ok(None)
-}
-
-fn parse_session_template_apply_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--session-template-apply=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--session-template-apply=` requires a template name.",
-        )?;
-        return Ok(Some(ParsedToken::SessionTemplateApply(Some(
-            value.to_string(),
-        ))));
-    }
-    Ok(None)
-}
-
-fn parse_session_template_create_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--session-template-create=") {
-        let value =
-            require_nonempty_key_value(value, "`--session-template-create=` requires a name.")?;
-        return Ok(Some(ParsedToken::SessionTemplateCreate(value.to_string())));
-    }
-    Ok(None)
-}
-
-fn parse_session_template_rename_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--session-template-rename=") {
-        let value =
-            require_nonempty_key_value(value, "`--session-template-rename=` requires a name.")?;
-        return Ok(Some(ParsedToken::SessionTemplateRename(value.to_string())));
     }
     Ok(None)
 }

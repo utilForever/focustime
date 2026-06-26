@@ -1082,96 +1082,6 @@ fn parse_blocklist_profile_delete_runs_command() {
 }
 
 #[test]
-fn parse_session_template_without_value_reads_current_template() {
-    let parsed = parse(&["--session-template"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SessionTemplate {
-                command: SessionTemplateCommandKind::Select { name: None }
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_session_template_with_value_selects_template() {
-    let parsed = parse(&["--session-template", "Deep Flow"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SessionTemplate {
-                command: SessionTemplateCommandKind::Select {
-                    name: Some("Deep Flow".to_string())
-                }
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_session_template_apply_without_value_uses_active_template() {
-    let parsed = parse(&["--session-template-apply"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SessionTemplate {
-                command: SessionTemplateCommandKind::Apply { name: None }
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_session_template_create_with_equals() {
-    let parsed = parse(&["--session-template-create=Deep Flow"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SessionTemplate {
-                command: SessionTemplateCommandKind::Create {
-                    name: "Deep Flow".to_string()
-                }
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_session_template_rename_with_value() {
-    let parsed = parse(&["--session-template-rename", "Sprint Focus"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SessionTemplate {
-                command: SessionTemplateCommandKind::Rename {
-                    name: "Sprint Focus".to_string()
-                }
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_session_template_delete_runs_command() {
-    let parsed = parse(&["--session-template-delete"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::SessionTemplate {
-                command: SessionTemplateCommandKind::Delete
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
 fn parse_history_dashboard_without_value_reads_dashboard_state() {
     let parsed = parse(&["--history-dashboard"]).unwrap();
     assert_eq!(
@@ -1478,44 +1388,6 @@ fn classify_key_value_arg_ignores_automation_triggers_set_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_session_template_equals_value() {
-    let parsed = classify_key_value_arg("--session-template=Deep Flow").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::SessionTemplate(Some("Deep Flow".to_string())))
-    );
-}
-
-#[test]
-fn classify_key_value_arg_accepts_session_template_apply_equals_value() {
-    let parsed = classify_key_value_arg("--session-template-apply=Deep Flow").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::SessionTemplateApply(Some(
-            "Deep Flow".to_string()
-        )))
-    );
-}
-
-#[test]
-fn classify_key_value_arg_accepts_session_template_create_equals_value() {
-    let parsed = classify_key_value_arg("--session-template-create=Deep Flow").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::SessionTemplateCreate("Deep Flow".to_string()))
-    );
-}
-
-#[test]
-fn classify_key_value_arg_accepts_session_template_rename_equals_value() {
-    let parsed = classify_key_value_arg("--session-template-rename=Deep Flow").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::SessionTemplateRename("Deep Flow".to_string()))
-    );
-}
-
-#[test]
 fn classify_key_value_arg_ignores_retired_history_dashboard_customization() {
     assert_eq!(
         classify_key_value_arg("--history-dashboard-pin=focus_score").unwrap(),
@@ -1606,27 +1478,22 @@ fn parse_automation_triggers_set_equals_is_retired() {
 }
 
 #[test]
-fn classify_key_value_arg_rejects_empty_session_template_equals_value() {
-    let error = classify_key_value_arg("--session-template=").unwrap_err();
-    assert!(error.contains("`--session-template=` requires a template name."));
-}
-
-#[test]
-fn classify_key_value_arg_rejects_empty_session_template_apply_equals_value() {
-    let error = classify_key_value_arg("--session-template-apply=").unwrap_err();
-    assert!(error.contains("`--session-template-apply=` requires a template name."));
-}
-
-#[test]
-fn classify_key_value_arg_rejects_empty_session_template_create_equals_value() {
-    let error = classify_key_value_arg("--session-template-create=").unwrap_err();
-    assert!(error.contains("`--session-template-create=` requires a name."));
-}
-
-#[test]
-fn classify_key_value_arg_rejects_empty_session_template_rename_equals_value() {
-    let error = classify_key_value_arg("--session-template-rename=").unwrap_err();
-    assert!(error.contains("`--session-template-rename=` requires a name."));
+fn parse_session_template_commands_are_retired() {
+    for option in [
+        "--session-template",
+        "--session-template=Deep Flow",
+        "--session-template-apply",
+        "--session-template-apply=Deep Flow",
+        "--session-template-create",
+        "--session-template-create=Deep Flow",
+        "--session-template-rename",
+        "--session-template-rename=Deep Flow",
+        "--session-template-delete",
+        "--session-template-delete=Deep Flow",
+    ] {
+        let error = parse(&[option]).unwrap_err();
+        assert!(error.contains("Session template commands were removed."));
+    }
 }
 
 #[test]
@@ -1741,18 +1608,6 @@ fn parse_rejects_automation_triggers_set_without_payload_as_retired() {
 fn parse_rejects_blocklist_profile_create_without_value() {
     let error = parse(&["--blocklist-profile-create"]).unwrap_err();
     assert!(error.contains("`--blocklist-profile-create` requires a profile name"));
-}
-
-#[test]
-fn parse_rejects_session_template_create_without_value() {
-    let error = parse(&["--session-template-create"]).unwrap_err();
-    assert!(error.contains("`--session-template-create` requires a template name"));
-}
-
-#[test]
-fn parse_rejects_session_template_rename_without_value() {
-    let error = parse(&["--session-template-rename"]).unwrap_err();
-    assert!(error.contains("`--session-template-rename` requires a template name"));
 }
 
 #[test]
