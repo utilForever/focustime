@@ -101,9 +101,7 @@ cargo run -- --task-goal "Write docs"
 cargo run -- --task-goal "Write docs:120,4"
 cargo run -- --task-goal=Write-docs:120,4 --json
 
-# Show session metadata, or set it while focus is running/paused
-cargo run -- --focus-intention
-cargo run -- --focus-intention "Review PR feedback"
+# Show or set session note metadata while focus is running/paused
 cargo run -- --task-note
 cargo run -- --task-note="Capture blockers for retro" --json
 
@@ -208,7 +206,7 @@ cargo run -- --export=./reports --json
 ### Retired local daemon API
 
 - The local daemon API lifecycle commands (`--daemon-start`, `--daemon-status`, `--daemon-stop`, and `--daemon-port`) are removed.
-- New automation should use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--break-glass-trigger`, `--break-glass-cancel`) or the TUI for interactive focus sessions.
+- New automation should use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--task-note`, `--break-glass-trigger`, `--break-glass-cancel`) or the TUI for interactive focus sessions.
 - The loopback `/v1/*` daemon endpoints are no longer a supported runtime surface.
 
 Backup/restore/export behavior:
@@ -314,7 +312,7 @@ Early deprecation notices:
 | Standalone feature inventory export (`--feature-inventory`) | Removed; generated inventory snapshots are no longer committed or regenerated for releases. Use GitHub roadmap issues, release notes, and static cleanup documentation for planning. |
 | Schedule exception dates | Removed; represent focus availability with recurring schedule windows, inspect overlaps with `--schedule`, and use supported timer controls for one-off workflow adjustments. |
 | Standalone calendar refresh command (`--calendar-sync`) and `[calendar_sync]` config | Removed; scheduling no longer reads calendar annotation caches or renders calendar-derived busy/overlap text. |
-| Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--focus-intention`, `--task-note`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
+| Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--task-note`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule directly, then start focus through the unified timer flow with `--start` or the TUI. |
 
 Runtime dependency ownership after daemon and calendar cleanup:
@@ -492,8 +490,7 @@ quick session note.
 Saved notes are reflected in live status metadata (`task_note`), recovery state,
 and interruption/completed-session history export fields.
 
-CLI parity is available via `--focus-intention`, `--task-note`,
-`--break-glass-trigger`, and `--break-glass-cancel` for
+CLI parity is available via `--task-note`, `--break-glass-trigger`, and `--break-glass-cancel` for
 non-interactive inspection and in-session workflow control. `--history-dashboard`
 remains available for layout inspection.
 
@@ -776,7 +773,7 @@ You can configure notification and auto-start settings directly from the TUI:
 
 `focustime` persists in-progress timer sessions so restart/crash recovery can resume where you left off.
 
-- while a focus/break phase is running or paused, the app saves phase, remaining time, task metadata (`task_label`, `focus_intention`, `task_note`), and active profile
+- while a focus/break phase is running or paused, the app saves phase, remaining time, task metadata (`task_label`, `task_note`), and active profile
 - startup recovery also reconciles transient workflow runtime artifacts when still valid (schedule arming continuity, break-glass state, and strict-reset confirmation state)
 - while editing with `m`, pressing `Enter` replaces the in-progress session `task_note` and immediately syncs recovery metadata; if the draft is blank or only whitespace, the note is not saved and the task label is used instead
 - on startup, valid in-progress state is restored and shown in the timer notice line
@@ -866,16 +863,15 @@ From timer view:
 Exports include daily/weekly aggregates, weekly consistency, weekly focus score,
 profile effectiveness, productivity comparisons, task summaries/trends,
 interruption records, and labeled focus-session records where task labels were
-attached. Focus-session rows
-persist and export first-class `focus_intention` and `task_note` fields; when
-dedicated metadata input is not provided, both fields default to the selected
-`task_label`. Interruption records include structured `reason` values and
-remaining-time metadata. Export files now also include a `history_kpis` JSON
+attached. Focus-session rows persist and export `task_label` and `task_note`
+fields; when dedicated note input is not provided, `task_note` defaults to the
+selected `task_label`. Interruption records include structured `reason` values
+and remaining-time metadata. Export files now also include a `history_kpis` JSON
 object covering all History dashboard KPI cards (`session_summary`,
 `focus_score`, `goal_streak`, `focus_risk`, `weekly_allocation`,
 `last_interruption`, `stats_growth`, `retention`, `comparison_filters`), with
 matching CSV `history_kpi` rows (`kpi_card_id` + `kpi_payload_json`) for
-JSON/CSV parity. Export files expose `schema_version` (currently `7`) so
+JSON/CSV parity. Export files expose `schema_version` (currently `8`) so
 downstream consumers can handle versioned contracts explicitly.
 
 ## The way the system works
