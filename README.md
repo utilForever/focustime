@@ -96,11 +96,6 @@ cargo run -- --task "Write docs"
 cargo run -- --task=Write-docs --json
 # Archived labels are rejected by --task and cannot be used to start focus.
 
-# Show or set cumulative goal targets for a task label
-cargo run -- --task-goal "Write docs"
-cargo run -- --task-goal "Write docs:120,4"
-cargo run -- --task-goal=Write-docs:120,4 --json
-
 # Show or set the active profile
 cargo run -- --profile
 cargo run -- --profile standard
@@ -175,7 +170,7 @@ cargo run -- --break-glass-cancel
 cargo run -- --diagnostics
 cargo run -- --diagnostics --json
 
-# Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary overrides, latest interruption summary, and `selected_task_goal` in JSON)
+# Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary overrides, and latest interruption summary)
 cargo run -- --status
 cargo run -- --status --json
 # Export productivity comparisons for deeper status/history analysis
@@ -796,7 +791,6 @@ Override events are recorded for audit visibility in the History view and includ
 - productivity comparison rows by task/profile/time-of-day in History and exports
 - per-task totals (pomodoros and focused minutes) derived from labeled focus sessions
 - per-task trend summaries in History (`last 7 days` vs `previous 7 days`)
-- per-task cumulative goals (minutes/pomodoros) with per-label progress and met/in-progress evaluation
 - structured interruption events for manual `stop/reset` and `skip/next` actions
 - current streak and best streak based on completed daily goals
 - growth indicators (`record` count + estimated `stats.toml` size + top high-volume sections)
