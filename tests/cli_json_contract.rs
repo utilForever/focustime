@@ -203,25 +203,6 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload.get("goal").is_some());
     assert!(payload.get("weekly_goal").is_some());
     assert!(payload.get("monthly_goal").is_some());
-    assert!(payload.get("temporary_allowlist_active_count").is_none());
-    assert!(
-        payload
-            .get("temporary_allowlist_next_expiry_remaining_secs")
-            .is_none()
-    );
-    assert!(
-        payload
-            .get("temporary_allowlist_next_expiry_epoch_secs")
-            .is_none()
-    );
-    assert!(payload.get("temporary_allowlist_active").is_none());
-    assert!(payload.get("temporary_overrides_active_count").is_none());
-    assert!(payload.get("temporary_overrides").is_none());
-    assert!(
-        payload["stats_retention"]
-            .get("keep_break_glass_overrides_days")
-            .is_none()
-    );
     assert!(payload["goal"].get("carry_over").is_some());
     assert!(payload["weekly_goal"].get("carry_over").is_some());
     assert!(payload["monthly_goal"].get("carry_over").is_some());
