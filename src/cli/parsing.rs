@@ -142,7 +142,7 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
         }),
         "--break-glass-trigger" | "--break-glass-cancel" => Some(RemovedOptionGuidance {
             summary: "Break-glass commands were removed.",
-            replacement: "Use normal timer controls (`--pause`, `--resume`, `--stop`) or manage site rules with blocklist/allowlist commands.",
+            replacement: "Use normal timer controls (`--pause`, `--resume`, `--stop`, `--next`) or manage site rules with blocklist/allowlist commands.",
         }),
         _ => None,
     }

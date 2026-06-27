@@ -614,7 +614,7 @@ fn parse_break_glass_commands_are_removed_with_guidance() {
         assert_eq!(
             error.hint.as_deref(),
             Some(
-                "Use normal timer controls (`--pause`, `--resume`, `--stop`) or manage site rules with blocklist/allowlist commands."
+                "Use normal timer controls (`--pause`, `--resume`, `--stop`, `--next`) or manage site rules with blocklist/allowlist commands."
             )
         );
     }
