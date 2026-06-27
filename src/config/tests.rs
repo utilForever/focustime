@@ -38,10 +38,6 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.schedule_runtime, ScheduleRuntimeConfig::default());
     assert!(cfg.profile_automation.is_none());
     assert!(!cfg.strict_mode);
-    assert_eq!(
-        cfg.break_glass_duration_secs,
-        default_break_glass_duration_secs()
-    );
     assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
@@ -62,7 +58,6 @@ fn stats_retention_defaults_to_balanced_windows() {
     assert_eq!(windows.keep_daily_days, None);
     assert_eq!(windows.keep_focus_sessions_days, Some(365));
     assert_eq!(windows.keep_session_interruptions_days, Some(180));
-    assert_eq!(windows.keep_break_glass_overrides_days, Some(180));
     assert_eq!(windows.keep_weekly_goal_snapshots_days, Some(365));
     assert_eq!(windows.keep_monthly_goal_snapshots_days, Some(365));
 }
@@ -76,7 +71,6 @@ fn stats_retention_windows_change_by_preset() {
     assert_eq!(keep_all.keep_daily_days, None);
     assert_eq!(keep_all.keep_focus_sessions_days, None);
     assert_eq!(keep_all.keep_session_interruptions_days, None);
-    assert_eq!(keep_all.keep_break_glass_overrides_days, None);
     assert_eq!(keep_all.keep_weekly_goal_snapshots_days, None);
     assert_eq!(keep_all.keep_monthly_goal_snapshots_days, None);
 
@@ -87,7 +81,6 @@ fn stats_retention_windows_change_by_preset() {
     assert_eq!(aggressive.keep_daily_days, Some(365));
     assert_eq!(aggressive.keep_focus_sessions_days, Some(180));
     assert_eq!(aggressive.keep_session_interruptions_days, Some(90));
-    assert_eq!(aggressive.keep_break_glass_overrides_days, Some(90));
     assert_eq!(aggressive.keep_weekly_goal_snapshots_days, Some(180));
     assert_eq!(aggressive.keep_monthly_goal_snapshots_days, Some(180));
 }
@@ -180,7 +173,6 @@ fn round_trip_full_config() {
             }),
         }),
         strict_mode: true,
-        break_glass_duration_secs: 7 * 60,
         daily_goal: DailyGoalConfig {
             minutes: 180,
             pomodoros: 6,
@@ -278,10 +270,6 @@ fn round_trip_full_config() {
     assert_eq!(parsed.schedule_runtime, original.schedule_runtime);
     assert_eq!(parsed.profile_automation, original.profile_automation);
     assert!(!parsed.strict_mode);
-    assert_eq!(
-        parsed.break_glass_duration_secs,
-        original.break_glass_duration_secs
-    );
     assert_eq!(parsed.daily_goal, original.daily_goal);
     assert_eq!(parsed.weekly_goal, original.weekly_goal);
     assert_eq!(parsed.monthly_goal, original.monthly_goal);
@@ -313,10 +301,6 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
     assert!(cfg.profile_automation.is_none());
     assert!(!cfg.strict_mode);
-    assert_eq!(
-        cfg.break_glass_duration_secs,
-        default_break_glass_duration_secs()
-    );
     assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
@@ -400,19 +384,6 @@ fn normalize_history_dashboard_ignores_legacy_custom_pins() {
     .normalize();
 
     assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
-}
-
-#[test]
-fn normalize_clamps_zero_break_glass_duration_to_default() {
-    let cfg = AppConfig {
-        break_glass_duration_secs: 0,
-        ..AppConfig::default()
-    }
-    .normalize();
-    assert_eq!(
-        cfg.break_glass_duration_secs,
-        default_break_glass_duration_secs()
-    );
 }
 
 #[test]
@@ -691,7 +662,6 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         schedule_runtime: ScheduleRuntimeConfig::default(),
         profile_automation: None,
         strict_mode: false,
-        break_glass_duration_secs: default_break_glass_duration_secs(),
         daily_goal: DailyGoalConfig::default(),
         weekly_goal: WeeklyGoalConfig::default(),
         monthly_goal: MonthlyGoalConfig::default(),
@@ -742,10 +712,6 @@ fn load_returns_default_when_config_file_is_corrupt() {
     assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
     assert!(cfg.profile_automation.is_none());
     assert!(!cfg.strict_mode);
-    assert_eq!(
-        cfg.break_glass_duration_secs,
-        default_break_glass_duration_secs()
-    );
     assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());

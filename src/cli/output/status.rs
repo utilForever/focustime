@@ -1,9 +1,9 @@
 use crate::cli::{
-    BreakGlassCommandOutput, FocusScoreOutput, GoalOutput, StatsGrowthSummary,
-    StatsRetentionStatusOutput, StatusOutput, TimerStateOutput,
+    FocusScoreOutput, GoalOutput, StatsGrowthSummary, StatsRetentionStatusOutput, StatusOutput,
+    TimerStateOutput,
 };
 
-use super::{format_duration, format_expiry_clock_suffix};
+use super::format_duration;
 
 pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
     println!("Date: {}", payload.day);
@@ -23,7 +23,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
         "Blocklist profile: {} ({} sites)",
         payload.selected_blocklist_profile, payload.blocked_sites_count
     );
-    print_temporary_overrides_status(payload);
     println!(
         "Strict mode: {}",
         if payload.strict_mode { "on" } else { "off" }
@@ -64,38 +63,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
     );
     if let Some(error) = payload.live.recovery_error.as_deref() {
         println!("Live timer warning: {error}");
-    }
-}
-
-fn print_temporary_overrides_status(payload: &StatusOutput) {
-    if payload.temporary_overrides.is_empty() {
-        println!("Temporary overrides: off");
-    } else {
-        println!(
-            "Temporary overrides: {} active",
-            payload.temporary_overrides_active_count
-        );
-        for entry in &payload.temporary_overrides {
-            match (
-                entry.kind,
-                entry.site.as_deref(),
-                entry.remaining_secs,
-                entry.expires_at_epoch_secs,
-                entry.pending_confirmation,
-            ) {
-                ("break-glass", _, _, _, true) => {
-                    println!("  - break-glass (pending confirmation)");
-                }
-                ("break-glass", _, Some(remaining_secs), Some(epoch_secs), false) => {
-                    println!(
-                        "  - break-glass (expires in {}{})",
-                        format_duration(remaining_secs),
-                        format_expiry_clock_suffix(epoch_secs)
-                    );
-                }
-                _ => {}
-            }
-        }
     }
 }
 
@@ -244,20 +211,18 @@ fn print_status_growth_line(growth: &StatsGrowthSummary) {
 fn print_status_retention_line(retention: &StatsRetentionStatusOutput) {
     println!("Stats retention preset: {}", retention.preset);
     println!(
-        "Stats retention windows: daily {}, sessions {}, interruptions {}, overrides {}",
+        "Stats retention windows: daily {}, sessions {}, interruptions {}",
         format_retention_window(retention.keep_daily_days),
         format_retention_window(retention.keep_focus_sessions_days),
         format_retention_window(retention.keep_session_interruptions_days),
-        format_retention_window(retention.keep_break_glass_overrides_days),
     );
     if retention.pending_prune.any_removed() {
         println!(
-            "Stats retention pending prune: {} records (daily {}, sessions {}, interruptions {}, overrides {})",
+            "Stats retention pending prune: {} records (daily {}, sessions {}, interruptions {})",
             retention.pending_prune.total_removed(),
             retention.pending_prune.daily_removed,
             retention.pending_prune.focus_sessions_removed,
             retention.pending_prune.session_interruptions_removed,
-            retention.pending_prune.break_glass_overrides_removed
         );
     } else {
         println!("Stats retention pending prune: none");
@@ -299,24 +264,4 @@ pub(in crate::cli) fn print_timer_state_output(timer: &TimerStateOutput) {
         "Profile: {} ({})",
         timer.selected_profile.label, timer.selected_profile.id
     );
-}
-
-pub(in crate::cli) fn print_break_glass_command_output(payload: &BreakGlassCommandOutput) {
-    if payload.pending_confirmation {
-        println!("Break-glass armed. Run `--break-glass-trigger` again to confirm.");
-    } else if payload.active {
-        if let Some(remaining_secs) = payload.remaining_secs {
-            println!(
-                "Break-glass active: blocking paused for {} more.",
-                format_duration(remaining_secs)
-            );
-        } else {
-            println!("Break-glass active: blocking is currently paused.");
-        }
-    } else if payload.action == "break-glass-cancel" {
-        println!("Break-glass confirmation canceled.");
-    } else {
-        println!("Break-glass state unchanged.");
-    }
-    print_timer_state_output(&payload.timer);
 }

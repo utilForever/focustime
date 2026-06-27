@@ -15,7 +15,6 @@ pub(crate) enum ShortcutAction {
     OpenTaskSetup,
     OpenStatsHistory,
     OpenSetupDiagnostics,
-    BreakGlassOverride,
     BackSiteManager,
     ToggleSiteListMode,
     SiteAdd,
@@ -71,7 +70,7 @@ enum ShortcutKey {
     Delete,
 }
 
-const TIMER_SCOPE_ACTIONS: [ShortcutAction; 9] = [
+const TIMER_SCOPE_ACTIONS: [ShortcutAction; 8] = [
     ShortcutAction::TimerTogglePause,
     ShortcutAction::TimerStopReset,
     ShortcutAction::TimerNextPhase,
@@ -80,7 +79,6 @@ const TIMER_SCOPE_ACTIONS: [ShortcutAction; 9] = [
     ShortcutAction::OpenTaskSetup,
     ShortcutAction::OpenStatsHistory,
     ShortcutAction::OpenSetupDiagnostics,
-    ShortcutAction::BreakGlassOverride,
 ];
 
 const SITE_MANAGER_SCOPE_ACTIONS: [ShortcutAction; 10] = [
@@ -317,7 +315,6 @@ impl ShortcutBindings {
             open_session_planner: key_token(self.key(ShortcutAction::OpenTaskSetup)),
             open_stats_history: key_token(self.key(ShortcutAction::OpenStatsHistory)),
             open_setup_diagnostics: key_token(self.key(ShortcutAction::OpenSetupDiagnostics)),
-            break_glass_override: key_token(self.key(ShortcutAction::BreakGlassOverride)),
             back_site_manager: key_token(self.key(ShortcutAction::BackSiteManager)),
             toggle_site_list_mode: key_token(self.key(ShortcutAction::ToggleSiteListMode)),
             site_add: key_token(self.key(ShortcutAction::SiteAdd)),
@@ -506,7 +503,6 @@ fn requested_shortcut_char(config: &ShortcutConfig, action: ShortcutAction) -> c
         ShortcutAction::OpenTaskSetup => &config.open_session_planner,
         ShortcutAction::OpenStatsHistory => &config.open_stats_history,
         ShortcutAction::OpenSetupDiagnostics => &config.open_setup_diagnostics,
-        ShortcutAction::BreakGlassOverride => &config.break_glass_override,
         ShortcutAction::BackSiteManager => &config.back_site_manager,
         ShortcutAction::ToggleSiteListMode => &config.toggle_site_list_mode,
         ShortcutAction::SiteAdd => &config.site_add,
@@ -564,7 +560,6 @@ fn default_shortcut_char(action: ShortcutAction) -> char {
         ShortcutAction::OpenTaskSetup => 't',
         ShortcutAction::OpenStatsHistory => 'h',
         ShortcutAction::OpenSetupDiagnostics => 'd',
-        ShortcutAction::BreakGlassOverride => 'u',
         ShortcutAction::BackSiteManager => 'b',
         ShortcutAction::ToggleSiteListMode => 'm',
         ShortcutAction::SiteAdd => 'a',

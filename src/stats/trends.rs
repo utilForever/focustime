@@ -1,8 +1,7 @@
 use crate::stats::{
-    BTreeMap, BTreeSet, BreakGlassOverrideEvent, DailyGoalSnapshot, DailyStats, FocusStats,
-    GoalStreak, SessionInterruptionEvent, TaskTotals, TaskTrend, TaskTrendAccumulator,
-    TaskTrendWindow, best_goal_streak, canonical_task_label, current_goal_streak,
-    normalize_task_label,
+    BTreeMap, BTreeSet, DailyGoalSnapshot, DailyStats, FocusStats, GoalStreak,
+    SessionInterruptionEvent, TaskTotals, TaskTrend, TaskTrendAccumulator, TaskTrendWindow,
+    best_goal_streak, canonical_task_label, current_goal_streak, normalize_task_label,
 };
 
 impl FocusStats {
@@ -87,18 +86,6 @@ impl FocusStats {
         let mut trends = self.task_trends_for_window(window);
         trends.truncate(limit);
         trends
-    }
-
-    pub(crate) fn recent_break_glass_overrides(
-        &self,
-        limit: usize,
-    ) -> Vec<BreakGlassOverrideEvent> {
-        self.break_glass_overrides
-            .iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect()
     }
 
     #[cfg(test)]

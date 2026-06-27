@@ -154,7 +154,6 @@ impl App {
             (false, true) => self.start_focus_runtime(),
             (true, false) => {
                 self.clear_focus_runtime();
-                self.break_glass_expires_at = None;
             }
             _ => {}
         }

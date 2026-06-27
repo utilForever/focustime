@@ -416,7 +416,6 @@ pub(crate) struct StatsRetentionPruneResult {
     pub(crate) daily_removed: usize,
     pub(crate) focus_sessions_removed: usize,
     pub(crate) session_interruptions_removed: usize,
-    pub(crate) break_glass_overrides_removed: usize,
     pub(crate) weekly_goal_snapshots_removed: usize,
     pub(crate) monthly_goal_snapshots_removed: usize,
 }
@@ -426,7 +425,6 @@ impl StatsRetentionPruneResult {
         self.daily_removed
             .saturating_add(self.focus_sessions_removed)
             .saturating_add(self.session_interruptions_removed)
-            .saturating_add(self.break_glass_overrides_removed)
             .saturating_add(self.weekly_goal_snapshots_removed)
             .saturating_add(self.monthly_goal_snapshots_removed)
     }
@@ -746,14 +744,6 @@ struct ProfileEffectivenessAccumulator {
     active_days: BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct BreakGlassOverrideEvent {
-    pub(crate) timestamp_epoch_secs: u64,
-    pub(crate) date: String,
-    pub(crate) task_label: Option<String>,
-    pub(crate) duration_seconds: u64,
-}
-
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 struct StatsExport {
     schema_version: u32,
@@ -761,7 +751,6 @@ struct StatsExport {
     weekly: Vec<WeeklyExportRow>,
     sessions: Vec<SessionExportRow>,
     interruptions: Vec<SessionInterruptionExportRow>,
-    overrides: Vec<BreakGlassOverrideExportRow>,
     task_totals: Vec<TaskTotalsExportRow>,
     task_trends: Vec<TaskTrendExportRow>,
     weekly_consistency: Vec<WeeklyConsistencyExportRow>,
@@ -798,15 +787,6 @@ struct SessionExportRow {
     focused_seconds: u64,
     focused_minutes: u64,
     profile: Option<ProfileId>,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-struct BreakGlassOverrideExportRow {
-    timestamp_epoch_secs: u64,
-    date: String,
-    task_label: Option<String>,
-    duration_seconds: u64,
-    duration_minutes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -1028,8 +1008,6 @@ struct CsvExportRow {
     goal_pomodoros: Option<u32>,
     goal_met: Option<bool>,
     task_label: Option<String>,
-    break_glass_timestamp_epoch_secs: Option<u64>,
-    break_glass_duration_seconds: Option<u64>,
     interruption_timestamp_epoch_secs: Option<u64>,
     interruption_reason: Option<SessionInterruptionReason>,
     interruption_remaining_secs: Option<u64>,
@@ -1078,8 +1056,6 @@ struct PersistedStats {
     #[serde(default)]
     session_interruptions: Vec<SessionInterruptionEvent>,
     #[serde(default)]
-    break_glass_overrides: Vec<BreakGlassOverrideEvent>,
-    #[serde(default)]
     command_usage_counts: BTreeMap<String, u64>,
     #[serde(default)]
     screen_usage_counts: BTreeMap<String, u64>,
@@ -1097,7 +1073,6 @@ pub(crate) struct FocusStats {
     task_label_archived: BTreeSet<String>,
     focus_sessions: Vec<FocusSessionRecord>,
     session_interruptions: Vec<SessionInterruptionEvent>,
-    break_glass_overrides: Vec<BreakGlassOverrideEvent>,
     command_usage_counts: BTreeMap<String, u64>,
     screen_usage_counts: BTreeMap<String, u64>,
 }

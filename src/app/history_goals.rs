@@ -1,9 +1,9 @@
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
 
 use crate::app::{
-    App, AppMode, BreakGlassOverrideEvent, DailyGoalSnapshot, FocusInterruptionContext,
-    FocusSessionMetadata, Local, SessionInterruptionEvent, SessionInterruptionReason,
-    WeeklyDailyAllocationDay, WeeklyDailyGoalAllocation, carry_over_goal_target, current_day_key,
+    App, AppMode, DailyGoalSnapshot, FocusInterruptionContext, FocusSessionMetadata, Local,
+    SessionInterruptionEvent, SessionInterruptionReason, WeeklyDailyAllocationDay,
+    WeeklyDailyGoalAllocation, carry_over_goal_target, current_day_key,
     previous_month_reference_day,
 };
 use crate::config::RecurringScheduleConfig;
@@ -198,14 +198,6 @@ impl App {
             self.mark_stats_dirty();
             self.flush_stats_if_dirty(false);
         }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn recent_break_glass_overrides(
-        &self,
-        limit: usize,
-    ) -> Vec<BreakGlassOverrideEvent> {
-        self.stats.recent_break_glass_overrides(limit)
     }
 
     #[cfg(test)]

@@ -56,8 +56,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Strict(_)
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
-            | ParsedToken::BreakGlassTrigger
-            | ParsedToken::BreakGlassCancel
             | ParsedToken::Diagnostics
             | ParsedToken::Backup(_)
             | ParsedToken::Restore(_)
@@ -142,6 +140,10 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
             summary: "Temporary allowlist commands were removed.",
             replacement: "Use permanent `--allowlist-site-add`, `--allowlist-site-edit`, and `--allowlist-site-delete` commands for site-rule management.",
         }),
+        "--break-glass-trigger" | "--break-glass-cancel" => Some(RemovedOptionGuidance {
+            summary: "Break-glass commands were removed.",
+            replacement: "Use normal timer controls (`--pause`, `--resume`, `--stop`) or manage site rules with blocklist/allowlist commands.",
+        }),
         _ => None,
     }
 }
@@ -192,12 +194,6 @@ pub(super) fn parse_primary_command(
             ParsedToken::Schedule => set_primary_command(&mut primary, PrimaryCommand::Schedule)?,
             ParsedToken::ScheduleSet(schedule) => {
                 set_primary_command(&mut primary, PrimaryCommand::ScheduleSet(schedule.clone()))?
-            }
-            ParsedToken::BreakGlassTrigger => {
-                set_primary_command(&mut primary, PrimaryCommand::BreakGlassTrigger)?
-            }
-            ParsedToken::BreakGlassCancel => {
-                set_primary_command(&mut primary, PrimaryCommand::BreakGlassCancel)?
             }
             ParsedToken::Diagnostics => {
                 set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
@@ -339,14 +335,6 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Schedule {
                 schedule: Some(schedule),
             },
-            output,
-        })),
-        Some(PrimaryCommand::BreakGlassTrigger) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BreakGlassTrigger,
-            output,
-        })),
-        Some(PrimaryCommand::BreakGlassCancel) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BreakGlassCancel,
             output,
         })),
         Some(PrimaryCommand::Diagnostics) => Ok(CliAction::RunCommand(CliCommand {
@@ -519,8 +507,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Strict(_) => "--strict",
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
-        PrimaryCommand::BreakGlassTrigger => "--break-glass-trigger",
-        PrimaryCommand::BreakGlassCancel => "--break-glass-cancel",
         PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::Status => "--status",
         PrimaryCommand::Backup(_) => "--backup",

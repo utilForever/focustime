@@ -4,7 +4,7 @@ use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, HistoryFeedbackLevel,
     Layout, Line, List, ListItem, NavigationAction, Paragraph, Rect, ShortcutAction, Span, Style,
     Wrap, app_color, centered_rect, format_duration_label, format_goal_period_progress,
-    format_wakatime_heartbeat_timestamp, render_hint_lines,
+    render_hint_lines,
 };
 
 pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
@@ -62,11 +62,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
 
     let right_sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(34),
-            Constraint::Percentage(33),
-            Constraint::Percentage(33),
-        ])
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(content_layout[1]);
 
     let comparison_items: Vec<ListItem> = history_data
@@ -137,33 +133,6 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         "  No profile effectiveness yet.",
     );
 
-    let override_items: Vec<ListItem> = history_data
-        .break_glass_overrides
-        .iter()
-        .map(|event| {
-            let task_label = event
-                .task_label
-                .as_deref()
-                .unwrap_or("Unlabeled")
-                .to_string();
-            ListItem::new(format!(
-                "  {} {} · {} · {}",
-                event.date,
-                format_wakatime_heartbeat_timestamp(event.timestamp_epoch_secs),
-                task_label,
-                format_duration_label(event.duration_seconds)
-            ))
-        })
-        .collect();
-    render_history_panel(
-        frame,
-        app,
-        left_sections[2],
-        " Break-glass Audit ",
-        override_items,
-        "  No break-glass overrides yet.",
-    );
-
     let monthly_items: Vec<ListItem> = history_data
         .monthly_stats
         .iter()
@@ -179,13 +148,13 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
     render_history_panel(
         frame,
         app,
-        right_sections[1],
+        left_sections[2],
         " Monthly Trend ",
         monthly_items,
         "  No monthly totals yet.",
     );
 
-    render_monthly_heatmap_panel(frame, right_sections[2], app, &history_data.monthly_heatmap);
+    render_monthly_heatmap_panel(frame, right_sections[1], app, &history_data.monthly_heatmap);
 
     if let Some(feedback) = app.history_feedback.as_ref() {
         let (prefix, color) = match feedback.level {

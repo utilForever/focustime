@@ -14,16 +14,13 @@ pub(super) use sites::{
     print_site_add_command_output, print_site_delete_command_output,
     print_site_edit_command_output, print_site_list_command_output,
 };
-pub(super) use status::{
-    print_break_glass_command_output, print_status_output, print_timer_state_output,
-};
+pub(super) use status::{print_status_output, print_timer_state_output};
 
 use crate::cli::{
     BackupOutput, BlocklistProfileConfig, ExportOutput, GoalCarryCommandOutput, GoalCommandOutput,
     ProfileOutput, RestoreOutput, ScheduleCommandOutput, Serialize, StrictCommandOutput,
     ThemeCommandOutput, Write, io,
 };
-use chrono::{Local, TimeZone};
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
     if payload.updated {
@@ -195,14 +192,6 @@ pub(super) fn format_duration(secs: u64) -> String {
         (m, 0) => format!("{m}m"),
         (m, s) => format!("{m}m {s}s"),
     }
-}
-
-fn format_expiry_clock_suffix(epoch_secs: i64) -> String {
-    Local
-        .timestamp_opt(epoch_secs, 0)
-        .single()
-        .map(|datetime| format!(" at {}", datetime.format("%H:%M:%S")))
-        .unwrap_or_default()
 }
 
 pub(super) fn display_input_value(value: &str) -> String {

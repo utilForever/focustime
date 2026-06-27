@@ -841,23 +841,6 @@ fn persisted_stats_round_trip_preserves_daily_history() {
 }
 
 #[test]
-fn persisted_stats_round_trip_preserves_break_glass_overrides() {
-    let mut original = FocusStats::default();
-    original.record_break_glass_override_event("2026-04-09", 1_711_000_000, Some("Project A"), 300);
-
-    let persisted = original.to_persisted();
-    let toml_str = toml::to_string_pretty(&persisted).unwrap();
-    let restored = FocusStats::try_from_toml(&toml_str).unwrap();
-    let recent = restored.recent_break_glass_overrides(1);
-
-    assert_eq!(recent.len(), 1);
-    assert_eq!(recent[0].date, "2026-04-09");
-    assert_eq!(recent[0].timestamp_epoch_secs, 1_711_000_000);
-    assert_eq!(recent[0].task_label.as_deref(), Some("Project A"));
-    assert_eq!(recent[0].duration_seconds, 300);
-}
-
-#[test]
 fn persisted_stats_round_trip_preserves_session_interruptions() {
     let mut original = FocusStats::default();
     original.record_session_interruption_event(
@@ -1608,7 +1591,6 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         600,
         Some(ProfileId::Classic),
     );
-    stats.record_break_glass_override_event(&labeled_day, 1_711_000_000, Some("Project A"), 300);
     stats.record_focus_elapsed(&other_day, 45 * 60, goal);
     stats.record_completed_pomodoro(&other_day, goal);
 
@@ -1628,7 +1610,6 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     let weekly = json_value["weekly"].as_array().unwrap();
     let sessions = json_value["sessions"].as_array().unwrap();
     let interruptions = json_value["interruptions"].as_array().unwrap();
-    let overrides = json_value["overrides"].as_array().unwrap();
     let task_totals = json_value["task_totals"].as_array().unwrap();
     let task_trends = json_value["task_trends"].as_array().unwrap();
     let weekly_consistency = json_value["weekly_consistency"].as_array().unwrap();
@@ -1640,7 +1621,6 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     assert!(!weekly.is_empty());
     assert_eq!(sessions.len(), 1);
     assert_eq!(interruptions.len(), 1);
-    assert_eq!(overrides.len(), 1);
     assert_eq!(task_totals.len(), 1);
     assert_eq!(task_trends.len(), 1);
     assert!(!weekly_consistency.is_empty());
@@ -1677,8 +1657,6 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     assert_eq!(interruptions[0]["reason"], "manual_skip");
     assert_eq!(interruptions[0]["remaining_secs"], 600);
     assert_eq!(interruptions[0]["task_label"], "Project A");
-    assert_eq!(overrides[0]["duration_seconds"], 300);
-    assert_eq!(overrides[0]["task_label"], "Project A");
     assert_eq!(task_totals[0]["task_label"], "Project A");
     assert_eq!(task_totals[0]["focused_minutes"], 30);
     assert_eq!(task_trends[0]["task_label"], "Project A");
@@ -1752,11 +1730,6 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     )));
     assert!(csv.contains("manual_skip"));
     assert!(csv.contains("1711000111"));
-    assert!(csv.contains(&format!(
-        "{},break_glass_override,{labeled_day}",
-        EXPORT_SCHEMA_VERSION
-    )));
-    assert!(csv.contains("1711000000"));
     assert!(csv.contains(&format!("{},task_summary", EXPORT_SCHEMA_VERSION)));
     assert!(csv.contains(&format!("{},task_trend", EXPORT_SCHEMA_VERSION)));
     assert!(csv.contains(&format!("{},weekly_consistency,", EXPORT_SCHEMA_VERSION)));
@@ -1977,9 +1950,6 @@ fn apply_retention_policy_prunes_old_high_volume_entries() {
         600,
         None,
     );
-    stats.record_break_glass_override_event(&old_day, 1_711_000_222, Some("Docs"), 120);
-    stats.record_break_glass_override_event(&recent_day, 1_711_000_333, Some("Docs"), 120);
-
     let result = stats.apply_retention_policy(
         crate::config::StatsRetentionConfig {
             preset: crate::config::StatsRetentionPreset::Balanced,
@@ -1989,13 +1959,11 @@ fn apply_retention_policy_prunes_old_high_volume_entries() {
     assert_eq!(result.daily_removed, 0);
     assert_eq!(result.focus_sessions_removed, 1);
     assert_eq!(result.session_interruptions_removed, 1);
-    assert_eq!(result.break_glass_overrides_removed, 1);
     assert_eq!(result.weekly_goal_snapshots_removed, 1);
     assert_eq!(result.monthly_goal_snapshots_removed, 1);
-    assert_eq!(result.total_removed(), 5);
+    assert_eq!(result.total_removed(), 4);
     assert!(result.any_removed());
     assert_eq!(stats.task_totals(10)[0].pomodoros_completed, 1);
-    assert_eq!(stats.recent_break_glass_overrides(10).len(), 1);
     assert_eq!(stats.recent_session_interruptions(10).len(), 1);
 }
 

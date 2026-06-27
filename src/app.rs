@@ -1,8 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::BTreeSet,
-    time::{Duration, Instant},
-};
+use std::{cell::RefCell, collections::BTreeSet};
 
 use chrono::{DateTime, Datelike, Local, NaiveDate};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -27,12 +23,12 @@ use crate::schedule::{
     occurrence_key,
 };
 use crate::stats::{
-    BreakGlassOverrideEvent, ComparisonDimension, DailyGoalSnapshot, DailyStats,
-    ExportedStatsFiles, FocusRiskForecast, FocusSessionMetadata, FocusStats, GoalStreak,
-    MonthlyHeatmap, MonthlyStats, ProfileBucket, ProfileEffectiveness, ProfileTotals,
-    SessionInterruptionEvent, SessionInterruptionReason, SessionStats, StatsGrowthSummary,
-    StatsRetentionPruneResult, TaskTotals, TaskTrend, TimeOfDayBucket, WeeklyConsistency,
-    WeeklyFocusScore, WeeklyStats, carry_over_goal_target, current_day_key,
+    ComparisonDimension, DailyGoalSnapshot, DailyStats, ExportedStatsFiles, FocusRiskForecast,
+    FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileBucket,
+    ProfileEffectiveness, ProfileTotals, SessionInterruptionEvent, SessionInterruptionReason,
+    SessionStats, StatsGrowthSummary, StatsRetentionPruneResult, TaskTotals, TaskTrend,
+    TimeOfDayBucket, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target,
+    current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -43,7 +39,6 @@ use crate::timer::{
 use crate::wakatime::WakatimeTracker;
 use crate::wakatime::{WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, WakatimeRuntimeState};
 
-mod break_glass;
 mod cli_api;
 mod error;
 mod feedback_diagnostics;
@@ -243,7 +238,6 @@ fn blocking_backend_config_for_persistence(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingTimerAction {
     Reset,
-    BreakGlassOverride,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -481,8 +475,6 @@ pub(crate) struct App {
     last_active_schedule_occurrence_key: Option<String>,
     current_frame_now: DateTime<Local>,
     pub(crate) strict_mode: bool,
-    break_glass_duration_secs: u64,
-    break_glass_expires_at: Option<Instant>,
     daily_goal: DailyGoalConfig,
     weekly_goal: WeeklyGoalConfig,
     monthly_goal: MonthlyGoalConfig,
@@ -534,7 +526,6 @@ impl App {
         let recurring_windows = compile_windows(&recurring_schedule.windows);
         let strict_mode = selected_automation.strict_mode;
         let schedule_runtime = config.schedule_runtime;
-        let break_glass_duration_secs = config.break_glass_duration_secs;
         let daily_goal = config.daily_goal;
         let weekly_goal = config.weekly_goal;
         let monthly_goal = config.monthly_goal;
@@ -669,8 +660,6 @@ impl App {
             last_active_schedule_occurrence_key: None,
             current_frame_now: Local::now(),
             strict_mode,
-            break_glass_duration_secs,
-            break_glass_expires_at: None,
             daily_goal,
             weekly_goal,
             monthly_goal,
@@ -720,7 +709,6 @@ impl App {
         self.current_frame_now = now;
         self.sync_today_goal_snapshot();
         self.integrations.poll_wakatime_events();
-        self.sync_break_glass_override();
         self.sync_recurring_schedule(now);
     }
 
@@ -1211,7 +1199,7 @@ impl App {
     }
 
     fn should_block_for_current_state(&self) -> bool {
-        self.focus_session_active_for_current_state() && !self.break_glass_override_active_now()
+        self.focus_session_active_for_current_state()
     }
 
     fn timer_activity(&self) -> TimerActivity {
@@ -1395,15 +1383,6 @@ fn goal_progress_for_totals(
     DailyGoalProgress {
         minutes: goal_progress(focused_minutes, target_minutes),
         pomodoros: goal_progress(u64::from(pomodoros_completed), u64::from(target_pomodoros)),
-    }
-}
-
-fn ceil_duration_secs(duration: Duration) -> u64 {
-    let secs = duration.as_secs();
-    if duration.subsec_nanos() > 0 {
-        secs.saturating_add(1)
-    } else {
-        secs
     }
 }
 

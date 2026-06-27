@@ -38,11 +38,11 @@ mod setup;
 use setup::render_setup_check;
 use setup::render_setup_diagnostics;
 mod timer;
-use timer::{format_duration_label, format_wakatime_heartbeat_timestamp, render_timer};
+use timer::{format_duration_label, render_timer};
 #[cfg(test)]
 use timer::{
     timer_primary_hint, timer_secondary_hint, timer_session_status_lines_for_width,
-    timer_status_text, wakatime_status_line,
+    wakatime_status_line,
 };
 
 const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];

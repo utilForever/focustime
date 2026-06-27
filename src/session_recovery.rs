@@ -102,49 +102,6 @@ pub(crate) struct WorkflowStateSnapshot {
     pub(crate) last_schedule_occurrence_key: Option<String>,
     #[serde(default)]
     pub(crate) strict_reset_confirmation_pending: bool,
-    #[serde(default)]
-    pub(crate) temporary_overrides: Vec<WorkflowTemporaryOverrideSnapshot>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum WorkflowTemporaryOverrideKind {
-    BreakGlass,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct WorkflowTemporaryOverrideSnapshot {
-    pub(crate) kind: WorkflowTemporaryOverrideKind,
-    #[serde(default)]
-    pub(crate) profile: Option<String>,
-    #[serde(default)]
-    pub(crate) site: Option<String>,
-    #[serde(default)]
-    pub(crate) expires_at_epoch_secs: Option<i64>,
-    #[serde(default)]
-    pub(crate) confirmation_pending: bool,
-}
-
-impl WorkflowTemporaryOverrideSnapshot {
-    pub(crate) fn break_glass_active(expires_at_epoch_secs: i64) -> Self {
-        Self {
-            kind: WorkflowTemporaryOverrideKind::BreakGlass,
-            profile: None,
-            site: None,
-            expires_at_epoch_secs: Some(expires_at_epoch_secs),
-            confirmation_pending: false,
-        }
-    }
-
-    pub(crate) fn break_glass_pending_confirmation() -> Self {
-        Self {
-            kind: WorkflowTemporaryOverrideKind::BreakGlass,
-            profile: None,
-            site: None,
-            expires_at_epoch_secs: None,
-            confirmation_pending: true,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -946,9 +903,6 @@ checksum = "deadbeef"
             schedule_armed_occurrence_key: None,
             last_schedule_occurrence_key: None,
             strict_reset_confirmation_pending: false,
-            temporary_overrides: vec![
-                WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
-            ],
         })
         .expect("save should succeed");
 
@@ -970,24 +924,5 @@ schedule_delay_until_epoch_secs = 1700000000
         assert!(snapshot.schedule_armed_occurrence_key.is_none());
         assert!(snapshot.last_schedule_occurrence_key.is_none());
         assert!(!snapshot.strict_reset_confirmation_pending);
-        assert!(snapshot.temporary_overrides.is_empty());
-    }
-
-    #[test]
-    fn workflow_state_snapshot_uses_canonical_temporary_overrides() {
-        let snapshot = WorkflowStateSnapshot {
-            temporary_overrides: vec![
-                WorkflowTemporaryOverrideSnapshot::break_glass_active(1_700_000_100),
-                WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
-            ],
-            ..WorkflowStateSnapshot::default()
-        };
-
-        assert_eq!(snapshot.temporary_overrides.len(), 2);
-        assert!(
-            snapshot
-                .temporary_overrides
-                .contains(&WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation())
-        );
     }
 }

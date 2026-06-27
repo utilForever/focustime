@@ -48,13 +48,13 @@ use output::{
     build_diagnostics_blocking_preview_error, build_diagnostics_blocking_preview_output,
     build_diagnostics_command_output, build_schedule_inspection_output, display_input_value,
     effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
-    print_blocklist_profile_command_output, print_break_glass_command_output,
-    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
-    print_goal_command_output, print_history_dashboard_command_output, print_json,
-    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_theme_command_output, print_timer_state_output,
+    print_blocklist_profile_command_output, print_diagnostics_command_output, print_export_output,
+    print_goal_carry_command_output, print_goal_command_output,
+    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
@@ -94,8 +94,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
   focustime --schedule-set=JSON_PAYLOAD [--json]
-  focustime --break-glass-trigger [--json]
-  focustime --break-glass-cancel [--json]
   focustime --blocklist-profile [PROFILE_NAME] [--json]
   focustime --blocklist-profile-create=PROFILE_NAME [--json]
   focustime --blocklist-profile-rename=PROFILE_NAME [--json]
@@ -133,8 +131,6 @@ Options:
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
   --schedule-set  Replace selected profile schedule from JSON payload
-  --break-glass-trigger  Trigger temporary override workflow for break-glass (first call arms, second confirms)
-  --break-glass-cancel   Cancel a pending break-glass confirmation
   --blocklist-profile         Show active blocklist profile, or set active profile
   --blocklist-profile-create  Create a blocklist profile and select it
   --blocklist-profile-rename  Rename the active blocklist profile
@@ -249,8 +245,6 @@ pub(crate) enum CommandKind {
     Schedule {
         schedule: Option<RecurringScheduleConfig>,
     },
-    BreakGlassTrigger,
-    BreakGlassCancel,
     Diagnostics,
     Status {
         watch_interval_secs: Option<u64>,
@@ -308,8 +302,6 @@ enum PrimaryCommand {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
-    BreakGlassTrigger,
-    BreakGlassCancel,
     Diagnostics,
     Status,
     Backup(Option<PathBuf>),
@@ -353,8 +345,6 @@ enum ParsedToken {
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
-    BreakGlassTrigger,
-    BreakGlassCancel,
     Diagnostics,
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
@@ -499,16 +489,6 @@ struct LiveStatusOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct TemporaryOverrideStatusOutput {
-    kind: &'static str,
-    profile: Option<String>,
-    site: Option<String>,
-    remaining_secs: Option<u64>,
-    expires_at_epoch_secs: Option<i64>,
-    pending_confirmation: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct WeeklyAllocationDayOutput {
     date: String,
     minutes_target: u64,
@@ -539,8 +519,6 @@ struct StatusOutput {
     selected_task_label: Option<String>,
     selected_blocklist_profile: String,
     blocked_sites_count: usize,
-    temporary_overrides_active_count: usize,
-    temporary_overrides: Vec<TemporaryOverrideStatusOutput>,
     strict_mode: bool,
     goal: GoalOutput,
     weekly_goal: GoalOutput,
@@ -562,7 +540,6 @@ struct StatsRetentionStatusOutput {
     keep_daily_days: Option<u16>,
     keep_focus_sessions_days: Option<u16>,
     keep_session_interruptions_days: Option<u16>,
-    keep_break_glass_overrides_days: Option<u16>,
     pending_prune: StatsRetentionPruneResult,
 }
 
@@ -600,15 +577,6 @@ struct TimerStateOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct TimerCommandOutput {
     action: &'static str,
-    timer: TimerStateOutput,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct BreakGlassCommandOutput {
-    action: &'static str,
-    pending_confirmation: bool,
-    active: bool,
-    remaining_secs: Option<u64>,
     timer: TimerStateOutput,
 }
 

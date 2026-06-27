@@ -3,13 +3,10 @@ use crate::cli::{
     AppConfig, CustomProfileConfig, DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL,
     DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS, DailyGoalSnapshot, Datelike,
     FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput, NaiveDate, ProfileId, ProfileSpec,
-    ProfileView, SessionOutput, StatsRetentionStatusOutput, StatusOutput,
-    TemporaryOverrideStatusOutput, ThemePreset, ThemePresetView, TimerPhase, TimerStatus,
-    TodayOutput, WeeklyAllocationDayOutput, WeeklyAllocationOutput, carry_over_goal_target,
-    current_day_key, effective_blocked_sites_for_profile, session_recovery,
-};
-use crate::session_recovery::{
-    WorkflowStateSnapshot, WorkflowTemporaryOverrideKind, WorkflowTemporaryOverrideSnapshot,
+    ProfileView, SessionOutput, StatsRetentionStatusOutput, StatusOutput, ThemePreset,
+    ThemePresetView, TimerPhase, TimerStatus, TodayOutput, WeeklyAllocationDayOutput,
+    WeeklyAllocationOutput, carry_over_goal_target, current_day_key,
+    effective_blocked_sites_for_profile, session_recovery,
 };
 use crate::timer::TimerState;
 
@@ -37,12 +34,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         .map(|profile| effective_blocked_sites_for_profile(profile).len())
         .unwrap_or_default();
     let selected_automation = config.profile_automation_for(config.selected_profile);
-    let workflow_state = session_recovery::load_workflow_state().ok().flatten();
-    let temporary_overrides = active_temporary_override_status(config, workflow_state.as_ref());
-    let temporary_overrides_active_count = temporary_overrides
-        .iter()
-        .filter(|entry| !entry.pending_confirmation)
-        .count();
     let live = build_live_status_output(config, selected_task_label.clone());
     let session = build_session_output(&live);
     let latest_interruption = stats.latest_session_interruption();
@@ -84,8 +75,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         selected_task_label,
         selected_blocklist_profile: config.selected_blocklist_profile.clone(),
         blocked_sites_count: active_sites_count,
-        temporary_overrides_active_count,
-        temporary_overrides,
         strict_mode: selected_automation.strict_mode,
         goal: GoalOutput {
             configured: goal_snapshot.has_any_target(),
@@ -133,76 +122,10 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
             keep_daily_days: retention_windows.keep_daily_days,
             keep_focus_sessions_days: retention_windows.keep_focus_sessions_days,
             keep_session_interruptions_days: retention_windows.keep_session_interruptions_days,
-            keep_break_glass_overrides_days: retention_windows.keep_break_glass_overrides_days,
             pending_prune,
         },
         live,
     }
-}
-
-fn active_temporary_override_status(
-    config: &AppConfig,
-    workflow_state: Option<&WorkflowStateSnapshot>,
-) -> Vec<TemporaryOverrideStatusOutput> {
-    let now_epoch_secs = chrono::Local::now().timestamp();
-    let selected_profile = config.selected_blocklist_profile.trim();
-    let Some(workflow_state) = workflow_state else {
-        return Vec::new();
-    };
-
-    let mut active = workflow_state
-        .temporary_overrides
-        .clone()
-        .into_iter()
-        .filter_map(|entry| {
-            temporary_override_status_output(entry, selected_profile, now_epoch_secs)
-        })
-        .collect::<Vec<_>>();
-    active.sort_by(|left, right| {
-        left.pending_confirmation
-            .cmp(&right.pending_confirmation)
-            .then_with(|| {
-                left.remaining_secs
-                    .unwrap_or(u64::MAX)
-                    .cmp(&right.remaining_secs.unwrap_or(u64::MAX))
-            })
-            .then_with(|| left.kind.cmp(right.kind))
-            .then_with(|| left.site.cmp(&right.site))
-    });
-    active
-}
-
-fn temporary_override_status_output(
-    entry: WorkflowTemporaryOverrideSnapshot,
-    _selected_profile: &str,
-    now_epoch_secs: i64,
-) -> Option<TemporaryOverrideStatusOutput> {
-    match entry.kind {
-        WorkflowTemporaryOverrideKind::BreakGlass => {
-            break_glass_override_status(entry, now_epoch_secs)
-        }
-    }
-}
-
-fn break_glass_override_status(
-    entry: WorkflowTemporaryOverrideSnapshot,
-    now_epoch_secs: i64,
-) -> Option<TemporaryOverrideStatusOutput> {
-    let active_expiry = entry
-        .expires_at_epoch_secs
-        .filter(|expires_at_epoch_secs| *expires_at_epoch_secs > now_epoch_secs);
-    if active_expiry.is_none() && !entry.confirmation_pending {
-        return None;
-    }
-    Some(TemporaryOverrideStatusOutput {
-        kind: "break-glass",
-        profile: None,
-        site: None,
-        remaining_secs: active_expiry
-            .map(|expires_at_epoch_secs| (expires_at_epoch_secs - now_epoch_secs) as u64),
-        expires_at_epoch_secs: active_expiry,
-        pending_confirmation: entry.confirmation_pending,
-    })
 }
 
 fn build_session_output(live: &LiveStatusOutput) -> SessionOutput {
