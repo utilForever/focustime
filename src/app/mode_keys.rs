@@ -3,7 +3,7 @@ use crate::app::{
     SessionInterruptionReason, ShortcutAction, TimerState,
 };
 
-const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 9] = [
+const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 8] = [
     ShortcutAction::TimerTogglePause,
     ShortcutAction::TimerStopReset,
     ShortcutAction::TimerNextPhase,
@@ -12,7 +12,6 @@ const TIMER_SHORTCUT_ACTIONS: [ShortcutAction; 9] = [
     ShortcutAction::OpenTaskSetup,
     ShortcutAction::OpenStatsHistory,
     ShortcutAction::OpenSetupDiagnostics,
-    ShortcutAction::BreakGlassOverride,
 ];
 
 impl App {
@@ -51,7 +50,6 @@ impl App {
             ShortcutAction::OpenTaskSetup => self.open_session_planner(),
             ShortcutAction::OpenStatsHistory => self.open_stats_history(),
             ShortcutAction::OpenSetupDiagnostics => self.open_setup_diagnostics(),
-            ShortcutAction::BreakGlassOverride => self.handle_break_glass_key(),
             _ => {}
         }
     }
@@ -64,14 +62,6 @@ impl App {
                     TimerState::reset,
                     Some(SessionInterruptionReason::ManualStop),
                 );
-                return true;
-            }
-            self.pending_timer_action = None;
-        }
-
-        if self.break_glass_confirmation_pending() {
-            if self.shortcut_matches(ShortcutAction::BreakGlassOverride, key) {
-                self.confirm_break_glass_override();
                 return true;
             }
             self.pending_timer_action = None;

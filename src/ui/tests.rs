@@ -49,15 +49,10 @@ fn timer_secondary_hint_uses_custom_history_shortcut() {
 }
 
 #[test]
-fn timer_primary_hint_includes_break_glass_shortcut() {
-    let app = App::default();
-    assert!(timer_primary_hint(&app).contains("[u] Unblock"));
-}
-
-#[test]
 fn timer_primary_hint_omits_note_shortcut() {
     let app = App::default();
     assert!(!timer_primary_hint(&app).contains("Note"));
+    assert!(!timer_primary_hint(&app).contains("Unblock"));
 }
 
 #[test]
@@ -264,49 +259,13 @@ fn timer_primary_hint_omits_schedule_delay_shortcut() {
 }
 
 #[test]
-fn timer_primary_hint_shows_break_glass_confirmation_prompt() {
-    let mut app = App::default();
-    app.blocker.add_site("example.com".to_string());
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('u'),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-
-    assert!(timer_primary_hint(&app).contains("Confirm unblock"));
-}
-
-#[test]
-fn timer_status_text_shows_active_break_glass_state() {
-    let mut app = App::default();
-    app.blocker.add_site("example.com".to_string());
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('u'),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('u'),
-        crossterm::event::KeyModifiers::NONE,
-    ));
-
-    let (_, _, break_glass_status) = timer_status_text(&app);
-    assert!(break_glass_status.contains("Break-glass: active"));
-}
-
-#[test]
-fn timer_session_status_lines_include_strict_and_break_glass_only() {
+fn timer_session_status_lines_include_strict_only() {
     let app = App::default();
 
     let lines = timer_session_status_lines_for_width(&app, 80);
 
-    assert_eq!(lines.len(), 2);
+    assert_eq!(lines.len(), 1);
     assert!(lines.iter().any(|line| line.contains("Strict:")));
-    assert!(lines.iter().any(|line| line.contains("Break-glass:")));
     assert!(!lines.iter().any(|line| line.contains("allowlist")));
 }
 
@@ -534,7 +493,7 @@ fn history_view_renders_monthly_heatmap_profile_and_task_panels() {
     assert!(text_lower.contains("profile effect"));
     assert!(text.contains("Comparison: Task"));
     assert!(text.contains("Task Trends"));
-    assert!(text.contains("Break-glass Audit"));
+    assert!(!text.contains("Break-glass Audit"));
     assert!(text_lower.contains("focus score"));
     assert!(text.contains(&month_label));
 }

@@ -12,7 +12,7 @@ use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, TimeZone,
 use std::{
     fs,
     path::Path,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -157,7 +157,6 @@ fn selected_builtin_profile_is_applied_on_startup() {
         schedule_runtime: ScheduleRuntimeConfig::default(),
         profile_automation: None,
         strict_mode: false,
-        break_glass_duration_secs: 5 * 60,
         daily_goal: DailyGoalConfig::default(),
         weekly_goal: WeeklyGoalConfig::default(),
         monthly_goal: MonthlyGoalConfig::default(),
@@ -478,7 +477,6 @@ fn persisted_config_keeps_legacy_fields_from_custom_profile() {
     assert_eq!(persisted.notifications, NotificationConfig::default());
     assert_eq!(persisted.auto_start, AutoStartConfig::default());
     assert!(persisted.strict_mode);
-    assert_eq!(persisted.break_glass_duration_secs, 5 * 60);
     assert_eq!(persisted.daily_goal, DailyGoalConfig::default());
     assert_eq!(persisted.wakatime, WakatimeMetadataConfig::default());
     assert_eq!(persisted.selected_blocklist_profile, "Default");
@@ -3320,127 +3318,6 @@ fn custom_c_quit_key_allows_quit_when_focus_not_active() {
 }
 
 #[test]
-fn strict_mode_stays_enforced_during_break_glass_override() {
-    let config = AppConfig {
-        strict_mode: true,
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-    app.break_glass_expires_at = Some(Instant::now() + Duration::from_secs(120));
-
-    assert!(app.strict_mode_enforced_for_focus());
-}
-
-#[test]
-fn break_glass_requires_confirmation_before_unblocking() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-    app.apply_blocking_for_phase();
-    assert!(app.should_block_for_current_state());
-
-    app.handle_key(key(KeyCode::Char('u')));
-    assert!(app.break_glass_confirmation_pending());
-    assert!(app.should_block_for_current_state());
-
-    app.handle_key(key(KeyCode::Char('u')));
-    assert!(!app.break_glass_confirmation_pending());
-    if app.break_glass_override_active() {
-        assert!(!app.should_block_for_current_state());
-    } else {
-        assert!(app.should_block_for_current_state());
-        assert!(
-            app.phase_notification
-                .as_deref()
-                .is_some_and(|message| message.contains("failed"))
-        );
-    }
-}
-
-#[test]
-fn break_glass_expiry_reapplies_blocking_and_logs_notification() {
-    let mut app = App::default();
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-    app.break_glass_expires_at = Some(Instant::now() - Duration::from_secs(1));
-    app.poll_wakatime_status();
-
-    assert!(!app.break_glass_override_active());
-    assert!(app.should_block_for_current_state());
-    assert!(
-        app.phase_notification
-            .as_deref()
-            .is_some_and(|message| message.contains("expired"))
-    );
-}
-
-#[test]
-fn break_glass_is_rejected_when_focus_is_not_active() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Idle;
-
-    app.handle_key(key(KeyCode::Char('u')));
-
-    assert!(!app.break_glass_confirmation_pending());
-    assert!(
-        app.phase_notification
-            .as_deref()
-            .is_some_and(|message| message.contains("only during active focus"))
-    );
-}
-
-#[test]
-fn break_glass_records_audit_event_in_stats() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.task_labels = vec!["Project A".to_string()];
-    app.selected_task_label = Some("Project A".to_string());
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-    app.apply_blocking_for_phase();
-
-    app.handle_key(key(KeyCode::Char('u')));
-    app.handle_key(key(KeyCode::Char('u')));
-
-    let overrides = app.recent_break_glass_overrides(1);
-    if app.break_glass_override_active() {
-        assert_eq!(overrides.len(), 1);
-        assert_eq!(overrides[0].date.len(), 10);
-        assert_eq!(overrides[0].task_label.as_deref(), Some("Project A"));
-        assert_eq!(overrides[0].duration_seconds, 5 * 60);
-    } else {
-        assert!(overrides.is_empty());
-    }
-}
-
-#[test]
-fn break_glass_without_sites_does_not_record_audit_event() {
-    let mut app = App::default();
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-
-    app.handle_key(key(KeyCode::Char('u')));
-
-    assert!(!app.break_glass_confirmation_pending());
-    assert!(app.recent_break_glass_overrides(1).is_empty());
-}
-
-#[test]
 fn focus_elapsed_accumulates_session_and_today_minutes() {
     let mut app = App::default();
     app.timer.phase = TimerPhase::Focus;
@@ -3461,7 +3338,6 @@ fn on_tick_without_phase_change_does_not_sync_workflow_state() {
     app.timer.phase = TimerPhase::Focus;
     app.timer.status = TimerStatus::Running;
     app.timer.remaining_secs = app.timer.focus_secs;
-    app.break_glass_expires_at = Some(Instant::now() + Duration::from_secs(120));
     session_recovery::clear_workflow_state().unwrap();
 
     app.on_tick(false);
@@ -4210,142 +4086,6 @@ fn cli_next_records_session_interruption_reason() {
 }
 
 #[test]
-fn cli_break_glass_trigger_requires_active_focus() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Idle;
-
-    let error = app.trigger_break_glass_for_cli().unwrap_err();
-
-    assert_eq!(
-        error,
-        "Break-glass override is available only during active focus."
-    );
-    assert!(!app.break_glass_confirmation_pending());
-}
-
-#[test]
-fn cli_break_glass_trigger_persists_pending_confirmation() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-
-    app.trigger_break_glass_for_cli().unwrap();
-
-    let snapshot = session_recovery::test_saved_workflow_snapshot()
-        .expect("workflow snapshot should be saved");
-    assert!(snapshot.temporary_overrides.contains(
-        &session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation()
-    ));
-}
-
-#[test]
-fn cli_break_glass_trigger_arms_confirmation_when_valid() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-
-    app.trigger_break_glass_for_cli().unwrap();
-
-    assert!(app.break_glass_confirmation_pending());
-}
-
-#[test]
-fn cli_break_glass_cancel_clears_persisted_workflow_state() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-    app.trigger_break_glass_for_cli().unwrap();
-    assert!(
-        session_recovery::test_saved_workflow_snapshot()
-            .is_some_and(|snapshot| snapshot.temporary_overrides.contains(
-                &session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation()
-            ))
-    );
-
-    app.cancel_break_glass_for_cli().unwrap();
-
-    assert!(session_recovery::test_saved_workflow_snapshot().is_none());
-}
-
-#[test]
-fn cli_break_glass_cancel_requires_pending_confirmation() {
-    let mut app = App::default();
-
-    let error = app.cancel_break_glass_for_cli().unwrap_err();
-
-    assert_eq!(
-        error,
-        "Cannot cancel break-glass: no confirmation is pending."
-    );
-}
-
-#[test]
-fn app_restores_cli_workflow_state_from_snapshot() {
-    session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
-        TimerPhase::Focus,
-        TimerStatus::Running,
-        300,
-        Some("Docs"),
-        ProfileId::Classic,
-    )));
-    session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
-        schedule_armed_occurrence_key: None,
-        last_schedule_occurrence_key: None,
-        strict_reset_confirmation_pending: false,
-        temporary_overrides: vec![
-            session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
-        ],
-    }));
-
-    let app = App::default();
-
-    assert!(app.break_glass_confirmation_pending());
-}
-
-#[test]
-fn app_restores_break_glass_override_from_canonical_snapshot() {
-    let now = Local::now();
-    session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
-        TimerPhase::Focus,
-        TimerStatus::Running,
-        300,
-        Some("Docs"),
-        ProfileId::Classic,
-    )));
-    session_recovery::set_test_load_workflow_state(Some(session_recovery::WorkflowStateSnapshot {
-        schedule_armed_occurrence_key: None,
-        last_schedule_occurrence_key: None,
-        strict_reset_confirmation_pending: false,
-        temporary_overrides: vec![
-            session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_active(
-                (now + ChronoDuration::seconds(90)).timestamp(),
-            ),
-        ],
-    }));
-
-    let app = App::default();
-
-    assert!(app.break_glass_override_remaining_secs().is_some());
-}
-
-#[test]
 fn app_restores_schedule_arming_continuity_from_workflow_snapshot() {
     let now = local_datetime_today(10, 15);
     let config = AppConfig {
@@ -4368,7 +4108,6 @@ fn app_restores_schedule_arming_continuity_from_workflow_snapshot() {
         schedule_armed_occurrence_key: Some(active_occurrence_key.clone()),
         last_schedule_occurrence_key: Some(active_occurrence_key.clone()),
         strict_reset_confirmation_pending: false,
-        temporary_overrides: Vec::new(),
     }));
 
     let app = App::from_config(config);
@@ -4396,7 +4135,6 @@ fn app_restores_strict_reset_confirmation_from_workflow_snapshot() {
         schedule_armed_occurrence_key: None,
         last_schedule_occurrence_key: None,
         strict_reset_confirmation_pending: true,
-        temporary_overrides: Vec::new(),
     }));
 
     let app = App::from_config(AppConfig {
@@ -4413,9 +4151,6 @@ fn app_reports_partial_runtime_recovery_notice_for_ignored_workflow_artifacts() 
         schedule_armed_occurrence_key: Some("recurring:stale".to_string()),
         last_schedule_occurrence_key: Some("recurring:stale".to_string()),
         strict_reset_confirmation_pending: true,
-        temporary_overrides: vec![
-            session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
-        ],
     }));
 
     let app = App::default();
@@ -4427,64 +4162,7 @@ fn app_reports_partial_runtime_recovery_notice_for_ignored_workflow_artifacts() 
     assert!(notice.contains("Ignored saved runtime artifacts"));
     assert!(notice.contains("schedule arm state"));
     assert!(notice.contains("schedule trigger continuity"));
-    assert!(notice.contains("break-glass confirmation"));
     assert!(notice.contains("strict reset confirmation"));
-}
-
-#[test]
-fn cli_break_glass_cancel_clears_pending_confirmation() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-    app.trigger_break_glass_for_cli().unwrap();
-    assert!(app.break_glass_confirmation_pending());
-
-    app.cancel_break_glass_for_cli().unwrap();
-
-    assert!(!app.break_glass_confirmation_pending());
-}
-
-#[test]
-fn cli_break_glass_trigger_reports_active_override() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-    app.break_glass_expires_at = Some(Instant::now() + Duration::from_secs(90));
-
-    let error = app.trigger_break_glass_for_cli().unwrap_err();
-
-    assert!(error.contains("Break-glass override already active"));
-    assert!(!app.break_glass_confirmation_pending());
-}
-
-#[test]
-fn cli_break_glass_trigger_pending_confirm_rechecks_focus_state() {
-    let config = AppConfig {
-        blocked_sites: vec!["example.com".to_string()],
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-    app.timer.phase = TimerPhase::Focus;
-    app.timer.status = TimerStatus::Running;
-    app.trigger_break_glass_for_cli().unwrap();
-    assert!(app.break_glass_confirmation_pending());
-    app.timer.status = TimerStatus::Idle;
-
-    let error = app.trigger_break_glass_for_cli().unwrap_err();
-
-    assert_eq!(
-        error,
-        "Break-glass override is available only during active focus."
-    );
-    assert!(!app.break_glass_confirmation_pending());
 }
 
 #[test]

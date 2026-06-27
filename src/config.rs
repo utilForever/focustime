@@ -109,11 +109,6 @@ pub(crate) struct AppConfig {
     /// Deprecated top-level automation mirror (legacy load-time compatibility field).
     #[serde(default, skip_serializing)]
     pub(crate) strict_mode: bool,
-    /// Duration of a break-glass unblock override in seconds.
-    ///
-    /// This value is clamped to a non-zero default during normalization.
-    #[serde(default = "default_break_glass_duration_secs")]
-    pub(crate) break_glass_duration_secs: u64,
     /// Daily goal settings for focus minutes and completed pomodoros.
     ///
     /// A value of `0` disables the corresponding goal.
@@ -590,7 +585,6 @@ impl StatsRetentionConfig {
                 keep_daily_days: None,
                 keep_focus_sessions_days: None,
                 keep_session_interruptions_days: None,
-                keep_break_glass_overrides_days: None,
                 keep_weekly_goal_snapshots_days: None,
                 keep_monthly_goal_snapshots_days: None,
             },
@@ -598,7 +592,6 @@ impl StatsRetentionConfig {
                 keep_daily_days: None,
                 keep_focus_sessions_days: Some(365),
                 keep_session_interruptions_days: Some(180),
-                keep_break_glass_overrides_days: Some(180),
                 keep_weekly_goal_snapshots_days: Some(365),
                 keep_monthly_goal_snapshots_days: Some(365),
             },
@@ -606,7 +599,6 @@ impl StatsRetentionConfig {
                 keep_daily_days: Some(365),
                 keep_focus_sessions_days: Some(180),
                 keep_session_interruptions_days: Some(90),
-                keep_break_glass_overrides_days: Some(90),
                 keep_weekly_goal_snapshots_days: Some(180),
                 keep_monthly_goal_snapshots_days: Some(180),
             },
@@ -619,7 +611,6 @@ pub(crate) struct StatsRetentionWindows {
     pub(crate) keep_daily_days: Option<u16>,
     pub(crate) keep_focus_sessions_days: Option<u16>,
     pub(crate) keep_session_interruptions_days: Option<u16>,
-    pub(crate) keep_break_glass_overrides_days: Option<u16>,
     pub(crate) keep_weekly_goal_snapshots_days: Option<u16>,
     pub(crate) keep_monthly_goal_snapshots_days: Option<u16>,
 }
@@ -773,10 +764,6 @@ fn default_schedule_window_start() -> String {
 
 fn default_schedule_window_end() -> String {
     "10:00".to_string()
-}
-
-fn default_break_glass_duration_secs() -> u64 {
-    5 * 60
 }
 
 fn default_history_dashboard_pinned_cards() -> Vec<HistoryKpiCardId> {
@@ -992,7 +979,6 @@ impl Default for AppConfig {
             schedule_runtime: ScheduleRuntimeConfig::default(),
             profile_automation: None,
             strict_mode: false,
-            break_glass_duration_secs: default_break_glass_duration_secs(),
             daily_goal: DailyGoalConfig::default(),
             weekly_goal: WeeklyGoalConfig::default(),
             monthly_goal: MonthlyGoalConfig::default(),
@@ -1150,10 +1136,6 @@ impl AppConfig {
             nonzero_or_default_u64(self.long_break_secs, default_long_break_secs());
         self.long_break_interval =
             nonzero_or_default_u32(self.long_break_interval, default_long_break_interval());
-        self.break_glass_duration_secs = nonzero_or_default_u64(
-            self.break_glass_duration_secs,
-            default_break_glass_duration_secs(),
-        );
         self.feature_flags = self.feature_flags.normalized();
         self.custom_profile = self.custom_profile.map(|profile| profile.normalized());
         self.recurring_schedule = self.recurring_schedule.normalized();

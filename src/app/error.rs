@@ -12,7 +12,6 @@ pub(crate) enum AppError {
     TimerNotPaused,
     StrictModeActive { action: &'static str },
     TimerAlreadyIdle,
-    BreakGlassNoConfirmation,
     TaskLabelEmpty,
     TaskLabelLookupFailed,
     ArchivedTaskLabel { label: String },
@@ -67,11 +66,6 @@ impl UserFacingError for AppError {
                 "app.timer.already_idle",
                 "Cannot stop: timer is already idle.",
                 "Start a focus session before stopping it.",
-            ),
-            Self::BreakGlassNoConfirmation => UserMessage::with_hint(
-                "app.break_glass.no_confirmation",
-                "Cannot cancel break-glass: no confirmation is pending.",
-                "Trigger break-glass first before trying to cancel the pending confirmation.",
             ),
             Self::TaskLabelEmpty => UserMessage::with_hint(
                 "app.task_label.empty",

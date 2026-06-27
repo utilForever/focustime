@@ -8,12 +8,11 @@ use crate::app::App;
 use crate::error::UserMessage;
 
 use crate::cli::{
-    AppConfig, BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig, FocusStats,
-    GoalCarryCommandOutput, GoalCommandOutput, MonthlyGoalConfig, OutputMode, ProfileId,
-    ProfileOutput, ProfileView, RecurringScheduleConfig, ScheduleCommandOutput,
-    StrictCommandOutput, TaskCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
-    TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
-    build_schedule_inspection_output, print_break_glass_command_output,
+    AppConfig, CliCommand, CommandKind, DailyGoalConfig, FocusStats, GoalCarryCommandOutput,
+    GoalCommandOutput, MonthlyGoalConfig, OutputMode, ProfileId, ProfileOutput, ProfileView,
+    RecurringScheduleConfig, ScheduleCommandOutput, StrictCommandOutput, TaskCommandOutput,
+    ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput, WeeklyGoalConfig,
+    available_theme_preset_views, build_schedule_inspection_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_profile_output,
     print_schedule_command_output, print_strict_command_output, print_theme_command_output,
     print_timer_state_output, profile_id, profile_view, theme_preset_view, timer_phase_id,
@@ -79,8 +78,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Schedule { schedule } => {
             execute_schedule_command(schedule, cli_command.output)
         }
-        CommandKind::BreakGlassTrigger => execute_break_glass_trigger_command(cli_command.output),
-        CommandKind::BreakGlassCancel => execute_break_glass_cancel_command(cli_command.output),
         CommandKind::Diagnostics => {
             execute_diagnostics_command(cli_command.output).map_err(UserMessage::from)
         }
@@ -130,8 +127,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::GoalCarryMonthly { .. } => Some("goal-carry-monthly"),
         CommandKind::Strict { .. } => Some("strict"),
         CommandKind::Schedule { .. } => Some("schedule"),
-        CommandKind::BreakGlassTrigger => Some("break-glass-trigger"),
-        CommandKind::BreakGlassCancel => Some("break-glass-cancel"),
         CommandKind::Diagnostics => Some("diagnostics"),
         CommandKind::Status { .. } => Some("status"),
         CommandKind::Backup { .. } => Some("backup"),
@@ -152,8 +147,6 @@ fn command_usage_records_via_app(command: &CommandKind) -> bool {
             | CommandKind::Stop
             | CommandKind::Next
             | CommandKind::Task { .. }
-            | CommandKind::BreakGlassTrigger
-            | CommandKind::BreakGlassCancel
             | CommandKind::Diagnostics
     )
 }
@@ -509,22 +502,6 @@ fn execute_schedule_command(
     Ok(())
 }
 
-fn execute_break_glass_trigger_command(output: OutputMode) -> CliExecuteResult<()> {
-    let mut app = App::new();
-    app.record_command_usage_for_cli("break-glass-trigger");
-    app.trigger_break_glass_for_cli()?;
-    emit_break_glass_command_output("break-glass-trigger", &app, output)?;
-    Ok(())
-}
-
-fn execute_break_glass_cancel_command(output: OutputMode) -> CliExecuteResult<()> {
-    let mut app = App::new();
-    app.record_command_usage_for_cli("break-glass-cancel");
-    app.cancel_break_glass_for_cli()?;
-    emit_break_glass_command_output("break-glass-cancel", &app, output)?;
-    Ok(())
-}
-
 fn emit_timer_command_output(
     action: &'static str,
     app: &App,
@@ -540,25 +517,6 @@ fn emit_timer_command_output(
             println!("Timer action applied: {}", payload.action);
             print_timer_state_output(&payload.timer);
         }
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn emit_break_glass_command_output(
-    action: &'static str,
-    app: &App,
-    output: OutputMode,
-) -> Result<(), String> {
-    let payload = BreakGlassCommandOutput {
-        action,
-        pending_confirmation: app.break_glass_confirmation_pending(),
-        active: app.break_glass_override_active(),
-        remaining_secs: app.break_glass_override_remaining_secs(),
-        timer: build_timer_state_output(app),
-    };
-    match output {
-        OutputMode::Text => print_break_glass_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

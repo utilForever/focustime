@@ -2,7 +2,6 @@ use crate::cli::*;
 use crate::config::{ConfigDoctorReport, ConfigHealthStatus, ConfigMigrationReport};
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
-    WorkflowStateSnapshot, WorkflowTemporaryOverrideSnapshot,
 };
 use chrono::{Datelike, Duration};
 #[cfg(unix)]
@@ -182,17 +181,17 @@ fn usage_text_omits_retired_config_diagnostics_commands() {
 fn usage_text_keeps_supported_cli_automation_replacements() {
     let usage = usage_text();
     for supported in [
-        "--start",
-        "--pause",
-        "--resume",
-        "--stop",
-        "--next",
-        "--task",
-        "--break-glass-trigger",
-        "--break-glass-cancel",
+        "--start", "--pause", "--resume", "--stop", "--next", "--task",
     ] {
         assert!(usage.contains(supported));
     }
+}
+
+#[test]
+fn usage_text_omits_break_glass_commands() {
+    let usage = usage_text();
+    assert!(!usage.contains("--break-glass-trigger"));
+    assert!(!usage.contains("--break-glass-cancel"));
 }
 
 #[test]
@@ -607,27 +606,18 @@ fn parse_automation_triggers_is_retired() {
 }
 
 #[test]
-fn parse_break_glass_trigger_supports_json_mode() {
-    let parsed = parse(&["--break-glass-trigger", "--json"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BreakGlassTrigger,
-            output: OutputMode::Json
-        })
-    );
-}
-
-#[test]
-fn parse_break_glass_cancel_defaults_to_text_mode() {
-    let parsed = parse(&["--break-glass-cancel"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BreakGlassCancel,
-            output: OutputMode::Text
-        })
-    );
+fn parse_break_glass_commands_are_removed_with_guidance() {
+    for flag in ["--break-glass-trigger", "--break-glass-cancel"] {
+        let error = parse_with_contract(&[flag]).unwrap_err();
+        assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+        assert!(error.message.contains(&format!("Unknown option `{flag}`.")));
+        assert_eq!(
+            error.hint.as_deref(),
+            Some(
+                "Use normal timer controls (`--pause`, `--resume`, `--stop`, `--next`) or manage site rules with blocklist/allowlist commands."
+            )
+        );
+    }
 }
 
 #[test]
@@ -2142,56 +2132,6 @@ fn build_status_output_excludes_allowlist_from_blocked_sites_count() {
 }
 
 #[test]
-fn build_status_output_ignores_absent_temporary_allowlist_overrides() {
-    let now_epoch_secs = chrono::Local::now().timestamp();
-    session_recovery::set_test_load_workflow_state(Some(WorkflowStateSnapshot {
-        temporary_overrides: vec![WorkflowTemporaryOverrideSnapshot::break_glass_active(
-            now_epoch_secs - 1,
-        )],
-        ..WorkflowStateSnapshot::default()
-    }));
-
-    let config = AppConfig {
-        selected_blocklist_profile: "Work".to_string(),
-        ..AppConfig::default()
-    };
-    let output = build_status_output(&config, &FocusStats::default());
-    session_recovery::set_test_load_workflow_state(None);
-
-    assert_eq!(output.temporary_overrides_active_count, 0);
-    assert!(output.temporary_overrides.is_empty());
-}
-
-#[test]
-fn build_status_output_includes_break_glass_temporary_override() {
-    let now_epoch_secs = chrono::Local::now().timestamp();
-    session_recovery::set_test_load_workflow_state(Some(WorkflowStateSnapshot {
-        temporary_overrides: vec![
-            WorkflowTemporaryOverrideSnapshot::break_glass_active(now_epoch_secs + 90),
-            WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
-        ],
-        ..WorkflowStateSnapshot::default()
-    }));
-
-    let output = build_status_output(&AppConfig::default(), &FocusStats::default());
-    session_recovery::set_test_load_workflow_state(None);
-
-    assert_eq!(output.temporary_overrides_active_count, 1);
-    assert!(
-        output
-            .temporary_overrides
-            .iter()
-            .any(|entry| entry.kind == "break-glass" && entry.remaining_secs.is_some())
-    );
-    assert!(
-        output
-            .temporary_overrides
-            .iter()
-            .any(|entry| entry.kind == "break-glass" && entry.pending_confirmation)
-    );
-}
-
-#[test]
 fn build_status_output_includes_growth_and_retention_signals() {
     let mut stats = FocusStats::default();
     let goal = DailyGoalSnapshot {
@@ -2219,10 +2159,6 @@ fn build_status_output_includes_growth_and_retention_signals() {
     assert_eq!(output.stats_retention.keep_focus_sessions_days, Some(365));
     assert_eq!(
         output.stats_retention.keep_session_interruptions_days,
-        Some(180)
-    );
-    assert_eq!(
-        output.stats_retention.keep_break_glass_overrides_days,
         Some(180)
     );
     assert_eq!(

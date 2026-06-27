@@ -123,7 +123,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let (status_text, strict_status_text, break_glass_status_text) = timer_status_text(app);
+    let (status_text, strict_status_text) = timer_status_text(app);
     let profile_line = format!(
         "🗂  Profile: {} ({})",
         app.selected_profile_name(),
@@ -184,7 +184,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
         ));
     }
     lines.push(Line::styled(waka_text, Style::default().fg(waka_color)));
-    for status_line in timer_session_status_lines(strict_status_text, break_glass_status_text) {
+    for status_line in timer_session_status_lines(strict_status_text) {
         lines.push(Line::styled(
             status_line,
             Style::default().fg(app_color(app, Color::DarkGray)),
@@ -194,7 +194,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-pub(super) fn timer_status_text(app: &App) -> (String, String, String) {
+pub(super) fn timer_status_text(app: &App) -> (String, String) {
     let status_text = match app.timer.status {
         TimerStatus::Running => "📍 Status: ▶ Running".to_string(),
         TimerStatus::Paused => "📍 Status: ⏸ Paused".to_string(),
@@ -212,34 +212,18 @@ pub(super) fn timer_status_text(app: &App) -> (String, String, String) {
     } else {
         "🔓 Strict: off".to_string()
     };
-    let break_glass_text = if app.break_glass_confirmation_pending() {
-        format!(
-            "🚨 Break-glass: confirm {}",
-            app.shortcut_hint(ShortcutAction::BreakGlassOverride)
-        )
-    } else if let Some(remaining_secs) = app.break_glass_override_remaining_secs() {
-        format!(
-            "🚨 Break-glass: active ({})",
-            format_duration_label(remaining_secs)
-        )
-    } else {
-        "🚨 Break-glass: off".to_string()
-    };
-    (status_text, strict_text, break_glass_text)
+    (status_text, strict_text)
 }
 
-fn timer_session_status_lines(
-    strict_status_text: String,
-    break_glass_status_text: String,
-) -> Vec<String> {
-    vec![strict_status_text, break_glass_status_text]
+fn timer_session_status_lines(strict_status_text: String) -> Vec<String> {
+    vec![strict_status_text]
 }
 
 #[cfg(test)]
 pub(super) fn timer_session_status_lines_for_width(app: &App, width: u16) -> Vec<String> {
     let _ = width;
-    let (_, strict_status_text, break_glass_status_text) = timer_status_text(app);
-    timer_session_status_lines(strict_status_text, break_glass_status_text)
+    let (_, strict_status_text) = timer_status_text(app);
+    timer_session_status_lines(strict_status_text)
 }
 
 fn render_timer_phase_notice(frame: &mut Frame, app: &App, area: Rect) {
@@ -385,24 +369,17 @@ pub(super) fn timer_primary_hint(app: &App) -> String {
     let timer_toggle = app.shortcut_hint(ShortcutAction::TimerTogglePause);
     let timer_stop = app.shortcut_hint(ShortcutAction::TimerStopReset);
     let timer_next = app.shortcut_hint(ShortcutAction::TimerNextPhase);
-    let timer_unblock = app.shortcut_hint(ShortcutAction::BreakGlassOverride);
 
-    if app.break_glass_confirmation_pending() {
+    if app.strict_reset_confirmation_pending() {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_unblock} Confirm unblock"
-        )
-    } else if app.strict_reset_confirmation_pending() {
-        format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Confirm reset  {timer_next} Next (Locked)  {timer_unblock} Unblock"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Confirm reset  {timer_next} Next (Locked)"
         )
     } else if app.strict_mode_enforced_for_focus() {
         format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset (Confirm)  {timer_next} Next (Locked)  {timer_unblock} Unblock"
+            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset (Confirm)  {timer_next} Next (Locked)"
         )
     } else {
-        format!(
-            "Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next  {timer_unblock} Unblock"
-        )
+        format!("Timer: {timer_toggle} Run/Pause  {timer_stop} Stop/Reset  {timer_next} Next")
     }
 }
 

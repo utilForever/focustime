@@ -157,18 +157,12 @@ cargo run -- --schedule
 cargo run -- --schedule-set='{"windows":[{"days":["mon","tue"],"start":"09:00","end":"11:00"}]}'
 cargo run -- --schedule --json
 
-# Break-glass temporary override controls from CLI (first call arms, second confirms)
-cargo run -- --break-glass-trigger
-cargo run -- --break-glass-trigger --json
-# Cancel a pending break-glass confirmation
-cargo run -- --break-glass-cancel
-
 # Show the consolidated diagnostics workflow:
 # setup checks, blocking preview details, config health, and config migration guidance
 cargo run -- --diagnostics
 cargo run -- --diagnostics --json
 
-# Show status (text or JSON, including growth/retention signals, live timer/session fields, break-glass overrides, and latest interruption summary)
+# Show status (text or JSON, including growth/retention signals, live timer/session fields, and latest interruption summary)
 cargo run -- --status
 cargo run -- --status --json
 # Export productivity comparisons for deeper status/history analysis
@@ -195,7 +189,7 @@ cargo run -- --export=./reports --json
 ### Retired local daemon API
 
 - The local daemon API lifecycle commands (`--daemon-start`, `--daemon-status`, `--daemon-stop`, and `--daemon-port`) are removed.
-- New automation should use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--break-glass-trigger`, `--break-glass-cancel`) or the TUI for interactive focus sessions.
+- New automation should use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`) or the TUI for interactive focus sessions.
 - The loopback `/v1/*` daemon endpoints are no longer a supported runtime surface.
 
 Backup/restore/export behavior:
@@ -273,8 +267,6 @@ Roadmap direction:
 - Keep one focus-entry runtime path for scheduled and manual starts.
 - Keep `--diagnostics` as the supported way to inspect setup health, config
   health, and migration guidance together.
-- Keep break-glass represented through the temporary override runtime model in
-  status and recovery flows.
 - Keep local backup/restore workflows as the supported portable recovery path.
 - Keep cleanup candidates tracked in GitHub roadmap issues first, with release
   notes and static documentation naming supported replacement behavior before
@@ -292,8 +284,9 @@ Early deprecation notices:
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--diagnostics` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--diagnostics`. |
 | Retired blocklist category config is migration-only | `--diagnostics` reports migration guidance to flatten category `sites` and `allowlist_sites` into profile-level lists; manage hostnames directly with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`. |
-| Temporary allowlist CLI/runtime workflow | Use permanent `--allowlist-site-add`, `--allowlist-site-edit`, and `--allowlist-site-delete` for site-rule management; use break-glass only when blocking needs a short active-session pause. |
-| Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model for break-glass state; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields are no longer emitted by runtime persistence or `--status --json`. |
+| Temporary allowlist CLI/runtime workflow | Use permanent `--allowlist-site-add`, `--allowlist-site-edit`, and `--allowlist-site-delete` for site-rule management. |
+| Break-glass temporary override workflow | Removed; use normal timer controls (`--pause`, `--resume`, `--stop`) for session flow changes or blocklist/allowlist commands for site-rule changes. |
+| Split temporary override runtime fields | Removed; runtime persistence and `--status --json` no longer emit temporary override entries or legacy `break_glass_*` / `temporary_allowlist_*` fields. |
 | Focus History dashboard customization (`[history_dashboard]`, retired customization CLI paths) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands are removed from help text and command parsing. |
 | Advanced status comparison slicing | Use `--export` artifacts for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Removed; use profile schedules for automatic focus starts, supported timer controls for active windows, and task/profile/blocklist commands for defaults. |
@@ -308,7 +301,7 @@ Early deprecation notices:
 | Task-specific cumulative goals (`--task-goal`, selected task goal status/history/export fields) | Removed; use global daily, weekly, and monthly goals with `--goal`, `--goal-weekly`, and `--goal-monthly`; task labels remain available for grouping. |
 | Session template workflows (`--session-template*` commands and session-template config/runtime persistence) | Removed; select task, profile, schedule, and blocklist settings directly through their dedicated controls. |
 | Per-task WakaTime metadata mappings (`[[wakatime.task_mappings]]`) | Removed; configure one global `[wakatime]` project/language pair for heartbeat metadata. |
-| Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`, `--break-glass-trigger`, `--break-glass-cancel`) for automation, or the TUI for interactive focus sessions. |
+| Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`) for automation, or the TUI for interactive focus sessions. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule directly, then start focus through the unified timer flow with `--start` or the TUI. |
 
 Runtime dependency ownership after daemon and calendar cleanup:
@@ -381,7 +374,7 @@ The TUI keeps the same keyboard shortcuts, but uses a cleaner hierarchy and more
 consistent screen structure:
 
 - **Timer view** prioritizes phase/countdown/progress first, then shows grouped
-  session context (task, profile, schedule, stats, WakaTime, strict/break-glass).
+  session context (task, profile, schedule, stats, WakaTime, strict mode).
 - **Manager/detail views** (sites, profiles, task setup, history, diagnostics)
   follow a consistent pattern: context header, primary content block, feedback
   line, and compact command legend.
@@ -474,9 +467,7 @@ stats growth, retention, and comparison filters. Dashboard pin, unpin, and order
 customization commands are retired; use `--history-dashboard` for CLI layout
 inspection.
 
-CLI parity is available via `--break-glass-trigger` and `--break-glass-cancel`
-for non-interactive in-session workflow control. `--history-dashboard` remains
-available for layout inspection.
+CLI layout inspection remains available through `--history-dashboard`.
 
 Blocklist rules support exact hosts and wildcard subdomain rules. `*.example.com`
 matches `docs.example.com` and `api.example.com`, but does **not** match
@@ -498,8 +489,6 @@ policy = "hosts_then_command"
 block_command = ""
 unblock_command = ""
 diagnostics_command = ""
-
-break_glass_duration_secs = 300
 
 [shortcuts]
 timer_toggle_pause = "space"
@@ -739,7 +728,7 @@ You can configure notification and auto-start settings directly from the TUI:
 `focustime` persists in-progress timer sessions so restart/crash recovery can resume where you left off.
 
 - while a focus/break phase is running or paused, the app saves phase, remaining time, task label, and active profile
-- startup recovery also reconciles transient workflow runtime artifacts when still valid (schedule arming continuity, break-glass state, and strict-reset confirmation state)
+- startup recovery also reconciles transient workflow runtime artifacts when still valid (schedule arming continuity and strict-reset confirmation state)
 - on startup, valid in-progress state is restored and shown in the timer notice line
 - on startup, blocking is reconciled with recovered timer state: recovered active focus re-applies blocking, while non-recovered startup attempts to remove stale crash-era block entries
 - stale or invalid saved recovery/runtime artifacts are ignored safely with a startup warning notice
@@ -756,28 +745,11 @@ When strict mode is enabled during an active focus session:
 - `p` (profile manager) is disabled, so profile switching is locked
 - quit shortcuts (`q`, `Esc`, `Ctrl-C`) are disabled until focus is no longer active
 
-## Temporary override workflow
+## Temporary override workflows
 
-Break-glass uses the runtime override model:
-
-- `--break-glass-trigger` temporarily pauses all effective blocking for the active focus session after a second confirmation
-- `--status --json` reports active break-glass state through the canonical `temporary_overrides` list
-
-Temporary allowlist commands have been retired. Use permanent allowlist site management for site-rule changes.
-
-## Break-glass override for site blocking
-
-During an active focus session, you can temporarily pause site blocking with an explicit two-step confirm:
-
-- press `u` to arm break-glass
-- press `u` again to confirm and temporarily unblock
-
-The same temporary override workflow is available in CLI mode using `--break-glass-trigger` (arm/confirm) and
-`--break-glass-cancel` (cancel pending confirmation).
-
-While active, timer status shows a live countdown. When the countdown expires, blocking resumes automatically if focus is still active.
-
-Override events are recorded for audit visibility in the History view and included in export metadata (`focustime-stats.json` and `focustime-stats.csv`).
+Temporary allowlist and break-glass workflows have been retired. Use permanent
+allowlist site management for site-rule changes, and use normal timer controls
+(`--pause`, `--resume`, `--stop`, `--next`) for session flow changes.
 
 ## Session stats and history
 
@@ -800,8 +772,8 @@ Override events are recorded for audit visibility in the History view and includ
 Current retention presets for historical records:
 
 - `keep_all`: no automatic pruning
-- `balanced` (default): keep daily aggregates, prune `focus_sessions` at 365 days, prune `session_interruptions` and `break_glass_overrides` at 180 days
-- `aggressive`: prune daily aggregates at 365 days, `focus_sessions` at 180 days, and `session_interruptions` / `break_glass_overrides` at 90 days
+- `balanced` (default): keep daily aggregates, prune `focus_sessions` at 365 days, and prune `session_interruptions` at 180 days
+- `aggressive`: prune daily aggregates at 365 days, `focus_sessions` at 180 days, and `session_interruptions` at 90 days
 
 Retention is enforced when stats are persisted. Existing data older than the selected windows is pruned on save.
 

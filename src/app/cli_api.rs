@@ -64,28 +64,6 @@ impl App {
         Ok(())
     }
 
-    pub(crate) fn trigger_break_glass_for_cli(&mut self) -> AppResult<()> {
-        if self.break_glass_confirmation_pending() {
-            let result = self.confirm_break_glass_override_for_workflow();
-            self.sync_wakatime_tracking_for_state();
-            result?;
-            self.sync_cli_workflow_state()?;
-            return Ok(());
-        }
-        self.arm_break_glass_override_for_workflow()?;
-        self.sync_cli_workflow_state()?;
-        Ok(())
-    }
-
-    pub(crate) fn cancel_break_glass_for_cli(&mut self) -> AppResult<()> {
-        if !self.break_glass_confirmation_pending() {
-            return Err(AppError::BreakGlassNoConfirmation);
-        }
-        self.pending_timer_action = None;
-        self.sync_cli_workflow_state()?;
-        Ok(())
-    }
-
     pub(crate) fn blocking_preview_for_cli(&self) -> AppResult<BlockingPreview> {
         self.compute_blocking_preview()
             .map_err(|error| AppError::BlockingPreviewFailed {

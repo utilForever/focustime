@@ -4,12 +4,7 @@ use crate::app::{
     blocking_backend_config_for_persistence, format_duration_label, occurrence_key, profile_index,
     profile_spec_for, task_label_index,
 };
-use crate::session_recovery::{
-    self, InProgressSessionSnapshot, WorkflowStateSnapshot, WorkflowTemporaryOverrideKind,
-    WorkflowTemporaryOverrideSnapshot,
-};
-use chrono::{LocalResult, TimeZone};
-use std::time::Instant;
+use crate::session_recovery::{self, InProgressSessionSnapshot, WorkflowStateSnapshot};
 
 impl App {
     pub(super) fn restore_in_progress_session(&mut self) {
@@ -68,7 +63,6 @@ impl App {
             schedule_armed_occurrence_key,
             last_schedule_occurrence_key,
             strict_reset_confirmation_pending,
-            temporary_overrides,
         } = snapshot;
 
         self.reset_cli_workflow_runtime_state_for_restore();
@@ -81,10 +75,6 @@ impl App {
             schedule_armed_occurrence_key,
             last_schedule_occurrence_key,
             active_occurrence_key.as_deref(),
-            &mut ignored_runtime_artifacts,
-        );
-        self.restore_break_glass_runtime_state(
-            &temporary_overrides,
             &mut ignored_runtime_artifacts,
         );
         self.recompute_blocker_sites_from_active_profile();
@@ -116,7 +106,6 @@ impl App {
         self.schedule_armed_occurrence_key = None;
         self.last_schedule_occurrence_key = None;
         self.pending_timer_action = None;
-        self.break_glass_expires_at = None;
     }
 
     fn restore_schedule_continuity_runtime_state(
@@ -141,52 +130,6 @@ impl App {
             } else {
                 push_ignored_artifact(ignored_runtime_artifacts, "schedule trigger continuity");
             }
-        }
-    }
-
-    fn restore_break_glass_runtime_state(
-        &mut self,
-        temporary_overrides: &[WorkflowTemporaryOverrideSnapshot],
-        ignored_runtime_artifacts: &mut Vec<&'static str>,
-    ) {
-        let break_glass_expires_at_epoch_secs = temporary_overrides
-            .iter()
-            .filter(|override_entry| {
-                override_entry.kind == WorkflowTemporaryOverrideKind::BreakGlass
-            })
-            .filter_map(|override_entry| override_entry.expires_at_epoch_secs)
-            .max();
-        let break_glass_confirmation_pending = temporary_overrides.iter().any(|override_entry| {
-            override_entry.kind == WorkflowTemporaryOverrideKind::BreakGlass
-                && override_entry.confirmation_pending
-        });
-        if !self.focus_session_active_for_current_state() {
-            if break_glass_expires_at_epoch_secs.is_some() {
-                push_ignored_artifact(ignored_runtime_artifacts, "break-glass override timer");
-            }
-            if break_glass_confirmation_pending {
-                push_ignored_artifact(ignored_runtime_artifacts, "break-glass confirmation");
-            }
-            return;
-        }
-
-        if let Some(expires_at_epoch_secs) = break_glass_expires_at_epoch_secs
-            && let Some(expires_at) = local_datetime_from_epoch_secs(expires_at_epoch_secs)
-            && expires_at > self.current_frame_now
-        {
-            let remaining = expires_at
-                .signed_duration_since(self.current_frame_now)
-                .to_std()
-                .ok();
-            self.break_glass_expires_at = remaining.map(|remaining| Instant::now() + remaining);
-        } else if break_glass_expires_at_epoch_secs.is_some() {
-            push_ignored_artifact(ignored_runtime_artifacts, "break-glass override timer");
-        }
-
-        if break_glass_confirmation_pending && self.break_glass_expires_at.is_none() {
-            self.pending_timer_action = Some(PendingTimerAction::BreakGlassOverride);
-        } else if break_glass_confirmation_pending {
-            push_ignored_artifact(ignored_runtime_artifacts, "break-glass confirmation");
         }
     }
 
@@ -269,7 +212,6 @@ impl App {
         self.timer = recovered_timer;
         self.selected_task_label = Some(selected_task_label);
         self.pending_timer_action = None;
-        self.break_glass_expires_at = None;
         let focus_active =
             self.timer.phase == TimerPhase::Focus && self.timer.status != TimerStatus::Idle;
         self.active_focus_task_label = if focus_active {
@@ -322,26 +264,8 @@ impl App {
             .active_schedule_occurrence_at(now)
             .map(|occurrence| occurrence_key(&occurrence));
 
-        let break_glass_expires_at_epoch_secs = self
-            .break_glass_expires_at
-            .and_then(|deadline| deadline.checked_duration_since(Instant::now()))
-            .and_then(|remaining| chrono::Duration::from_std(remaining).ok())
-            .map(|remaining| (now + remaining).timestamp());
-
-        let break_glass_confirmation_pending =
-            self.break_glass_confirmation_pending() && focus_active;
         let strict_reset_confirmation_pending =
             self.strict_reset_confirmation_pending() && self.strict_mode_enforced_for_focus();
-        let mut temporary_overrides = Vec::new();
-        if let Some(expires_at_epoch_secs) = break_glass_expires_at_epoch_secs {
-            temporary_overrides.push(WorkflowTemporaryOverrideSnapshot::break_glass_active(
-                expires_at_epoch_secs,
-            ));
-        }
-        if break_glass_confirmation_pending {
-            temporary_overrides
-                .push(WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation());
-        }
         let schedule_armed_occurrence_key = if !focus_active {
             self.schedule_armed_occurrence_key
                 .clone()
@@ -357,13 +281,11 @@ impl App {
             schedule_armed_occurrence_key,
             last_schedule_occurrence_key,
             strict_reset_confirmation_pending,
-            temporary_overrides,
         };
 
         let should_persist = snapshot.schedule_armed_occurrence_key.is_some()
             || snapshot.last_schedule_occurrence_key.is_some()
-            || snapshot.strict_reset_confirmation_pending
-            || !snapshot.temporary_overrides.is_empty();
+            || snapshot.strict_reset_confirmation_pending;
         if should_persist {
             session_recovery::save_workflow_state(&snapshot)
                 .map_err(|error| format!("workflow state save failed: {error}"))
@@ -419,7 +341,6 @@ impl App {
             schedule_runtime: self.schedule_runtime,
             profile_automation: Some(profile_automation),
             strict_mode: self.strict_mode,
-            break_glass_duration_secs: self.break_glass_duration_secs,
             daily_goal: self.daily_goal,
             weekly_goal: self.weekly_goal,
             monthly_goal: self.monthly_goal,
@@ -485,14 +406,6 @@ impl App {
             self.stats_dirty = false;
             self.stats_has_unsaved_elapsed = false;
         }
-    }
-}
-
-fn local_datetime_from_epoch_secs(epoch_secs: i64) -> Option<chrono::DateTime<Local>> {
-    match Local.timestamp_opt(epoch_secs, 0) {
-        LocalResult::Single(value) => Some(value),
-        LocalResult::Ambiguous(earliest, _) => Some(earliest),
-        LocalResult::None => None,
     }
 }
 

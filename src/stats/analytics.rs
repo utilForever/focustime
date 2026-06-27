@@ -677,11 +677,6 @@ impl FocusStats {
                 &self.session_interruptions,
             ),
             stats_growth_section(
-                "break_glass_overrides",
-                self.break_glass_overrides.len(),
-                &self.break_glass_overrides,
-            ),
-            stats_growth_section(
                 "command_usage_counts",
                 self.command_usage_counts.len(),
                 &self.command_usage_counts,
@@ -749,15 +744,6 @@ impl FocusStats {
                 .retain(|event| is_day_key_on_or_after(&event.date, cutoff_day));
             result.session_interruptions_removed =
                 before.saturating_sub(self.session_interruptions.len());
-        }
-
-        if let Some(keep_days) = windows.keep_break_glass_overrides_days {
-            let cutoff_day = retention_cutoff_day(reference_day, keep_days);
-            let before = self.break_glass_overrides.len();
-            self.break_glass_overrides
-                .retain(|event| is_day_key_on_or_after(&event.date, cutoff_day));
-            result.break_glass_overrides_removed =
-                before.saturating_sub(self.break_glass_overrides.len());
         }
 
         if let Some(keep_days) = windows.keep_weekly_goal_snapshots_days {

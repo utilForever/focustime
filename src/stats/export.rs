@@ -3,18 +3,17 @@ use chrono::{Datelike, Duration, NaiveDate};
 use crate::app::weekly_daily_goal_allocation_for_context;
 use crate::config::HistoryKpiCardId;
 use crate::stats::{
-    BreakGlassOverrideExportRow, CSV_EXPORT_FILE_NAME, ComparisonDimension, CsvExportRow,
-    DailyExportRow, DailyGoalSnapshot, EXPORT_SCHEMA_VERSION, ExportedStatsFiles,
-    FocusRiskForecast, FocusScoreExportRow, FocusStats, HistoryKpiComparisonFilters,
-    HistoryKpiExport, HistoryKpiExportContext, HistoryKpiFocusRisk, HistoryKpiFocusScore,
-    HistoryKpiGoalPeriodProgress, HistoryKpiGoalStreak, HistoryKpiLastInterruption,
-    HistoryKpiRetention, HistoryKpiSessionSummary, HistoryKpiStatsGrowth,
-    HistoryKpiWeeklyAllocation, HistoryKpiWeeklyAllocationDay, JSON_EXPORT_FILE_NAME, Path,
-    ProductivityComparisonExportRow, ProductivityComparisonFilter, ProfileEffectivenessExportRow,
-    SessionExportRow, SessionInterruptionExportRow, StatsExport, TaskTotalsExportRow,
-    TaskTrendExportRow, WeeklyConsistencyExportRow, WeeklyExportRow, WeeklyFocusScore,
-    average_two_percentages, consistency_score_from_active_days, format_week_label, fs, io,
-    weekly_completion_score_pct, write_atomic_bytes,
+    CSV_EXPORT_FILE_NAME, ComparisonDimension, CsvExportRow, DailyExportRow, DailyGoalSnapshot,
+    EXPORT_SCHEMA_VERSION, ExportedStatsFiles, FocusRiskForecast, FocusScoreExportRow, FocusStats,
+    HistoryKpiComparisonFilters, HistoryKpiExport, HistoryKpiExportContext, HistoryKpiFocusRisk,
+    HistoryKpiFocusScore, HistoryKpiGoalPeriodProgress, HistoryKpiGoalStreak,
+    HistoryKpiLastInterruption, HistoryKpiRetention, HistoryKpiSessionSummary,
+    HistoryKpiStatsGrowth, HistoryKpiWeeklyAllocation, HistoryKpiWeeklyAllocationDay,
+    JSON_EXPORT_FILE_NAME, Path, ProductivityComparisonExportRow, ProductivityComparisonFilter,
+    ProfileEffectivenessExportRow, SessionExportRow, SessionInterruptionExportRow, StatsExport,
+    TaskTotalsExportRow, TaskTrendExportRow, WeeklyConsistencyExportRow, WeeklyExportRow,
+    WeeklyFocusScore, average_two_percentages, consistency_score_from_active_days,
+    format_week_label, fs, io, weekly_completion_score_pct, write_atomic_bytes,
 };
 
 impl FocusStats {
@@ -61,7 +60,6 @@ impl FocusStats {
             weekly: self.export_weekly_rows(),
             sessions: self.export_session_rows(),
             interruptions: self.export_session_interruption_rows(),
-            overrides: self.export_break_glass_override_rows(),
             task_totals: self.export_task_totals_rows(),
             task_trends: self.export_task_trend_rows(),
             weekly_consistency: self.export_weekly_consistency_rows(),
@@ -275,19 +273,6 @@ impl FocusStats {
                 task_label: event.task_label.clone(),
                 remaining_secs: event.remaining_secs,
                 profile: event.profile,
-            })
-            .collect()
-    }
-
-    fn export_break_glass_override_rows(&self) -> Vec<BreakGlassOverrideExportRow> {
-        self.break_glass_overrides
-            .iter()
-            .map(|event| BreakGlassOverrideExportRow {
-                timestamp_epoch_secs: event.timestamp_epoch_secs,
-                date: event.date.clone(),
-                task_label: event.task_label.clone(),
-                duration_seconds: event.duration_seconds,
-                duration_minutes: event.duration_seconds / 60,
             })
             .collect()
     }
@@ -562,8 +547,6 @@ impl StatsExport {
             goal_pomodoros: None,
             goal_met: None,
             task_label: None,
-            break_glass_timestamp_epoch_secs: None,
-            break_glass_duration_seconds: None,
             interruption_timestamp_epoch_secs: None,
             interruption_reason: None,
             interruption_remaining_secs: None,
@@ -598,7 +581,6 @@ impl StatsExport {
                 + self.weekly.len()
                 + self.sessions.len()
                 + self.interruptions.len()
-                + self.overrides.len()
                 + self.task_totals.len()
                 + self.task_trends.len()
                 + self.weekly_consistency.len()
@@ -656,16 +638,6 @@ impl StatsExport {
                     .profile
                     .map(|profile| profile.label().to_string()),
                 ..Self::csv_row_defaults("session_interruption")
-            });
-        }
-
-        for override_event in &self.overrides {
-            rows.push(CsvExportRow {
-                date: Some(override_event.date.clone()),
-                task_label: override_event.task_label.clone(),
-                break_glass_timestamp_epoch_secs: Some(override_event.timestamp_epoch_secs),
-                break_glass_duration_seconds: Some(override_event.duration_seconds),
-                ..Self::csv_row_defaults("break_glass_override")
             });
         }
 

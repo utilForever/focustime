@@ -119,8 +119,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--next" => Some(ParsedToken::Next),
         "--status" => Some(ParsedToken::Status),
         "--schedule" => Some(ParsedToken::Schedule),
-        "--break-glass-trigger" => Some(ParsedToken::BreakGlassTrigger),
-        "--break-glass-cancel" => Some(ParsedToken::BreakGlassCancel),
         "--diagnostics" => Some(ParsedToken::Diagnostics),
         "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
         "--history-dashboard" => Some(ParsedToken::HistoryDashboard),

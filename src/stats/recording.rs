@@ -1,7 +1,7 @@
 use crate::stats::{
-    BTreeMap, BreakGlassOverrideEvent, DailyGoalSnapshot, FocusSessionMetadata, FocusSessionRecord,
-    FocusStats, ProfileId, SessionInterruptionEvent, SessionInterruptionReason, TimeOfDayBucket,
-    month_key_for_day, normalize_task_label, task_label_index, week_key_for_day,
+    BTreeMap, DailyGoalSnapshot, FocusSessionMetadata, FocusSessionRecord, FocusStats, ProfileId,
+    SessionInterruptionEvent, SessionInterruptionReason, TimeOfDayBucket, month_key_for_day,
+    normalize_task_label, task_label_index, week_key_for_day,
 };
 use chrono::Timelike;
 
@@ -91,32 +91,6 @@ impl FocusStats {
                 ),
             });
         }
-    }
-
-    pub(crate) fn record_break_glass_override_event(
-        &mut self,
-        day_key: &str,
-        timestamp_epoch_secs: u64,
-        task_label: Option<&str>,
-        duration_seconds: u64,
-    ) {
-        if duration_seconds == 0 {
-            return;
-        }
-
-        let normalized_task_label = task_label.and_then(normalize_task_label);
-        if let Some(task_label) = normalized_task_label.as_ref()
-            && task_label_index(&self.task_labels, task_label).is_none()
-        {
-            self.task_labels.push(task_label.clone());
-        }
-
-        self.break_glass_overrides.push(BreakGlassOverrideEvent {
-            timestamp_epoch_secs,
-            date: day_key.to_string(),
-            task_label: normalized_task_label,
-            duration_seconds,
-        });
     }
 
     pub(crate) fn record_session_interruption_event(

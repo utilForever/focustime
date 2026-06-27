@@ -3,10 +3,10 @@ use std::path::PathBuf;
 #[cfg(not(test))]
 use crate::stats::fs;
 use crate::stats::{
-    BreakGlassOverrideEvent, FocusSessionRecord, FocusStats, PersistedStats, STATS_FILE_NAME,
-    SessionInterruptionEvent, SessionStats, StatsLoadOptions, StatsSaveOptions,
-    backfilled_time_of_day_bucket, io, normalize_task_label, normalize_task_planner_state,
-    normalize_usage_counts, planner_state_labels_for_keys, write_atomic_bytes,
+    FocusSessionRecord, FocusStats, PersistedStats, STATS_FILE_NAME, SessionInterruptionEvent,
+    SessionStats, StatsLoadOptions, StatsSaveOptions, backfilled_time_of_day_bucket, io,
+    normalize_task_label, normalize_task_planner_state, normalize_usage_counts,
+    planner_state_labels_for_keys, write_atomic_bytes,
 };
 
 impl FocusStats {
@@ -99,20 +99,6 @@ impl FocusStats {
                 profile: event.profile,
             });
         }
-        let mut break_glass_overrides = Vec::new();
-        for event in persisted.break_glass_overrides {
-            if event.duration_seconds == 0 {
-                continue;
-            }
-            break_glass_overrides.push(BreakGlassOverrideEvent {
-                timestamp_epoch_secs: event.timestamp_epoch_secs,
-                date: event.date.trim().to_string(),
-                task_label: event
-                    .task_label
-                    .and_then(|label| normalize_task_label(&label)),
-                duration_seconds: event.duration_seconds,
-            });
-        }
         Self {
             session: SessionStats::default(),
             daily: persisted.daily,
@@ -124,7 +110,6 @@ impl FocusStats {
             task_label_archived,
             focus_sessions,
             session_interruptions,
-            break_glass_overrides,
             command_usage_counts,
             screen_usage_counts,
         }
@@ -147,7 +132,6 @@ impl FocusStats {
             ),
             focus_sessions: self.focus_sessions.clone(),
             session_interruptions: self.session_interruptions.clone(),
-            break_glass_overrides: self.break_glass_overrides.clone(),
             command_usage_counts: self.command_usage_counts.clone(),
             screen_usage_counts: self.screen_usage_counts.clone(),
         }

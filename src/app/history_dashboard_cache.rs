@@ -6,10 +6,10 @@ use crate::config::{
     StatsRetentionConfig, WeeklyGoalConfig,
 };
 use crate::stats::{
-    BreakGlassOverrideEvent, ComparisonDimension, DailyStats, FocusRiskForecast, GoalStreak,
-    MonthlyHeatmap, MonthlyStats, ProductivityComparisonRow, ProfileBucket, ProfileEffectiveness,
-    SessionInterruptionEvent, SessionStats, StatsGrowthSummary, StatsRetentionPruneResult,
-    TaskTrend, TimeOfDayBucket, WeeklyFocusScore,
+    ComparisonDimension, DailyStats, FocusRiskForecast, GoalStreak, MonthlyHeatmap, MonthlyStats,
+    ProductivityComparisonRow, ProfileBucket, ProfileEffectiveness, SessionInterruptionEvent,
+    SessionStats, StatsGrowthSummary, StatsRetentionPruneResult, TaskTrend, TimeOfDayBucket,
+    WeeklyFocusScore,
 };
 
 #[derive(Debug, Clone)]
@@ -31,7 +31,6 @@ pub(crate) struct HistoryDashboardViewData {
     pub(crate) comparison_rows: Vec<ProductivityComparisonRow>,
     pub(crate) task_trends: Vec<TaskTrend>,
     pub(crate) profile_effectiveness: Vec<ProfileEffectiveness>,
-    pub(crate) break_glass_overrides: Vec<BreakGlassOverrideEvent>,
     pub(crate) monthly_stats: Vec<MonthlyStats>,
     pub(crate) monthly_heatmap: MonthlyHeatmap,
 }
@@ -53,7 +52,6 @@ pub(super) struct HistoryDashboardStaticSnapshot {
     stats_retention_preview: StatsRetentionPruneResult,
     task_trends: Vec<TaskTrend>,
     profile_effectiveness: Vec<ProfileEffectiveness>,
-    break_glass_overrides: Vec<BreakGlassOverrideEvent>,
     monthly_stats: Vec<MonthlyStats>,
     monthly_heatmap: MonthlyHeatmap,
 }
@@ -166,7 +164,6 @@ impl App {
             comparison_rows: comparison_snapshot.comparison_rows,
             task_trends: static_snapshot.task_trends,
             profile_effectiveness: static_snapshot.profile_effectiveness,
-            break_glass_overrides: static_snapshot.break_glass_overrides,
             monthly_stats: static_snapshot.monthly_stats,
             monthly_heatmap: static_snapshot.monthly_heatmap,
         }
@@ -236,7 +233,6 @@ impl App {
             stats_retention_preview: self.stats.retention_preview(self.stats_retention, day),
             task_trends: self.stats.recent_task_trends(6),
             profile_effectiveness: self.stats.profile_effectiveness(),
-            break_glass_overrides: self.stats.recent_break_glass_overrides(6),
             monthly_stats: self.stats.recent_monthly(4),
             monthly_heatmap: self.stats.latest_monthly_heatmap(),
         }

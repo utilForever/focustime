@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking - Break-glass workflow cleanup (#559):** removed break-glass CLI/TUI/runtime handling, dropped temporary override recovery/status/stats/export fields, and routed users to normal timer controls or blocklist/allowlist commands.
+
 ## [0.16.3] - 2026-06-27
 
 ### Changed

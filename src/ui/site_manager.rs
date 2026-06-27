@@ -2,8 +2,7 @@ use crate::ui::{
     Alignment, App, Block, BlocklistProfileInputMode, Borders, Color, Constraint, Direction, Frame,
     Layout, Line, List, ListItem, ListState, Modifier, NavigationAction, Paragraph, Rect,
     ShortcutAction, SiteFeedbackLevel, SiteInputMode, SiteListMode, Span, Style, TimerPhase,
-    TimerStatus, app_color, centered_rect, format_duration_label, render_centered_error,
-    render_hint_lines,
+    TimerStatus, app_color, centered_rect, render_centered_error, render_hint_lines,
 };
 
 pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
@@ -97,17 +96,6 @@ fn site_manager_status_span(app: &App) -> Span<'static> {
             Style::default()
                 .fg(app_color(app, Color::Red))
                 .add_modifier(Modifier::BOLD),
-        );
-    }
-
-    if app.break_glass_override_active() {
-        let remaining_secs = app.break_glass_override_remaining_secs().unwrap_or(0);
-        return Span::styled(
-            format!(
-                "Break-glass override active — blocking paused ({} left)",
-                format_duration_label(remaining_secs)
-            ),
-            Style::default().fg(app_color(app, Color::Yellow)),
         );
     }
 
