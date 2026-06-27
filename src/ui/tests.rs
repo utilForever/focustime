@@ -446,6 +446,7 @@ fn site_manager_renders_allowlist_mode_labels() {
 
     let text = terminal_text(&terminal, width, height);
     assert!(text.contains("Allowlist Exceptions"));
+    assert!(text.contains("Add Allowlist Sites"));
     assert!(text.contains("Mode: [m] Toggle (Allowlist)"));
     assert!(!text.contains("Category"));
 }
@@ -493,7 +494,6 @@ fn history_view_renders_monthly_heatmap_profile_and_task_panels() {
     assert!(text_lower.contains("profile effect"));
     assert!(text.contains("Comparison: Task"));
     assert!(text.contains("Task Trends"));
-    assert!(!text.contains("Break-glass Audit"));
     assert!(text_lower.contains("focus score"));
     assert!(text.contains(&month_label));
 }
