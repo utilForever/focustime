@@ -109,7 +109,6 @@ pub(crate) struct WorkflowStateSnapshot {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum WorkflowTemporaryOverrideKind {
-    AllowlistSite,
     BreakGlass,
 }
 
@@ -127,20 +126,6 @@ pub(crate) struct WorkflowTemporaryOverrideSnapshot {
 }
 
 impl WorkflowTemporaryOverrideSnapshot {
-    pub(crate) fn temporary_allowlist(
-        profile: impl Into<String>,
-        site: impl Into<String>,
-        expires_at_epoch_secs: i64,
-    ) -> Self {
-        Self {
-            kind: WorkflowTemporaryOverrideKind::AllowlistSite,
-            profile: Some(profile.into()),
-            site: Some(site.into()),
-            expires_at_epoch_secs: Some(expires_at_epoch_secs),
-            confirmation_pending: false,
-        }
-    }
-
     pub(crate) fn break_glass_active(expires_at_epoch_secs: i64) -> Self {
         Self {
             kind: WorkflowTemporaryOverrideKind::BreakGlass,
@@ -994,16 +979,11 @@ schedule_delay_until_epoch_secs = 1700000000
             temporary_overrides: vec![
                 WorkflowTemporaryOverrideSnapshot::break_glass_active(1_700_000_100),
                 WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation(),
-                WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-                    "Work",
-                    "reddit.com",
-                    1_700_000_200,
-                ),
             ],
             ..WorkflowStateSnapshot::default()
         };
 
-        assert_eq!(snapshot.temporary_overrides.len(), 3);
+        assert_eq!(snapshot.temporary_overrides.len(), 2);
         assert!(
             snapshot
                 .temporary_overrides

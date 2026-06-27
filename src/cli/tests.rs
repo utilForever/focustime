@@ -1094,17 +1094,11 @@ fn parse_blocklist_site_add_with_equals() {
 }
 
 #[test]
-fn parse_allowlist_site_add_temporary_with_equals() {
-    let parsed = parse(&["--allowlist-site-add-temporary=reddit.com=30m,docs.rs=45s"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::AllowlistSiteAddTemporary {
-                input: "reddit.com=30m,docs.rs=45s".to_string()
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_allowlist_site_add_temporary_is_removed() {
+    let error = parse(&["--allowlist-site-add-temporary=reddit.com=30m"]).unwrap_err();
+
+    assert!(error.contains("Temporary allowlist commands were removed."));
+    assert!(error.contains("--allowlist-site-add"));
 }
 
 #[test]
@@ -2148,26 +2142,12 @@ fn build_status_output_excludes_allowlist_from_blocked_sites_count() {
 }
 
 #[test]
-fn build_status_output_includes_active_temporary_allowlist_overrides() {
+fn build_status_output_ignores_absent_temporary_allowlist_overrides() {
     let now_epoch_secs = chrono::Local::now().timestamp();
     session_recovery::set_test_load_workflow_state(Some(WorkflowStateSnapshot {
-        temporary_overrides: vec![
-            WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-                "Work",
-                "reddit.com",
-                now_epoch_secs + 120,
-            ),
-            WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-                "Work",
-                "expired.com",
-                now_epoch_secs - 1,
-            ),
-            WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-                "Personal",
-                "youtube.com",
-                now_epoch_secs + 120,
-            ),
-        ],
+        temporary_overrides: vec![WorkflowTemporaryOverrideSnapshot::break_glass_active(
+            now_epoch_secs - 1,
+        )],
         ..WorkflowStateSnapshot::default()
     }));
 
@@ -2178,17 +2158,8 @@ fn build_status_output_includes_active_temporary_allowlist_overrides() {
     let output = build_status_output(&config, &FocusStats::default());
     session_recovery::set_test_load_workflow_state(None);
 
-    assert_eq!(output.temporary_overrides_active_count, 1);
-    assert_eq!(output.temporary_overrides[0].kind, "allowlist-site");
-    assert_eq!(
-        output.temporary_overrides[0].site.as_deref(),
-        Some("reddit.com")
-    );
-    assert!(
-        output.temporary_overrides[0]
-            .remaining_secs
-            .is_some_and(|remaining_secs| remaining_secs <= 120 && remaining_secs > 0)
-    );
+    assert_eq!(output.temporary_overrides_active_count, 0);
+    assert!(output.temporary_overrides.is_empty());
 }
 
 #[test]

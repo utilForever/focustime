@@ -1,10 +1,9 @@
 use crate::cli::{
     BlocklistProfileCommandOutput, HistoryDashboardCommandOutput, SiteAddCommandOutput,
     SiteDeleteCommandOutput, SiteEditCommandOutput, SiteListCommandOutput,
-    TemporarySiteAddCommandOutput,
 };
 
-use super::{display_input_value, format_duration};
+use super::display_input_value;
 
 pub(in crate::cli) fn print_blocklist_profile_command_output(
     payload: &BlocklistProfileCommandOutput,
@@ -106,34 +105,6 @@ pub(in crate::cli) fn print_site_add_command_output(payload: &SiteAddCommandOutp
         "Effective blocked sites: {}",
         payload.effective_blocked_sites_count
     );
-}
-
-pub(in crate::cli) fn print_temporary_site_add_command_output(
-    payload: &TemporarySiteAddCommandOutput,
-) {
-    if payload.updated {
-        println!(
-            "Temporary allowlist updated in profile `{}`: added {}, refreshed {}.",
-            payload.profile, payload.added, payload.refreshed
-        );
-    } else {
-        println!(
-            "No temporary allowlist changes were applied in profile `{}`.",
-            payload.profile
-        );
-    }
-    if payload.active.is_empty() {
-        println!("Active temporary exceptions: none");
-        return;
-    }
-    println!("Active temporary exceptions ({}):", payload.active.len());
-    for entry in &payload.active {
-        println!(
-            "  - {} (expires in {})",
-            entry.site,
-            format_duration(entry.remaining_secs)
-        );
-    }
 }
 
 pub(in crate::cli) fn print_site_edit_command_output(payload: &SiteEditCommandOutput) {

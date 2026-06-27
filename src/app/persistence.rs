@@ -8,9 +8,6 @@ use crate::session_recovery::{
     self, InProgressSessionSnapshot, WorkflowStateSnapshot, WorkflowTemporaryOverrideKind,
     WorkflowTemporaryOverrideSnapshot,
 };
-use crate::temporary_allowlist::{
-    TemporaryAllowlistEntry, prune_expired_temporary_allowlist_entries,
-};
 use chrono::{LocalResult, TimeZone};
 use std::time::Instant;
 
@@ -90,10 +87,6 @@ impl App {
             &temporary_overrides,
             &mut ignored_runtime_artifacts,
         );
-        self.restore_temporary_allowlist_runtime_state(
-            &temporary_overrides,
-            &mut ignored_runtime_artifacts,
-        );
         self.recompute_blocker_sites_from_active_profile();
         self.restore_strict_reset_runtime_state(
             strict_reset_confirmation_pending,
@@ -124,7 +117,6 @@ impl App {
         self.last_schedule_occurrence_key = None;
         self.pending_timer_action = None;
         self.break_glass_expires_at = None;
-        self.temporary_allowlist_entries.clear();
     }
 
     fn restore_schedule_continuity_runtime_state(
@@ -211,44 +203,6 @@ impl App {
             self.pending_timer_action = Some(PendingTimerAction::Reset);
         } else {
             push_ignored_artifact(ignored_runtime_artifacts, "strict reset confirmation");
-        }
-    }
-
-    fn restore_temporary_allowlist_runtime_state(
-        &mut self,
-        temporary_overrides: &[WorkflowTemporaryOverrideSnapshot],
-        ignored_runtime_artifacts: &mut Vec<&'static str>,
-    ) {
-        let mut restored = Vec::new();
-        let mut ignored_count = 0usize;
-        for entry in temporary_overrides
-            .iter()
-            .filter(|entry| entry.kind == WorkflowTemporaryOverrideKind::AllowlistSite)
-        {
-            let profile = entry
-                .profile
-                .as_deref()
-                .unwrap_or_default()
-                .trim()
-                .to_string();
-            let site = entry.site.as_deref().unwrap_or_default().trim().to_string();
-            let expires_at_epoch_secs = entry.expires_at_epoch_secs.unwrap_or_default();
-            if profile.is_empty()
-                || site.is_empty()
-                || expires_at_epoch_secs <= self.current_frame_now.timestamp()
-            {
-                ignored_count += 1;
-                continue;
-            }
-            restored.push(TemporaryAllowlistEntry {
-                profile,
-                site,
-                expires_at_epoch_secs,
-            });
-        }
-        self.temporary_allowlist_entries = restored;
-        if ignored_count > 0 {
-            push_ignored_artifact(ignored_runtime_artifacts, "temporary allowlist entries");
         }
     }
 
@@ -363,10 +317,6 @@ impl App {
 
     pub(super) fn sync_cli_workflow_state(&mut self) -> Result<(), String> {
         let now = Local::now();
-        prune_expired_temporary_allowlist_entries(
-            &mut self.temporary_allowlist_entries,
-            now.timestamp(),
-        );
         let focus_active = self.focus_session_active_for_current_state();
         let active_occurrence_key = self
             .active_schedule_occurrence_at(now)
@@ -392,19 +342,6 @@ impl App {
             temporary_overrides
                 .push(WorkflowTemporaryOverrideSnapshot::break_glass_pending_confirmation());
         }
-        temporary_overrides.extend(self.temporary_allowlist_entries.iter().filter_map(|entry| {
-            if entry.profile.trim().is_empty()
-                || entry.site.trim().is_empty()
-                || entry.expires_at_epoch_secs <= now.timestamp()
-            {
-                return None;
-            }
-            Some(WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-                entry.profile.clone(),
-                entry.site.clone(),
-                entry.expires_at_epoch_secs,
-            ))
-        }));
         let schedule_armed_occurrence_key = if !focus_active {
             self.schedule_armed_occurrence_key
                 .clone()

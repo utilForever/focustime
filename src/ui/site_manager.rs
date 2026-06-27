@@ -163,7 +163,7 @@ fn site_manager_copy_for_mode(app: &App, site_list_mode: SiteListMode) -> (Strin
                 app.shortcut_hint(ShortcutAction::SiteAdd)
             ),
             format!(
-                "Press {} to add allowlist exceptions (HOST=30m for temporary) or {} to edit selected",
+                "Press {} to add allowlist entries or {} to edit selected",
                 app.shortcut_hint(ShortcutAction::SiteAdd),
                 app.shortcut_hint(ShortcutAction::SiteEdit)
             ),
@@ -355,7 +355,7 @@ fn site_manager_hint_lines(
             }),
             Line::from(match input_mode {
                 SiteInputMode::Add => format!(
-                    "Tip: comma/newline entries. In Allowlist mode, use HOST=30m for temporary exceptions, then press {}",
+                    "Tip: comma/newline entries. Press {} to save changes",
                     app.navigation_hint(NavigationAction::Confirm)
                 ),
                 SiteInputMode::Edit => format!(
