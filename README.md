@@ -149,8 +149,6 @@ cargo run -- --blocklist-sites
 cargo run -- --allowlist-sites --json
 cargo run -- --blocklist-site-add="youtube.com, *.facebook.com"
 cargo run -- --allowlist-site-add "reddit.com"
-# Add a temporary override for selected allowlist exceptions
-cargo run -- --allowlist-site-add-temporary "reddit.com=30m,news.ycombinator.com=10m"
 cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
 cargo run -- --allowlist-site-delete reddit.com
 
@@ -170,7 +168,7 @@ cargo run -- --break-glass-cancel
 cargo run -- --diagnostics
 cargo run -- --diagnostics --json
 
-# Show status (text or JSON, including growth/retention signals, live timer/session fields, active temporary overrides, and latest interruption summary)
+# Show status (text or JSON, including growth/retention signals, live timer/session fields, break-glass overrides, and latest interruption summary)
 cargo run -- --status
 cargo run -- --status --json
 # Export productivity comparisons for deeper status/history analysis
@@ -249,7 +247,7 @@ Milestone policy:
 - **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
 - **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config health and migration guidance are included in the canonical diagnostics payload.
 - **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows and supported timer controls remain the supported behavior.
-- **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary allowlist and break-glass controls share the canonical temporary override runtime model.
+- **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary override state is represented through the canonical runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export artifact workflows share target-directory handling.
 - **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency ownership stays documented, and WakaTime integration uses explicit supported runtime calls.
 - **v0.15.7:** standalone blocking preview access, Focus History dashboard customization paths, and dedicated status comparison guidance stay removed while diagnostics, the stable KPI dashboard, export artifacts, and Focus History remain the supported replacements.
@@ -275,8 +273,8 @@ Roadmap direction:
 - Keep one focus-entry runtime path for scheduled and manual starts.
 - Keep `--diagnostics` as the supported way to inspect setup health, config
   health, and migration guidance together.
-- Keep temporary allowlist exceptions and break-glass controls represented as
-  one temporary override runtime model in status and recovery flows.
+- Keep break-glass represented through the temporary override runtime model in
+  status and recovery flows.
 - Keep local backup/restore workflows as the supported portable recovery path.
 - Keep cleanup candidates tracked in GitHub roadmap issues first, with release
   notes and static documentation naming supported replacement behavior before
@@ -294,7 +292,8 @@ Early deprecation notices:
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--diagnostics` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--diagnostics`. |
 | Retired blocklist category config is migration-only | `--diagnostics` reports migration guidance to flatten category `sites` and `allowlist_sites` into profile-level lists; manage hostnames directly with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`. |
-| Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields are no longer emitted by runtime persistence or `--status --json`. |
+| Temporary allowlist CLI/runtime workflow | Use permanent `--allowlist-site-add`, `--allowlist-site-edit`, and `--allowlist-site-delete` for site-rule management; use break-glass only when blocking needs a short active-session pause. |
+| Split temporary allowlist and break-glass runtime fields | Use the canonical `temporary_overrides` status/recovery model for break-glass state; legacy `break_glass_*` recovery fields and `temporary_allowlist_*` status fields are no longer emitted by runtime persistence or `--status --json`. |
 | Focus History dashboard customization (`[history_dashboard]`, retired customization CLI paths) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands are removed from help text and command parsing. |
 | Advanced status comparison slicing | Use `--export` artifacts for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
 | Standalone automation trigger rules (`automation_triggers`, `--automation-triggers*`) | Removed; use profile schedules for automatic focus starts, supported timer controls for active windows, and task/profile/blocklist commands for defaults. |
@@ -757,15 +756,14 @@ When strict mode is enabled during an active focus session:
 - `p` (profile manager) is disabled, so profile switching is locked
 - quit shortcuts (`q`, `Esc`, `Ctrl-C`) are disabled until focus is no longer active
 
-## Temporary override workflows
+## Temporary override workflow
 
-Temporary allowlist exceptions and break-glass both use the same runtime override model:
+Break-glass uses the runtime override model:
 
-- `--allowlist-site-add-temporary HOST=30m` grants selected host exceptions without changing profile config
 - `--break-glass-trigger` temporarily pauses all effective blocking for the active focus session after a second confirmation
-- `--status --json` reports active temporary allowlist exceptions and break-glass state through the canonical `temporary_overrides` list
+- `--status --json` reports active break-glass state through the canonical `temporary_overrides` list
 
-Existing temporary allowlist commands remain supported as compatibility entry points into this shared model.
+Temporary allowlist commands have been retired. Use permanent allowlist site management for site-rule changes.
 
 ## Break-glass override for site blocking
 
