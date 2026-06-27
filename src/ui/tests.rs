@@ -447,6 +447,7 @@ fn site_manager_renders_allowlist_mode_labels() {
     let text = terminal_text(&terminal, width, height);
     assert!(text.contains("Allowlist Exceptions"));
     assert!(text.contains("Add Allowlist Sites"));
+    assert!(!text.contains("Temporary Exceptions"));
     assert!(text.contains("Mode: [m] Toggle (Allowlist)"));
     assert!(!text.contains("Category"));
 }
