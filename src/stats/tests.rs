@@ -1606,6 +1606,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     let json = fs::read_to_string(&exported.json_path).unwrap();
     let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(json_value["schema_version"], EXPORT_SCHEMA_VERSION);
+    assert!(json_value.get("overrides").is_none());
     let daily = json_value["daily"].as_array().unwrap();
     let weekly = json_value["weekly"].as_array().unwrap();
     let sessions = json_value["sessions"].as_array().unwrap();
@@ -1701,6 +1702,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
     );
 
     let csv = fs::read_to_string(&exported.csv_path).unwrap();
+    assert!(!csv.contains(",break_glass_override,"));
     let csv_header = csv.lines().next().expect("csv header should be present");
     let focus_session_line = csv
         .lines()
