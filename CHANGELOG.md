@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-06-27
+
 ### Changed
 
 - **WakaTime task mapping cleanup (#556):** removed per-task WakaTime metadata mappings so heartbeats use the global `[wakatime]` project/language configuration only.
@@ -532,7 +534,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.16.2...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.16.3...HEAD
+[0.16.3]: https://github.com/utilForever/focustime/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/utilForever/focustime/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/utilForever/focustime/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/utilForever/focustime/compare/v0.15.9...v0.16.0
