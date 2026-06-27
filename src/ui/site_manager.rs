@@ -214,7 +214,7 @@ fn render_site_manager_input(
     let input_title = match input_mode {
         SiteInputMode::Add => match site_list_mode {
             SiteListMode::Blocklist => " Add / Import Blocklist Sites ",
-            SiteListMode::Allowlist => " Add Allowlist Sites / Temporary Exceptions ",
+            SiteListMode::Allowlist => " Add Allowlist Sites ",
         },
         SiteInputMode::Edit => match site_list_mode {
             SiteListMode::Blocklist => " Edit Blocklist Site ",
