@@ -123,8 +123,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let (status_text, strict_status_text, break_glass_status_text, temporary_allowlist_status_text) =
-        timer_status_text(app);
+    let (status_text, strict_status_text, break_glass_status_text) = timer_status_text(app);
     let profile_line = format!(
         "🗂  Profile: {} ({})",
         app.selected_profile_name(),
@@ -185,13 +184,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
         ));
     }
     lines.push(Line::styled(waka_text, Style::default().fg(waka_color)));
-    for status_line in timer_session_status_lines(
-        strict_status_text,
-        break_glass_status_text,
-        temporary_allowlist_status_text,
-        app,
-        inner.width,
-    ) {
+    for status_line in timer_session_status_lines(strict_status_text, break_glass_status_text) {
         lines.push(Line::styled(
             status_line,
             Style::default().fg(app_color(app, Color::DarkGray)),
@@ -201,7 +194,7 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-pub(super) fn timer_status_text(app: &App) -> (String, String, String, String) {
+pub(super) fn timer_status_text(app: &App) -> (String, String, String) {
     let status_text = match app.timer.status {
         TimerStatus::Running => "📍 Status: ▶ Running".to_string(),
         TimerStatus::Paused => "📍 Status: ⏸ Paused".to_string(),
@@ -232,140 +225,21 @@ pub(super) fn timer_status_text(app: &App) -> (String, String, String, String) {
     } else {
         "🚨 Break-glass: off".to_string()
     };
-    let temporary_allowlist_text =
-        if let Some(next_expiry_secs) = app.next_temporary_allowlist_expiry_remaining_secs() {
-            format!(
-                "⏳ Temp allowlist: {} active (next {})",
-                app.active_temporary_allowlist_count(),
-                format_duration_label(next_expiry_secs)
-            )
-        } else {
-            "⏳ Temp allowlist: off".to_string()
-        };
-    (
-        status_text,
-        strict_text,
-        break_glass_text,
-        temporary_allowlist_text,
-    )
+    (status_text, strict_text, break_glass_text)
 }
 
 fn timer_session_status_lines(
     strict_status_text: String,
     break_glass_status_text: String,
-    temporary_allowlist_status_text: String,
-    app: &App,
-    width: u16,
 ) -> Vec<String> {
-    let narrow = is_narrow_timer_status(width);
-    let mut lines = vec![strict_status_text, break_glass_status_text];
-    lines.push(timer_temporary_allowlist_summary_line(
-        app,
-        narrow,
-        temporary_allowlist_status_text,
-    ));
-
-    let active_entries = app.active_temporary_allowlist_entries();
-    if active_entries.is_empty() {
-        return lines;
-    }
-
-    let max_visible_entries = max_visible_temporary_allowlist_entries(width);
-
-    for entry in active_entries.iter().take(max_visible_entries) {
-        lines.push(timer_temporary_allowlist_entry_line(
-            &entry.site,
-            entry.remaining_secs,
-            narrow,
-        ));
-    }
-
-    if let Some(more_entries_line) = timer_temporary_allowlist_more_entries_line(
-        active_entries.len(),
-        max_visible_entries,
-        narrow,
-    ) {
-        lines.push(more_entries_line);
-    }
-
-    lines
-}
-
-fn is_narrow_timer_status(width: u16) -> bool {
-    width < 56
-}
-
-fn max_visible_temporary_allowlist_entries(width: u16) -> usize {
-    if width < 56 {
-        1
-    } else if width < 76 {
-        2
-    } else {
-        3
-    }
-}
-
-fn timer_temporary_allowlist_summary_line(
-    app: &App,
-    narrow: bool,
-    temporary_allowlist_status_text: String,
-) -> String {
-    if !narrow {
-        return temporary_allowlist_status_text;
-    }
-
-    match app.next_temporary_allowlist_expiry_remaining_secs() {
-        Some(next_expiry_secs) => format!(
-            "⏳ Temp: {} active (next {})",
-            app.active_temporary_allowlist_count(),
-            format_duration_label(next_expiry_secs)
-        ),
-        None => "⏳ Temp: off".to_string(),
-    }
-}
-
-fn timer_temporary_allowlist_entry_line(site: &str, remaining_secs: u64, narrow: bool) -> String {
-    if narrow {
-        format!("  • {} ({})", site, format_duration_label(remaining_secs))
-    } else {
-        format!(
-            "  • {} (expires in {})",
-            site,
-            format_duration_label(remaining_secs)
-        )
-    }
-}
-
-fn timer_temporary_allowlist_more_entries_line(
-    total_entries: usize,
-    max_visible_entries: usize,
-    narrow: bool,
-) -> Option<String> {
-    let hidden_entries = total_entries.saturating_sub(max_visible_entries);
-    if hidden_entries == 0 {
-        return None;
-    }
-    if narrow {
-        return Some(format!("  • +{hidden_entries} more"));
-    }
-    if hidden_entries == 1 {
-        Some("  • +1 more active exception".to_string())
-    } else {
-        Some(format!("  • +{hidden_entries} more active exceptions"))
-    }
+    vec![strict_status_text, break_glass_status_text]
 }
 
 #[cfg(test)]
 pub(super) fn timer_session_status_lines_for_width(app: &App, width: u16) -> Vec<String> {
-    let (_, strict_status_text, break_glass_status_text, temporary_allowlist_status_text) =
-        timer_status_text(app);
-    timer_session_status_lines(
-        strict_status_text,
-        break_glass_status_text,
-        temporary_allowlist_status_text,
-        app,
-        width,
-    )
+    let _ = width;
+    let (_, strict_status_text, break_glass_status_text) = timer_status_text(app);
+    timer_session_status_lines(strict_status_text, break_glass_status_text)
 }
 
 fn render_timer_phase_notice(frame: &mut Frame, app: &App, area: Rect) {

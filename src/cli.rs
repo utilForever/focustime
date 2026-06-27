@@ -54,8 +54,7 @@ use output::{
     print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
     print_site_add_command_output, print_site_delete_command_output,
     print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_temporary_site_add_command_output,
-    print_theme_command_output, print_timer_state_output,
+    print_strict_command_output, print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
@@ -106,7 +105,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --allowlist-sites [--json]
   focustime --blocklist-site-add=HOSTNAMES [--json]
   focustime --allowlist-site-add=HOSTNAMES [--json]
-  focustime --allowlist-site-add-temporary=HOST_DURATIONS [--json]
   focustime --blocklist-site-edit=OLD=NEW [--json]
   focustime --allowlist-site-edit=OLD=NEW [--json]
   focustime --blocklist-site-delete=HOSTNAME [--json]
@@ -146,7 +144,6 @@ Options:
   --allowlist-sites           List allowlist sites for the active blocklist profile
   --blocklist-site-add        Add/import blocklist hostnames for the active blocklist profile
   --allowlist-site-add        Add/import allowlist hostnames for the active blocklist profile
-  --allowlist-site-add-temporary  Add temporary override host exceptions with inline duration (HOST=30m,HOST=45s)
   --blocklist-site-edit       Replace blocklist hostname for the active blocklist profile using OLD=NEW
   --allowlist-site-edit       Replace allowlist hostname for the active blocklist profile using OLD=NEW
   --blocklist-site-delete     Delete blocklist hostname from the active blocklist profile
@@ -274,9 +271,6 @@ pub(crate) enum CommandKind {
         target: SiteListTarget,
         command: BlocklistSiteCommandKind,
     },
-    AllowlistSiteAddTemporary {
-        input: String,
-    },
     HistoryDashboard {
         command: HistoryDashboardCommandKind,
     },
@@ -330,7 +324,6 @@ enum PrimaryCommand {
     AllowlistSites,
     BlocklistSiteAdd(String),
     AllowlistSiteAdd(String),
-    AllowlistSiteAddTemporary(String),
     BlocklistSiteEdit(SiteEditValue),
     AllowlistSiteEdit(SiteEditValue),
     BlocklistSiteDelete(String),
@@ -375,7 +368,6 @@ enum ParsedToken {
     AllowlistSites,
     BlocklistSiteAdd(String),
     AllowlistSiteAdd(String),
-    AllowlistSiteAddTemporary(String),
     BlocklistSiteEdit(SiteEditValue),
     AllowlistSiteEdit(SiteEditValue),
     BlocklistSiteDelete(String),
@@ -504,13 +496,6 @@ struct LiveStatusOutput {
     selected_profile: ProfileView,
     selected_task_label: Option<String>,
     strict_mode_enforced: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct TemporaryAllowlistStatusOutput {
-    site: String,
-    remaining_secs: u64,
-    expires_at_epoch_secs: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -782,16 +767,6 @@ struct SiteAddCommandOutput {
     invalid: Vec<InvalidSiteEntryOutput>,
     sites: Vec<String>,
     effective_blocked_sites_count: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct TemporarySiteAddCommandOutput {
-    action: &'static str,
-    updated: bool,
-    profile: String,
-    added: usize,
-    refreshed: usize,
-    active: Vec<TemporaryAllowlistStatusOutput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

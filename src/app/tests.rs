@@ -4320,7 +4320,7 @@ fn app_restores_cli_workflow_state_from_snapshot() {
 }
 
 #[test]
-fn app_restores_temporary_overrides_from_canonical_snapshot() {
+fn app_restores_break_glass_override_from_canonical_snapshot() {
     let now = Local::now();
     session_recovery::set_test_load_snapshot(Some(snapshot_for_tests(
         TimerPhase::Focus,
@@ -4337,22 +4337,12 @@ fn app_restores_temporary_overrides_from_canonical_snapshot() {
             session_recovery::WorkflowTemporaryOverrideSnapshot::break_glass_active(
                 (now + ChronoDuration::seconds(90)).timestamp(),
             ),
-            session_recovery::WorkflowTemporaryOverrideSnapshot::temporary_allowlist(
-                "Default",
-                "reddit.com",
-                (now + ChronoDuration::seconds(120)).timestamp(),
-            ),
         ],
     }));
 
     let app = App::default();
 
     assert!(app.break_glass_override_remaining_secs().is_some());
-    assert_eq!(app.active_temporary_allowlist_count(), 1);
-    assert_eq!(
-        app.active_temporary_allowlist_entries()[0].site,
-        "reddit.com"
-    );
 }
 
 #[test]

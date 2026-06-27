@@ -93,14 +93,6 @@ fn print_temporary_overrides_status(payload: &StatusOutput) {
                         format_expiry_clock_suffix(epoch_secs)
                     );
                 }
-                ("allowlist-site", Some(site), Some(remaining_secs), Some(epoch_secs), false) => {
-                    println!(
-                        "  - allowlist site {} (expires in {}{})",
-                        site,
-                        format_duration(remaining_secs),
-                        format_expiry_clock_suffix(epoch_secs)
-                    );
-                }
                 _ => {}
             }
         }

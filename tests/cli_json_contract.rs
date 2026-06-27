@@ -237,42 +237,25 @@ fn status_json_success_emits_payload_on_stdout() {
 }
 
 #[test]
-fn temporary_allowlist_add_json_is_reflected_in_status_json() {
-    let env = TestEnv::new("temporary-allowlist-json");
+fn temporary_allowlist_add_json_command_is_removed() {
+    let env = TestEnv::new("temporary-allowlist-json-removed");
 
-    let add_output = env.run(&["--allowlist-site-add-temporary=reddit.com=120s", "--json"]);
-    assert_eq!(add_output.status.code(), Some(0));
-    assert!(stderr_text(&add_output).trim().is_empty());
-    let add_payload: Value = serde_json::from_slice(&add_output.stdout).expect("stdout JSON");
-    assert_eq!(add_payload["action"], "allowlist-site-add-temporary");
-    assert_eq!(add_payload["updated"], true);
-    assert_eq!(add_payload["added"], 1);
-    assert_eq!(add_payload["active"][0]["site"], "reddit.com");
+    let output = env.run(&["--allowlist-site-add-temporary=reddit.com=120s", "--json"]);
 
-    let status_output = env.run(&["--status", "--json"]);
-    assert_eq!(status_output.status.code(), Some(0));
-    assert!(stderr_text(&status_output).trim().is_empty());
-    let status_payload: Value = serde_json::from_slice(&status_output.stdout).expect("stdout JSON");
-    assert_eq!(status_payload["temporary_overrides_active_count"], 1);
-    assert_eq!(
-        status_payload["temporary_overrides"][0]["kind"],
-        "allowlist-site"
-    );
-    assert_eq!(
-        status_payload["temporary_overrides"][0]["site"],
-        "reddit.com"
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr_text(&output).trim().is_empty());
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout JSON");
+    assert_eq!(payload["ok"], false);
+    assert!(
+        payload["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("Temporary allowlist commands were removed."))
     );
     assert!(
-        status_payload["temporary_overrides"][0]["remaining_secs"]
-            .as_u64()
-            .is_some_and(|remaining_secs| remaining_secs > 0 && remaining_secs <= 120)
+        payload["error"]["hint"]
+            .as_str()
+            .is_some_and(|hint| hint.contains("--allowlist-site-add"))
     );
-    assert!(
-        status_payload["temporary_overrides"][0]["expires_at_epoch_secs"]
-            .as_i64()
-            .is_some()
-    );
-    assert!(status_payload.get("temporary_allowlist_active").is_none());
 }
 
 #[test]

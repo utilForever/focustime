@@ -216,16 +216,6 @@ impl App {
     fn commit_site_input(&mut self) {
         let input = self.site_input.clone();
         let mode = self.site_list_mode;
-        if self.site_edit_index.is_none()
-            && mode == SiteListMode::Allowlist
-            && temporary_allowlist_syntax_used(&input)
-        {
-            let committed = self.apply_temporary_allowlist_add_input(&input);
-            if committed {
-                self.cancel_site_input();
-            }
-            return;
-        }
 
         let mut working = SiteBlocker::new();
         for site in self.active_profile_sites_for_mode(mode).iter().cloned() {
@@ -248,37 +238,6 @@ impl App {
 
         if committed {
             self.cancel_site_input();
-        }
-    }
-
-    fn apply_temporary_allowlist_add_input(&mut self, input: &str) -> bool {
-        match self.add_temporary_allowlist_entries_for_active_profile_from_input(input) {
-            Ok((added, refreshed)) => {
-                let mut parts = Vec::new();
-                if added > 0 {
-                    parts.push(format!(
-                        "Added {}",
-                        format_count(added, "temporary exception", "temporary exceptions")
-                    ));
-                }
-                if refreshed > 0 {
-                    parts.push(format!(
-                        "Refreshed {}",
-                        format_count(refreshed, "existing exception", "existing exceptions")
-                    ));
-                }
-                let message = if parts.is_empty() {
-                    "No temporary allowlist changes applied".to_string()
-                } else {
-                    parts.join(" • ")
-                };
-                self.set_site_feedback(SiteFeedbackLevel::Success, message);
-                added > 0 || refreshed > 0
-            }
-            Err(error) => {
-                self.set_site_feedback(SiteFeedbackLevel::Warning, error);
-                false
-            }
         }
     }
 
@@ -600,12 +559,7 @@ impl App {
         self.clamp_blocklist_profile_selection();
         self.blocker.sites.clear();
         if let Some(active_profile) = self.blocklist_profiles.get(self.active_blocklist_profile) {
-            let temporary_allowlist =
-                self.active_temporary_allowlist_site_set_for_profile(&active_profile.name);
             for site in effective_blocked_sites_for_profile(active_profile) {
-                if temporary_allowlist.contains(&site.to_ascii_lowercase()) {
-                    continue;
-                }
                 self.blocker.add_site(site);
             }
         }
@@ -649,11 +603,4 @@ impl App {
     pub(super) fn should_resync_blocking_after_site_mutation(&self) -> bool {
         self.should_block_for_current_state() || self.blocker.is_blocking
     }
-}
-
-fn temporary_allowlist_syntax_used(input: &str) -> bool {
-    input
-        .split([',', '\n', '\r'])
-        .map(str::trim)
-        .any(|token| !token.is_empty() && token.contains('='))
 }

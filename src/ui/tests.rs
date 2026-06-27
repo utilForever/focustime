@@ -294,46 +294,20 @@ fn timer_status_text_shows_active_break_glass_state() {
         crossterm::event::KeyModifiers::NONE,
     ));
 
-    let (_, _, break_glass_status, _) = timer_status_text(&app);
+    let (_, _, break_glass_status) = timer_status_text(&app);
     assert!(break_glass_status.contains("Break-glass: active"));
 }
 
 #[test]
-fn timer_session_status_lines_include_active_temporary_allowlist_entries() {
-    let mut app = App::default();
-    let (added, refreshed) = app
-        .add_temporary_allowlist_for_cli("reddit.com=120s,news.ycombinator.com=180s")
-        .expect("temporary allowlist entries should be accepted");
-    assert_eq!(added, 2);
-    assert_eq!(refreshed, 0);
+fn timer_session_status_lines_include_strict_and_break_glass_only() {
+    let app = App::default();
 
     let lines = timer_session_status_lines_for_width(&app, 80);
-    assert!(
-        lines
-            .iter()
-            .any(|line| line.contains("Temp allowlist: 2 active"))
-    );
-    assert!(lines.iter().any(|line| line.contains("reddit.com")));
-    assert!(
-        lines
-            .iter()
-            .any(|line| line.contains("news.ycombinator.com"))
-    );
-}
 
-#[test]
-fn timer_session_status_lines_compact_temporary_allowlist_in_narrow_layouts() {
-    let mut app = App::default();
-    let (added, refreshed) = app
-        .add_temporary_allowlist_for_cli("reddit.com=120s,news.ycombinator.com=180s")
-        .expect("temporary allowlist entries should be accepted");
-    assert_eq!(added, 2);
-    assert_eq!(refreshed, 0);
-
-    let lines = timer_session_status_lines_for_width(&app, 50);
-    assert!(lines.iter().any(|line| line.contains("⏳ Temp: 2 active")));
-    assert!(lines.iter().any(|line| line.contains("reddit.com")));
-    assert!(lines.iter().any(|line| line.contains("+1 more")));
+    assert_eq!(lines.len(), 2);
+    assert!(lines.iter().any(|line| line.contains("Strict:")));
+    assert!(lines.iter().any(|line| line.contains("Break-glass:")));
+    assert!(!lines.iter().any(|line| line.contains("allowlist")));
 }
 
 #[test]

@@ -59,7 +59,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 25] = [
+    let parsers: [(&str, ValueArgParser); 24] = [
         ("--task", classify_task_arg),
         ("--profile", classify_profile_arg),
         ("--theme", classify_theme_arg),
@@ -86,10 +86,6 @@ fn classify_value_arg(
         ),
         ("--blocklist-site-add", classify_blocklist_site_add_arg),
         ("--allowlist-site-add", classify_allowlist_site_add_arg),
-        (
-            "--allowlist-site-add-temporary",
-            classify_allowlist_site_add_temporary_arg,
-        ),
         ("--blocklist-site-edit", classify_blocklist_site_edit_arg),
         ("--allowlist-site-edit", classify_allowlist_site_edit_arg),
         (
@@ -306,24 +302,6 @@ fn classify_allowlist_site_add_arg(
     }
     Err(invalid_usage(
         "`--allowlist-site-add` requires hostnames input. Use `--allowlist-site-add=HOSTNAMES` or `--allowlist-site-add HOSTNAMES`.",
-    ))
-}
-
-fn classify_allowlist_site_add_temporary_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(
-            next,
-            "`--allowlist-site-add-temporary` requires HOST=30m style input.",
-        )?;
-        return Ok((ParsedToken::AllowlistSiteAddTemporary(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--allowlist-site-add-temporary` requires HOST=30m style input. Use `--allowlist-site-add-temporary=HOST_DURATIONS` or `--allowlist-site-add-temporary HOST_DURATIONS`.",
     ))
 }
 

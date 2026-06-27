@@ -11,14 +11,13 @@ use crate::cli::{
     AppConfig, BreakGlassCommandOutput, CliCommand, CommandKind, DailyGoalConfig, FocusStats,
     GoalCarryCommandOutput, GoalCommandOutput, MonthlyGoalConfig, OutputMode, ProfileId,
     ProfileOutput, ProfileView, RecurringScheduleConfig, ScheduleCommandOutput,
-    StrictCommandOutput, TaskCommandOutput, TemporaryAllowlistStatusOutput,
-    TemporarySiteAddCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
+    StrictCommandOutput, TaskCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
     TimerStateOutput, WeeklyGoalConfig, available_theme_preset_views,
     build_schedule_inspection_output, print_break_glass_command_output,
     print_goal_carry_command_output, print_goal_command_output, print_json, print_profile_output,
-    print_schedule_command_output, print_strict_command_output,
-    print_temporary_site_add_command_output, print_theme_command_output, print_timer_state_output,
-    profile_id, profile_view, theme_preset_view, timer_phase_id, timer_status_id,
+    print_schedule_command_output, print_strict_command_output, print_theme_command_output,
+    print_timer_state_output, profile_id, profile_view, theme_preset_view, timer_phase_id,
+    timer_status_id,
 };
 
 mod blocklists;
@@ -106,9 +105,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
             execute_blocklist_sites_command(target, command, cli_command.output)
                 .map_err(UserMessage::from)
         }
-        CommandKind::AllowlistSiteAddTemporary { input } => {
-            execute_allowlist_site_add_temporary_command(input, cli_command.output)
-        }
         CommandKind::HistoryDashboard { command } => {
             execute_history_dashboard_command(command, cli_command.output)
                 .map_err(UserMessage::from)
@@ -143,7 +139,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Export { .. } => Some("export"),
         CommandKind::BlocklistProfile { .. } => Some("blocklist-profile"),
         CommandKind::BlocklistSites { .. } => Some("blocklist-sites"),
-        CommandKind::AllowlistSiteAddTemporary { .. } => Some("allowlist-site-add-temporary"),
         CommandKind::HistoryDashboard { .. } => Some("history-dashboard"),
     }
 }
@@ -157,7 +152,6 @@ fn command_usage_records_via_app(command: &CommandKind) -> bool {
             | CommandKind::Stop
             | CommandKind::Next
             | CommandKind::Task { .. }
-            | CommandKind::AllowlistSiteAddTemporary { .. }
             | CommandKind::BreakGlassTrigger
             | CommandKind::BreakGlassCancel
             | CommandKind::Diagnostics
@@ -242,36 +236,6 @@ fn execute_task_command(label: String, output: OutputMode) -> CliExecuteResult<(
             }
             print_timer_state_output(&payload.timer);
         }
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn execute_allowlist_site_add_temporary_command(
-    input: String,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let mut app = App::new();
-    app.record_command_usage_for_cli("allowlist-site-add-temporary");
-    let (added, refreshed) = app.add_temporary_allowlist_for_cli(&input)?;
-    let payload = TemporarySiteAddCommandOutput {
-        action: "allowlist-site-add-temporary",
-        updated: added > 0 || refreshed > 0,
-        profile: app.selected_blocklist_profile_name_for_cli(),
-        added,
-        refreshed,
-        active: app
-            .active_temporary_allowlist_entries()
-            .into_iter()
-            .map(|entry| TemporaryAllowlistStatusOutput {
-                site: entry.site,
-                remaining_secs: entry.remaining_secs,
-                expires_at_epoch_secs: entry.expires_at_epoch_secs,
-            })
-            .collect(),
-    };
-    match output {
-        OutputMode::Text => print_temporary_site_add_command_output(&payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

@@ -35,10 +35,6 @@ use crate::stats::{
     WeeklyFocusScore, WeeklyStats, carry_over_goal_target, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
-use crate::temporary_allowlist::{
-    ActiveTemporaryAllowlistEntry, TemporaryAllowlistEntry,
-    active_temporary_allowlist_status_entries_for_profile,
-};
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
@@ -65,7 +61,6 @@ mod session_planner;
 mod setup_diagnostics;
 mod shortcuts;
 mod site_manager;
-mod temporary_allowlist;
 mod timer_flow;
 
 pub(crate) use error::{AppError, AppResult};
@@ -488,7 +483,6 @@ pub(crate) struct App {
     pub(crate) strict_mode: bool,
     break_glass_duration_secs: u64,
     break_glass_expires_at: Option<Instant>,
-    temporary_allowlist_entries: Vec<TemporaryAllowlistEntry>,
     daily_goal: DailyGoalConfig,
     weekly_goal: WeeklyGoalConfig,
     monthly_goal: MonthlyGoalConfig,
@@ -677,7 +671,6 @@ impl App {
             strict_mode,
             break_glass_duration_secs,
             break_glass_expires_at: None,
-            temporary_allowlist_entries: Vec::new(),
             daily_goal,
             weekly_goal,
             monthly_goal,
@@ -727,7 +720,6 @@ impl App {
         self.current_frame_now = now;
         self.sync_today_goal_snapshot();
         self.integrations.poll_wakatime_events();
-        self.sync_temporary_allowlist_entries(now);
         self.sync_break_glass_override();
         self.sync_recurring_schedule(now);
     }
@@ -1105,24 +1097,6 @@ impl App {
 
     pub(crate) fn effective_blocked_site_count(&self) -> usize {
         self.blocker.sites.len()
-    }
-
-    pub(crate) fn active_temporary_allowlist_entries(&self) -> Vec<ActiveTemporaryAllowlistEntry> {
-        active_temporary_allowlist_status_entries_for_profile(
-            &self.temporary_allowlist_entries,
-            self.active_blocklist_profile_name(),
-            self.current_frame_now.timestamp(),
-        )
-    }
-
-    pub(crate) fn active_temporary_allowlist_count(&self) -> usize {
-        self.active_temporary_allowlist_entries().len()
-    }
-
-    pub(crate) fn next_temporary_allowlist_expiry_remaining_secs(&self) -> Option<u64> {
-        self.active_temporary_allowlist_entries()
-            .first()
-            .map(|entry| entry.remaining_secs)
     }
 
     pub(crate) fn blocklist_profile_input_mode(&self) -> Option<BlocklistProfileInputMode> {

@@ -86,14 +86,6 @@ impl App {
         Ok(())
     }
 
-    pub(crate) fn add_temporary_allowlist_for_cli(
-        &mut self,
-        input: &str,
-    ) -> AppResult<(usize, usize)> {
-        self.add_temporary_allowlist_entries_for_active_profile_from_input(input)
-            .map_err(AppError::workflow)
-    }
-
     pub(crate) fn blocking_preview_for_cli(&self) -> AppResult<BlockingPreview> {
         self.compute_blocking_preview()
             .map_err(|error| AppError::BlockingPreviewFailed {
@@ -135,10 +127,6 @@ impl App {
 
     pub(crate) fn selected_profile_id(&self) -> ProfileId {
         self.selected_profile
-    }
-
-    pub(crate) fn selected_blocklist_profile_name_for_cli(&self) -> String {
-        self.active_blocklist_profile_name().to_string()
     }
 
     pub(crate) fn selected_task_label_for_cli(&self) -> Option<String> {

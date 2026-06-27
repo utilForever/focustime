@@ -174,44 +174,14 @@ fn active_temporary_override_status(
 
 fn temporary_override_status_output(
     entry: WorkflowTemporaryOverrideSnapshot,
-    selected_profile: &str,
+    _selected_profile: &str,
     now_epoch_secs: i64,
 ) -> Option<TemporaryOverrideStatusOutput> {
     match entry.kind {
-        WorkflowTemporaryOverrideKind::AllowlistSite => {
-            temporary_allowlist_override_status(entry, selected_profile, now_epoch_secs)
-        }
         WorkflowTemporaryOverrideKind::BreakGlass => {
             break_glass_override_status(entry, now_epoch_secs)
         }
     }
-}
-
-fn temporary_allowlist_override_status(
-    entry: WorkflowTemporaryOverrideSnapshot,
-    selected_profile: &str,
-    now_epoch_secs: i64,
-) -> Option<TemporaryOverrideStatusOutput> {
-    let profile = entry.profile.unwrap_or_default();
-    if selected_profile.is_empty() || !profile.eq_ignore_ascii_case(selected_profile) {
-        return None;
-    }
-    let expires_at_epoch_secs = entry.expires_at_epoch_secs?;
-    if expires_at_epoch_secs <= now_epoch_secs {
-        return None;
-    }
-    let site = entry.site.unwrap_or_default().trim().to_string();
-    if site.is_empty() {
-        return None;
-    }
-    Some(TemporaryOverrideStatusOutput {
-        kind: "allowlist-site",
-        profile: Some(profile),
-        site: Some(site),
-        remaining_secs: Some((expires_at_epoch_secs - now_epoch_secs) as u64),
-        expires_at_epoch_secs: Some(expires_at_epoch_secs),
-        pending_confirmation: false,
-    })
 }
 
 fn break_glass_override_status(

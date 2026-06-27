@@ -6,7 +6,7 @@ use crate::cli::{
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 25] = [
+    let parsers: [KeyValueParser; 24] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_theme_key_value_arg,
@@ -27,7 +27,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_blocklist_profile_rename_key_value_arg,
         parse_blocklist_site_add_key_value_arg,
         parse_allowlist_site_add_key_value_arg,
-        parse_allowlist_site_add_temporary_key_value_arg,
         parse_blocklist_site_edit_key_value_arg,
         parse_allowlist_site_edit_key_value_arg,
         parse_blocklist_site_delete_key_value_arg,
@@ -251,21 +250,6 @@ fn parse_allowlist_site_add_key_value_arg(arg: &str) -> Result<Option<ParsedToke
         let value =
             require_nonempty_key_value(value, "`--allowlist-site-add=` requires hostnames input.")?;
         return Ok(Some(ParsedToken::AllowlistSiteAdd(value.to_string())));
-    }
-    Ok(None)
-}
-
-fn parse_allowlist_site_add_temporary_key_value_arg(
-    arg: &str,
-) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--allowlist-site-add-temporary=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--allowlist-site-add-temporary=` requires HOST=30m style input.",
-        )?;
-        return Ok(Some(ParsedToken::AllowlistSiteAddTemporary(
-            value.to_string(),
-        )));
     }
     Ok(None)
 }
