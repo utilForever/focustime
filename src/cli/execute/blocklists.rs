@@ -234,7 +234,6 @@ fn active_profile_sites(
     let profile = &config.blocklist_profiles[profile_index];
     match target {
         SiteListTarget::Blocklist => &profile.sites,
-        SiteListTarget::Allowlist => &profile.allowlist_sites,
     }
 }
 
@@ -246,7 +245,6 @@ fn active_profile_sites_mut(
     let profile = &mut config.blocklist_profiles[profile_index];
     match target {
         SiteListTarget::Blocklist => &mut profile.sites,
-        SiteListTarget::Allowlist => &mut profile.allowlist_sites,
     }
 }
 

@@ -95,13 +95,9 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --schedule-set=JSON_PAYLOAD [--json]
   focustime --history-dashboard [--json]
   focustime --blocklist-sites [--json]
-  focustime --allowlist-sites [--json]
   focustime --blocklist-site-add=HOSTNAMES [--json]
-  focustime --allowlist-site-add=HOSTNAMES [--json]
   focustime --blocklist-site-edit=OLD=NEW [--json]
-  focustime --allowlist-site-edit=OLD=NEW [--json]
   focustime --blocklist-site-delete=HOSTNAME [--json]
-  focustime --allowlist-site-delete=HOSTNAME [--json]
   focustime --diagnostics [--json]
   focustime --status [--watch[=SECONDS]] [--json]
   focustime --backup[=DIR] [--json]
@@ -128,13 +124,9 @@ Options:
   --schedule-set  Replace selected profile schedule from JSON payload
   --history-dashboard       Show the stable default KPI dashboard layout
   --blocklist-sites           List canonical blocklist sites
-  --allowlist-sites           List canonical allowlist sites
   --blocklist-site-add        Add/import canonical blocklist hostnames
-  --allowlist-site-add        Add/import canonical allowlist hostnames
   --blocklist-site-edit       Replace canonical blocklist hostname using OLD=NEW
-  --allowlist-site-edit       Replace canonical allowlist hostname using OLD=NEW
   --blocklist-site-delete     Delete canonical blocklist hostname
-  --allowlist-site-delete     Delete canonical allowlist hostname
   --diagnostics   Show setup diagnostics, blocking preview details, config health, and migration guidance
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
@@ -297,13 +289,9 @@ enum PrimaryCommand {
     Export(Option<PathBuf>),
     HistoryDashboard,
     BlocklistSites,
-    AllowlistSites,
     BlocklistSiteAdd(String),
-    AllowlistSiteAdd(String),
     BlocklistSiteEdit(SiteEditValue),
-    AllowlistSiteEdit(SiteEditValue),
     BlocklistSiteDelete(String),
-    AllowlistSiteDelete(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -335,13 +323,9 @@ enum ParsedToken {
     Export(Option<PathBuf>),
     HistoryDashboard,
     BlocklistSites,
-    AllowlistSites,
     BlocklistSiteAdd(String),
-    AllowlistSiteAdd(String),
     BlocklistSiteEdit(SiteEditValue),
-    AllowlistSiteEdit(SiteEditValue),
     BlocklistSiteDelete(String),
-    AllowlistSiteDelete(String),
     UnknownOption(String),
     Positional(String),
 }
@@ -353,14 +337,12 @@ type ValueArgParser = fn(&[String], usize) -> Result<(ParsedToken, usize), Strin
 #[serde(rename_all = "snake_case")]
 pub(crate) enum SiteListTarget {
     Blocklist,
-    Allowlist,
 }
 
 impl SiteListTarget {
     fn id(self) -> &'static str {
         match self {
             Self::Blocklist => "blocklist",
-            Self::Allowlist => "allowlist",
         }
     }
 }

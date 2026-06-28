@@ -137,13 +137,11 @@ cargo run -- --strict --json
 cargo run -- --history-dashboard
 cargo run -- --history-dashboard --json
 
-# Manage canonical blocklist/allowlist sites
+# Manage canonical blocklist sites
 cargo run -- --blocklist-sites
-cargo run -- --allowlist-sites --json
 cargo run -- --blocklist-site-add="youtube.com, *.facebook.com"
-cargo run -- --allowlist-site-add "reddit.com"
 cargo run -- --blocklist-site-edit "youtube.com=news.ycombinator.com"
-cargo run -- --allowlist-site-delete reddit.com
+cargo run -- --blocklist-site-delete reddit.com
 
 # Show/set schedule for the selected profile (including overlap/conflict inspection)
 cargo run -- --schedule
@@ -276,9 +274,9 @@ Early deprecation notices:
 | --- | --- |
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--diagnostics` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables and the canonical `Default` blocklist profile; inspect with `--diagnostics`. |
-| Retired blocklist category config is migration-only | `--diagnostics` reports migration guidance to flatten category `sites` and `allowlist_sites` into profile-level lists; manage hostnames directly with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`. |
-| Temporary allowlist CLI/runtime workflow | Use permanent `--allowlist-site-add`, `--allowlist-site-edit`, and `--allowlist-site-delete` for site-rule management. |
-| Break-glass temporary override workflow | Removed; use normal timer controls (`--pause`, `--resume`, `--stop`) for session flow changes or blocklist/allowlist commands for site-rule changes. |
+| Retired blocklist category config is migration-only | `--diagnostics` reports migration guidance to flatten category `sites` and `allowlist_sites` into profile-level lists; manage blocked hostnames directly with `--blocklist-sites`, `--blocklist-site-add`, `--blocklist-site-edit`, and `--blocklist-site-delete`. |
+| Temporary allowlist CLI/runtime workflow | Removed; manage blocked hostnames with blocklist commands and keep persistent exceptions in `allowlist_sites` config when needed. |
+| Break-glass temporary override workflow | Removed; use normal timer controls (`--pause`, `--resume`, `--stop`) for session flow changes or blocklist commands for site-rule changes. |
 | Split temporary override runtime fields | Removed; runtime persistence and `--status --json` no longer emit temporary override entries or legacy `break_glass_*` / `temporary_allowlist_*` fields. |
 | Focus History dashboard customization (`[history_dashboard]`, retired customization CLI paths) | Use the stable default KPI layout shown by `--history-dashboard`; customization commands are removed from help text and command parsing. |
 | Advanced status comparison slicing | Use `--export` artifacts for productivity comparison rows, or Focus History reports/dashboard filters for interactive comparison workflows. |
@@ -587,7 +585,9 @@ Invalid and duplicate entries are reported inline so you can fix them without le
 
 Allowlist entries act as explicit exceptions: effective focus blocking is computed as
 **blocklist sites minus allowlist sites** for the canonical blocklist, using exact and
-wildcard rule matching.
+wildcard rule matching. Allowlist management is config-only; use the
+`allowlist_sites` list in the canonical `[[blocklist_profiles]]` entry for
+persistent exceptions.
 
 Older blocklist category config is accepted only as migration input.
 `--diagnostics` reports guidance to flatten category `sites` and
@@ -713,8 +713,9 @@ When strict mode is enabled during an active focus session:
 ## Temporary override workflows
 
 Temporary allowlist and break-glass workflows have been retired. Use permanent
-allowlist site management for site-rule changes, and use normal timer controls
-(`--pause`, `--resume`, `--stop`, `--next`) for session flow changes.
+`allowlist_sites` config entries for persistent exceptions, blocklist commands
+for blocked-site changes, and normal timer controls (`--pause`, `--resume`,
+`--stop`, `--next`) for session flow changes.
 
 ## Session stats and history
 

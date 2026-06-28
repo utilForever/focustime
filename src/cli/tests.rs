@@ -612,7 +612,7 @@ fn parse_break_glass_commands_are_removed_with_guidance() {
         assert_eq!(
             error.hint.as_deref(),
             Some(
-                "Use normal timer controls (`--pause`, `--resume`, `--stop`, `--next`) or manage site rules with blocklist/allowlist commands."
+                "Use normal timer controls (`--pause`, `--resume`, `--stop`, `--next`) or manage blocked sites with blocklist commands."
             )
         );
     }
@@ -1018,7 +1018,7 @@ fn parse_rejects_removed_blocklist_category_flags() {
 fn usage_text_omits_removed_blocklist_category_flags() {
     assert!(!USAGE_TEXT.contains("--blocklist-category"));
     assert!(USAGE_TEXT.contains("--blocklist-sites [--json]"));
-    assert!(USAGE_TEXT.contains("--allowlist-sites [--json]"));
+    assert!(!USAGE_TEXT.contains("--allowlist-sites"));
 }
 
 #[test]
@@ -1040,47 +1040,48 @@ fn parse_blocklist_site_add_with_equals() {
 
 #[test]
 fn parse_allowlist_site_add_temporary_is_removed() {
-    let error = parse(&["--allowlist-site-add-temporary=reddit.com=30m"]).unwrap_err();
+    let error =
+        parse_with_contract(&["--allowlist-site-add-temporary=reddit.com=30m"]).unwrap_err();
 
-    assert!(error.contains("Temporary allowlist commands were removed."));
-    assert!(error.contains("--allowlist-site-add"));
-}
-
-#[test]
-fn parse_allowlist_site_delete_with_equals() {
-    let parsed = parse(&["--allowlist-site-delete=reddit.com"]).unwrap();
+    assert!(
+        error
+            .message
+            .contains("Temporary allowlist commands were removed.")
+    );
     assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistSites {
-                target: SiteListTarget::Allowlist,
-                command: BlocklistSiteCommandKind::Delete {
-                    site: "reddit.com".to_string()
-                }
-            },
-            output: OutputMode::Text
-        })
+        error.hint.as_deref(),
+        Some(
+            "Use blocklist site commands for CLI site-rule management; keep persistent exceptions in `allowlist_sites` config when needed."
+        )
     );
 }
 
 #[test]
-fn parse_allowlist_site_edit_with_equals() {
-    let parsed = parse(&["--allowlist-site-edit=old.com=new.com"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistSites {
-                target: SiteListTarget::Allowlist,
-                command: BlocklistSiteCommandKind::Edit {
-                    value: SiteEditValue {
-                        previous: "old.com".to_string(),
-                        next: "new.com".to_string()
-                    }
-                }
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_allowlist_site_management_commands_are_removed_with_guidance() {
+    for args in [
+        &["--allowlist-sites"][..],
+        &["--allowlist-site-add", "reddit.com"][..],
+        &["--allowlist-site-add=reddit.com"][..],
+        &["--allowlist-site-edit", "old.com=new.com"][..],
+        &["--allowlist-site-edit=old.com=new.com"][..],
+        &["--allowlist-site-delete", "reddit.com"][..],
+        &["--allowlist-site-delete=reddit.com"][..],
+    ] {
+        let error = parse_with_contract(args).unwrap_err();
+        assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+        assert!(error.message.contains("Unknown option `--allowlist-"));
+        assert!(
+            error
+                .message
+                .contains("Allowlist site management commands were removed.")
+        );
+        assert_eq!(
+            error.hint.as_deref(),
+            Some(
+                "Manage blocked hostnames with `--blocklist-sites`, `--blocklist-site-add`, `--blocklist-site-edit`, and `--blocklist-site-delete`; keep exceptions in `allowlist_sites` config when needed."
+            )
+        );
+    }
 }
 
 #[test]
@@ -1784,31 +1785,6 @@ fn apply_history_dashboard_show_uses_stable_default_layout() {
 }
 
 #[test]
-fn apply_allowlist_site_add_updates_effective_blocking() {
-    let mut config = AppConfig {
-        blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
-            name: "Default".to_string(),
-            sites: vec!["a.com".to_string(), "b.com".to_string()],
-            allowlist_sites: vec!["b.com".to_string()],
-        }],
-        selected_blocklist_profile: "Default".to_string(),
-        ..AppConfig::default()
-    }
-    .normalized();
-
-    let payload = apply_site_add_command(&mut config, SiteListTarget::Allowlist, "a.com").unwrap();
-
-    assert!(payload.updated);
-    assert_eq!(payload.target, SiteListTarget::Allowlist);
-    assert_eq!(
-        config.blocklist_profiles[0].allowlist_sites,
-        vec!["b.com".to_string(), "a.com".to_string()]
-    );
-    assert!(config.blocked_sites.is_empty());
-    assert_eq!(payload.effective_blocked_sites_count, 0);
-}
-
-#[test]
 fn apply_site_add_command_uses_profile_sites_not_selected_category() {
     let mut config: AppConfig = toml::from_str(
         r#"
@@ -1925,29 +1901,6 @@ fn apply_site_edit_command_handles_duplicate_case_entries() {
         vec!["news.com".to_string(), "b.com".to_string()]
     );
     assert!(config.blocked_sites.is_empty());
-}
-
-#[test]
-fn apply_site_delete_command_updates_allowlist_and_effective_blocking() {
-    let mut config = AppConfig {
-        blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
-            name: "Default".to_string(),
-            sites: vec!["a.com".to_string(), "b.com".to_string()],
-            allowlist_sites: vec!["b.com".to_string()],
-        }],
-        selected_blocklist_profile: "Default".to_string(),
-        ..AppConfig::default()
-    }
-    .normalized();
-
-    let payload =
-        apply_site_delete_command(&mut config, SiteListTarget::Allowlist, "b.com").unwrap();
-
-    assert!(payload.updated);
-    assert_eq!(payload.removed, "b.com");
-    assert!(config.blocklist_profiles[0].allowlist_sites.is_empty());
-    assert!(config.blocked_sites.is_empty());
-    assert_eq!(payload.effective_blocked_sites_count, 2);
 }
 
 #[test]
