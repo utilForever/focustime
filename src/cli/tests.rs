@@ -1951,6 +1951,33 @@ fn apply_site_delete_command_updates_allowlist_and_effective_blocking() {
 }
 
 #[test]
+fn apply_site_delete_command_does_not_restore_legacy_blocked_sites() {
+    let mut config = AppConfig {
+        blocked_sites: vec!["legacy.com".to_string()],
+        blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+            name: "Default".to_string(),
+            sites: vec!["a.com".to_string()],
+            allowlist_sites: Vec::new(),
+        }],
+        selected_blocklist_profile: "Default".to_string(),
+        ..AppConfig::default()
+    }
+    .normalized();
+
+    let payload =
+        apply_site_delete_command(&mut config, SiteListTarget::Blocklist, "legacy.com").unwrap();
+
+    assert!(payload.updated);
+    assert_eq!(payload.removed, "legacy.com");
+    assert!(config.blocked_sites.is_empty());
+    assert_eq!(
+        config.blocklist_profiles[0].sites,
+        vec!["a.com".to_string()]
+    );
+    assert_eq!(payload.effective_blocked_sites_count, 1);
+}
+
+#[test]
 fn apply_site_delete_command_handles_duplicate_case_entries() {
     let mut config = AppConfig {
         blocklist_profiles: vec![crate::config::BlocklistProfileConfig {

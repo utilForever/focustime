@@ -199,12 +199,13 @@ pub(in crate::cli) fn apply_site_delete_command(
 }
 
 fn ensure_blocklist_profiles(config: &mut AppConfig) {
+    let legacy_blocked_sites = std::mem::take(&mut config.blocked_sites);
     let mut canonical = BlocklistProfileConfig {
         name: "Default".to_string(),
         sites: Vec::new(),
         allowlist_sites: Vec::new(),
     };
-    merge_unique_case_insensitive(&mut canonical.sites, &config.blocked_sites);
+    merge_unique_case_insensitive(&mut canonical.sites, &legacy_blocked_sites);
     for profile in &config.blocklist_profiles {
         merge_unique_case_insensitive(&mut canonical.sites, &profile.sites);
         merge_unique_case_insensitive(&mut canonical.allowlist_sites, &profile.allowlist_sites);
