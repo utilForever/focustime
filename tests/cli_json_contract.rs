@@ -237,11 +237,9 @@ fn temporary_allowlist_add_json_command_is_removed() {
             .as_str()
             .is_some_and(|message| message.contains("Temporary allowlist commands were removed."))
     );
-    assert!(
-        payload["error"]["hint"]
-            .as_str()
-            .is_some_and(|hint| hint.contains("--allowlist-site-add"))
-    );
+    assert!(payload["error"]["hint"].as_str().is_some_and(|hint| {
+        hint.contains("Use blocklist site commands") && hint.contains("allowlist_sites")
+    }));
 }
 
 #[test]

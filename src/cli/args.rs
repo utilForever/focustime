@@ -59,7 +59,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 21] = [
+    let parsers: [(&str, ValueArgParser); 18] = [
         ("--task", classify_task_arg),
         ("--profile", classify_profile_arg),
         ("--theme", classify_theme_arg),
@@ -76,16 +76,10 @@ fn classify_value_arg(
         ("--restore", classify_restore_arg),
         ("--export", classify_export_arg),
         ("--blocklist-site-add", classify_blocklist_site_add_arg),
-        ("--allowlist-site-add", classify_allowlist_site_add_arg),
         ("--blocklist-site-edit", classify_blocklist_site_edit_arg),
-        ("--allowlist-site-edit", classify_allowlist_site_edit_arg),
         (
             "--blocklist-site-delete",
             classify_blocklist_site_delete_arg,
-        ),
-        (
-            "--allowlist-site-delete",
-            classify_allowlist_site_delete_arg,
         ),
     ];
 
@@ -113,7 +107,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--diagnostics" => Some(ParsedToken::Diagnostics),
         "--history-dashboard" => Some(ParsedToken::HistoryDashboard),
         "--blocklist-sites" => Some(ParsedToken::BlocklistSites),
-        "--allowlist-sites" => Some(ParsedToken::AllowlistSites),
         _ => None,
     }
 }
@@ -224,22 +217,6 @@ fn classify_blocklist_site_add_arg(
     ))
 }
 
-fn classify_allowlist_site_add_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--allowlist-site-add` requires hostnames input.")?;
-        return Ok((ParsedToken::AllowlistSiteAdd(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--allowlist-site-add` requires hostnames input. Use `--allowlist-site-add=HOSTNAMES` or `--allowlist-site-add HOSTNAMES`.",
-    ))
-}
-
 fn classify_blocklist_site_edit_arg(
     args: &[String],
     index: usize,
@@ -257,23 +234,6 @@ fn classify_blocklist_site_edit_arg(
     ))
 }
 
-fn classify_allowlist_site_edit_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        return Ok((
-            ParsedToken::AllowlistSiteEdit(parse_site_edit_value(next)?),
-            2,
-        ));
-    }
-    Err(invalid_usage(
-        "`--allowlist-site-edit` requires `OLD=NEW`. Use `--allowlist-site-edit=OLD=NEW` or `--allowlist-site-edit OLD=NEW`.",
-    ))
-}
-
 fn classify_blocklist_site_delete_arg(
     args: &[String],
     index: usize,
@@ -287,22 +247,6 @@ fn classify_blocklist_site_delete_arg(
     }
     Err(invalid_usage(
         "`--blocklist-site-delete` requires a hostname. Use `--blocklist-site-delete=HOSTNAME` or `--blocklist-site-delete HOSTNAME`.",
-    ))
-}
-
-fn classify_allowlist_site_delete_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value =
-            require_nonempty_key_value(next, "`--allowlist-site-delete` requires a hostname.")?;
-        return Ok((ParsedToken::AllowlistSiteDelete(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--allowlist-site-delete` requires a hostname. Use `--allowlist-site-delete=HOSTNAME` or `--allowlist-site-delete HOSTNAME`.",
     ))
 }
 

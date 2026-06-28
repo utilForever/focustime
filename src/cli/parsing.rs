@@ -61,13 +61,9 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Export(_)
             | ParsedToken::HistoryDashboard
             | ParsedToken::BlocklistSites
-            | ParsedToken::AllowlistSites
             | ParsedToken::BlocklistSiteAdd(_)
-            | ParsedToken::AllowlistSiteAdd(_)
             | ParsedToken::BlocklistSiteEdit(_)
-            | ParsedToken::AllowlistSiteEdit(_)
-            | ParsedToken::BlocklistSiteDelete(_)
-            | ParsedToken::AllowlistSiteDelete(_) => {}
+            | ParsedToken::BlocklistSiteDelete(_) => {}
         }
     }
     Ok((show_help, output))
@@ -115,14 +111,21 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
         | "--session-template-rename"
         | "--session-template-delete" => Some(RemovedOptionGuidance {
             summary: "Session template commands were removed.",
-            replacement: "Use `--task`, `--profile`, `--schedule`/`--schedule-set`, and blocklist/allowlist site commands directly.",
+            replacement: "Use `--task`, `--profile`, `--schedule`/`--schedule-set`, and blocklist site commands directly.",
         }),
         "--blocklist-profile"
         | "--blocklist-profile-create"
         | "--blocklist-profile-rename"
         | "--blocklist-profile-delete" => Some(RemovedOptionGuidance {
             summary: "Blocklist profile commands were removed.",
-            replacement: "Use canonical site commands: `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`.",
+            replacement: "Use canonical blocklist site commands: `--blocklist-sites`, `--blocklist-site-add`, `--blocklist-site-edit`, and `--blocklist-site-delete`.",
+        }),
+        "--allowlist-sites"
+        | "--allowlist-site-add"
+        | "--allowlist-site-edit"
+        | "--allowlist-site-delete" => Some(RemovedOptionGuidance {
+            summary: "Allowlist site management commands were removed.",
+            replacement: "Manage blocked hostnames with `--blocklist-sites`, `--blocklist-site-add`, `--blocklist-site-edit`, and `--blocklist-site-delete`; keep exceptions in `allowlist_sites` config when needed.",
         }),
         "--config-doctor" | "--config-migrate" | "--config-migrate-apply" => {
             Some(RemovedOptionGuidance {
@@ -140,11 +143,11 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
         }),
         "--allowlist-site-add-temporary" => Some(RemovedOptionGuidance {
             summary: "Temporary allowlist commands were removed.",
-            replacement: "Use permanent `--allowlist-site-add`, `--allowlist-site-edit`, and `--allowlist-site-delete` commands for site-rule management.",
+            replacement: "Use blocklist site commands for CLI site-rule management; keep persistent exceptions in `allowlist_sites` config when needed.",
         }),
         "--break-glass-trigger" | "--break-glass-cancel" => Some(RemovedOptionGuidance {
             summary: "Break-glass commands were removed.",
-            replacement: "Use normal timer controls (`--pause`, `--resume`, `--stop`, `--next`) or manage site rules with blocklist/allowlist commands.",
+            replacement: "Use normal timer controls (`--pause`, `--resume`, `--stop`, `--next`) or manage blocked sites with blocklist commands.",
         }),
         _ => None,
     }
@@ -215,32 +218,17 @@ pub(super) fn parse_primary_command(
             ParsedToken::BlocklistSites => {
                 set_primary_command(&mut primary, PrimaryCommand::BlocklistSites)?
             }
-            ParsedToken::AllowlistSites => {
-                set_primary_command(&mut primary, PrimaryCommand::AllowlistSites)?
-            }
             ParsedToken::BlocklistSiteAdd(input) => set_primary_command(
                 &mut primary,
                 PrimaryCommand::BlocklistSiteAdd(input.clone()),
-            )?,
-            ParsedToken::AllowlistSiteAdd(input) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::AllowlistSiteAdd(input.clone()),
             )?,
             ParsedToken::BlocklistSiteEdit(value) => set_primary_command(
                 &mut primary,
                 PrimaryCommand::BlocklistSiteEdit(value.clone()),
             )?,
-            ParsedToken::AllowlistSiteEdit(value) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::AllowlistSiteEdit(value.clone()),
-            )?,
             ParsedToken::BlocklistSiteDelete(site) => set_primary_command(
                 &mut primary,
                 PrimaryCommand::BlocklistSiteDelete(site.clone()),
-            )?,
-            ParsedToken::AllowlistSiteDelete(site) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::AllowlistSiteDelete(site.clone()),
             )?,
             ParsedToken::Help
             | ParsedToken::Json
@@ -379,23 +367,9 @@ pub(super) fn finalize_cli_action(
             },
             output,
         })),
-        Some(PrimaryCommand::AllowlistSites) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistSites {
-                target: SiteListTarget::Allowlist,
-                command: BlocklistSiteCommandKind::List,
-            },
-            output,
-        })),
         Some(PrimaryCommand::BlocklistSiteAdd(input)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::BlocklistSites {
                 target: SiteListTarget::Blocklist,
-                command: BlocklistSiteCommandKind::Add { input },
-            },
-            output,
-        })),
-        Some(PrimaryCommand::AllowlistSiteAdd(input)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistSites {
-                target: SiteListTarget::Allowlist,
                 command: BlocklistSiteCommandKind::Add { input },
             },
             output,
@@ -407,23 +381,9 @@ pub(super) fn finalize_cli_action(
             },
             output,
         })),
-        Some(PrimaryCommand::AllowlistSiteEdit(value)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistSites {
-                target: SiteListTarget::Allowlist,
-                command: BlocklistSiteCommandKind::Edit { value },
-            },
-            output,
-        })),
         Some(PrimaryCommand::BlocklistSiteDelete(site)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::BlocklistSites {
                 target: SiteListTarget::Blocklist,
-                command: BlocklistSiteCommandKind::Delete { site },
-            },
-            output,
-        })),
-        Some(PrimaryCommand::AllowlistSiteDelete(site)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistSites {
-                target: SiteListTarget::Allowlist,
                 command: BlocklistSiteCommandKind::Delete { site },
             },
             output,
@@ -473,13 +433,9 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Export(_) => "--export",
         PrimaryCommand::HistoryDashboard => "--history-dashboard",
         PrimaryCommand::BlocklistSites => "--blocklist-sites",
-        PrimaryCommand::AllowlistSites => "--allowlist-sites",
         PrimaryCommand::BlocklistSiteAdd(_) => "--blocklist-site-add",
-        PrimaryCommand::AllowlistSiteAdd(_) => "--allowlist-site-add",
         PrimaryCommand::BlocklistSiteEdit(_) => "--blocklist-site-edit",
-        PrimaryCommand::AllowlistSiteEdit(_) => "--allowlist-site-edit",
         PrimaryCommand::BlocklistSiteDelete(_) => "--blocklist-site-delete",
-        PrimaryCommand::AllowlistSiteDelete(_) => "--allowlist-site-delete",
     }
 }
 

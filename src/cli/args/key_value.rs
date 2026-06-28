@@ -6,7 +6,7 @@ use crate::cli::{
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 21] = [
+    let parsers: [KeyValueParser; 18] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_theme_key_value_arg,
@@ -23,11 +23,8 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_restore_key_value_arg,
         parse_export_key_value_arg,
         parse_blocklist_site_add_key_value_arg,
-        parse_allowlist_site_add_key_value_arg,
         parse_blocklist_site_edit_key_value_arg,
-        parse_allowlist_site_edit_key_value_arg,
         parse_blocklist_site_delete_key_value_arg,
-        parse_allowlist_site_delete_key_value_arg,
     ];
 
     for parser in parsers {
@@ -211,27 +208,9 @@ fn parse_blocklist_site_add_key_value_arg(arg: &str) -> Result<Option<ParsedToke
     Ok(None)
 }
 
-fn parse_allowlist_site_add_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--allowlist-site-add=") {
-        let value =
-            require_nonempty_key_value(value, "`--allowlist-site-add=` requires hostnames input.")?;
-        return Ok(Some(ParsedToken::AllowlistSiteAdd(value.to_string())));
-    }
-    Ok(None)
-}
-
 fn parse_blocklist_site_edit_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--blocklist-site-edit=") {
         return Ok(Some(ParsedToken::BlocklistSiteEdit(parse_site_edit_value(
-            value,
-        )?)));
-    }
-    Ok(None)
-}
-
-fn parse_allowlist_site_edit_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--allowlist-site-edit=") {
-        return Ok(Some(ParsedToken::AllowlistSiteEdit(parse_site_edit_value(
             value,
         )?)));
     }
@@ -243,15 +222,6 @@ fn parse_blocklist_site_delete_key_value_arg(arg: &str) -> Result<Option<ParsedT
         let value =
             require_nonempty_key_value(value, "`--blocklist-site-delete=` requires a hostname.")?;
         return Ok(Some(ParsedToken::BlocklistSiteDelete(value.to_string())));
-    }
-    Ok(None)
-}
-
-fn parse_allowlist_site_delete_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--allowlist-site-delete=") {
-        let value =
-            require_nonempty_key_value(value, "`--allowlist-site-delete=` requires a hostname.")?;
-        return Ok(Some(ParsedToken::AllowlistSiteDelete(value.to_string())));
     }
     Ok(None)
 }
