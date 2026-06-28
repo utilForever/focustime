@@ -397,6 +397,8 @@ fn setup_diagnostics_view_renders_blocking_preview_section() {
         .expect("render should succeed");
 
     let text = terminal_text(&terminal, width, height);
+    assert!(text.contains("Hosts-file preview"));
+    assert!(!text.contains("Preview backend"));
     assert!(text.contains("action: block"));
     assert!(
         text.contains("# focustime-block-start"),

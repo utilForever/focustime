@@ -111,14 +111,9 @@ pub(super) fn render_setup_diagnostics(frame: &mut Frame, app: &App) {
             BlockingPreviewAction::Unblock => "unblock",
             BlockingPreviewAction::NoChange => "no-change",
         };
-        let backend = app
-            .blocking_preview
-            .backend
-            .map(|backend| backend.id())
-            .unwrap_or("unknown");
         (
             format!(
-                "Preview backend: {backend} · action: {action} · changes: {} · effective blocked sites: {}",
+                "Hosts-file preview · action: {action} · changes: {} · effective blocked sites: {}",
                 if app.blocking_preview.would_change {
                     "yes"
                 } else {
