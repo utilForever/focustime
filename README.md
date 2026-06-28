@@ -481,15 +481,6 @@ selected_profile = "advanced"
 selected_theme_preset = "classic"
 selected_blocklist_profile = "Work"
 
-[blocking_backend]
-# hosts_only | hosts_then_command | command_then_hosts | command_only
-policy = "hosts_then_command"
-
-[blocking_backend.command]
-block_command = ""
-unblock_command = ""
-diagnostics_command = ""
-
 [shortcuts]
 timer_toggle_pause = "space"
 timer_stop_reset = "s"
@@ -620,7 +611,7 @@ Older blocklist category config is accepted only as migration input.
 saves persist only profile-level `sites` and `allowlist_sites`.
 
 For hosts-based blocking to apply reliably, keep DNS-over-HTTPS disabled in your browser.
-If you configure the command backend, ensure your custom commands enforce equivalent restrictions.
+`focustime` supports hosts-file blocking as the single blocking backend.
 
 ## Setup diagnostics
 
@@ -631,12 +622,10 @@ Open the setup diagnostics screen from timer view with **`d`**.
 
 The diagnostics screen reports:
 
-- backend policy/order and last backend selection (including fallback usage)
-- command backend readiness
 - blocking permissions
 - hosts file write capability
-- blocking preview summary and backend target details
-- remediation guidance when hosts or command backend readiness is insufficient
+- blocking preview summary and hosts-file target details
+- remediation guidance when hosts-file readiness is insufficient
 - WakaTime config status (`~/.wakatime.cfg` and `api_key` availability)
 - WakaTime runtime queue/retry status (`not configured`, `idle`,
   `tracking`, `sending`, `queued`, `replaying`, `retrying`, `error`, and
@@ -668,14 +657,6 @@ The standalone `focustime --automation-triggers*` path has been removed. Scripts
 should configure profile schedules with `focustime --schedule-set`, use supported
 timer controls for active windows, and select task/profile/blocklist defaults
 through their dedicated commands.
-
-Blocking backend policy is deterministic:
-
-- `hosts_then_command` (default): try hosts first, then command backend fallback
-- `command_then_hosts`: try command first, then hosts fallback
-- `hosts_only` / `command_only`: disable fallback
-
-Command backend templates support `{sites_csv}`, `{sites_lines}`, and `{site_count}` placeholders.
 
 ## Phase notifications
 
