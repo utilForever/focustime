@@ -275,18 +275,21 @@ fn remove_collapsed_block_allow_collisions(
                 .collect()
         })
         .collect();
-    let mut first_allowlist_sources = HashMap::new();
+    let mut allowlist_sources = HashMap::new();
     for (profile_index, profile) in profiles.iter().enumerate() {
         for site in &profile.allowlist_sites {
             if let Some(rule) = normalized_blocklist_rule_key(site) {
-                first_allowlist_sources.entry(rule).or_insert(profile_index);
+                allowlist_sources
+                    .entry(rule)
+                    .or_insert_with(HashSet::new)
+                    .insert(profile_index);
             }
         }
     }
     retain_allowlist_entries_without_collapsed_block_collisions(
         &legacy_blocked_rules,
         &profile_blocked_rules,
-        &first_allowlist_sources,
+        &allowlist_sources,
         allowlist_sites,
     );
 }
@@ -300,7 +303,7 @@ pub(super) fn normalized_blocklist_rule_key(site: &str) -> Option<String> {
 pub(super) fn retain_allowlist_entries_without_collapsed_block_collisions(
     legacy_blocked_rules: &HashSet<String>,
     profile_blocked_rules: &[HashSet<String>],
-    first_allowlist_sources: &HashMap<String, usize>,
+    allowlist_sources: &HashMap<String, HashSet<usize>>,
     allowlist_sites: &mut Vec<String>,
 ) {
     allowlist_sites.retain(|site| {
@@ -310,14 +313,14 @@ pub(super) fn retain_allowlist_entries_without_collapsed_block_collisions(
         if legacy_blocked_rules.contains(&rule) {
             return false;
         }
-        let Some(source_index) = first_allowlist_sources.get(&rule) else {
+        let Some(source_indexes) = allowlist_sources.get(&rule) else {
             return true;
         };
         !profile_blocked_rules
             .iter()
             .enumerate()
             .any(|(profile_index, blocked_rules)| {
-                profile_index != *source_index && blocked_rules.contains(&rule)
+                !source_indexes.contains(&profile_index) && blocked_rules.contains(&rule)
             })
     });
 }

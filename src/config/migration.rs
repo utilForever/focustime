@@ -443,21 +443,24 @@ fn remove_collapsed_block_allow_collisions(
                 .collect()
         })
         .collect();
-    let mut first_allowlist_sources = HashMap::new();
+    let mut allowlist_sources = HashMap::new();
     for (profile_index, profile) in profiles.iter().enumerate() {
         let Some(profile) = profile.as_table() else {
             continue;
         };
         for site in string_array(profile.get("allowlist_sites")) {
             if let Some(rule) = normalized_blocklist_rule_key(&site) {
-                first_allowlist_sources.entry(rule).or_insert(profile_index);
+                allowlist_sources
+                    .entry(rule)
+                    .or_insert_with(HashSet::new)
+                    .insert(profile_index);
             }
         }
     }
     retain_allowlist_entries_without_collapsed_block_collisions(
         &legacy_blocked_rules,
         &profile_blocked_rules,
-        &first_allowlist_sources,
+        &allowlist_sources,
         allowlist_sites,
     );
 }

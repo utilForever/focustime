@@ -1243,6 +1243,48 @@ allowlist_sites = []
 }
 
 #[test]
+fn migrate_config_toml_preserves_same_profile_allowlist_overrides() {
+    let original: toml::Value = toml::from_str(
+        r#"
+schema_version = 2
+selected_blocklist_profile = "Work"
+
+[[blocklist_profiles]]
+name = "Work"
+sites = ["a.com"]
+allowlist_sites = ["b.com"]
+
+[[blocklist_profiles]]
+name = "Personal"
+sites = ["b.com"]
+allowlist_sites = ["b.com"]
+"#,
+    )
+    .unwrap();
+
+    let migrated = migrate_config_toml_to_current(original)
+        .expect("current-schema payload should still collapse blocklist profiles");
+    let root = migrated.as_table().expect("root should be a table");
+    let profiles = root
+        .get("blocklist_profiles")
+        .and_then(toml::Value::as_array)
+        .unwrap();
+    let profile = profiles[0].as_table().unwrap();
+
+    assert_eq!(
+        profile.get("sites").unwrap().as_array().unwrap(),
+        &vec![
+            toml::Value::String("a.com".to_string()),
+            toml::Value::String("b.com".to_string()),
+        ]
+    );
+    assert_eq!(
+        profile.get("allowlist_sites").unwrap().as_array().unwrap(),
+        &vec![toml::Value::String("b.com".to_string())]
+    );
+}
+
+#[test]
 fn migrate_config_toml_legacy_to_v1_sets_intermediate_schema_version_to_one() {
     let legacy: toml::Value = toml::from_str("focus_secs = 1500").unwrap();
     let migrated = migrate_config_toml_legacy_to_v1(legacy).expect("legacy migration should work");
@@ -1807,6 +1849,40 @@ fn normalize_collapses_profiles_and_fixes_selection() {
     );
     assert_eq!(cfg.selected_blocklist_profile, "Default");
     assert!(cfg.blocked_sites.is_empty());
+}
+
+#[test]
+fn normalize_preserves_same_profile_allowlist_overrides() {
+    let cfg = AppConfig {
+        blocklist_profiles: vec![
+            BlocklistProfileConfig {
+                name: "Work".to_string(),
+                sites: vec!["a.com".to_string()],
+                allowlist_sites: vec!["b.com".to_string()],
+            },
+            BlocklistProfileConfig {
+                name: "Personal".to_string(),
+                sites: vec!["b.com".to_string()],
+                allowlist_sites: vec!["b.com".to_string()],
+            },
+        ],
+        selected_blocklist_profile: "Personal".to_string(),
+        ..AppConfig::default()
+    }
+    .normalize();
+
+    assert_eq!(
+        cfg.blocklist_profiles[0].sites,
+        vec!["a.com".to_string(), "b.com".to_string()]
+    );
+    assert_eq!(
+        cfg.blocklist_profiles[0].allowlist_sites,
+        vec!["b.com".to_string()]
+    );
+    assert_eq!(
+        effective_blocked_sites_for_profile(&cfg.blocklist_profiles[0]),
+        vec!["a.com".to_string()]
+    );
 }
 
 #[test]
