@@ -298,22 +298,23 @@ impl App {
     /// Failures are best-effort; the error is surfaced through `config_error`.
     pub(super) fn persisted_config(&self) -> AppConfig {
         let custom_profile = self.custom_profile.normalized();
-        let mut blocklist_profiles = self.blocklist_profiles.clone();
-        if blocklist_profiles.is_empty() {
-            blocklist_profiles.push(BlocklistProfileConfig {
-                name: DEFAULT_BLOCKLIST_PROFILE_NAME.to_string(),
-                sites: self.blocker.sites.clone(),
-                allowlist_sites: Vec::new(),
-            });
+        let mut canonical_blocklist_profile = BlocklistProfileConfig {
+            name: DEFAULT_BLOCKLIST_PROFILE_NAME.to_string(),
+            sites: Vec::new(),
+            allowlist_sites: Vec::new(),
+        };
+        for profile in &self.blocklist_profiles {
+            merge_unique_case_insensitive(&mut canonical_blocklist_profile.sites, &profile.sites);
+            merge_unique_case_insensitive(
+                &mut canonical_blocklist_profile.allowlist_sites,
+                &profile.allowlist_sites,
+            );
         }
-        let active_index = self
-            .active_blocklist_profile
-            .min(blocklist_profiles.len().saturating_sub(1));
-        let selected_blocklist_profile = blocklist_profiles
-            .get(active_index)
-            .or_else(|| blocklist_profiles.first())
-            .map(|profile| profile.name.clone())
-            .unwrap_or_else(|| DEFAULT_BLOCKLIST_PROFILE_NAME.to_string());
+        if canonical_blocklist_profile.sites.is_empty() && self.blocklist_profiles.is_empty() {
+            canonical_blocklist_profile.sites = self.blocker.sites.clone();
+        }
+        let blocklist_profiles = vec![canonical_blocklist_profile];
+        let selected_blocklist_profile = DEFAULT_BLOCKLIST_PROFILE_NAME.to_string();
         let mut profile_automation = self.profile_automation.clone();
         profile_automation
             .set_for_profile(self.selected_profile, self.selected_profile_automation());
@@ -407,5 +408,17 @@ impl App {
 fn push_ignored_artifact(ignored_artifacts: &mut Vec<&'static str>, artifact: &'static str) {
     if !ignored_artifacts.contains(&artifact) {
         ignored_artifacts.push(artifact);
+    }
+}
+
+fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
+    let mut seen: std::collections::HashSet<String> = target
+        .iter()
+        .map(|value| value.to_ascii_lowercase())
+        .collect();
+    for value in source {
+        if seen.insert(value.to_ascii_lowercase()) {
+            target.push(value.clone());
+        }
     }
 }

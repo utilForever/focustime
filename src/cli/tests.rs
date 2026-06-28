@@ -947,63 +947,20 @@ fn parse_feature_inventory_is_retired() {
 }
 
 #[test]
-fn parse_blocklist_profile_without_value_reads_current_profile() {
-    let parsed = parse(&["--blocklist-profile"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistProfile {
-                command: BlocklistProfileCommandKind::Select { profile: None }
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_blocklist_profile_with_value_selects_profile() {
-    let parsed = parse(&["--blocklist-profile", "Work"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistProfile {
-                command: BlocklistProfileCommandKind::Select {
-                    profile: Some("Work".to_string())
-                }
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_blocklist_profile_rename_with_equals() {
-    let parsed = parse(&["--blocklist-profile-rename=Deep Work"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistProfile {
-                command: BlocklistProfileCommandKind::Rename {
-                    name: "Deep Work".to_string()
-                }
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_blocklist_profile_delete_runs_command() {
-    let parsed = parse(&["--blocklist-profile-delete"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistProfile {
-                command: BlocklistProfileCommandKind::Delete
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_blocklist_profile_commands_are_retired() {
+    for args in [
+        &["--blocklist-profile"][..],
+        &["--blocklist-profile", "Work"][..],
+        &["--blocklist-profile-create", "Work"][..],
+        &["--blocklist-profile-create=Work"][..],
+        &["--blocklist-profile-rename", "Deep Work"][..],
+        &["--blocklist-profile-rename=Deep Work"][..],
+        &["--blocklist-profile-delete"][..],
+    ] {
+        let error = parse(args).unwrap_err();
+        assert!(error.contains("Unknown option `--blocklist-profile"));
+        assert!(error.contains("Blocklist profile commands were removed."));
+    }
 }
 
 #[test]
@@ -1473,9 +1430,10 @@ fn parse_rejects_automation_triggers_set_without_payload_as_retired() {
 }
 
 #[test]
-fn parse_rejects_blocklist_profile_create_without_value() {
+fn parse_rejects_blocklist_profile_create_without_value_as_retired() {
     let error = parse(&["--blocklist-profile-create"]).unwrap_err();
-    assert!(error.contains("`--blocklist-profile-create` requires a profile name"));
+    assert!(error.contains("Unknown option `--blocklist-profile-create`"));
+    assert!(error.contains("Blocklist profile commands were removed."));
 }
 
 #[test]
@@ -1747,7 +1705,7 @@ fn parse_rejects_non_utf8_arguments() {
 }
 
 #[test]
-fn apply_blocklist_profile_select_updates_selection_case_insensitively() {
+fn blocklist_site_commands_collapse_existing_profiles_to_canonical_rules() {
     let mut config = AppConfig {
         blocklist_profiles: vec![
             crate::config::BlocklistProfileConfig {
@@ -1763,86 +1721,28 @@ fn apply_blocklist_profile_select_updates_selection_case_insensitively() {
         ],
         selected_blocklist_profile: "work".to_string(),
         ..AppConfig::default()
-    }
-    .normalized();
-
-    let payload = apply_blocklist_profile_command(
-        &mut config,
-        BlocklistProfileCommandKind::Select {
-            profile: Some("STUDY".to_string()),
-        },
-    )
-    .unwrap();
-
-    assert!(payload.updated);
-    assert_eq!(payload.selected_blocklist_profile, "Study");
-    assert_eq!(config.selected_blocklist_profile, "Study");
-    assert!(config.blocked_sites.is_empty());
-}
-
-#[test]
-fn apply_blocklist_profile_rename_updates_selection_and_name() {
-    let mut config = AppConfig {
-        blocklist_profiles: vec![
-            crate::config::BlocklistProfileConfig {
-                name: "Work".to_string(),
-                sites: vec!["a.com".to_string()],
-                allowlist_sites: Vec::new(),
-            },
-            crate::config::BlocklistProfileConfig {
-                name: "Study".to_string(),
-                sites: vec!["study.com".to_string()],
-                allowlist_sites: Vec::new(),
-            },
-        ],
-        selected_blocklist_profile: "Work".to_string(),
-        ..AppConfig::default()
-    }
-    .normalized();
-
-    let payload = apply_blocklist_profile_command(
-        &mut config,
-        BlocklistProfileCommandKind::Rename {
-            name: "Deep Work".to_string(),
-        },
-    )
-    .unwrap();
-
-    assert!(payload.updated);
-    assert_eq!(payload.selected_blocklist_profile, "Deep Work");
-    assert_eq!(config.selected_blocklist_profile, "Deep Work");
-    assert_eq!(config.blocklist_profiles[0].name, "Deep Work");
-    assert!(config.blocked_sites.is_empty());
-}
-
-#[test]
-fn apply_blocklist_profile_delete_switches_selection() {
-    let mut config = AppConfig {
-        blocklist_profiles: vec![
-            crate::config::BlocklistProfileConfig {
-                name: "Work".to_string(),
-                sites: vec!["a.com".to_string()],
-                allowlist_sites: Vec::new(),
-            },
-            crate::config::BlocklistProfileConfig {
-                name: "Study".to_string(),
-                sites: vec!["study.com".to_string(), "news.com".to_string()],
-                allowlist_sites: vec!["news.com".to_string()],
-            },
-        ],
-        selected_blocklist_profile: "Work".to_string(),
-        ..AppConfig::default()
-    }
-    .normalized();
+    };
 
     let payload =
-        apply_blocklist_profile_command(&mut config, BlocklistProfileCommandKind::Delete).unwrap();
+        apply_site_add_command(&mut config, SiteListTarget::Blocklist, "docs.example.com").unwrap();
 
     assert!(payload.updated);
-    assert_eq!(payload.selected_blocklist_profile, "Study");
-    assert_eq!(config.selected_blocklist_profile, "Study");
+    assert_eq!(config.selected_blocklist_profile, "Default");
     assert_eq!(config.blocklist_profiles.len(), 1);
-    assert!(config.blocked_sites.is_empty());
+    assert_eq!(config.blocklist_profiles[0].name, "Default");
+    assert_eq!(
+        config.blocklist_profiles[0].sites,
+        vec![
+            "a.com".to_string(),
+            "study.com".to_string(),
+            "news.com".to_string(),
+            "docs.example.com".to_string()
+        ]
+    );
+    assert_eq!(
+        config.blocklist_profiles[0].allowlist_sites,
+        vec!["news.com".to_string()]
+    );
 }
 
 #[test]
@@ -2048,6 +1948,33 @@ fn apply_site_delete_command_updates_allowlist_and_effective_blocking() {
     assert!(config.blocklist_profiles[0].allowlist_sites.is_empty());
     assert!(config.blocked_sites.is_empty());
     assert_eq!(payload.effective_blocked_sites_count, 2);
+}
+
+#[test]
+fn apply_site_delete_command_does_not_restore_legacy_blocked_sites() {
+    let mut config = AppConfig {
+        blocked_sites: vec!["legacy.com".to_string()],
+        blocklist_profiles: vec![crate::config::BlocklistProfileConfig {
+            name: "Default".to_string(),
+            sites: vec!["a.com".to_string()],
+            allowlist_sites: Vec::new(),
+        }],
+        selected_blocklist_profile: "Default".to_string(),
+        ..AppConfig::default()
+    }
+    .normalized();
+
+    let payload =
+        apply_site_delete_command(&mut config, SiteListTarget::Blocklist, "legacy.com").unwrap();
+
+    assert!(payload.updated);
+    assert_eq!(payload.removed, "legacy.com");
+    assert!(config.blocked_sites.is_empty());
+    assert_eq!(
+        config.blocklist_profiles[0].sites,
+        vec!["a.com".to_string()]
+    );
+    assert_eq!(payload.effective_blocked_sites_count, 1);
 }
 
 #[test]

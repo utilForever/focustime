@@ -64,13 +64,13 @@ pub(crate) struct AppConfig {
     /// Deprecated blocked-sites mirror (legacy load-time compatibility field).
     #[serde(default, skip_serializing)]
     pub(crate) blocked_sites: Vec<String>,
-    /// Named blocklist profiles.
+    /// Canonical blocklist profile.
     ///
-    /// Each profile stores a separate blocked-sites list. This field supports
-    /// issue #110 and supersedes `blocked_sites` as the primary representation.
+    /// Older configs may contain multiple named profiles; normalization folds
+    /// their site rules into this single `Default` entry.
     #[serde(default)]
     pub(crate) blocklist_profiles: Vec<BlocklistProfileConfig>,
-    /// Name of the active blocklist profile.
+    /// Compatibility name for the active blocklist profile.
     #[serde(default = "default_blocklist_profile_name")]
     pub(crate) selected_blocklist_profile: String,
     /// Selected profile identifier.

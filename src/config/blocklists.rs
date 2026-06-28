@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::normalize_nonempty_or_default_string;
 use crate::blocker::{domain_rule_matches_host, normalize_domain_rule};
@@ -140,54 +140,26 @@ pub(super) fn normalize_blocklist_profiles(
     profiles: &[BlocklistProfileConfig],
     legacy_blocked_sites: &[String],
 ) -> Vec<BlocklistProfileConfig> {
-    let mut normalized = Vec::new();
-    let mut seen_names = HashSet::new();
-
+    let mut sites = dedup_case_insensitive(legacy_blocked_sites.iter().cloned());
+    let mut allowlist_sites = Vec::new();
     for profile in profiles {
-        let base_name =
-            normalize_nonempty_or_default_string(&profile.name, &default_blocklist_profile_name());
-        let name = make_unique_profile_name(&base_name, &mut seen_names);
-        normalized.push(BlocklistProfileConfig {
-            name,
-            sites: dedup_case_insensitive(profile.sites.iter().cloned()),
-            allowlist_sites: dedup_case_insensitive(profile.allowlist_sites.iter().cloned()),
-        });
+        merge_unique_case_insensitive(&mut sites, &profile.sites);
+        merge_unique_case_insensitive(&mut allowlist_sites, &profile.allowlist_sites);
     }
+    remove_collapsed_block_allow_collisions(profiles, legacy_blocked_sites, &mut allowlist_sites);
 
-    if normalized.is_empty() {
-        return vec![BlocklistProfileConfig {
-            name: default_blocklist_profile_name(),
-            sites: dedup_case_insensitive(legacy_blocked_sites.iter().cloned()),
-            allowlist_sites: Vec::new(),
-        }];
-    }
-
-    normalized
+    vec![BlocklistProfileConfig {
+        name: default_blocklist_profile_name(),
+        sites,
+        allowlist_sites,
+    }]
 }
 
 pub(super) fn normalize_selected_blocklist_profile(
-    selected_name: &str,
-    profiles: &[BlocklistProfileConfig],
+    _selected_name: &str,
+    _profiles: &[BlocklistProfileConfig],
 ) -> String {
-    let selected_name = selected_name.trim();
-    if selected_name.is_empty() {
-        return profiles
-            .first()
-            .map(|profile| profile.name.clone())
-            .unwrap_or_else(default_blocklist_profile_name);
-    }
-
-    if let Some(profile) = profiles
-        .iter()
-        .find(|profile| profile.name.eq_ignore_ascii_case(selected_name))
-    {
-        profile.name.clone()
-    } else {
-        profiles
-            .first()
-            .map(|profile| profile.name.clone())
-            .unwrap_or_else(default_blocklist_profile_name)
-    }
+    default_blocklist_profile_name()
 }
 
 pub(super) fn make_unique_profile_name(
@@ -282,6 +254,75 @@ fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
             target.push(value.clone());
         }
     }
+}
+
+fn remove_collapsed_block_allow_collisions(
+    profiles: &[BlocklistProfileConfig],
+    legacy_blocked_sites: &[String],
+    allowlist_sites: &mut Vec<String>,
+) {
+    let legacy_blocked_rules: HashSet<String> = legacy_blocked_sites
+        .iter()
+        .filter_map(|site| normalized_blocklist_rule_key(site))
+        .collect();
+    let profile_blocked_rules: Vec<HashSet<String>> = profiles
+        .iter()
+        .map(|profile| {
+            profile
+                .sites
+                .iter()
+                .filter_map(|site| normalized_blocklist_rule_key(site))
+                .collect()
+        })
+        .collect();
+    let mut allowlist_sources = HashMap::new();
+    for (profile_index, profile) in profiles.iter().enumerate() {
+        for site in &profile.allowlist_sites {
+            if let Some(rule) = normalized_blocklist_rule_key(site) {
+                allowlist_sources
+                    .entry(rule)
+                    .or_insert_with(HashSet::new)
+                    .insert(profile_index);
+            }
+        }
+    }
+    retain_allowlist_entries_without_collapsed_block_collisions(
+        &legacy_blocked_rules,
+        &profile_blocked_rules,
+        &allowlist_sources,
+        allowlist_sites,
+    );
+}
+
+pub(super) fn normalized_blocklist_rule_key(site: &str) -> Option<String> {
+    normalize_domain_rule(site)
+        .ok()
+        .map(|site| site.to_ascii_lowercase())
+}
+
+pub(super) fn retain_allowlist_entries_without_collapsed_block_collisions(
+    legacy_blocked_rules: &HashSet<String>,
+    profile_blocked_rules: &[HashSet<String>],
+    allowlist_sources: &HashMap<String, HashSet<usize>>,
+    allowlist_sites: &mut Vec<String>,
+) {
+    allowlist_sites.retain(|site| {
+        let Some(rule) = normalized_blocklist_rule_key(site) else {
+            return true;
+        };
+        if legacy_blocked_rules.contains(&rule) {
+            return false;
+        }
+        let Some(source_indexes) = allowlist_sources.get(&rule) else {
+            return true;
+        };
+        !profile_blocked_rules
+            .iter()
+            .enumerate()
+            .any(|(profile_index, blocked_rules)| {
+                !source_indexes.contains(&profile_index) && blocked_rules.contains(&rule)
+            })
+    });
 }
 
 fn flatten_blocklist_categories(

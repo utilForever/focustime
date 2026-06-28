@@ -133,18 +133,11 @@ cargo run -- --strict
 cargo run -- --strict=on
 cargo run -- --strict --json
 
-# Manage blocklist profiles (active profile + CRUD)
-cargo run -- --blocklist-profile
-cargo run -- --blocklist-profile Work
-cargo run -- --blocklist-profile-create Study
-cargo run -- --blocklist-profile-rename "Deep Work"
-cargo run -- --blocklist-profile-delete --json
-
 # Inspect the stable Focus History KPI dashboard layout
 cargo run -- --history-dashboard
 cargo run -- --history-dashboard --json
 
-# Manage blocklist/allowlist sites for the active blocklist profile
+# Manage canonical blocklist/allowlist sites
 cargo run -- --blocklist-sites
 cargo run -- --allowlist-sites --json
 cargo run -- --blocklist-site-add="youtube.com, *.facebook.com"
@@ -233,7 +226,7 @@ detected.
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | Top-level `focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval` | `[custom_profile]`                                                                                                                                | v0.12.0           |
 | Top-level `notifications`, `auto_start`, `strict_mode`, `recurring_schedule`         | `[profile_automation.<preset>.notifications]`, `[profile_automation.<preset>.auto_start]`, and per-preset `strict_mode` / `recurring_schedule` | v0.12.0           |
-| Top-level `blocked_sites` (without canonical profiles)                               | `[[blocklist_profiles]]` + `selected_blocklist_profile`                                                                                           | v0.12.0           |
+| Top-level `blocked_sites`                                                            | Canonical `[[blocklist_profiles]]` entry named `Default`                                                                                          | v0.12.0           |
 
 Milestone policy:
 
@@ -282,7 +275,7 @@ Early deprecation notices:
 | Deprecated or overlapping path | Supported replacement behavior |
 | --- | --- |
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--diagnostics` when stale keys are reported. |
-| Legacy automation and blocklist top-level fields | Use per-profile automation tables, `[[blocklist_profiles]]`, and `selected_blocklist_profile`; inspect with `--diagnostics`. |
+| Legacy automation and blocklist top-level fields | Use per-profile automation tables and the canonical `Default` blocklist profile; inspect with `--diagnostics`. |
 | Retired blocklist category config is migration-only | `--diagnostics` reports migration guidance to flatten category `sites` and `allowlist_sites` into profile-level lists; manage hostnames directly with `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`. |
 | Temporary allowlist CLI/runtime workflow | Use permanent `--allowlist-site-add`, `--allowlist-site-edit`, and `--allowlist-site-delete` for site-rule management. |
 | Break-glass temporary override workflow | Removed; use normal timer controls (`--pause`, `--resume`, `--stop`) for session flow changes or blocklist/allowlist commands for site-rule changes. |
@@ -479,7 +472,7 @@ matches `docs.example.com` and `api.example.com`, but does **not** match
 schema_version = 2
 selected_profile = "advanced"
 selected_theme_preset = "classic"
-selected_blocklist_profile = "Work"
+selected_blocklist_profile = "Default"
 
 [shortcuts]
 timer_toggle_pause = "space"
@@ -490,14 +483,9 @@ open_stats_history = "h"
 quit = "q"
 
 [[blocklist_profiles]]
-name = "Work"
+name = "Default"
 sites = ["youtube.com", "*.facebook.com", "reddit.com"]
 allowlist_sites = ["reddit.com"]
-
-[[blocklist_profiles]]
-name = "Study"
-sites = ["x.com", "news.ycombinator.com"]
-allowlist_sites = []
 
 [custom_profile]
 focus_secs = 1800
@@ -583,10 +571,6 @@ Open the site manager from timer view with **`b`**.
 - `e`: edit the selected hostname
 - `d` or `Delete`: remove the selected hostname
 - `m`: toggle between editing blocklist sites and allowlist exceptions
-- `[` / `]`: switch active blocklist profile
-- `n`: create a blocklist profile
-- `r`: rename the active blocklist profile
-- `x`: delete the active blocklist profile
 - `↑/↓` (default `navigate_up`/`navigate_down`): move selection
 - `b`: return to timer view
 - `Esc` (default `cancel`): return to timer view only when add/edit mode is not active
@@ -602,13 +586,13 @@ Add/import input supports:
 Invalid and duplicate entries are reported inline so you can fix them without leaving the view.
 
 Allowlist entries act as explicit exceptions: effective focus blocking is computed as
-**blocklist sites minus allowlist sites** for the active profile, using exact and
+**blocklist sites minus allowlist sites** for the canonical blocklist, using exact and
 wildcard rule matching.
 
 Older blocklist category config is accepted only as migration input.
 `--diagnostics` reports guidance to flatten category `sites` and
-`allowlist_sites` into each parent `[[blocklist_profiles]]` entry, and runtime
-saves persist only profile-level `sites` and `allowlist_sites`.
+`allowlist_sites`, and runtime saves persist one canonical `Default`
+`[[blocklist_profiles]]` entry.
 
 For hosts-based blocking to apply reliably, keep DNS-over-HTTPS disabled in your browser.
 `focustime` supports hosts-file blocking as the single blocking backend.

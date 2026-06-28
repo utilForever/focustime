@@ -1,8 +1,8 @@
 use crate::ui::{
-    Alignment, App, Block, BlocklistProfileInputMode, Borders, Color, Constraint, Direction, Frame,
-    Layout, Line, List, ListItem, ListState, Modifier, NavigationAction, Paragraph, Rect,
-    ShortcutAction, SiteFeedbackLevel, SiteInputMode, SiteListMode, Span, Style, TimerPhase,
-    TimerStatus, app_color, centered_rect, render_centered_error, render_hint_lines,
+    Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
+    ListItem, ListState, Modifier, NavigationAction, Paragraph, Rect, ShortcutAction,
+    SiteFeedbackLevel, SiteInputMode, SiteListMode, Span, Style, TimerPhase, TimerStatus,
+    app_color, centered_rect, render_centered_error, render_hint_lines,
 };
 
 pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
@@ -33,10 +33,9 @@ pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
         .margin(2)
         .constraints([
             Constraint::Length(1), // status line
-            Constraint::Length(1), // profile line
+            Constraint::Length(1), // policy line
             Constraint::Min(4),    // site list
             Constraint::Length(3), // site input area
-            Constraint::Length(3), // profile input area
             Constraint::Length(1), // error/feedback line
             Constraint::Length(3), // key hints
         ])
@@ -49,23 +48,19 @@ pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
     );
 
     let site_list_mode = app.site_list_mode();
-    let profile_text = format!(
-        "Profile: {} ({}/{}) · List: {} · Effective blocks: {}",
-        app.active_blocklist_profile_name(),
-        app.active_blocklist_profile_position(),
-        app.blocklist_profile_count(),
+    let policy_text = format!(
+        "Canonical blocklist · List: {} · Effective blocks: {}",
         site_list_mode.label(),
         app.effective_blocked_site_count()
     );
     frame.render_widget(
-        Paragraph::new(profile_text)
+        Paragraph::new(policy_text)
             .alignment(Alignment::Center)
             .style(Style::default().fg(app_color(app, Color::Cyan))),
         inner[1],
     );
 
     let input_mode = app.site_input_mode();
-    let profile_input_mode = app.blocklist_profile_input_mode();
     let (list_title_label, empty_text, idle_input_text) =
         site_manager_copy_for_mode(app, site_list_mode);
     render_site_manager_site_list(frame, app, inner[2], &list_title_label, &empty_text);
@@ -77,12 +72,11 @@ pub(super) fn render_site_manager(frame: &mut Frame, app: &App) {
         site_list_mode,
         &idle_input_text,
     );
-    render_site_manager_profile_input(frame, app, inner[4], profile_input_mode);
-    render_site_manager_feedback_line(frame, app, inner[5]);
+    render_site_manager_feedback_line(frame, app, inner[4]);
     render_hint_lines(
         frame,
         app,
-        inner[6],
+        inner[5],
         site_manager_hint_lines(app, site_list_mode, input_mode),
     );
 }
@@ -167,8 +161,7 @@ fn render_site_manager_site_list(
     empty_text: &str,
 ) {
     let list_title = format!(
-        " {list_title_label} · {} ({}) ",
-        app.active_blocklist_profile_name(),
+        " {list_title_label} · Canonical ({}) ",
         app.active_policy_site_count()
     );
     let list_block = Block::default()
@@ -245,47 +238,6 @@ fn render_site_manager_input(
     );
 }
 
-fn render_site_manager_profile_input(
-    frame: &mut Frame,
-    app: &App,
-    area: Rect,
-    profile_input_mode: Option<BlocklistProfileInputMode>,
-) {
-    let profile_input_title = match profile_input_mode {
-        Some(BlocklistProfileInputMode::Create) => " New Blocklist Profile ",
-        Some(BlocklistProfileInputMode::Rename) => " Rename Blocklist Profile ",
-        None => " Blocklist Profiles ",
-    };
-    let active_style = if app.blocklist_profile_input_active {
-        Style::default().fg(app_color(app, Color::Yellow))
-    } else {
-        Style::default().fg(app_color(app, Color::DarkGray))
-    };
-    let profile_input_text = if app.blocklist_profile_input_active {
-        format!("{}_", app.blocklist_profile_input)
-    } else {
-        format!(
-            "Profiles [{} {}] switch · {} create/{} rename/{} delete",
-            app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
-            app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
-            app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
-            app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
-            app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
-        )
-    };
-    frame.render_widget(
-        Paragraph::new(profile_input_text)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(profile_input_title)
-                    .style(active_style),
-            )
-            .style(active_style),
-        area,
-    );
-}
-
 fn render_site_manager_feedback_line(frame: &mut Frame, app: &App, area: Rect) {
     if let Some(err) = app.block_error.as_ref() {
         let privilege_hint = if cfg!(target_os = "windows") {
@@ -355,18 +307,6 @@ fn site_manager_hint_lines(
         ];
     }
 
-    if app.blocklist_profile_input_active {
-        return vec![
-            Line::from(format!(
-                "Profile: {} Save  {} Cancel",
-                app.navigation_hint(NavigationAction::Confirm),
-                app.navigation_hint(NavigationAction::Cancel)
-            )),
-            Line::from("Tip: manage blocklist/allowlist sites directly on profiles"),
-            Line::from("Tip: disable DNS-over-HTTPS in your browser so blocking can apply"),
-        ];
-    }
-
     if app.strict_mode_enforced_for_focus() {
         return vec![
             Line::from(format!(
@@ -381,12 +321,7 @@ fn site_manager_hint_lines(
                 app.navigation_hint(NavigationAction::MoveDown),
             )),
             Line::from(format!(
-                "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/{}] Back  [{}] Quit (Locked)",
-                app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
-                app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
-                app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
-                app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
-                app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
+                "[{}/{}] Back  [{}] Quit (Locked)",
                 app.shortcut_label(ShortcutAction::BackSiteManager),
                 app.navigation_label(NavigationAction::Cancel),
                 app.shortcut_label(ShortcutAction::Quit),
@@ -408,12 +343,7 @@ fn site_manager_hint_lines(
             app.navigation_hint(NavigationAction::MoveDown),
         )),
         Line::from(format!(
-            "Profiles: [{} {}] Switch  {} New  {} Rename  {} Delete  [{}/{}] Back",
-            app.shortcut_label(ShortcutAction::SelectPreviousBlocklistProfile),
-            app.shortcut_label(ShortcutAction::SelectNextBlocklistProfile),
-            app.shortcut_hint(ShortcutAction::CreateBlocklistProfile),
-            app.shortcut_hint(ShortcutAction::RenameBlocklistProfile),
-            app.shortcut_hint(ShortcutAction::DeleteBlocklistProfile),
+            "[{}/{}] Back",
             app.shortcut_label(ShortcutAction::BackSiteManager),
             app.navigation_label(NavigationAction::Cancel),
         )),

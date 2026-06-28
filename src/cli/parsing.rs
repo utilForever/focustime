@@ -11,9 +11,8 @@ pub(super) use value::{
 };
 
 use crate::cli::{
-    BlocklistProfileCommandKind, BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind,
-    HistoryDashboardCommandKind, OutputMode, ParsedToken, PrimaryCommand, SiteListTarget,
-    USAGE_TEXT,
+    BlocklistSiteCommandKind, CliAction, CliCommand, CommandKind, HistoryDashboardCommandKind,
+    OutputMode, ParsedToken, PrimaryCommand, SiteListTarget, USAGE_TEXT,
 };
 
 pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, OutputMode), String> {
@@ -60,10 +59,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Backup(_)
             | ParsedToken::Restore(_)
             | ParsedToken::Export(_)
-            | ParsedToken::BlocklistProfile(_)
-            | ParsedToken::BlocklistProfileCreate(_)
-            | ParsedToken::BlocklistProfileRename(_)
-            | ParsedToken::BlocklistProfileDelete
             | ParsedToken::HistoryDashboard
             | ParsedToken::BlocklistSites
             | ParsedToken::AllowlistSites
@@ -120,7 +115,14 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
         | "--session-template-rename"
         | "--session-template-delete" => Some(RemovedOptionGuidance {
             summary: "Session template commands were removed.",
-            replacement: "Use `--task`, `--profile`, `--schedule`/`--schedule-set`, and blocklist profile commands directly.",
+            replacement: "Use `--task`, `--profile`, `--schedule`/`--schedule-set`, and blocklist/allowlist site commands directly.",
+        }),
+        "--blocklist-profile"
+        | "--blocklist-profile-create"
+        | "--blocklist-profile-rename"
+        | "--blocklist-profile-delete" => Some(RemovedOptionGuidance {
+            summary: "Blocklist profile commands were removed.",
+            replacement: "Use canonical site commands: `--blocklist-sites`, `--blocklist-site-add`, `--allowlist-sites`, and `--allowlist-site-add`.",
         }),
         "--config-doctor" | "--config-migrate" | "--config-migrate-apply" => {
             Some(RemovedOptionGuidance {
@@ -206,21 +208,6 @@ pub(super) fn parse_primary_command(
             }
             ParsedToken::Export(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
-            }
-            ParsedToken::BlocklistProfile(profile) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::BlocklistProfile(profile.clone()),
-            )?,
-            ParsedToken::BlocklistProfileCreate(name) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::BlocklistProfileCreate(name.clone()),
-            )?,
-            ParsedToken::BlocklistProfileRename(name) => set_primary_command(
-                &mut primary,
-                PrimaryCommand::BlocklistProfileRename(name.clone()),
-            )?,
-            ParsedToken::BlocklistProfileDelete => {
-                set_primary_command(&mut primary, PrimaryCommand::BlocklistProfileDelete)?
             }
             ParsedToken::HistoryDashboard => {
                 set_primary_command(&mut primary, PrimaryCommand::HistoryDashboard)?
@@ -379,34 +366,6 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Export { dir },
             output,
         })),
-        Some(PrimaryCommand::BlocklistProfile(profile)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistProfile {
-                command: BlocklistProfileCommandKind::Select { profile },
-            },
-            output,
-        })),
-        Some(PrimaryCommand::BlocklistProfileCreate(name)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::BlocklistProfile {
-                    command: BlocklistProfileCommandKind::Create { name },
-                },
-                output,
-            }))
-        }
-        Some(PrimaryCommand::BlocklistProfileRename(name)) => {
-            Ok(CliAction::RunCommand(CliCommand {
-                kind: CommandKind::BlocklistProfile {
-                    command: BlocklistProfileCommandKind::Rename { name },
-                },
-                output,
-            }))
-        }
-        Some(PrimaryCommand::BlocklistProfileDelete) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::BlocklistProfile {
-                command: BlocklistProfileCommandKind::Delete,
-            },
-            output,
-        })),
         Some(PrimaryCommand::HistoryDashboard) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::HistoryDashboard {
                 command: HistoryDashboardCommandKind::Show,
@@ -512,10 +471,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Backup(_) => "--backup",
         PrimaryCommand::Restore(_) => "--restore",
         PrimaryCommand::Export(_) => "--export",
-        PrimaryCommand::BlocklistProfile(_) => "--blocklist-profile",
-        PrimaryCommand::BlocklistProfileCreate(_) => "--blocklist-profile-create",
-        PrimaryCommand::BlocklistProfileRename(_) => "--blocklist-profile-rename",
-        PrimaryCommand::BlocklistProfileDelete => "--blocklist-profile-delete",
         PrimaryCommand::HistoryDashboard => "--history-dashboard",
         PrimaryCommand::BlocklistSites => "--blocklist-sites",
         PrimaryCommand::AllowlistSites => "--allowlist-sites",

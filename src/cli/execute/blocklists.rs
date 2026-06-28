@@ -1,32 +1,11 @@
 use crate::cli::{
-    AppConfig, BlocklistProfileCommandKind, BlocklistProfileCommandOutput, BlocklistProfileConfig,
-    BlocklistProfileSummaryOutput, BlocklistSiteCommandKind, EditSiteResult,
+    AppConfig, BlocklistProfileConfig, BlocklistSiteCommandKind, EditSiteResult,
     InvalidSiteEntryOutput, InvalidSiteInput, OutputMode, SiteAddCommandOutput, SiteBlocker,
     SiteDeleteCommandOutput, SiteEditCommandOutput, SiteEditValue, SiteListCommandOutput,
-    SiteListTarget, display_input_value, effective_blocked_sites_for_profile,
-    print_blocklist_profile_command_output, print_json, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output,
+    SiteListTarget, display_input_value, effective_blocked_sites_for_profile, print_json,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output,
 };
-
-pub(super) fn execute_blocklist_profile_command(
-    command: BlocklistProfileCommandKind,
-    output: OutputMode,
-) -> Result<(), String> {
-    let mut config = AppConfig::load().normalized();
-    let payload = apply_blocklist_profile_command(&mut config, command)?;
-    if payload.updated {
-        config
-            .save()
-            .map_err(|error| format!("Failed to save blocklist profile settings: {error}"))?;
-    }
-
-    match output {
-        OutputMode::Text => print_blocklist_profile_command_output(&payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
 
 pub(super) fn execute_blocklist_sites_command(
     target: SiteListTarget,
@@ -80,115 +59,6 @@ pub(super) fn execute_blocklist_sites_command(
         }
     }
     Ok(())
-}
-
-pub(in crate::cli) fn apply_blocklist_profile_command(
-    config: &mut AppConfig,
-    command: BlocklistProfileCommandKind,
-) -> Result<BlocklistProfileCommandOutput, String> {
-    ensure_blocklist_profiles(config);
-
-    let (action, updated) = match command {
-        BlocklistProfileCommandKind::Select { profile } => {
-            handle_select_blocklist_profile(config, profile)?
-        }
-        BlocklistProfileCommandKind::Create { name } => {
-            handle_create_blocklist_profile(config, name)?
-        }
-        BlocklistProfileCommandKind::Rename { name } => {
-            handle_rename_blocklist_profile(config, name)?
-        }
-        BlocklistProfileCommandKind::Delete => handle_delete_blocklist_profile(config)?,
-    };
-
-    if updated {
-        sync_selected_blocklist_profile(config);
-    }
-    Ok(build_blocklist_profile_command_output(
-        config, action, updated,
-    ))
-}
-
-fn handle_select_blocklist_profile(
-    config: &mut AppConfig,
-    profile: Option<String>,
-) -> Result<(&'static str, bool), String> {
-    let mut updated = false;
-    if let Some(profile) = profile {
-        let index = blocklist_profile_index_by_name(&config.blocklist_profiles, &profile)
-            .ok_or_else(|| format!("Unknown blocklist profile `{profile}`."))?;
-        let selected = config.blocklist_profiles[index].name.clone();
-        if !config
-            .selected_blocklist_profile
-            .eq_ignore_ascii_case(&selected)
-        {
-            config.selected_blocklist_profile = selected;
-            updated = true;
-        }
-    }
-    Ok(("blocklist-profile", updated))
-}
-
-fn handle_create_blocklist_profile(
-    config: &mut AppConfig,
-    name: String,
-) -> Result<(&'static str, bool), String> {
-    let name = name.trim().to_string();
-    if name.is_empty() {
-        return Err("Profile name cannot be empty.".to_string());
-    }
-    if blocklist_profile_index_by_name(&config.blocklist_profiles, &name).is_some() {
-        return Err(format!("Profile `{name}` already exists."));
-    }
-    config.blocklist_profiles.push(BlocklistProfileConfig {
-        name: name.clone(),
-        sites: Vec::new(),
-        allowlist_sites: Vec::new(),
-    });
-    config.selected_blocklist_profile = name;
-    Ok(("blocklist-profile-create", true))
-}
-
-fn handle_rename_blocklist_profile(
-    config: &mut AppConfig,
-    name: String,
-) -> Result<(&'static str, bool), String> {
-    let index = selected_blocklist_profile_index(config);
-    let current_name = config.blocklist_profiles[index].name.clone();
-    let name = name.trim().to_string();
-    if name.is_empty() {
-        return Err("Profile name cannot be empty.".to_string());
-    }
-    if current_name.eq_ignore_ascii_case(&name) {
-        return Ok(("blocklist-profile-rename", false));
-    }
-
-    let duplicate =
-        config
-            .blocklist_profiles
-            .iter()
-            .enumerate()
-            .any(|(candidate_index, profile)| {
-                candidate_index != index && profile.name.eq_ignore_ascii_case(&name)
-            });
-    if duplicate {
-        return Err(format!("Profile `{name}` already exists."));
-    }
-
-    config.blocklist_profiles[index].name = name.clone();
-    config.selected_blocklist_profile = name;
-    Ok(("blocklist-profile-rename", true))
-}
-
-fn handle_delete_blocklist_profile(config: &mut AppConfig) -> Result<(&'static str, bool), String> {
-    if config.blocklist_profiles.len() <= 1 {
-        return Err("At least one blocklist profile is required.".to_string());
-    }
-    let index = selected_blocklist_profile_index(config);
-    config.blocklist_profiles.remove(index);
-    let next_index = index.min(config.blocklist_profiles.len().saturating_sub(1));
-    config.selected_blocklist_profile = config.blocklist_profiles[next_index].name.clone();
-    Ok(("blocklist-profile-delete", true))
 }
 
 pub(in crate::cli) fn apply_site_add_command(
@@ -329,29 +199,31 @@ pub(in crate::cli) fn apply_site_delete_command(
 }
 
 fn ensure_blocklist_profiles(config: &mut AppConfig) {
-    if config.blocklist_profiles.is_empty() {
-        config
-            .blocklist_profiles
-            .push(BlocklistProfileConfig::default());
-        config.selected_blocklist_profile = config.blocklist_profiles[0].name.clone();
+    let legacy_blocked_sites = std::mem::take(&mut config.blocked_sites);
+    let mut canonical = BlocklistProfileConfig {
+        name: "Default".to_string(),
+        sites: Vec::new(),
+        allowlist_sites: Vec::new(),
+    };
+    merge_unique_case_insensitive(&mut canonical.sites, &legacy_blocked_sites);
+    for profile in &config.blocklist_profiles {
+        merge_unique_case_insensitive(&mut canonical.sites, &profile.sites);
+        merge_unique_case_insensitive(&mut canonical.allowlist_sites, &profile.allowlist_sites);
     }
-}
-
-fn blocklist_profile_index_by_name(
-    profiles: &[BlocklistProfileConfig],
-    name: &str,
-) -> Option<usize> {
-    profiles
-        .iter()
-        .position(|profile| profile.name.eq_ignore_ascii_case(name.trim()))
+    config.blocklist_profiles = vec![canonical];
+    config.selected_blocklist_profile = "Default".to_string();
 }
 
 fn selected_blocklist_profile_index(config: &AppConfig) -> usize {
-    blocklist_profile_index_by_name(
-        &config.blocklist_profiles,
-        &config.selected_blocklist_profile,
-    )
-    .unwrap_or(0)
+    config
+        .blocklist_profiles
+        .iter()
+        .position(|profile| {
+            profile
+                .name
+                .eq_ignore_ascii_case(&config.selected_blocklist_profile)
+        })
+        .unwrap_or(0)
 }
 
 fn active_profile_sites(
@@ -384,36 +256,6 @@ fn sync_selected_blocklist_profile(config: &mut AppConfig) {
     config.selected_blocklist_profile = config.blocklist_profiles[index].name.clone();
 }
 
-fn build_blocklist_profile_command_output(
-    config: &AppConfig,
-    action: &'static str,
-    updated: bool,
-) -> BlocklistProfileCommandOutput {
-    let selected_name = config
-        .blocklist_profiles
-        .get(selected_blocklist_profile_index(config))
-        .map(|profile| profile.name.clone())
-        .unwrap_or_else(|| config.selected_blocklist_profile.clone());
-    let profiles = config
-        .blocklist_profiles
-        .iter()
-        .map(|profile| BlocklistProfileSummaryOutput {
-            name: profile.name.clone(),
-            active: profile.name.eq_ignore_ascii_case(&selected_name),
-            blocklist_sites_count: profile.sites.len(),
-            allowlist_sites_count: profile.allowlist_sites.len(),
-            effective_blocked_sites_count: effective_blocked_sites_for_profile(profile).len(),
-        })
-        .collect();
-
-    BlocklistProfileCommandOutput {
-        action,
-        updated,
-        selected_blocklist_profile: selected_name,
-        profiles,
-    }
-}
-
 fn build_site_list_command_output(
     config: &AppConfig,
     target: SiteListTarget,
@@ -441,6 +283,18 @@ fn build_site_list_command_output(
         target,
         sites: active_profile_sites(config, index, target).to_vec(),
         effective_blocked_sites_count: effective_blocked_sites_for_profile(profile).len(),
+    }
+}
+
+fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
+    let mut seen: std::collections::HashSet<String> = target
+        .iter()
+        .map(|value| value.to_ascii_lowercase())
+        .collect();
+    for value in source {
+        if seen.insert(value.to_ascii_lowercase()) {
+            target.push(value.clone());
+        }
     }
 }
 

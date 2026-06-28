@@ -59,7 +59,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 24] = [
+    let parsers: [(&str, ValueArgParser); 21] = [
         ("--task", classify_task_arg),
         ("--profile", classify_profile_arg),
         ("--theme", classify_theme_arg),
@@ -75,15 +75,6 @@ fn classify_value_arg(
         ("--backup", classify_backup_arg),
         ("--restore", classify_restore_arg),
         ("--export", classify_export_arg),
-        ("--blocklist-profile", classify_blocklist_profile_arg),
-        (
-            "--blocklist-profile-create",
-            classify_blocklist_profile_create_arg,
-        ),
-        (
-            "--blocklist-profile-rename",
-            classify_blocklist_profile_rename_arg,
-        ),
         ("--blocklist-site-add", classify_blocklist_site_add_arg),
         ("--allowlist-site-add", classify_allowlist_site_add_arg),
         ("--blocklist-site-edit", classify_blocklist_site_edit_arg),
@@ -120,7 +111,6 @@ fn classify_simple_flag(arg: &str) -> Option<ParsedToken> {
         "--status" => Some(ParsedToken::Status),
         "--schedule" => Some(ParsedToken::Schedule),
         "--diagnostics" => Some(ParsedToken::Diagnostics),
-        "--blocklist-profile-delete" => Some(ParsedToken::BlocklistProfileDelete),
         "--history-dashboard" => Some(ParsedToken::HistoryDashboard),
         "--blocklist-sites" => Some(ParsedToken::BlocklistSites),
         "--allowlist-sites" => Some(ParsedToken::AllowlistSites),
@@ -216,59 +206,6 @@ fn classify_watch_arg(args: &[String], index: usize) -> Result<(ParsedToken, usi
         ));
     }
     Ok((ParsedToken::Watch(None), 1))
-}
-
-fn classify_blocklist_profile_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        if next.trim().is_empty() {
-            return Err(invalid_usage(
-                "`--blocklist-profile` requires a profile name when a value is provided.",
-            ));
-        }
-        return Ok((ParsedToken::BlocklistProfile(Some(next.clone())), 2));
-    }
-    Ok((ParsedToken::BlocklistProfile(None), 1))
-}
-
-fn classify_blocklist_profile_create_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(
-            next,
-            "`--blocklist-profile-create` requires a profile name.",
-        )?;
-        return Ok((ParsedToken::BlocklistProfileCreate(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--blocklist-profile-create` requires a profile name. Use `--blocklist-profile-create=NAME` or `--blocklist-profile-create NAME`.",
-    ))
-}
-
-fn classify_blocklist_profile_rename_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        let value = require_nonempty_key_value(
-            next,
-            "`--blocklist-profile-rename` requires a profile name.",
-        )?;
-        return Ok((ParsedToken::BlocklistProfileRename(value.to_string()), 2));
-    }
-    Err(invalid_usage(
-        "`--blocklist-profile-rename` requires a profile name. Use `--blocklist-profile-rename=NAME` or `--blocklist-profile-rename NAME`.",
-    ))
 }
 
 fn classify_blocklist_site_add_arg(

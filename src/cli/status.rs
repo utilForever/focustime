@@ -25,12 +25,7 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let monthly_goal_snapshot = effective_monthly_goal_snapshot(config, stats, day_date);
     let active_sites_count = config
         .blocklist_profiles
-        .iter()
-        .find(|profile| {
-            profile
-                .name
-                .eq_ignore_ascii_case(&config.selected_blocklist_profile)
-        })
+        .first()
         .map(|profile| effective_blocked_sites_for_profile(profile).len())
         .unwrap_or_default();
     let selected_automation = config.profile_automation_for(config.selected_profile);
@@ -73,7 +68,7 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
         selected_profile: profile_view(config.selected_profile, &config.effective_custom_profile()),
         selected_theme_preset: theme_preset_view(config.selected_theme_preset),
         selected_task_label,
-        selected_blocklist_profile: config.selected_blocklist_profile.clone(),
+        selected_blocklist_profile: "Default".to_string(),
         blocked_sites_count: active_sites_count,
         strict_mode: selected_automation.strict_mode,
         goal: GoalOutput {

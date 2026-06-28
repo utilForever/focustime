@@ -25,12 +25,11 @@ mod data;
 mod diagnostics;
 mod status;
 
+use blocklists::execute_blocklist_sites_command;
 #[cfg(test)]
 pub(super) use blocklists::{
-    apply_blocklist_profile_command, apply_site_add_command, apply_site_delete_command,
-    apply_site_edit_command,
+    apply_site_add_command, apply_site_delete_command, apply_site_edit_command,
 };
-use blocklists::{execute_blocklist_profile_command, execute_blocklist_sites_command};
 #[cfg(test)]
 pub(super) use dashboard::apply_history_dashboard_command;
 use dashboard::execute_history_dashboard_command;
@@ -94,10 +93,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Export { dir } => {
             execute_export_command(dir, cli_command.output).map_err(UserMessage::from)
         }
-        CommandKind::BlocklistProfile { command } => {
-            execute_blocklist_profile_command(command, cli_command.output)
-                .map_err(UserMessage::from)
-        }
         CommandKind::BlocklistSites { target, command } => {
             execute_blocklist_sites_command(target, command, cli_command.output)
                 .map_err(UserMessage::from)
@@ -132,7 +127,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Backup { .. } => Some("backup"),
         CommandKind::Restore { .. } => Some("restore"),
         CommandKind::Export { .. } => Some("export"),
-        CommandKind::BlocklistProfile { .. } => Some("blocklist-profile"),
         CommandKind::BlocklistSites { .. } => Some("blocklist-sites"),
         CommandKind::HistoryDashboard { .. } => Some("history-dashboard"),
     }

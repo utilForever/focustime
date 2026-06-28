@@ -6,7 +6,7 @@ use crate::cli::{
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 24] = [
+    let parsers: [KeyValueParser; 21] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_theme_key_value_arg,
@@ -22,9 +22,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_backup_key_value_arg,
         parse_restore_key_value_arg,
         parse_export_key_value_arg,
-        parse_blocklist_profile_key_value_arg,
-        parse_blocklist_profile_create_key_value_arg,
-        parse_blocklist_profile_rename_key_value_arg,
         parse_blocklist_site_add_key_value_arg,
         parse_allowlist_site_add_key_value_arg,
         parse_blocklist_site_edit_key_value_arg,
@@ -201,37 +198,6 @@ fn parse_watch_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
         return Ok(Some(ParsedToken::Watch(Some(parse_watch_interval_secs(
             value,
         )?))));
-    }
-    Ok(None)
-}
-
-fn parse_blocklist_profile_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--blocklist-profile=") {
-        let value =
-            require_nonempty_key_value(value, "`--blocklist-profile=` requires a profile name.")?;
-        return Ok(Some(ParsedToken::BlocklistProfile(Some(value.to_string()))));
-    }
-    Ok(None)
-}
-
-fn parse_blocklist_profile_create_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--blocklist-profile-create=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--blocklist-profile-create=` requires a profile name.",
-        )?;
-        return Ok(Some(ParsedToken::BlocklistProfileCreate(value.to_string())));
-    }
-    Ok(None)
-}
-
-fn parse_blocklist_profile_rename_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--blocklist-profile-rename=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--blocklist-profile-rename=` requires a profile name.",
-        )?;
-        return Ok(Some(ParsedToken::BlocklistProfileRename(value.to_string())));
     }
     Ok(None)
 }

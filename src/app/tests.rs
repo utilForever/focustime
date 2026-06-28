@@ -1908,20 +1908,6 @@ fn site_manager_bulk_add_via_paste_supports_comma_and_newline() {
 }
 
 #[test]
-fn site_manager_paste_targets_blocklist_profile_input_when_active() {
-    let mut app = App::default();
-    app.handle_key(key(KeyCode::Char('b')));
-    app.handle_key(key(KeyCode::Char('n')));
-
-    app.handle_paste("Work".to_string());
-
-    assert!(app.blocklist_profile_input_active);
-    assert_eq!(app.blocklist_profile_input, "Work");
-    assert!(!app.site_input_active);
-    assert!(app.site_input.is_empty());
-}
-
-#[test]
 fn site_manager_ctrl_c_quits_during_text_input_modes() {
     let mut app = App::default();
     app.handle_key(key(KeyCode::Char('b')));
@@ -1931,35 +1917,18 @@ fn site_manager_ctrl_c_quits_during_text_input_modes() {
     app.handle_key(ctrl_key(KeyCode::Char('c')));
 
     assert!(app.should_quit);
-
-    let mut app = App::default();
-    app.handle_key(key(KeyCode::Char('b')));
-    app.handle_key(key(KeyCode::Char('n')));
-    assert!(app.blocklist_profile_input_active);
-
-    app.handle_key(ctrl_key(KeyCode::Char('c')));
-
-    assert!(app.should_quit);
 }
 
 #[test]
-fn site_manager_input_modes_are_mutually_exclusive() {
+fn site_manager_paste_starts_site_input() {
     let mut app = App::default();
     app.mode = AppMode::SiteManager;
 
-    app.start_blocklist_profile_input(BlocklistProfileInputMode::Create);
-    assert!(app.blocklist_profile_input_active);
-    assert!(!app.site_input_active);
+    app.handle_paste("example.com".to_string());
 
-    app.start_site_input(SiteInputMode::Add);
     assert!(app.site_input_active);
-    assert!(!app.blocklist_profile_input_active);
-    assert!(app.blocklist_profile_input.is_empty());
-
-    app.start_blocklist_profile_input(BlocklistProfileInputMode::Rename);
-    assert!(app.blocklist_profile_input_active);
-    assert!(!app.site_input_active);
-    assert!(app.site_input.is_empty());
+    assert_eq!(app.site_input, "example.com");
+    assert!(app.site_edit_index.is_none());
 }
 
 #[test]
@@ -2048,7 +2017,7 @@ fn site_manager_reapply_decision_uses_focus_state() {
 }
 
 #[test]
-fn site_manager_switches_between_blocklist_profiles() {
+fn site_manager_collapses_blocklist_profiles_into_canonical_rules() {
     let config = AppConfig {
         blocklist_profiles: vec![
             BlocklistProfileConfig {
@@ -2068,15 +2037,26 @@ fn site_manager_switches_between_blocklist_profiles() {
     let mut app = App::from_config(config);
     app.handle_key(key(KeyCode::Char('b')));
 
-    assert_eq!(app.active_blocklist_profile_name(), "Work");
-    assert_eq!(app.blocker.sites, vec!["a.com".to_string()]);
+    assert_eq!(app.active_blocklist_profile_name(), "Default");
+    assert_eq!(
+        app.blocker.sites,
+        vec![
+            "a.com".to_string(),
+            "b.com".to_string(),
+            "c.com".to_string()
+        ]
+    );
 
     app.handle_key(key(KeyCode::Char(']')));
 
-    assert_eq!(app.active_blocklist_profile_name(), "Study");
+    assert_eq!(app.active_blocklist_profile_name(), "Default");
     assert_eq!(
         app.blocker.sites,
-        vec!["b.com".to_string(), "c.com".to_string()]
+        vec![
+            "a.com".to_string(),
+            "b.com".to_string(),
+            "c.com".to_string()
+        ]
     );
 }
 
@@ -2130,7 +2110,7 @@ allowlist_sites = []
 }
 
 #[test]
-fn site_manager_allowlist_mode_clamps_selection_on_profile_switch() {
+fn site_manager_allowlist_mode_keeps_canonical_selection_without_profile_switch() {
     let config = AppConfig {
         blocklist_profiles: vec![
             BlocklistProfileConfig {
@@ -2157,11 +2137,21 @@ fn site_manager_allowlist_mode_clamps_selection_on_profile_switch() {
 
     app.handle_key(key(KeyCode::Char(']')));
 
-    assert_eq!(app.active_blocklist_profile_name(), "Work");
+    assert_eq!(app.active_blocklist_profile_name(), "Default");
     assert_eq!(app.site_list_mode(), SiteListMode::Allowlist);
-    assert_eq!(app.active_policy_sites(), vec!["news.com".to_string()]);
-    assert_eq!(app.selected_site, 0);
-    assert_eq!(app.blocker.sites, vec!["work.com".to_string()]);
+    assert_eq!(
+        app.active_policy_sites(),
+        vec![
+            "allow-a.com".to_string(),
+            "allow-b.com".to_string(),
+            "news.com".to_string()
+        ]
+    );
+    assert_eq!(app.selected_site, 1);
+    assert_eq!(
+        app.blocker.sites,
+        vec!["study.com".to_string(), "work.com".to_string()]
+    );
 }
 
 #[test]
@@ -2253,35 +2243,18 @@ fn site_manager_allowlist_mode_updates_effective_blocked_sites() {
 }
 
 #[test]
-fn site_manager_create_rename_and_delete_blocklist_profile() {
+fn site_manager_profile_shortcuts_are_retired() {
     let mut app = App::default();
     app.handle_key(key(KeyCode::Char('b')));
 
     app.handle_key(key(KeyCode::Char('n')));
-    for c in "Work".chars() {
-        app.handle_key(key(KeyCode::Char(c)));
-    }
-    app.handle_key(key(KeyCode::Enter));
-
-    assert_eq!(app.blocklist_profile_count(), 2);
-    assert_eq!(app.active_blocklist_profile_name(), "Work");
-    assert!(app.blocker.sites.is_empty());
-
     app.handle_key(key(KeyCode::Char('r')));
-    for _ in 0.."Work".len() {
-        app.handle_key(key(KeyCode::Backspace));
-    }
-    for c in "Deep Work".chars() {
-        app.handle_key(key(KeyCode::Char(c)));
-    }
-    app.handle_key(key(KeyCode::Enter));
-
-    assert_eq!(app.active_blocklist_profile_name(), "Deep Work");
-
     app.handle_key(key(KeyCode::Char('x')));
 
     assert_eq!(app.blocklist_profile_count(), 1);
     assert_eq!(app.active_blocklist_profile_name(), "Default");
+    assert!(!app.site_input_active);
+    assert!(app.blocker.sites.is_empty());
 }
 
 #[test]
