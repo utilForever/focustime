@@ -255,9 +255,9 @@ impl SiteBlocker {
         #[cfg(test)]
         record_test_blocking_action("block");
 
-        if self.sites.is_empty() {
-            // Best-effort: strip any stale block section left by a prior run.
-            let _ = self.remove_hosts_block();
+        if self.hosts_renderable_sites().is_empty() {
+            // Strip any stale block section left by a prior run.
+            self.remove_hosts_block()?;
             self.is_blocking = false;
             return Ok(());
         }
