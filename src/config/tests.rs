@@ -1730,7 +1730,7 @@ fn normalize_migrates_legacy_blocked_sites_into_default_profile() {
 }
 
 #[test]
-fn normalize_deduplicates_profile_names_and_fixes_selection() {
+fn normalize_collapses_profiles_and_fixes_selection() {
     let cfg = AppConfig {
         blocklist_profiles: vec![
             BlocklistProfileConfig {
@@ -1749,9 +1749,17 @@ fn normalize_deduplicates_profile_names_and_fixes_selection() {
     }
     .normalize();
 
-    assert_eq!(cfg.blocklist_profiles[0].name, "Work");
-    assert_eq!(cfg.blocklist_profiles[1].name, "work (2)");
-    assert_eq!(cfg.selected_blocklist_profile, "Work");
+    assert_eq!(cfg.blocklist_profiles.len(), 1);
+    assert_eq!(cfg.blocklist_profiles[0].name, "Default");
+    assert_eq!(
+        cfg.blocklist_profiles[0].sites,
+        vec!["a.com".to_string(), "b.com".to_string()]
+    );
+    assert_eq!(
+        cfg.blocklist_profiles[0].allowlist_sites,
+        vec!["b.com".to_string()]
+    );
+    assert_eq!(cfg.selected_blocklist_profile, "Default");
     assert!(cfg.blocked_sites.is_empty());
 }
 
@@ -1933,7 +1941,7 @@ fn normalize_legacy_automation_fields_do_not_override_profile_automation() {
 }
 
 #[test]
-fn normalize_keeps_legacy_blocked_sites_when_profiles_exist() {
+fn normalize_merges_legacy_blocked_sites_when_profiles_exist() {
     let cfg = AppConfig {
         blocked_sites: vec!["legacy-only.com".to_string()],
         blocklist_profiles: vec![BlocklistProfileConfig {
@@ -1946,8 +1954,21 @@ fn normalize_keeps_legacy_blocked_sites_when_profiles_exist() {
     }
     .normalize();
 
-    assert_eq!(cfg.selected_blocklist_profile, "Work");
+    assert_eq!(cfg.selected_blocklist_profile, "Default");
     assert_eq!(cfg.blocked_sites, vec!["legacy-only.com".to_string()]);
+    assert_eq!(cfg.blocklist_profiles.len(), 1);
+    assert_eq!(
+        cfg.blocklist_profiles[0].sites,
+        vec![
+            "legacy-only.com".to_string(),
+            "a.com".to_string(),
+            "b.com".to_string()
+        ]
+    );
+    assert_eq!(
+        cfg.blocklist_profiles[0].allowlist_sites,
+        vec!["b.com".to_string()]
+    );
 }
 
 #[test]

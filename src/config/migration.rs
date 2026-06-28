@@ -99,6 +99,16 @@ pub(super) fn migrate_config_toml_to_current_detailed(
                 .to_string(),
         });
     }
+    let blocklist_profile_input = config_toml.clone();
+    collapse_blocklist_profiles_to_canonical(&mut config_toml);
+    if blocklist_profile_input != config_toml {
+        steps.push(ConfigMigrationStepReport {
+            from_schema_version,
+            to_schema_version: from_schema_version,
+            summary: "Collapse blocklist profiles into one canonical blocklist/allowlist."
+                .to_string(),
+        });
+    }
     Ok((config_toml, schema_version, steps))
 }
 
@@ -231,6 +241,70 @@ pub(super) fn migrate_blocklist_categories_to_profile_rules(config_toml: &mut to
             string_values(allowlist_sites),
         );
     }
+}
+
+/// Merges legacy named blocklist profiles into the canonical Default profile.
+pub(super) fn collapse_blocklist_profiles_to_canonical(config_toml: &mut toml::Value) {
+    let Some(table) = config_toml.as_table_mut() else {
+        return;
+    };
+    let legacy_blocked_sites = string_array(table.get("blocked_sites"));
+    let Some(existing_profiles) = table.remove("blocklist_profiles") else {
+        if !legacy_blocked_sites.is_empty() {
+            table.insert(
+                "blocklist_profiles".to_string(),
+                canonical_blocklist_profiles_value(legacy_blocked_sites, Vec::new()),
+            );
+            table.insert(
+                "selected_blocklist_profile".to_string(),
+                toml::Value::String("Default".to_string()),
+            );
+        }
+        return;
+    };
+    let Some(profiles) = existing_profiles.as_array() else {
+        table.insert("blocklist_profiles".to_string(), existing_profiles);
+        return;
+    };
+
+    let mut sites = dedup_case_insensitive_strings(legacy_blocked_sites);
+    let mut allowlist_sites = Vec::new();
+    for profile in profiles {
+        let Some(profile) = profile.as_table() else {
+            continue;
+        };
+        merge_unique_case_insensitive(&mut sites, &string_array(profile.get("sites")));
+        merge_unique_case_insensitive(
+            &mut allowlist_sites,
+            &string_array(profile.get("allowlist_sites")),
+        );
+    }
+
+    table.insert(
+        "blocklist_profiles".to_string(),
+        canonical_blocklist_profiles_value(sites, allowlist_sites),
+    );
+    table.insert(
+        "selected_blocklist_profile".to_string(),
+        toml::Value::String("Default".to_string()),
+    );
+}
+
+fn canonical_blocklist_profiles_value(
+    sites: Vec<String>,
+    allowlist_sites: Vec<String>,
+) -> toml::Value {
+    let mut profile = toml::map::Map::new();
+    profile.insert(
+        "name".to_string(),
+        toml::Value::String("Default".to_string()),
+    );
+    profile.insert("sites".to_string(), string_values(sites));
+    profile.insert(
+        "allowlist_sites".to_string(),
+        string_values(allowlist_sites),
+    );
+    toml::Value::Array(vec![toml::Value::Table(profile)])
 }
 
 fn flatten_blocklist_category_values(
@@ -495,9 +569,9 @@ pub(super) fn detect_legacy_config_deprecation_warnings(config: &AppConfig) -> V
         );
     }
 
-    if config.blocklist_profiles.is_empty() && !config.blocked_sites.is_empty() {
+    if !config.blocked_sites.is_empty() {
         warnings.push(
-            "Deprecated `blocked_sites` is in use without `[[blocklist_profiles]]`. Move entries into a blocklist profile (for example `Default`).".to_string(),
+            "Deprecated `blocked_sites` is in use. Move entries into the canonical blocklist profile (for example `Default`).".to_string(),
         );
     }
 
