@@ -34,12 +34,8 @@ impl SetupCheck {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SetupDiagnostics {
     pub(crate) hosts_file_path: String,
-    pub(crate) backend_policy: String,
-    pub(crate) backend_order: String,
-    pub(crate) backend_selection: SetupCheck,
     pub(crate) blocking_permissions: SetupCheck,
     pub(crate) hosts_write_capability: SetupCheck,
-    pub(crate) command_backend: SetupCheck,
     pub(crate) wakatime_config: SetupCheck,
     pub(crate) wakatime_runtime: SetupCheck,
     pub(crate) deprecation_warnings: Vec<String>,
@@ -54,23 +50,9 @@ impl SetupDiagnostics {
         wakatime_runtime_state: WakatimeRuntimeState,
     ) -> Self {
         let hosts_diagnostics = blocker.hosts_file_diagnostics();
-        let backend_status = blocker.backend_status();
         let blocking_permissions = blocking_permissions_check(&hosts_diagnostics);
         let hosts_write_capability = hosts_write_capability_check(&hosts_diagnostics);
         let hosts_file_path = hosts_diagnostics.path.clone();
-        let backend_policy = backend_status.policy.id().to_string();
-        let backend_order = backend_status
-            .order
-            .iter()
-            .map(|backend| backend.id())
-            .collect::<Vec<_>>()
-            .join(" -> ");
-        let backend_selection = backend_selection_check(
-            backend_status.last_backend,
-            backend_status.fallback_used,
-            backend_status.last_error.as_deref(),
-        );
-        let command_backend = command_backend_check(blocker);
         let wakatime_config = if wakatime_integration_enabled {
             let wakatime_diagnostics = WakatimeTracker::config_diagnostics();
             match wakatime_diagnostics.status {
@@ -89,12 +71,8 @@ impl SetupDiagnostics {
             wakatime_runtime_check(wakatime_integration_enabled, &wakatime_runtime_state);
         Self {
             hosts_file_path,
-            backend_policy,
-            backend_order,
-            backend_selection,
             blocking_permissions,
             hosts_write_capability,
-            command_backend,
             wakatime_config,
             wakatime_runtime,
             deprecation_warnings,
@@ -106,8 +84,6 @@ impl SetupDiagnostics {
 pub(crate) struct BlockingPreviewSnapshot {
     pub(crate) backend: Option<BlockingBackendKind>,
     pub(crate) backend_target: Option<String>,
-    pub(crate) attempted_backends: Vec<BlockingBackendKind>,
-    pub(crate) fallback_used: bool,
     pub(crate) action: BlockingPreviewAction,
     pub(crate) would_change: bool,
     pub(crate) effective_blocked_sites_count: usize,
@@ -120,8 +96,6 @@ impl Default for BlockingPreviewSnapshot {
         Self {
             backend: None,
             backend_target: None,
-            attempted_backends: Vec::new(),
-            fallback_used: false,
             action: BlockingPreviewAction::NoChange,
             would_change: false,
             effective_blocked_sites_count: 0,
@@ -151,37 +125,6 @@ fn blocking_permissions_check(hosts_diagnostics: &HostsFileDiagnostics) -> Setup
             "Blocked: write permission unavailable ({reason}). {}",
             permission_remediation_guidance()
         ))
-    }
-}
-
-fn backend_selection_check(
-    last_backend: Option<BlockingBackendKind>,
-    fallback_used: bool,
-    last_error: Option<&str>,
-) -> SetupCheck {
-    if let Some(error) = last_error {
-        return SetupCheck::warning(format!("Blocked: backend selection failed ({error})"));
-    }
-    if let Some(backend) = last_backend {
-        if fallback_used {
-            return SetupCheck::warning(format!(
-                "Fallback active: using `{}` backend after primary backend failure",
-                backend.id()
-            ));
-        }
-        return SetupCheck::ok(format!("Ready: using `{}` backend", backend.id()));
-    }
-    SetupCheck::warning(
-        "Awaiting first block/unblock operation to confirm selected backend".to_string(),
-    )
-}
-
-fn command_backend_check(blocker: &SiteBlocker) -> SetupCheck {
-    match blocker.command_backend_diagnostics() {
-        Ok(()) => SetupCheck::ok("Ready: command backend diagnostics passed"),
-        Err(error) => SetupCheck::warning(format!(
-            "Blocked: command backend unavailable ({error}). Configure commands or use hosts backend."
-        )),
     }
 }
 

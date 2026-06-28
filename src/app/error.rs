@@ -86,7 +86,7 @@ impl UserFacingError for AppError {
             Self::BlockingPreviewFailed { source } => UserMessage::with_hint(
                 "app.blocking_preview.failed",
                 format!("Failed to generate blocking preview: {source}"),
-                "Run `focustime --diagnostics` to inspect blocking backend setup.",
+                "Run `focustime --diagnostics` to inspect hosts-file blocking setup.",
             ),
             Self::WorkflowFailed { source } => UserMessage::new("app.workflow.failed", source),
         }

@@ -143,7 +143,6 @@ fn selected_builtin_profile_is_applied_on_startup() {
         blocked_sites: Vec::new(),
         blocklist_profiles: vec![BlocklistProfileConfig::default()],
         selected_blocklist_profile: "Default".to_string(),
-        blocking_backend: BlockingBackendConfig::default(),
         selected_profile: ProfileId::Classic,
         custom_profile: Some(CustomProfileConfig {
             focus_secs: 40 * 60,

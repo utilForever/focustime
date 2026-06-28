@@ -49,8 +49,6 @@ fn test_diagnostics_blocking_preview_output() -> DiagnosticsBlockingPreviewOutpu
         preview: Some(BlockingPreviewOutput {
             backend: "hosts",
             backend_target: "hosts".to_string(),
-            attempted_backends: vec!["hosts"],
-            fallback_used: false,
             hosts_file_path: "hosts".to_string(),
             action: "block",
             would_change: true,
