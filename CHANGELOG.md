@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking - Allowlist CLI surface cleanup (#563):** retired `--allowlist-sites`, `--allowlist-site-add`, `--allowlist-site-edit`, and `--allowlist-site-delete`, keeping allowlist exceptions as config/internal rules while CLI site management focuses on canonical blocklist commands.
 - **Breaking - Blocklist profile collapse (#562):** retired blocklist profile CLI/TUI CRUD and selection surfaces, collapsed persisted profile site rules into one canonical `Default` blocklist/allowlist, and kept existing hostnames during migration.
 - **Breaking - Blocking backend cleanup (#561):** removed the custom command blocking backend, retired backend fallback policy config, and focused blocking diagnostics on hosts-file readiness.
-- **Breaking - Break-glass workflow cleanup (#559):** removed break-glass CLI/TUI/runtime handling, dropped temporary override recovery/status/stats/export fields, and routed users to normal timer controls or blocklist/allowlist commands.
+- **Breaking - Break-glass workflow cleanup (#559):** removed break-glass CLI/TUI/runtime handling, dropped temporary override recovery/status/stats/export fields, and routed users to normal timer controls or blocklist commands.
 - **Temporary override audit cleanup (#560):** removed the remaining temporary-exception UI copy and narrowed cleanup regression coverage to supported retired-command and allowlist-rule contracts.
 
 ## [0.16.3] - 2026-06-27
