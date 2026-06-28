@@ -5,6 +5,7 @@ use super::{
     canonical_profile_id_token, default_focus_secs, default_long_break_interval,
     default_long_break_secs, default_short_break_secs,
 };
+use crate::blocker::normalize_domain_rule;
 
 /// Migrates raw TOML config data to the current schema without step details.
 pub(super) fn migrate_config_toml_to_current(config_toml: toml::Value) -> Option<toml::Value> {
@@ -268,6 +269,7 @@ pub(super) fn collapse_blocklist_profiles_to_canonical(config_toml: &mut toml::V
     };
 
     let mut sites = dedup_case_insensitive_strings(legacy_blocked_sites);
+    let has_legacy_blocked_sites = !sites.is_empty();
     let mut allowlist_sites = Vec::new();
     for profile in profiles {
         let Some(profile) = profile.as_table() else {
@@ -278,6 +280,9 @@ pub(super) fn collapse_blocklist_profiles_to_canonical(config_toml: &mut toml::V
             &mut allowlist_sites,
             &string_array(profile.get("allowlist_sites")),
         );
+    }
+    if profiles.len() > 1 || has_legacy_blocked_sites {
+        remove_exact_block_allow_collisions(&sites, &mut allowlist_sites);
     }
 
     table.insert(
@@ -414,6 +419,20 @@ fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
             target.push(value.clone());
         }
     }
+}
+
+fn remove_exact_block_allow_collisions(sites: &[String], allowlist_sites: &mut Vec<String>) {
+    let blocked_rules: std::collections::HashSet<String> = sites
+        .iter()
+        .filter_map(|site| normalize_domain_rule(site).ok())
+        .map(|site| site.to_ascii_lowercase())
+        .collect();
+
+    allowlist_sites.retain(|site| {
+        normalize_domain_rule(site)
+            .map(|site| !blocked_rules.contains(&site.to_ascii_lowercase()))
+            .unwrap_or(true)
+    });
 }
 
 /// Builds a warning-level config health finding with sorted advice messages.
