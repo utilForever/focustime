@@ -247,12 +247,6 @@ impl SiteListMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BlocklistProfileInputMode {
-    Create,
-    Rename,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PlannerInputMode {
     Add,
     Rename,
@@ -369,9 +363,6 @@ pub(crate) struct App {
     site_edit_index: Option<usize>,
     pub(crate) blocklist_profiles: Vec<BlocklistProfileConfig>,
     active_blocklist_profile: usize,
-    pub(crate) blocklist_profile_input: String,
-    pub(crate) blocklist_profile_input_active: bool,
-    blocklist_profile_input_mode: Option<BlocklistProfileInputMode>,
     pub(crate) site_feedback: Option<SiteFeedback>,
     pub(crate) task_labels: Vec<String>,
     pub(crate) selected_task_label: Option<String>,
@@ -555,9 +546,6 @@ impl App {
             site_edit_index: None,
             blocklist_profiles,
             active_blocklist_profile,
-            blocklist_profile_input: String::new(),
-            blocklist_profile_input_active: false,
-            blocklist_profile_input_mode: None,
             site_feedback: None,
             task_labels,
             selected_task_label,
@@ -1034,10 +1022,7 @@ impl App {
         self.blocker.sites.len()
     }
 
-    pub(crate) fn blocklist_profile_input_mode(&self) -> Option<BlocklistProfileInputMode> {
-        self.blocklist_profile_input_mode
-    }
-
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn active_blocklist_profile_name(&self) -> &str {
         self.blocklist_profiles
             .get(self.active_blocklist_profile)
@@ -1045,10 +1030,12 @@ impl App {
             .unwrap_or(DEFAULT_BLOCKLIST_PROFILE_NAME)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn active_blocklist_profile_position(&self) -> usize {
         self.active_blocklist_profile.saturating_add(1)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn blocklist_profile_count(&self) -> usize {
         self.blocklist_profiles.len()
     }
@@ -1066,11 +1053,6 @@ impl App {
 
     pub(crate) fn handle_paste(&mut self, text: String) {
         if self.mode != AppMode::SiteManager {
-            return;
-        }
-
-        if self.blocklist_profile_input_active {
-            self.blocklist_profile_input.push_str(&text);
             return;
         }
 

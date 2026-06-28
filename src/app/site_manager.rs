@@ -1,29 +1,20 @@
 use crate::app::{
-    App, AppMode, BlocklistProfileConfig, BlocklistProfileInputMode, BulkAddResult, EditSiteResult,
-    KeyCode, KeyEvent, KeyModifiers, NavigationAction, ShortcutAction, SiteBlocker,
-    SiteFeedbackLevel, SiteInputMode, SiteListMode, display_input_value,
-    effective_blocked_sites_for_profile, format_count, summarize_invalid_inputs,
+    App, AppMode, BlocklistProfileConfig, BulkAddResult, EditSiteResult, KeyCode, KeyEvent,
+    KeyModifiers, NavigationAction, ShortcutAction, SiteBlocker, SiteFeedbackLevel, SiteInputMode,
+    SiteListMode, display_input_value, effective_blocked_sites_for_profile, format_count,
+    summarize_invalid_inputs,
 };
 
-const SITE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 10] = [
+const SITE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 5] = [
     ShortcutAction::BackSiteManager,
     ShortcutAction::ToggleSiteListMode,
     ShortcutAction::SiteAdd,
     ShortcutAction::SiteEdit,
     ShortcutAction::SiteDelete,
-    ShortcutAction::SelectPreviousBlocklistProfile,
-    ShortcutAction::SelectNextBlocklistProfile,
-    ShortcutAction::CreateBlocklistProfile,
-    ShortcutAction::RenameBlocklistProfile,
-    ShortcutAction::DeleteBlocklistProfile,
 ];
 
 impl App {
     pub(super) fn handle_key_site_manager(&mut self, key: KeyEvent) {
-        if self.handle_blocklist_profile_input_key(&key) {
-            return;
-        }
-
         if self.handle_site_input_key(&key) {
             return;
         }
@@ -42,33 +33,6 @@ impl App {
         }
 
         self.handle_site_manager_shortcut_action(&key);
-    }
-
-    fn handle_blocklist_profile_input_key(&mut self, key: &KeyEvent) -> bool {
-        if !self.blocklist_profile_input_active {
-            return false;
-        }
-
-        match key.code {
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => false,
-            _ if self.navigation_matches(NavigationAction::Confirm, key) => {
-                self.commit_blocklist_profile_input();
-                true
-            }
-            _ if self.navigation_matches(NavigationAction::Cancel, key) => {
-                self.cancel_blocklist_profile_input();
-                true
-            }
-            _ if self.navigation_matches(NavigationAction::Backspace, key) => {
-                self.blocklist_profile_input.pop();
-                true
-            }
-            KeyCode::Char(c) => {
-                self.blocklist_profile_input.push(c);
-                true
-            }
-            _ => true,
-        }
     }
 
     fn handle_site_input_key(&mut self, key: &KeyEvent) -> bool {
@@ -136,17 +100,6 @@ impl App {
             ShortcutAction::SiteAdd => self.start_site_input(SiteInputMode::Add),
             ShortcutAction::SiteEdit => self.start_site_input(SiteInputMode::Edit),
             ShortcutAction::SiteDelete => self.remove_selected_site(),
-            ShortcutAction::SelectPreviousBlocklistProfile => {
-                self.select_previous_blocklist_profile()
-            }
-            ShortcutAction::SelectNextBlocklistProfile => self.select_next_blocklist_profile(),
-            ShortcutAction::CreateBlocklistProfile => {
-                self.start_blocklist_profile_input(BlocklistProfileInputMode::Create)
-            }
-            ShortcutAction::RenameBlocklistProfile => {
-                self.start_blocklist_profile_input(BlocklistProfileInputMode::Rename)
-            }
-            ShortcutAction::DeleteBlocklistProfile => self.delete_active_blocklist_profile(),
             _ => {}
         }
     }
@@ -161,7 +114,6 @@ impl App {
     }
 
     pub(super) fn start_site_input(&mut self, mode: SiteInputMode) {
-        self.cancel_blocklist_profile_input();
         self.site_input_active = true;
         self.site_feedback = None;
         match mode {
@@ -192,27 +144,6 @@ impl App {
         self.site_edit_index = None;
     }
 
-    pub(super) fn start_blocklist_profile_input(&mut self, mode: BlocklistProfileInputMode) {
-        self.cancel_site_input();
-        self.blocklist_profile_input_active = true;
-        self.blocklist_profile_input_mode = Some(mode);
-        self.site_feedback = None;
-        match mode {
-            BlocklistProfileInputMode::Create => {
-                self.blocklist_profile_input.clear();
-            }
-            BlocklistProfileInputMode::Rename => {
-                self.blocklist_profile_input = self.active_blocklist_profile_name().to_string();
-            }
-        }
-    }
-
-    pub(super) fn cancel_blocklist_profile_input(&mut self) {
-        self.blocklist_profile_input.clear();
-        self.blocklist_profile_input_active = false;
-        self.blocklist_profile_input_mode = None;
-    }
-
     fn commit_site_input(&mut self) {
         let input = self.site_input.clone();
         let mode = self.site_list_mode;
@@ -239,86 +170,6 @@ impl App {
         if committed {
             self.cancel_site_input();
         }
-    }
-
-    fn commit_blocklist_profile_input(&mut self) {
-        let Some(mode) = self.blocklist_profile_input_mode else {
-            return;
-        };
-
-        let name = self.blocklist_profile_input.trim().to_string();
-        if name.is_empty() {
-            self.set_site_feedback(SiteFeedbackLevel::Warning, "Profile name cannot be empty");
-            return;
-        }
-
-        let outcome = match mode {
-            BlocklistProfileInputMode::Create => self.commit_create_blocklist_profile(name),
-            BlocklistProfileInputMode::Rename => self.commit_rename_blocklist_profile(name),
-        };
-
-        if let Err(message) = outcome {
-            self.set_site_feedback(SiteFeedbackLevel::Warning, message);
-        }
-    }
-
-    fn commit_create_blocklist_profile(&mut self, name: String) -> Result<(), String> {
-        let has_duplicate = self
-            .blocklist_profiles
-            .iter()
-            .any(|profile| profile.name.eq_ignore_ascii_case(&name));
-        if has_duplicate {
-            return Err(format!("Profile `{name}` already exists"));
-        }
-
-        self.blocklist_profiles.push(BlocklistProfileConfig {
-            name: name.clone(),
-            sites: Vec::new(),
-            allowlist_sites: Vec::new(),
-        });
-        self.active_blocklist_profile = self.blocklist_profiles.len().saturating_sub(1);
-        self.recompute_blocker_sites_from_active_profile();
-        self.clamp_selection();
-        self.cancel_blocklist_profile_input();
-        self.save_config();
-        self.sync_blocking_after_site_mutation();
-        self.set_site_feedback(
-            SiteFeedbackLevel::Success,
-            format!("Created profile `{name}`"),
-        );
-        Ok(())
-    }
-
-    fn commit_rename_blocklist_profile(&mut self, name: String) -> Result<(), String> {
-        let old_name = self.active_blocklist_profile_name().to_string();
-        if old_name == name {
-            return Err(format!("No change for profile `{name}`"));
-        }
-
-        let has_duplicate = self
-            .blocklist_profiles
-            .iter()
-            .enumerate()
-            .any(|(index, profile)| {
-                index != self.active_blocklist_profile && profile.name.eq_ignore_ascii_case(&name)
-            });
-        if has_duplicate {
-            return Err(format!("Profile `{name}` already exists"));
-        }
-
-        if let Some(profile) = self
-            .blocklist_profiles
-            .get_mut(self.active_blocklist_profile)
-        {
-            profile.name = name.clone();
-        }
-        self.cancel_blocklist_profile_input();
-        self.save_config();
-        self.set_site_feedback(
-            SiteFeedbackLevel::Success,
-            format!("Renamed profile `{old_name}` -> `{name}`"),
-        );
-        Ok(())
     }
 
     fn apply_bulk_add_result(&mut self, result: BulkAddResult) -> bool {
@@ -441,76 +292,6 @@ impl App {
         }
     }
 
-    fn select_previous_blocklist_profile(&mut self) {
-        if self.blocklist_profiles.len() <= 1 {
-            return;
-        }
-        let next = if self.active_blocklist_profile == 0 {
-            self.blocklist_profiles.len().saturating_sub(1)
-        } else {
-            self.active_blocklist_profile.saturating_sub(1)
-        };
-        self.switch_blocklist_profile(next);
-    }
-
-    fn select_next_blocklist_profile(&mut self) {
-        if self.blocklist_profiles.len() <= 1 {
-            return;
-        }
-        let next = (self.active_blocklist_profile + 1) % self.blocklist_profiles.len();
-        self.switch_blocklist_profile(next);
-    }
-
-    fn switch_blocklist_profile(&mut self, next_index: usize) {
-        if next_index >= self.blocklist_profiles.len()
-            || next_index == self.active_blocklist_profile
-        {
-            return;
-        }
-
-        self.active_blocklist_profile = next_index;
-        self.recompute_blocker_sites_from_active_profile();
-        self.clamp_selection();
-        self.save_config();
-        self.sync_blocking_after_site_mutation();
-        self.set_site_feedback(
-            SiteFeedbackLevel::Success,
-            format!(
-                "Switched to profile `{}`",
-                self.active_blocklist_profile_name()
-            ),
-        );
-    }
-
-    fn delete_active_blocklist_profile(&mut self) {
-        if self.blocklist_profiles.len() <= 1 {
-            self.set_site_feedback(
-                SiteFeedbackLevel::Warning,
-                "At least one blocklist profile is required",
-            );
-            return;
-        }
-
-        let removed = self
-            .blocklist_profiles
-            .remove(self.active_blocklist_profile);
-        if self.active_blocklist_profile >= self.blocklist_profiles.len() {
-            self.active_blocklist_profile = self.blocklist_profiles.len().saturating_sub(1);
-        }
-        self.recompute_blocker_sites_from_active_profile();
-        self.clamp_selection();
-        self.save_config();
-        self.sync_blocking_after_site_mutation();
-        self.set_site_feedback(
-            SiteFeedbackLevel::Success,
-            format!(
-                "Deleted profile `{}` (active: `{}`)",
-                removed.name,
-                self.active_blocklist_profile_name()
-            ),
-        );
-    }
-
     pub(super) fn clamp_selection(&mut self) {
         if self.active_policy_sites().is_empty() {
             self.selected_site = 0;
@@ -520,15 +301,13 @@ impl App {
     }
 
     pub(super) fn clamp_blocklist_profile_selection(&mut self) {
-        if self.blocklist_profiles.is_empty() {
-            self.blocklist_profiles
-                .push(BlocklistProfileConfig::default());
-            self.active_blocklist_profile = 0;
-            return;
+        let mut canonical = BlocklistProfileConfig::default();
+        for profile in &self.blocklist_profiles {
+            merge_unique_case_insensitive(&mut canonical.sites, &profile.sites);
+            merge_unique_case_insensitive(&mut canonical.allowlist_sites, &profile.allowlist_sites);
         }
-        self.active_blocklist_profile = self
-            .active_blocklist_profile
-            .min(self.blocklist_profiles.len().saturating_sub(1));
+        self.blocklist_profiles = vec![canonical];
+        self.active_blocklist_profile = 0;
     }
 
     pub(super) fn active_profile_sites_for_mode(&self, mode: SiteListMode) -> &[String] {
@@ -570,7 +349,6 @@ impl App {
         self.set_mode(AppMode::SiteManager);
         self.site_list_mode = SiteListMode::Blocklist;
         self.cancel_site_input();
-        self.cancel_blocklist_profile_input();
         self.clamp_blocklist_profile_selection();
         self.clamp_selection();
     }
@@ -602,5 +380,17 @@ impl App {
 
     pub(super) fn should_resync_blocking_after_site_mutation(&self) -> bool {
         self.should_block_for_current_state() || self.blocker.is_blocking
+    }
+}
+
+fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
+    let mut seen: std::collections::HashSet<String> = target
+        .iter()
+        .map(|value| value.to_ascii_lowercase())
+        .collect();
+    for value in source {
+        if seen.insert(value.to_ascii_lowercase()) {
+            target.push(value.clone());
+        }
     }
 }

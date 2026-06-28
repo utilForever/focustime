@@ -8,10 +8,9 @@ use ratatui::{
 };
 
 use crate::app::{
-    App, AppMode, BlocklistProfileInputMode, DailyGoalProgress, HistoryFeedbackLevel,
-    NavigationAction, PLANNER_RECENT_LABEL_LIMIT, PROFILE_IDS, PlannerFeedbackLevel,
-    PlannerInputMode, SetupCheck, SetupCheckLevel, ShortcutAction, SiteFeedbackLevel,
-    SiteInputMode, SiteListMode,
+    App, AppMode, DailyGoalProgress, HistoryFeedbackLevel, NavigationAction,
+    PLANNER_RECENT_LABEL_LIMIT, PROFILE_IDS, PlannerFeedbackLevel, PlannerInputMode, SetupCheck,
+    SetupCheckLevel, ShortcutAction, SiteFeedbackLevel, SiteInputMode, SiteListMode,
 };
 use crate::blocker::BlockingPreviewAction;
 use crate::config::ThemePreset;
