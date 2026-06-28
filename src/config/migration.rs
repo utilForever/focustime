@@ -1,11 +1,15 @@
+use std::collections::{HashMap, HashSet};
+
 use super::{
     AppConfig, AutoStartConfig, CURRENT_CONFIG_SCHEMA_VERSION, ConfigHealthFinding,
     ConfigHealthSeverity, ConfigHealthStatus, ConfigMigrationStepReport,
     LEGACY_CONFIG_SCHEMA_VERSION, NotificationConfig, RecurringScheduleConfig,
+    blocklists::{
+        normalized_blocklist_rule_key, retain_allowlist_entries_without_collapsed_block_collisions,
+    },
     canonical_profile_id_token, default_focus_secs, default_long_break_interval,
     default_long_break_secs, default_short_break_secs,
 };
-use crate::blocker::normalize_domain_rule;
 
 /// Migrates raw TOML config data to the current schema without step details.
 pub(super) fn migrate_config_toml_to_current(config_toml: toml::Value) -> Option<toml::Value> {
@@ -268,8 +272,7 @@ pub(super) fn collapse_blocklist_profiles_to_canonical(config_toml: &mut toml::V
         return;
     };
 
-    let mut sites = dedup_case_insensitive_strings(legacy_blocked_sites);
-    let has_legacy_blocked_sites = !sites.is_empty();
+    let mut sites = dedup_case_insensitive_strings(legacy_blocked_sites.clone());
     let mut allowlist_sites = Vec::new();
     for profile in profiles {
         let Some(profile) = profile.as_table() else {
@@ -281,9 +284,7 @@ pub(super) fn collapse_blocklist_profiles_to_canonical(config_toml: &mut toml::V
             &string_array(profile.get("allowlist_sites")),
         );
     }
-    if profiles.len() > 1 || has_legacy_blocked_sites {
-        remove_exact_block_allow_collisions(&sites, &mut allowlist_sites);
-    }
+    remove_collapsed_block_allow_collisions(profiles, &legacy_blocked_sites, &mut allowlist_sites);
 
     table.insert(
         "blocklist_profiles".to_string(),
@@ -421,18 +422,44 @@ fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
     }
 }
 
-fn remove_exact_block_allow_collisions(sites: &[String], allowlist_sites: &mut Vec<String>) {
-    let blocked_rules: std::collections::HashSet<String> = sites
+fn remove_collapsed_block_allow_collisions(
+    profiles: &[toml::Value],
+    legacy_blocked_sites: &[String],
+    allowlist_sites: &mut Vec<String>,
+) {
+    let legacy_blocked_rules: HashSet<String> = legacy_blocked_sites
         .iter()
-        .filter_map(|site| normalize_domain_rule(site).ok())
-        .map(|site| site.to_ascii_lowercase())
+        .filter_map(|site| normalized_blocklist_rule_key(site))
         .collect();
-
-    allowlist_sites.retain(|site| {
-        normalize_domain_rule(site)
-            .map(|site| !blocked_rules.contains(&site.to_ascii_lowercase()))
-            .unwrap_or(true)
-    });
+    let profile_blocked_rules: Vec<HashSet<String>> = profiles
+        .iter()
+        .map(|profile| {
+            profile
+                .as_table()
+                .map(|profile| string_array(profile.get("sites")))
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|site| normalized_blocklist_rule_key(&site))
+                .collect()
+        })
+        .collect();
+    let mut first_allowlist_sources = HashMap::new();
+    for (profile_index, profile) in profiles.iter().enumerate() {
+        let Some(profile) = profile.as_table() else {
+            continue;
+        };
+        for site in string_array(profile.get("allowlist_sites")) {
+            if let Some(rule) = normalized_blocklist_rule_key(&site) {
+                first_allowlist_sources.entry(rule).or_insert(profile_index);
+            }
+        }
+    }
+    retain_allowlist_entries_without_collapsed_block_collisions(
+        &legacy_blocked_rules,
+        &profile_blocked_rules,
+        &first_allowlist_sources,
+        allowlist_sites,
+    );
 }
 
 /// Builds a warning-level config health finding with sorted advice messages.
