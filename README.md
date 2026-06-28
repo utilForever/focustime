@@ -242,6 +242,7 @@ Milestone policy:
 - **v0.16.1:** focused config diagnostics commands are retired in favor of `--diagnostics`; feature inventory CLI export and committed generated inventory snapshots are retired; legacy cleanup-specific regression gates are archived, and current cleanup contracts live in normal CI/module/integration tests.
 - **v0.16.2:** schedule exception dates, calendar annotation cache handling, and retired calendar timezone parsing stay removed; recurring schedule windows remain the supported schedule model, and `chrono-tz` stays out of the manifest and lockfile.
 - **v0.16.3:** task note metadata, focus intention metadata, task-specific goals, session-template command/config surfaces, and per-task WakaTime mappings are retired; task labels are the supported session context in status, recovery, history, and exports, while WakaTime uses one global metadata configuration.
+- **v0.16.4:** allowlist site-management commands, blocklist profile CRUD/selection, custom blocking backend/fallback policy, break-glass workflow, and temporary override runtime state are retired; canonical blocklist commands, config/internal allowlist rules, hosts-file diagnostics, and normal timer controls are the supported replacements.
 - **Future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
@@ -275,6 +276,9 @@ Early deprecation notices:
 | Legacy timer duration fields (`focus_secs`, `short_break_secs`, `long_break_secs`, `long_break_interval`) | Use `[custom_profile]`, profile presets, and `--profile`; run `--diagnostics` when stale keys are reported. |
 | Legacy automation and blocklist top-level fields | Use per-profile automation tables and the canonical `Default` blocklist profile; inspect with `--diagnostics`. |
 | Retired blocklist category config is migration-only | `--diagnostics` reports migration guidance to flatten category `sites` and `allowlist_sites` into profile-level lists; manage blocked hostnames directly with `--blocklist-sites`, `--blocklist-site-add`, `--blocklist-site-edit`, and `--blocklist-site-delete`. |
+| Allowlist site-management commands (`--allowlist-sites`, `--allowlist-site-add`, `--allowlist-site-edit`, `--allowlist-site-delete`) | Removed; keep persistent exceptions in `allowlist_sites` config/internal rules and manage canonical blocked hostnames with blocklist site commands. |
+| Blocklist profile CRUD and selection (`--blocklist-profile*`) | Removed; existing profile rules are collapsed into the canonical `Default` blocklist/allowlist, and new site changes use direct blocklist site commands. |
+| Custom command blocking backend and backend fallback policy | Removed; hosts-file blocking is the supported backend, and `--diagnostics` reports hosts-file readiness and preview details. |
 | Temporary allowlist CLI/runtime workflow | Removed; manage blocked hostnames with blocklist commands and keep persistent exceptions in `allowlist_sites` config when needed. |
 | Break-glass temporary override workflow | Removed; use normal timer controls (`--pause`, `--resume`, `--stop`) for session flow changes or blocklist commands for site-rule changes. |
 | Split temporary override runtime fields | Removed; runtime persistence and `--status --json` no longer emit temporary override entries or legacy `break_glass_*` / `temporary_allowlist_*` fields. |
@@ -836,12 +840,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.16.3`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.16.4`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.16.3](https://github.com/utilForever/focustime/releases/tag/v0.16.3).
+The latest stable release is [v0.16.4](https://github.com/utilForever/focustime/releases/tag/v0.16.4).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 
