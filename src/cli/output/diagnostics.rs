@@ -143,12 +143,6 @@ pub(in crate::cli) fn print_diagnostics_command_output(payload: &DiagnosticsComm
 fn print_setup_diagnostics_section(payload: &DiagnosticsSetupOutput) {
     println!("Setup diagnostics:");
     println!("Hosts file: {}", payload.hosts_file_path);
-    println!(
-        "Backend policy: {} (order: {})",
-        payload.backend_policy, payload.backend_order
-    );
-    print_diagnostics_check("Backend selection", &payload.backend_selection);
-    print_diagnostics_check("Command backend", &payload.command_backend);
     print_diagnostics_check("Blocking permissions", &payload.blocking_permissions);
     print_diagnostics_check("Hosts write capability", &payload.hosts_write_capability);
     print_diagnostics_check("WakaTime config", &payload.wakatime_config);
@@ -189,10 +183,6 @@ pub(in crate::cli) fn build_diagnostics_command_output(
         action: "diagnostics",
         setup: DiagnosticsSetupOutput {
             hosts_file_path: diagnostics.hosts_file_path.clone(),
-            backend_policy: diagnostics.backend_policy.clone(),
-            backend_order: diagnostics.backend_order.clone(),
-            backend_selection: setup_check_output(&diagnostics.backend_selection),
-            command_backend: setup_check_output(&diagnostics.command_backend),
             blocking_permissions: setup_check_output(&diagnostics.blocking_permissions),
             hosts_write_capability: setup_check_output(&diagnostics.hosts_write_capability),
             wakatime_config: setup_check_output(&diagnostics.wakatime_config),
@@ -230,16 +220,6 @@ fn print_blocking_preview_fields(payload: &BlockingPreviewOutput) {
         "Backend: {} (target: {})",
         payload.backend, payload.backend_target
     );
-    if !payload.attempted_backends.is_empty() {
-        println!(
-            "Attempted backends: {}",
-            payload.attempted_backends.join(" -> ")
-        );
-    }
-    println!(
-        "Fallback used: {}",
-        if payload.fallback_used { "yes" } else { "no" }
-    );
     println!("Hosts file: {}", payload.hosts_file_path);
     println!(
         "Preview action: {} (changes: {})",
@@ -272,12 +252,6 @@ fn build_blocking_preview_output(
     BlockingPreviewOutput {
         backend: preview.backend.id(),
         backend_target: preview.backend_target.clone(),
-        attempted_backends: preview
-            .attempted_backends
-            .iter()
-            .map(|backend| backend.id())
-            .collect(),
-        fallback_used: preview.fallback_used,
         hosts_file_path: preview.hosts_file_path.clone(),
         action,
         would_change: preview.would_change,

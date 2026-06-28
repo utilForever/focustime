@@ -148,8 +148,6 @@ impl App {
             Ok(preview) => BlockingPreviewSnapshot {
                 backend: Some(preview.backend),
                 backend_target: Some(preview.backend_target.clone()),
-                attempted_backends: preview.attempted_backends.clone(),
-                fallback_used: preview.fallback_used,
                 action: preview.action,
                 would_change: preview.would_change,
                 effective_blocked_sites_count: preview.effective_blocked_sites.len(),

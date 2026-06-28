@@ -4,12 +4,10 @@ use chrono::{DateTime, Datelike, Local, NaiveDate};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::blocker::{
-    BlockingBackendPolicy, BlockingIntent, BlockingPreview, BulkAddResult, CommandBlockingBackend,
-    EditSiteResult, InvalidSiteInput, SiteBlocker,
+    BlockingIntent, BlockingPreview, BulkAddResult, EditSiteResult, InvalidSiteInput, SiteBlocker,
 };
 use crate::config::{
-    AppConfig, AutoStartConfig, BlockingBackendConfig, BlockingBackendPolicyConfig,
-    BlocklistProfileConfig, CommandBlockingBackendConfig, CustomProfileConfig, DailyGoalConfig,
+    AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
     FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig, MonthlyGoalConfig,
     NotificationConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
     RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
@@ -185,54 +183,6 @@ fn blocklist_profile_index(profiles: &[BlocklistProfileConfig], selected_name: &
         .iter()
         .position(|profile| profile.name.eq_ignore_ascii_case(selected_name))
         .unwrap_or(0)
-}
-
-fn blocking_backend_policy_for_config(
-    policy: BlockingBackendPolicyConfig,
-) -> BlockingBackendPolicy {
-    match policy {
-        BlockingBackendPolicyConfig::HostsOnly => BlockingBackendPolicy::HostsOnly,
-        BlockingBackendPolicyConfig::HostsThenCommand => BlockingBackendPolicy::HostsThenCommand,
-        BlockingBackendPolicyConfig::CommandThenHosts => BlockingBackendPolicy::CommandThenHosts,
-        BlockingBackendPolicyConfig::CommandOnly => BlockingBackendPolicy::CommandOnly,
-    }
-}
-
-fn command_backend_for_config(config: &CommandBlockingBackendConfig) -> CommandBlockingBackend {
-    CommandBlockingBackend {
-        block_command: config.block_command.clone(),
-        unblock_command: config.unblock_command.clone(),
-        diagnostics_command: config.diagnostics_command.clone(),
-    }
-}
-
-fn blocking_backend_policy_to_config(policy: BlockingBackendPolicy) -> BlockingBackendPolicyConfig {
-    match policy {
-        BlockingBackendPolicy::HostsOnly => BlockingBackendPolicyConfig::HostsOnly,
-        BlockingBackendPolicy::HostsThenCommand => BlockingBackendPolicyConfig::HostsThenCommand,
-        BlockingBackendPolicy::CommandThenHosts => BlockingBackendPolicyConfig::CommandThenHosts,
-        BlockingBackendPolicy::CommandOnly => BlockingBackendPolicyConfig::CommandOnly,
-    }
-}
-
-fn command_backend_to_config(
-    command_backend: &CommandBlockingBackend,
-) -> CommandBlockingBackendConfig {
-    CommandBlockingBackendConfig {
-        block_command: command_backend.block_command.clone(),
-        unblock_command: command_backend.unblock_command.clone(),
-        diagnostics_command: command_backend.diagnostics_command.clone(),
-    }
-}
-
-fn blocking_backend_config_for_persistence(
-    policy: BlockingBackendPolicy,
-    command_backend: &CommandBlockingBackend,
-) -> BlockingBackendConfig {
-    BlockingBackendConfig {
-        policy: blocking_backend_policy_to_config(policy),
-        command: command_backend_to_config(command_backend),
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -588,10 +538,7 @@ impl App {
             profile_spec.long_break_secs,
             profile_spec.long_break_interval,
         );
-        let blocker = SiteBlocker::with_backend_config(
-            blocking_backend_policy_for_config(config.blocking_backend.policy),
-            command_backend_for_config(&config.blocking_backend.command),
-        );
+        let blocker = SiteBlocker::new();
         let setup_diagnostics = SetupDiagnostics::collect(
             &blocker,
             setup_deprecation_warnings.clone(),

@@ -8,12 +8,9 @@ use std::path::Path;
 const BLOCK_MARKER_START: &str = "# focustime-block-start";
 const BLOCK_MARKER_END: &str = "# focustime-block-end";
 
-mod command;
 mod hosts;
 mod rules;
 
-pub(crate) use command::CommandBlockingBackend;
-use command::{apply_command_backend, command_backend_diagnostics, preview_from_command};
 use hosts::{HOSTS_FILE, atomic_write_hosts_to_path, flush_dns_cache, hosts_file_diagnostics_for};
 #[cfg(test)]
 use hosts::{HostsWriteFailStep, set_test_hosts_write_fail_steps};
@@ -42,12 +39,6 @@ pub(crate) fn take_test_blocking_action() -> Option<&'static str> {
 pub(crate) struct SiteBlocker {
     pub(crate) sites: Vec<String>,
     pub(crate) is_blocking: bool,
-    backend_policy: BlockingBackendPolicy,
-    command_backend: CommandBlockingBackend,
-    active_backend: Option<BlockingBackendKind>,
-    last_backend: Option<BlockingBackendKind>,
-    last_fallback_used: bool,
-    last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,68 +96,20 @@ pub(crate) enum BlockingPreviewAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BlockingBackendKind {
     Hosts,
-    Command,
 }
 
 impl BlockingBackendKind {
     pub(crate) fn id(self) -> &'static str {
         match self {
             BlockingBackendKind::Hosts => "hosts",
-            BlockingBackendKind::Command => "command",
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum BlockingBackendPolicy {
-    HostsOnly,
-    #[default]
-    HostsThenCommand,
-    CommandThenHosts,
-    CommandOnly,
-}
-
-impl BlockingBackendPolicy {
-    pub(crate) fn id(self) -> &'static str {
-        match self {
-            BlockingBackendPolicy::HostsOnly => "hosts_only",
-            BlockingBackendPolicy::HostsThenCommand => "hosts_then_command",
-            BlockingBackendPolicy::CommandThenHosts => "command_then_hosts",
-            BlockingBackendPolicy::CommandOnly => "command_only",
-        }
-    }
-
-    fn backend_order(self) -> Vec<BlockingBackendKind> {
-        match self {
-            BlockingBackendPolicy::HostsOnly => vec![BlockingBackendKind::Hosts],
-            BlockingBackendPolicy::HostsThenCommand => {
-                vec![BlockingBackendKind::Hosts, BlockingBackendKind::Command]
-            }
-            BlockingBackendPolicy::CommandThenHosts => {
-                vec![BlockingBackendKind::Command, BlockingBackendKind::Hosts]
-            }
-            BlockingBackendPolicy::CommandOnly => vec![BlockingBackendKind::Command],
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct BlockingBackendStatus {
-    pub(crate) policy: BlockingBackendPolicy,
-    pub(crate) order: Vec<BlockingBackendKind>,
-    pub(crate) active_backend: Option<BlockingBackendKind>,
-    pub(crate) last_backend: Option<BlockingBackendKind>,
-    pub(crate) fallback_used: bool,
-    pub(crate) last_error: Option<String>,
-    pub(crate) command_configured: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BlockingPreview {
     pub(crate) backend: BlockingBackendKind,
     pub(crate) backend_target: String,
-    pub(crate) attempted_backends: Vec<BlockingBackendKind>,
-    pub(crate) fallback_used: bool,
     pub(crate) hosts_file_path: String,
     pub(crate) action: BlockingPreviewAction,
     pub(crate) effective_blocked_sites: Vec<String>,
@@ -185,46 +128,10 @@ impl BlockingPreview {
 
 impl SiteBlocker {
     pub(crate) fn new() -> Self {
-        Self::with_backend_config(
-            BlockingBackendPolicy::default(),
-            CommandBlockingBackend::default(),
-        )
-    }
-
-    pub(crate) fn with_backend_config(
-        backend_policy: BlockingBackendPolicy,
-        command_backend: CommandBlockingBackend,
-    ) -> Self {
         Self {
             sites: Vec::new(),
             is_blocking: false,
-            backend_policy,
-            command_backend: command_backend.normalized(),
-            active_backend: None,
-            last_backend: None,
-            last_fallback_used: false,
-            last_error: None,
         }
-    }
-
-    pub(crate) fn backend_status(&self) -> BlockingBackendStatus {
-        BlockingBackendStatus {
-            policy: self.backend_policy,
-            order: self.backend_policy.backend_order(),
-            active_backend: self.active_backend,
-            last_backend: self.last_backend,
-            fallback_used: self.last_fallback_used,
-            last_error: self.last_error.clone(),
-            command_configured: self.command_backend.is_configured(),
-        }
-    }
-
-    pub(crate) fn backend_config(&self) -> (BlockingBackendPolicy, CommandBlockingBackend) {
-        (self.backend_policy, self.command_backend.clone())
-    }
-
-    pub(crate) fn command_backend_diagnostics(&self) -> io::Result<()> {
-        command_backend_diagnostics(&self.command_backend)
     }
 
     pub(crate) fn add_site(&mut self, site: String) {
@@ -339,22 +246,7 @@ impl SiteBlocker {
         &self,
         intent: BlockingIntent,
     ) -> io::Result<BlockingPreview> {
-        let order = self.backend_order_for_intent(intent);
-        let mut errors = Vec::new();
-        for (index, backend) in order.iter().copied().enumerate() {
-            match self.preview_with_backend(intent, backend) {
-                Ok(mut preview) => {
-                    preview.attempted_backends = order[..=index].to_vec();
-                    preview.fallback_used = index > 0;
-                    return Ok(preview);
-                }
-                Err(error) => errors.push(format!("{}: {error}", backend.id())),
-            }
-        }
-        Err(io::Error::other(format!(
-            "Failed to generate blocking preview ({})",
-            errors.join(" | ")
-        )))
+        self.preview_with_backend(intent, BlockingBackendKind::Hosts)
     }
 
     /// Activate blocking by writing entries into the hosts file.
@@ -363,20 +255,13 @@ impl SiteBlocker {
         #[cfg(test)]
         record_test_blocking_action("block");
 
-        if self.sites.is_empty() {
-            if let Some(active_backend) = self.active_backend {
-                let _ = self.apply_with_backend(BlockingIntent::Unblock, active_backend);
-            }
-            // Best-effort: strip any stale block section left by a prior run.
-            let _ = self.remove_hosts_block();
+        if self.hosts_renderable_sites().is_empty() {
+            // Strip any stale block section left by a prior run.
+            self.remove_hosts_block()?;
             self.is_blocking = false;
-            self.active_backend = None;
-            self.last_backend = None;
-            self.last_fallback_used = false;
-            self.last_error = None;
             return Ok(());
         }
-        self.apply_with_fallback(BlockingIntent::Block)?;
+        self.apply_with_backend(BlockingIntent::Block, BlockingBackendKind::Hosts)?;
         self.is_blocking = true;
         Ok(())
     }
@@ -388,55 +273,14 @@ impl SiteBlocker {
         #[cfg(test)]
         record_test_blocking_action("unblock");
 
-        self.apply_with_fallback(BlockingIntent::Unblock)?;
+        self.apply_with_backend(BlockingIntent::Unblock, BlockingBackendKind::Hosts)?;
         self.is_blocking = false;
-        self.active_backend = None;
         Ok(())
     }
 
     /// Remove block entries on app exit (best-effort).
     pub(crate) fn cleanup(&mut self) {
         let _ = self.unblock();
-    }
-
-    fn apply_with_fallback(&mut self, intent: BlockingIntent) -> io::Result<()> {
-        let order = self.backend_order_for_intent(intent);
-        let mut errors = Vec::new();
-        let mut first_success: Option<(usize, BlockingBackendKind)> = None;
-        let attempt_all_backends = intent == BlockingIntent::Unblock;
-        for (index, backend) in order.iter().copied().enumerate() {
-            match self.apply_with_backend(intent, backend) {
-                Ok(()) => {
-                    if first_success.is_none() {
-                        first_success = Some((index, backend));
-                    }
-                    if !attempt_all_backends {
-                        break;
-                    }
-                }
-                Err(error) => errors.push(format!("{}: {error}", backend.id())),
-            }
-        }
-
-        if let Some((index, backend)) = first_success {
-            self.last_backend = Some(backend);
-            self.last_fallback_used = index > 0;
-            self.last_error = None;
-            if intent == BlockingIntent::Block {
-                self.active_backend = Some(backend);
-            }
-            return Ok(());
-        }
-
-        let message = format!(
-            "all configured blocking backends failed for {} ({})",
-            blocking_intent_id(intent),
-            errors.join(" | ")
-        );
-        self.last_backend = None;
-        self.last_fallback_used = false;
-        self.last_error = Some(message.clone());
-        Err(io::Error::new(io::ErrorKind::PermissionDenied, message))
     }
 
     fn apply_with_backend(
@@ -449,7 +293,6 @@ impl SiteBlocker {
                 BlockingIntent::Block => self.apply_hosts_block(),
                 BlockingIntent::Unblock => self.remove_hosts_block(),
             },
-            BlockingBackendKind::Command => self.apply_command_backend(intent),
         }
     }
 
@@ -463,33 +306,7 @@ impl SiteBlocker {
                 let original = fs::read_to_string(HOSTS_FILE)?;
                 Ok(self.preview_from_hosts_content(HOSTS_FILE, &original, intent))
             }
-            BlockingBackendKind::Command => self.preview_from_command(intent),
         }
-    }
-
-    fn backend_order_for_intent(&self, intent: BlockingIntent) -> Vec<BlockingBackendKind> {
-        if intent == BlockingIntent::Block {
-            return self.backend_policy.backend_order();
-        }
-
-        let mut order = Vec::new();
-        if let Some(active_backend) = self.active_backend {
-            order.push(active_backend);
-        }
-        for backend in self.backend_policy.backend_order() {
-            if !order.contains(&backend) {
-                order.push(backend);
-            }
-        }
-        order
-    }
-
-    fn apply_command_backend(&self, intent: BlockingIntent) -> io::Result<()> {
-        apply_command_backend(&self.command_backend, intent, &self.sites)
-    }
-
-    fn preview_from_command(&self, intent: BlockingIntent) -> io::Result<BlockingPreview> {
-        preview_from_command(&self.command_backend, intent, &self.sites)
     }
 
     fn apply_hosts_block(&self) -> io::Result<()> {
@@ -624,8 +441,6 @@ impl SiteBlocker {
         BlockingPreview {
             backend: BlockingBackendKind::Hosts,
             backend_target: hosts_file_path.to_string(),
-            attempted_backends: vec![BlockingBackendKind::Hosts],
-            fallback_used: false,
             hosts_file_path: hosts_file_path.to_string(),
             action,
             effective_blocked_sites,
@@ -714,13 +529,6 @@ impl SiteBlocker {
 impl Default for SiteBlocker {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-fn blocking_intent_id(intent: BlockingIntent) -> &'static str {
-    match intent {
-        BlockingIntent::Block => "block",
-        BlockingIntent::Unblock => "unblock",
     }
 }
 

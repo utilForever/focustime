@@ -637,10 +637,6 @@ struct SetupCheckOutput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct DiagnosticsSetupOutput {
     hosts_file_path: String,
-    backend_policy: String,
-    backend_order: String,
-    backend_selection: SetupCheckOutput,
-    command_backend: SetupCheckOutput,
     blocking_permissions: SetupCheckOutput,
     hosts_write_capability: SetupCheckOutput,
     wakatime_config: SetupCheckOutput,
@@ -661,8 +657,6 @@ struct DiagnosticsCommandOutput {
 struct BlockingPreviewOutput {
     backend: &'static str,
     backend_target: String,
-    attempted_backends: Vec<&'static str>,
-    fallback_used: bool,
     hosts_file_path: String,
     action: &'static str,
     would_change: bool,

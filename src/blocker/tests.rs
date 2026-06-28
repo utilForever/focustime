@@ -380,6 +380,14 @@ fn preview_block_skips_wildcard_entries_for_hosts_backend() {
 }
 
 #[test]
+fn hosts_renderable_sites_excludes_wildcard_only_rules() {
+    let mut blocker = SiteBlocker::new();
+    blocker.add_site("*.example.com".to_string());
+
+    assert!(blocker.hosts_renderable_sites().is_empty());
+}
+
+#[test]
 fn preview_unblock_reports_current_section_and_change() {
     let blocker = SiteBlocker::new();
     let original = "127.0.0.1 localhost\n# focustime-block-start\n127.0.0.1 example.com\n# focustime-block-end\n";

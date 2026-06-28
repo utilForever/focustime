@@ -31,7 +31,6 @@ fn default_values_are_canonical_pomodoro() {
     assert!(cfg.blocked_sites.is_empty());
     assert_eq!(cfg.selected_blocklist_profile, "Default");
     assert!(cfg.blocklist_profiles.is_empty());
-    assert_eq!(cfg.blocking_backend, BlockingBackendConfig::default());
     assert_eq!(cfg.notifications, NotificationConfig::default());
     assert_eq!(cfg.auto_start, AutoStartConfig::default());
     assert_eq!(cfg.recurring_schedule, RecurringScheduleConfig::default());
@@ -107,7 +106,6 @@ fn round_trip_full_config() {
             },
         ],
         selected_blocklist_profile: "Study".to_string(),
-        blocking_backend: BlockingBackendConfig::default(),
         selected_profile: ProfileId::DeepWork,
         custom_profile: Some(CustomProfileConfig {
             focus_secs: 30 * 60,
@@ -257,7 +255,6 @@ fn round_trip_full_config() {
         parsed.selected_blocklist_profile,
         original.selected_blocklist_profile
     );
-    assert_eq!(parsed.blocking_backend, original.blocking_backend);
     assert_eq!(parsed.selected_profile, original.selected_profile);
     assert_eq!(parsed.custom_profile, original.custom_profile);
     assert_eq!(parsed.selected_theme_preset, original.selected_theme_preset);
@@ -647,7 +644,6 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         blocked_sites: Vec::new(),
         blocklist_profiles: vec![BlocklistProfileConfig::default()],
         selected_blocklist_profile: "Default".to_string(),
-        blocking_backend: BlockingBackendConfig::default(),
         selected_profile: ProfileId::Custom,
         custom_profile: Some(CustomProfileConfig {
             focus_secs: 40 * 60,
