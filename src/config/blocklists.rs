@@ -146,6 +146,9 @@ pub(super) fn normalize_blocklist_profiles(
         merge_unique_case_insensitive(&mut sites, &profile.sites);
         merge_unique_case_insensitive(&mut allowlist_sites, &profile.allowlist_sites);
     }
+    if profiles.len() > 1 || !legacy_blocked_sites.is_empty() {
+        remove_exact_block_allow_collisions(&sites, &mut allowlist_sites);
+    }
 
     vec![BlocklistProfileConfig {
         name: default_blocklist_profile_name(),
@@ -253,6 +256,20 @@ fn merge_unique_case_insensitive(target: &mut Vec<String>, source: &[String]) {
             target.push(value.clone());
         }
     }
+}
+
+fn remove_exact_block_allow_collisions(sites: &[String], allowlist_sites: &mut Vec<String>) {
+    let blocked_rules: HashSet<String> = sites
+        .iter()
+        .filter_map(|site| normalize_domain_rule(site).ok())
+        .map(|site| site.to_ascii_lowercase())
+        .collect();
+
+    allowlist_sites.retain(|site| {
+        normalize_domain_rule(site)
+            .map(|site| !blocked_rules.contains(&site.to_ascii_lowercase()))
+            .unwrap_or(true)
+    });
 }
 
 fn flatten_blocklist_categories(

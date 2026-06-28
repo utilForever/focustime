@@ -1739,7 +1739,7 @@ fn normalize_collapses_profiles_and_fixes_selection() {
                 allowlist_sites: vec!["b.com".to_string()],
             },
             BlocklistProfileConfig {
-                name: "work".to_string(),
+                name: "Personal".to_string(),
                 sites: vec!["b.com".to_string()],
                 allowlist_sites: Vec::new(),
             },
@@ -1757,7 +1757,11 @@ fn normalize_collapses_profiles_and_fixes_selection() {
     );
     assert_eq!(
         cfg.blocklist_profiles[0].allowlist_sites,
-        vec!["b.com".to_string()]
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        effective_blocked_sites_for_profile(&cfg.blocklist_profiles[0]),
+        vec!["a.com".to_string(), "b.com".to_string()]
     );
     assert_eq!(cfg.selected_blocklist_profile, "Default");
     assert!(cfg.blocked_sites.is_empty());
