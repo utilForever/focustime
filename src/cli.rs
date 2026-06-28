@@ -41,20 +41,19 @@ use args::{classify_args, infer_output_mode_from_os_args};
 use execute::execute_cli_command;
 #[cfg(test)]
 use execute::{
-    apply_blocklist_profile_command, apply_history_dashboard_command, apply_site_add_command,
-    apply_site_delete_command, apply_site_edit_command,
+    apply_history_dashboard_command, apply_site_add_command, apply_site_delete_command,
+    apply_site_edit_command,
 };
 use output::{
     build_diagnostics_blocking_preview_error, build_diagnostics_blocking_preview_output,
     build_diagnostics_command_output, build_schedule_inspection_output, display_input_value,
     effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
-    print_blocklist_profile_command_output, print_diagnostics_command_output, print_export_output,
-    print_goal_carry_command_output, print_goal_command_output,
-    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
-    print_restore_output, print_schedule_command_output, print_site_add_command_output,
-    print_site_delete_command_output, print_site_edit_command_output,
-    print_site_list_command_output, print_status_output, print_strict_command_output,
-    print_theme_command_output, print_timer_state_output,
+    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
+    print_goal_command_output, print_history_dashboard_command_output, print_json,
+    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
+    print_site_add_command_output, print_site_delete_command_output,
+    print_site_edit_command_output, print_site_list_command_output, print_status_output,
+    print_strict_command_output, print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
@@ -94,10 +93,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
   focustime --schedule-set=JSON_PAYLOAD [--json]
-  focustime --blocklist-profile [PROFILE_NAME] [--json]
-  focustime --blocklist-profile-create=PROFILE_NAME [--json]
-  focustime --blocklist-profile-rename=PROFILE_NAME [--json]
-  focustime --blocklist-profile-delete [--json]
   focustime --history-dashboard [--json]
   focustime --blocklist-sites [--json]
   focustime --allowlist-sites [--json]
@@ -131,19 +126,15 @@ Options:
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
   --schedule-set  Replace selected profile schedule from JSON payload
-  --blocklist-profile         Show active blocklist profile, or set active profile
-  --blocklist-profile-create  Create a blocklist profile and select it
-  --blocklist-profile-rename  Rename the active blocklist profile
-  --blocklist-profile-delete  Delete the active blocklist profile
   --history-dashboard       Show the stable default KPI dashboard layout
-  --blocklist-sites           List blocklist sites for the active blocklist profile
-  --allowlist-sites           List allowlist sites for the active blocklist profile
-  --blocklist-site-add        Add/import blocklist hostnames for the active blocklist profile
-  --allowlist-site-add        Add/import allowlist hostnames for the active blocklist profile
-  --blocklist-site-edit       Replace blocklist hostname for the active blocklist profile using OLD=NEW
-  --allowlist-site-edit       Replace allowlist hostname for the active blocklist profile using OLD=NEW
-  --blocklist-site-delete     Delete blocklist hostname from the active blocklist profile
-  --allowlist-site-delete     Delete allowlist hostname from the active blocklist profile
+  --blocklist-sites           List canonical blocklist sites
+  --allowlist-sites           List canonical allowlist sites
+  --blocklist-site-add        Add/import canonical blocklist hostnames
+  --allowlist-site-add        Add/import canonical allowlist hostnames
+  --blocklist-site-edit       Replace canonical blocklist hostname using OLD=NEW
+  --allowlist-site-edit       Replace canonical allowlist hostname using OLD=NEW
+  --blocklist-site-delete     Delete canonical blocklist hostname
+  --allowlist-site-delete     Delete canonical allowlist hostname
   --diagnostics   Show setup diagnostics, blocking preview details, config health, and migration guidance
   --status        Print status summary (includes live timer/session fields and latest interruption)
   --watch         Stream periodic status updates (status command only; default 1s)
@@ -258,9 +249,6 @@ pub(crate) enum CommandKind {
     Export {
         dir: Option<PathBuf>,
     },
-    BlocklistProfile {
-        command: BlocklistProfileCommandKind,
-    },
     BlocklistSites {
         target: SiteListTarget,
         command: BlocklistSiteCommandKind,
@@ -307,10 +295,6 @@ enum PrimaryCommand {
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
     Export(Option<PathBuf>),
-    BlocklistProfile(Option<String>),
-    BlocklistProfileCreate(String),
-    BlocklistProfileRename(String),
-    BlocklistProfileDelete,
     HistoryDashboard,
     BlocklistSites,
     AllowlistSites,
@@ -349,10 +333,6 @@ enum ParsedToken {
     Backup(Option<PathBuf>),
     Restore(Option<PathBuf>),
     Export(Option<PathBuf>),
-    BlocklistProfile(Option<String>),
-    BlocklistProfileCreate(String),
-    BlocklistProfileRename(String),
-    BlocklistProfileDelete,
     HistoryDashboard,
     BlocklistSites,
     AllowlistSites,
@@ -389,14 +369,6 @@ impl SiteListTarget {
 pub(crate) struct SiteEditValue {
     previous: String,
     next: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum BlocklistProfileCommandKind {
-    Select { profile: Option<String> },
-    Create { name: String },
-    Rename { name: String },
-    Delete,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -672,23 +644,6 @@ struct DiagnosticsBlockingPreviewOutput {
     error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     preview: Option<BlockingPreviewOutput>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct BlocklistProfileSummaryOutput {
-    name: String,
-    active: bool,
-    blocklist_sites_count: usize,
-    allowlist_sites_count: usize,
-    effective_blocked_sites_count: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct BlocklistProfileCommandOutput {
-    action: &'static str,
-    updated: bool,
-    selected_blocklist_profile: String,
-    profiles: Vec<BlocklistProfileSummaryOutput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
