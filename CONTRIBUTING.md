@@ -94,7 +94,7 @@ Also keep the README roadmap, changelog entry, and deprecation notices aligned
 so every deprecated or retired path names supported replacement behavior before
 the tag is created.
 
-To publish a release artifact set, create and push a `v*` tag (for example, `v0.16.3`).
+To publish a release artifact set, create and push a `v*` tag (for example, `v0.16.4`).
 The release workflow will:
 
 - run `cargo check --all --locked`, `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, and `cargo test --all --locked`
