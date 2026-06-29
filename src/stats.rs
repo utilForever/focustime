@@ -33,7 +33,6 @@ mod trends;
 #[cfg_attr(test, allow(dead_code))]
 const STATS_FILE_NAME: &str = "stats.toml";
 const JSON_EXPORT_FILE_NAME: &str = "focustime-stats.json";
-const CSV_EXPORT_FILE_NAME: &str = "focustime-stats.csv";
 const EXPORT_SCHEMA_VERSION: u32 = 9;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -310,7 +309,6 @@ impl DailyStats {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExportedStatsFiles {
     pub(crate) json_path: PathBuf,
-    pub(crate) csv_path: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -546,14 +544,6 @@ impl ComparisonDimension {
             Self::TaskLabel => "Task",
             Self::Profile => "Profile",
             Self::TimeOfDay => "Time of Day",
-        }
-    }
-
-    pub(crate) fn id(self) -> &'static str {
-        match self {
-            Self::TaskLabel => "task_label",
-            Self::Profile => "profile",
-            Self::TimeOfDay => "time_of_day",
         }
     }
 }
@@ -907,48 +897,6 @@ struct HistoryKpiComparisonFilters {
     profile_filter: Option<ProfileBucket>,
     time_of_day_filter: Option<TimeOfDayBucket>,
     summary: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct CsvExportRow {
-    schema_version: u32,
-    record_type: &'static str,
-    date: Option<String>,
-    week_label: Option<String>,
-    year: Option<i32>,
-    week: Option<u32>,
-    pomodoros_completed: u32,
-    focused_seconds: u64,
-    focused_minutes: u64,
-    goal_minutes: Option<u64>,
-    goal_pomodoros: Option<u32>,
-    goal_met: Option<bool>,
-    task_label: Option<String>,
-    interruption_timestamp_epoch_secs: Option<u64>,
-    interruption_reason: Option<SessionInterruptionReason>,
-    interruption_remaining_secs: Option<u64>,
-    recent_window_start: Option<String>,
-    recent_window_end: Option<String>,
-    previous_window_start: Option<String>,
-    previous_window_end: Option<String>,
-    previous_pomodoros_completed: Option<u32>,
-    previous_focused_seconds: Option<u64>,
-    previous_focused_minutes: Option<u64>,
-    delta_focused_seconds: Option<i64>,
-    delta_focused_minutes: Option<i64>,
-    profile_name: Option<String>,
-    sessions_completed: Option<u32>,
-    active_days: Option<u32>,
-    consistency_score_pct: Option<u8>,
-    completion_score_pct: Option<u8>,
-    focus_score_pct: Option<u8>,
-    average_focused_minutes_per_session: Option<u64>,
-    focus_share_pct: Option<u8>,
-    comparison_dimension: Option<String>,
-    comparison_label: Option<String>,
-    time_of_day_bucket: Option<String>,
-    kpi_card_id: Option<String>,
-    kpi_payload_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]

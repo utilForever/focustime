@@ -98,26 +98,15 @@ impl App {
         let export_dir = paths
             .json_path
             .parent()
-            .or_else(|| paths.csv_path.parent())
             .unwrap_or_else(|| std::path::Path::new("."));
         let json_name = paths
             .json_path
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("focustime-stats.json");
-        let csv_name = paths
-            .csv_path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("focustime-stats.csv");
         self.set_history_feedback(
             HistoryFeedbackLevel::Success,
-            format!(
-                "Exported to {}: JSON {}, CSV {}",
-                export_dir.display(),
-                json_name,
-                csv_name
-            ),
+            format!("Exported to {}: JSON {}", export_dir.display(), json_name),
         );
     }
 

@@ -110,7 +110,6 @@ Key dependencies are defined in `Cargo.toml`:
 - `crossterm`: terminal input/output and screen control.
 - `serde_json`: CLI/status/export JSON.
 - `toml`: config, stats, and recovery persistence.
-- `csv`: stats export artifacts.
 - `chrono`: timer/stat dates and schedule windows.
 
 Dependency guidelines:

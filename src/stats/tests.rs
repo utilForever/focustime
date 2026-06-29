@@ -1488,7 +1488,7 @@ fn productivity_comparison_applies_task_and_time_filters() {
 }
 
 #[test]
-fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
+fn export_to_dir_writes_daily_and_weekly_json() {
     let mut stats = FocusStats::default();
     let goal = DailyGoalSnapshot {
         minutes: 25,
@@ -1547,7 +1547,6 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         exported.json_path.file_name().unwrap(),
         JSON_EXPORT_FILE_NAME
     );
-    assert_eq!(exported.csv_path.file_name().unwrap(), CSV_EXPORT_FILE_NAME);
 
     let json = fs::read_to_string(&exported.json_path).unwrap();
     let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -1644,94 +1643,7 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
             .iter()
             .any(|entry| entry["dimension"] == "time_of_day")
     );
-
-    let csv = fs::read_to_string(&exported.csv_path).unwrap();
-    let csv_header = csv.lines().next().expect("csv header should be present");
-    let focus_session_line = csv
-        .lines()
-        .find(|line| line.contains(",focus_session,"))
-        .expect("focus session row should be present");
-    assert!(focus_session_line.contains(",Basic,"));
-    let interruption_line = csv
-        .lines()
-        .find(|line| line.contains(",session_interruption,"))
-        .expect("session interruption row should be present");
-    assert!(interruption_line.contains(",Basic,"));
-    assert!(csv_header.contains("comparison_dimension"));
-    assert!(csv_header.contains("comparison_label"));
-    assert!(csv_header.contains("time_of_day_bucket"));
-    assert!(csv_header.contains("kpi_card_id"));
-    assert!(csv_header.contains("kpi_payload_json"));
-    assert!(csv.contains(&format!("{},daily,{labeled_day}", EXPORT_SCHEMA_VERSION)));
-    assert!(csv.contains(&format!("{},weekly,,", EXPORT_SCHEMA_VERSION)));
-    assert!(csv.contains(&format!(
-        "{},focus_session,{labeled_day}",
-        EXPORT_SCHEMA_VERSION
-    )));
-    assert!(csv.contains("Project A"));
-    assert!(csv.contains(&format!(
-        "{},session_interruption,{labeled_day}",
-        EXPORT_SCHEMA_VERSION
-    )));
-    assert!(csv.contains("manual_skip"));
-    assert!(csv.contains("1711000111"));
-    assert!(csv.contains(&format!("{},task_summary", EXPORT_SCHEMA_VERSION)));
-    assert!(csv.contains(&format!("{},task_trend", EXPORT_SCHEMA_VERSION)));
-    assert!(csv.contains(&format!("{},weekly_consistency,", EXPORT_SCHEMA_VERSION)));
-    assert!(csv.contains(&format!("{},focus_score,", EXPORT_SCHEMA_VERSION)));
-    assert!(csv.contains(&format!(
-        "{},profile_effectiveness,,,,,1,1800,30",
-        EXPORT_SCHEMA_VERSION
-    )));
-    assert!(csv.contains(&format!(
-        "{},productivity_comparison",
-        EXPORT_SCHEMA_VERSION
-    )));
-    assert!(csv.contains(&format!("{},history_kpi", EXPORT_SCHEMA_VERSION)));
-    assert!(csv.contains("Basic,1,1,"));
-
-    #[derive(serde::Deserialize)]
-    struct CsvKpiRow {
-        record_type: String,
-        kpi_card_id: Option<String>,
-        kpi_payload_json: Option<String>,
-    }
-
-    let mut csv_reader = csv::Reader::from_reader(csv.as_bytes());
-    let mut csv_kpi_payloads = std::collections::BTreeMap::new();
-    for row in csv_reader.deserialize::<CsvKpiRow>() {
-        let row = row.expect("history kpi row should deserialize");
-        if row.record_type != "history_kpi" {
-            continue;
-        }
-        let card_id = row
-            .kpi_card_id
-            .expect("history_kpi row should include kpi_card_id");
-        let payload = row
-            .kpi_payload_json
-            .expect("history_kpi row should include kpi_payload_json");
-        let parsed_payload: serde_json::Value =
-            serde_json::from_str(&payload).expect("kpi_payload_json should be valid JSON");
-        csv_kpi_payloads.insert(card_id, parsed_payload);
-    }
-
-    assert_eq!(csv_kpi_payloads.len(), 8);
-    for card_id in [
-        "session_summary",
-        "focus_score",
-        "goal_streak",
-        "focus_risk",
-        "last_interruption",
-        "stats_growth",
-        "retention",
-        "comparison_filters",
-    ] {
-        assert_eq!(
-            csv_kpi_payloads.get(card_id),
-            history_kpis.get(card_id),
-            "csv/json parity mismatch for {card_id}"
-        );
-    }
+    assert!(!export_dir.join("focustime-stats.csv").exists());
 
     fs::remove_dir_all(export_dir).unwrap();
 }

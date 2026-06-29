@@ -374,10 +374,7 @@ fn export_json_creates_target_dirs_and_preserves_path_fields() {
         path_value(&export_payload, "json_path"),
         export_dir.join("focustime-stats.json")
     );
-    assert_eq!(
-        path_value(&export_payload, "csv_path"),
-        export_dir.join("focustime-stats.csv")
-    );
+    assert!(export_payload.get("csv_path").is_none());
 }
 
 #[test]
