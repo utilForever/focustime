@@ -119,9 +119,6 @@ pub(crate) struct AppConfig {
     /// A value of `0` disables the corresponding goal.
     #[serde(default, skip_serializing)]
     pub(crate) monthly_goal: MonthlyGoalConfig,
-    /// Carry-over behavior for unmet daily targets.
-    #[serde(default)]
-    pub(crate) goal_carry_over: GoalCarryOverConfig,
     /// Retention policy for persisted stats history.
     #[serde(default)]
     pub(crate) stats_retention: StatsRetentionConfig,
@@ -473,19 +470,6 @@ pub(crate) struct MonthlyGoalConfig {
     /// Target completed pomodoros for the current month.
     #[serde(default)]
     pub(crate) pomodoros: u32,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub(crate) struct GoalCarryOverConfig {
-    /// When enabled, unmet daily targets are added to the next day's target.
-    #[serde(default)]
-    pub(crate) daily: bool,
-    /// Deprecated weekly target carry-over, retained only for legacy config reads.
-    #[serde(default, skip_serializing)]
-    pub(crate) weekly: bool,
-    /// Deprecated monthly target carry-over, retained only for legacy config reads.
-    #[serde(default, skip_serializing)]
-    pub(crate) monthly: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -915,7 +899,6 @@ impl Default for AppConfig {
             daily_goal: DailyGoalConfig::default(),
             weekly_goal: WeeklyGoalConfig::default(),
             monthly_goal: MonthlyGoalConfig::default(),
-            goal_carry_over: GoalCarryOverConfig::default(),
             stats_retention: StatsRetentionConfig::default(),
             history_dashboard: HistoryDashboardConfig::default(),
             feature_flags: FeatureFlagsConfig::default(),
@@ -1096,8 +1079,6 @@ impl AppConfig {
         self.shortcuts = self.shortcuts.normalized();
         self.weekly_goal = WeeklyGoalConfig::default();
         self.monthly_goal = MonthlyGoalConfig::default();
-        self.goal_carry_over.weekly = false;
-        self.goal_carry_over.monthly = false;
         self
     }
 

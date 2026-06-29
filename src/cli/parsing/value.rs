@@ -67,16 +67,6 @@ pub(in crate::cli) fn parse_strict_value(value: &str) -> Result<bool, String> {
     }
 }
 
-pub(in crate::cli) fn parse_goal_carry_value(value: &str) -> Result<bool, String> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "on" => Ok(true),
-        "off" => Ok(false),
-        _ => Err(invalid_usage(&format!(
-            "Invalid goal carry-over `{value}`. Use `on` or `off`."
-        ))),
-    }
-}
-
 pub(in crate::cli) fn parse_site_edit_value(value: &str) -> Result<SiteEditValue, String> {
     let trimmed = value.trim();
     let (previous, next) = trimmed.split_once('=').ok_or_else(|| {

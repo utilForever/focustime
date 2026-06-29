@@ -48,6 +48,7 @@ impl FocusStats {
         totals
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn monthly_for_day(&self, day: chrono::NaiveDate) -> MonthlyStats {
         let mut totals = MonthlyStats {
             year: day.year(),

@@ -3,8 +3,8 @@ use crate::cli::{
     DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS, DailyGoalSnapshot, FocusScoreOutput,
     FocusStats, GoalOutput, LiveStatusOutput, NaiveDate, ProfileId, ProfileSpec, ProfileView,
     SessionOutput, StatsRetentionStatusOutput, StatusOutput, ThemePreset, ThemePresetView,
-    TimerPhase, TimerStatus, TodayOutput, carry_over_goal_target, current_day_key,
-    effective_blocked_sites_for_profile, session_recovery,
+    TimerPhase, TimerStatus, TodayOutput, current_day_key, effective_blocked_sites_for_profile,
+    session_recovery,
 };
 use crate::timer::TimerState;
 
@@ -54,7 +54,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
             minutes_target: goal_snapshot.minutes,
             pomodoros_target: goal_snapshot.pomodoros,
             met: goal_snapshot.is_met_by(today),
-            carry_over: config.goal_carry_over.daily,
         },
         session: SessionOutput {
             focused_minutes: session.focused_minutes,
@@ -114,22 +113,13 @@ fn effective_daily_goal_snapshot_for_day(
     day: NaiveDate,
 ) -> DailyGoalSnapshot {
     let day_key = day.format("%Y-%m-%d").to_string();
-    let base = stats
+    stats
         .daily_entry(&day_key)
         .and_then(|daily| daily.goal)
         .unwrap_or(DailyGoalSnapshot {
             minutes: config.daily_goal.minutes,
             pomodoros: config.daily_goal.pomodoros,
-        });
-    let previous = day.pred_opt().and_then(|previous_day| {
-        let day_key = previous_day.format("%Y-%m-%d").to_string();
-        stats.daily_entry(&day_key).and_then(|daily| {
-            daily
-                .goal
-                .map(|goal| (goal, daily.focused_minutes(), daily.pomodoros_completed))
         })
-    });
-    carry_over_goal_target(base, config.goal_carry_over.daily, previous)
 }
 
 fn build_live_status_output(

@@ -1,13 +1,12 @@
 use crate::app::{
-    App, AppMode, KeyEvent, Local, NavigationAction, PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX,
-    PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX, PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX,
-    PROFILE_EDIT_FIELD_LABELS, PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX,
-    PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX, PROFILE_EDIT_SCHEDULE_DAY_INDEX,
-    PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
-    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_IDS,
-    ProfileAutomationConfig, ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState,
-    adjust_daily_goal_minutes, adjust_daily_goal_pomodoros, adjust_duration_minutes,
-    compile_windows, profile_for_index, profile_index, profile_spec_for,
+    App, AppMode, KeyEvent, Local, NavigationAction, PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX,
+    PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX, PROFILE_EDIT_FIELD_LABELS,
+    PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
+    PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
+    PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
+    PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_IDS, ProfileAutomationConfig, ProfileEditSnapshot,
+    ProfileId, ShortcutAction, TimerState, adjust_daily_goal_minutes, adjust_daily_goal_pomodoros,
+    adjust_duration_minutes, compile_windows, profile_for_index, profile_index, profile_spec_for,
 };
 
 const PROFILE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 2] = [
@@ -202,7 +201,6 @@ impl App {
             recurring_schedule: self.recurring_schedule.clone(),
             strict_mode: self.strict_mode,
             daily_goal: self.daily_goal,
-            goal_carry_over: self.goal_carry_over,
             selected_theme_preset: self.selected_theme_preset,
         });
         self.profile_edit_active = true;
@@ -220,7 +218,6 @@ impl App {
             self.recurring_schedule = snapshot.recurring_schedule;
             self.strict_mode = snapshot.strict_mode;
             self.daily_goal = snapshot.daily_goal;
-            self.goal_carry_over = snapshot.goal_carry_over;
             self.selected_theme_preset = snapshot.selected_theme_preset;
             self.rebuild_notifier();
             self.rebuild_recurring_schedule_runtime();
@@ -258,10 +255,9 @@ impl App {
     }
 
     fn profile_edit_goals_changed(&self) -> bool {
-        self.profile_edit_snapshot.as_ref().is_some_and(|snapshot| {
-            snapshot.daily_goal != self.daily_goal
-                || snapshot.goal_carry_over.daily != self.goal_carry_over.daily
-        })
+        self.profile_edit_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.daily_goal != self.daily_goal)
     }
 
     fn commit_profile_edit_profile_settings(&mut self, custom_profile_changed: bool) -> bool {
@@ -343,9 +339,6 @@ impl App {
             }
             PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX => {
                 adjust_daily_goal_pomodoros(&mut self.daily_goal.pomodoros, increase);
-            }
-            PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX => {
-                self.goal_carry_over.daily = increase;
             }
             PROFILE_EDIT_THEME_PRESET_INDEX => {
                 self.selected_theme_preset = if increase {

@@ -40,7 +40,6 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
-    assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.stats_retention, StatsRetentionConfig::default());
     assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
     assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
@@ -181,11 +180,6 @@ fn round_trip_full_config() {
             minutes: 2400,
             pomodoros: 80,
         },
-        goal_carry_over: GoalCarryOverConfig {
-            daily: true,
-            weekly: false,
-            monthly: true,
-        },
         stats_retention: StatsRetentionConfig {
             preset: StatsRetentionPreset::Aggressive,
         },
@@ -261,9 +255,6 @@ fn round_trip_full_config() {
     assert_eq!(parsed.daily_goal, original.daily_goal);
     assert_eq!(parsed.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(parsed.monthly_goal, MonthlyGoalConfig::default());
-    assert_eq!(parsed.goal_carry_over.daily, original.goal_carry_over.daily);
-    assert!(!parsed.goal_carry_over.weekly);
-    assert!(!parsed.goal_carry_over.monthly);
     assert_eq!(parsed.stats_retention, original.stats_retention);
     assert_eq!(parsed.history_dashboard, HistoryDashboardConfig::default());
     assert_eq!(parsed.feature_flags, original.feature_flags);
@@ -292,7 +283,6 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
-    assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
     assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
     assert_eq!(cfg.shortcuts, ShortcutConfig::default());
@@ -564,7 +554,6 @@ blocked_sites = ["reddit.com", "youtube.com"]
     assert_eq!(parsed.daily_goal, DailyGoalConfig::default());
     assert_eq!(parsed.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(parsed.monthly_goal, MonthlyGoalConfig::default());
-    assert_eq!(parsed.goal_carry_over, GoalCarryOverConfig::default());
 }
 
 #[test]
@@ -611,7 +600,6 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         daily_goal: DailyGoalConfig::default(),
         weekly_goal: WeeklyGoalConfig::default(),
         monthly_goal: MonthlyGoalConfig::default(),
-        goal_carry_over: GoalCarryOverConfig::default(),
         stats_retention: StatsRetentionConfig::default(),
         history_dashboard: HistoryDashboardConfig::default(),
         feature_flags: FeatureFlagsConfig::default(),
@@ -659,7 +647,6 @@ fn load_returns_default_when_config_file_is_corrupt() {
     assert_eq!(cfg.daily_goal, DailyGoalConfig::default());
     assert_eq!(cfg.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
-    assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
 }
 

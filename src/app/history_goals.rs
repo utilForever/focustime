@@ -3,8 +3,7 @@ use chrono::{Datelike, Duration, NaiveDate, Weekday};
 use crate::app::{
     App, AppMode, DailyGoalSnapshot, FocusInterruptionContext, FocusSessionMetadata, Local,
     SessionInterruptionEvent, SessionInterruptionReason, WeeklyDailyAllocationDay,
-    WeeklyDailyGoalAllocation, carry_over_goal_target, current_day_key,
-    previous_month_reference_day,
+    WeeklyDailyGoalAllocation, current_day_key,
 };
 use crate::config::RecurringScheduleConfig;
 use crate::stats::WeeklyStats;
@@ -96,68 +95,28 @@ impl App {
         day: NaiveDate,
     ) -> DailyGoalSnapshot {
         let day_key = day.format("%Y-%m-%d").to_string();
-        let base = self
-            .stats
+        self.stats
             .daily_entry(&day_key)
             .and_then(|stats| stats.goal)
-            .unwrap_or_else(|| self.current_goal_snapshot());
-        let previous = day.pred_opt().and_then(|previous_day| {
-            let previous_day_key = previous_day.format("%Y-%m-%d").to_string();
-            self.stats.daily_entry(&previous_day_key).and_then(|stats| {
-                stats
-                    .goal
-                    .map(|goal| (goal, stats.focused_minutes(), stats.pomodoros_completed))
-            })
-        });
-        carry_over_goal_target(base, self.goal_carry_over.daily, previous)
+            .unwrap_or_else(|| self.current_goal_snapshot())
     }
 
     pub(super) fn effective_weekly_goal_snapshot_for_day(
         &self,
         day: NaiveDate,
     ) -> DailyGoalSnapshot {
-        let base = self
-            .stats
+        self.stats
             .weekly_goal_snapshot_for_day(day)
-            .unwrap_or_else(|| self.current_week_goal_snapshot());
-        let previous =
-            day.checked_sub_signed(chrono::Duration::weeks(1))
-                .and_then(|previous_week_day| {
-                    self.stats
-                        .weekly_goal_snapshot_for_day(previous_week_day)
-                        .map(|previous_target| {
-                            let week = self.stats.weekly_for_day(previous_week_day);
-                            (
-                                previous_target,
-                                week.focused_minutes(),
-                                week.pomodoros_completed,
-                            )
-                        })
-                });
-        carry_over_goal_target(base, self.goal_carry_over.weekly, previous)
+            .unwrap_or_else(|| self.current_week_goal_snapshot())
     }
 
     pub(super) fn effective_monthly_goal_snapshot_for_day(
         &self,
         day: NaiveDate,
     ) -> DailyGoalSnapshot {
-        let base = self
-            .stats
+        self.stats
             .monthly_goal_snapshot_for_day(day)
-            .unwrap_or_else(|| self.current_month_goal_snapshot());
-        let previous = previous_month_reference_day(day).and_then(|previous_month_day| {
-            self.stats
-                .monthly_goal_snapshot_for_day(previous_month_day)
-                .map(|previous_target| {
-                    let month = self.stats.monthly_for_day(previous_month_day);
-                    (
-                        previous_target,
-                        month.focused_minutes(),
-                        month.pomodoros_completed,
-                    )
-                })
-        });
-        carry_over_goal_target(base, self.goal_carry_over.monthly, previous)
+            .unwrap_or_else(|| self.current_month_goal_snapshot())
     }
 
     #[allow(dead_code)]

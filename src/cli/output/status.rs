@@ -66,17 +66,13 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
 fn print_status_goal_line(label: &str, goal: &GoalOutput) {
     if goal.configured {
         println!(
-            "{label}: {} min, {} pomodoros ({}, carry-over: {})",
+            "{label}: {} min, {} pomodoros ({})",
             goal.minutes_target,
             goal.pomodoros_target,
-            if goal.met { "met" } else { "in progress" },
-            if goal.carry_over { "on" } else { "off" }
+            if goal.met { "met" } else { "in progress" }
         );
     } else {
-        println!(
-            "{label}: off (carry-over: {})",
-            if goal.carry_over { "on" } else { "off" }
-        );
+        println!("{label}: off");
     }
 }
 
