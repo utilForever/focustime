@@ -1,8 +1,19 @@
-use crate::app::PROFILE_EDIT_SCHEDULE_WINDOW_INDEX;
+use crate::app::{
+    App, AppMode, PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX, PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX,
+    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PlannerInputMode, SetupCheck, SetupCheckLevel,
+};
+use crate::blocker::BlockingPreviewAction;
 use crate::config::{
     AppConfig, HistoryDashboardConfig, HistoryKpiCardId, ShortcutConfig, ThemePreset,
 };
-use crate::ui::*;
+use crate::timer::{TimerPhase, TimerStatus};
+use crate::ui::{
+    app_color, format_duration_label, format_goal_period_progress, format_history_focus_risk_line,
+    format_history_goal_streak_line, format_history_interruption_line,
+    format_history_weekly_allocation_line, format_month_label, format_timer_goal_streak_line,
+    readable_goal_streak_text, render, render_setup_check, timer_primary_hint,
+    timer_secondary_hint, timer_session_status_lines_for_width,
+};
 use chrono::{Datelike, NaiveDate};
 use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
@@ -122,9 +133,8 @@ fn history_focus_risk_line_marks_alert_for_high_risk_forecast() {
     assert!(line.contains("ALERT"));
 }
 
-#[cfg(any())]
 #[test]
-fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
+fn goal_streak_lines_render_daily_period_progress() {
     let mut app = App::default();
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Char('p'),
@@ -134,22 +144,12 @@ fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
         crossterm::event::KeyCode::Char('e'),
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX;
+    app.profile_edit_field = PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX;
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Right,
-        crossterm::event::KeyModifiers::NONE,
-    ));
-    app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX;
-    app.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Right,
-        crossterm::event::KeyModifiers::NONE,
-    ));
-    app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX;
+    app.profile_edit_field = PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
@@ -159,55 +159,10 @@ fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
         crossterm::event::KeyModifiers::NONE,
     ));
 
-    let today = current_day_key();
-    let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
-        .expect("current day key should parse as a date");
-    let weekly_day = (-6..=6)
-        .filter(|offset| *offset != 0)
-        .map(|offset| today_date + Duration::days(i64::from(offset)))
-        .find(|candidate| candidate.iso_week() == today_date.iso_week())
-        .expect("there should be at least one nearby day in the current ISO week");
-    let monthly_day = (-31..=31)
-        .filter(|offset| *offset != 0)
-        .map(|offset| today_date + Duration::days(i64::from(offset)))
-        .find(|candidate| {
-            candidate.year() == today_date.year()
-                && candidate.month() == today_date.month()
-                && candidate.iso_week() != today_date.iso_week()
-        })
-        .expect("there should be at least one nearby day in the current month");
-
-    app.insert_daily_stats_for_tests(
-        &today,
-        crate::stats::DailyStats {
-            pomodoros_completed: 1,
-            focused_seconds: 5 * 60,
-            goal: None,
-        },
-    );
-    app.insert_daily_stats_for_tests(
-        &weekly_day.format("%Y-%m-%d").to_string(),
-        crate::stats::DailyStats {
-            pomodoros_completed: 1,
-            focused_seconds: 5 * 60,
-            goal: None,
-        },
-    );
-    app.insert_daily_stats_for_tests(
-        &monthly_day.format("%Y-%m-%d").to_string(),
-        crate::stats::DailyStats {
-            pomodoros_completed: 1,
-            focused_seconds: 5 * 60,
-            goal: None,
-        },
-    );
-
     let streak = app.goal_streak();
     let expected = format!(
-        "Goals: {} · {} · {}   Streaks: {}d current · {}d best",
+        "Goal: {}   Streaks: {}d current · {}d best",
         format_goal_period_progress("D", app.today_goal_progress()),
-        format_goal_period_progress("W", app.current_week_goal_progress()),
-        format_goal_period_progress("M", app.current_month_goal_progress()),
         streak.current,
         streak.best
     );
@@ -216,23 +171,17 @@ fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
     assert_eq!(format_history_goal_streak_line(&app), expected);
 }
 
-#[cfg(any())]
 #[test]
-fn weekly_allocation_lines_show_off_when_weekly_goal_is_disabled() {
+fn weekly_allocation_line_shows_retired_message_when_goal_is_disabled() {
     let app = App::default();
     assert_eq!(
         format_history_weekly_allocation_line(&app),
-        "Weekly allocation: off"
-    );
-    assert_eq!(
-        planner_weekly_allocation_summary(&app),
-        "Weekly allocation: off"
+        "Weekly allocation: retired"
     );
 }
 
-#[cfg(any())]
 #[test]
-fn weekly_allocation_lines_show_today_targets_when_weekly_goal_is_configured() {
+fn weekly_allocation_line_stays_retired_when_legacy_goal_is_configured() {
     let app = App::from_config_for_tests(AppConfig {
         weekly_goal: crate::config::WeeklyGoalConfig {
             minutes: 120,
@@ -240,11 +189,10 @@ fn weekly_allocation_lines_show_today_targets_when_weekly_goal_is_configured() {
         },
         ..AppConfig::default()
     });
-    let history_line = format_history_weekly_allocation_line(&app);
-    let planner_line = planner_weekly_allocation_summary(&app);
-
-    assert!(history_line.contains("Weekly allocation: today"));
-    assert!(planner_line.contains("Weekly allocation: today"));
+    assert_eq!(
+        format_history_weekly_allocation_line(&app),
+        "Weekly allocation: retired"
+    );
 }
 
 #[test]
