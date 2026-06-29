@@ -190,16 +190,12 @@ impl FocusRiskLevel {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum GoalPeriod {
     Daily,
-    Weekly,
-    Monthly,
 }
 
 impl GoalPeriod {
     pub(crate) fn short_label(self) -> &'static str {
         match self {
             Self::Daily => "D",
-            Self::Weekly => "W",
-            Self::Monthly => "M",
         }
     }
 }
@@ -236,19 +232,13 @@ pub(crate) struct StreakRiskForecast {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct FocusRiskForecast {
     pub(crate) daily_goal: GoalRiskForecast,
-    pub(crate) weekly_goal: GoalRiskForecast,
-    pub(crate) monthly_goal: GoalRiskForecast,
     pub(crate) streak: StreakRiskForecast,
 }
 
 impl FocusRiskForecast {
     pub(crate) fn highest_risk_level(&self) -> FocusRiskLevel {
         let mut level = self.daily_goal.risk_level;
-        for candidate in [
-            self.weekly_goal.risk_level,
-            self.monthly_goal.risk_level,
-            self.streak.risk_level,
-        ] {
+        for candidate in [self.streak.risk_level] {
             if candidate.rank() > level.rank() {
                 level = candidate;
             }
@@ -262,26 +252,16 @@ impl FocusRiskForecast {
             return true;
         }
 
-        let medium_count = [
-            self.daily_goal.risk_level,
-            self.weekly_goal.risk_level,
-            self.monthly_goal.risk_level,
-            self.streak.risk_level,
-        ]
-        .into_iter()
-        .filter(|level| matches!(level, FocusRiskLevel::Medium))
-        .count();
+        let medium_count = [self.daily_goal.risk_level, self.streak.risk_level]
+            .into_iter()
+            .filter(|level| matches!(level, FocusRiskLevel::Medium))
+            .count();
         if medium_count >= 2 {
             return true;
         }
 
         [
             (self.daily_goal.risk_level, self.daily_goal.risk_score_pct),
-            (self.weekly_goal.risk_level, self.weekly_goal.risk_score_pct),
-            (
-                self.monthly_goal.risk_level,
-                self.monthly_goal.risk_score_pct,
-            ),
             (self.streak.risk_level, self.streak.risk_score_pct),
         ]
         .into_iter()
@@ -289,6 +269,7 @@ impl FocusRiskForecast {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct FocusRiskCalibrationMetrics {
     pub(crate) sample_count: u32,
@@ -875,7 +856,6 @@ struct HistoryKpiExport {
     focus_score: HistoryKpiFocusScore,
     goal_streak: HistoryKpiGoalStreak,
     focus_risk: HistoryKpiFocusRisk,
-    weekly_allocation: HistoryKpiWeeklyAllocation,
     last_interruption: HistoryKpiLastInterruption,
     stats_growth: HistoryKpiStatsGrowth,
     retention: HistoryKpiRetention,
@@ -912,8 +892,6 @@ struct HistoryKpiGoalPeriodProgress {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 struct HistoryKpiGoalStreak {
     daily: HistoryKpiGoalPeriodProgress,
-    weekly: HistoryKpiGoalPeriodProgress,
-    monthly: HistoryKpiGoalPeriodProgress,
     current_days: u32,
     best_days: u32,
 }
@@ -927,37 +905,8 @@ struct HistoryKpiFocusRisk {
     highest_signal_value: Option<String>,
     daily_risk_level: FocusRiskLevel,
     daily_risk_score_pct: u8,
-    weekly_risk_level: FocusRiskLevel,
-    weekly_risk_score_pct: u8,
-    monthly_risk_level: FocusRiskLevel,
-    monthly_risk_score_pct: u8,
     streak_risk_level: FocusRiskLevel,
     streak_risk_score_pct: u8,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-struct HistoryKpiWeeklyAllocation {
-    week_target_minutes: u64,
-    week_target_pomodoros: u32,
-    completed_minutes: u64,
-    completed_pomodoros: u32,
-    remaining_minutes: u64,
-    remaining_pomodoros: u32,
-    remaining_days_in_week: usize,
-    allocatable_days: usize,
-    uses_schedule_weights: bool,
-    today_target_minutes: u64,
-    today_target_pomodoros: u32,
-    daily_targets: Vec<HistoryKpiWeeklyAllocationDay>,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-struct HistoryKpiWeeklyAllocationDay {
-    day: String,
-    minutes_target: u64,
-    pomodoros_target: u32,
-    allocatable: bool,
-    weight_minutes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -1039,9 +988,9 @@ struct CsvExportRow {
 struct PersistedStats {
     #[serde(default)]
     daily: BTreeMap<String, DailyStats>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     weekly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     monthly_goal_snapshots: BTreeMap<String, DailyGoalSnapshot>,
     #[serde(default)]
     task_labels: Vec<String>,

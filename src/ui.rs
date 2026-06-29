@@ -25,8 +25,6 @@ use history::{readable_goal_streak_text, render_stats_history};
 mod profile_manager;
 use profile_manager::render_profile_manager;
 mod session_planner;
-#[cfg(test)]
-use session_planner::planner_weekly_allocation_summary;
 use session_planner::render_session_planner;
 mod site_manager;
 use site_manager::render_site_manager;
@@ -95,18 +93,11 @@ fn format_goal_metric_progress(
 
 fn format_timer_goal_streak_line(app: &App) -> String {
     let daily_goal_progress = app.today_goal_progress();
-    let weekly_goal_progress = app.current_week_goal_progress();
-    let monthly_goal_progress = app.current_month_goal_progress();
     let streak = app.goal_streak();
-    if daily_goal_progress.has_any_target()
-        || weekly_goal_progress.has_any_target()
-        || monthly_goal_progress.has_any_target()
-    {
+    if daily_goal_progress.has_any_target() {
         format!(
-            "Goals: {} · {} · {}   Streaks: {}d current · {}d best",
+            "Goal: {}   Streaks: {}d current · {}d best",
             format_goal_period_progress("D", daily_goal_progress),
-            format_goal_period_progress("W", weekly_goal_progress),
-            format_goal_period_progress("M", monthly_goal_progress),
             streak.current,
             streak.best
         )

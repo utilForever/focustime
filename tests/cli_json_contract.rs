@@ -201,11 +201,12 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload.get("focus_intention").is_none());
     assert!(payload.get("task_note").is_none());
     assert!(payload.get("goal").is_some());
-    assert!(payload.get("weekly_goal").is_some());
-    assert!(payload.get("monthly_goal").is_some());
+    assert!(payload.get("weekly_goal").is_none());
+    assert!(payload.get("monthly_goal").is_none());
+    assert!(payload.get("weekly_allocation").is_none());
     assert!(payload["goal"].get("carry_over").is_some());
-    assert!(payload["weekly_goal"].get("carry_over").is_some());
-    assert!(payload["monthly_goal"].get("carry_over").is_some());
+    assert!(payload["goal"].get("weekly_carry_over").is_none());
+    assert!(payload["goal"].get("monthly_carry_over").is_none());
     assert!(payload.get("selected_task_goal").is_none());
     assert!(payload.get("focus_score").is_some());
     assert!(payload["focus_score"].get("available").is_some());
@@ -261,7 +262,7 @@ fn task_goal_json_command_is_removed() {
     );
     assert_eq!(
         payload["error"]["hint"],
-        "Use `--goal`, `--goal-weekly`, or `--goal-monthly` for global goals; task labels remain available through `--task`."
+        "Use `--goal` for the daily goal; task labels remain available through `--task`."
     );
 }
 

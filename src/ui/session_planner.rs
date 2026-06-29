@@ -20,7 +20,7 @@ pub(super) fn render_session_planner(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(2), // current task + weekly allocation
+            Constraint::Length(1), // current task
             Constraint::Min(4),    // task label list
             Constraint::Length(3), // task label input
             Constraint::Length(1), // feedback
@@ -40,37 +40,12 @@ fn render_session_planner_selected_task(frame: &mut Frame, app: &App, area: Rect
         || "Selected task: none (required before focus starts)".to_string(),
         |label| format!("Selected task: {label}"),
     );
-    let weekly_allocation = planner_weekly_allocation_summary(app);
-    let selected_text = vec![Line::from(selected_task), Line::from(weekly_allocation)];
     frame.render_widget(
-        Paragraph::new(selected_text)
+        Paragraph::new(selected_task)
             .style(Style::default().fg(app_color(app, Color::White)))
             .wrap(Wrap { trim: true }),
         area,
     );
-}
-
-pub(super) fn planner_weekly_allocation_summary(app: &App) -> String {
-    let allocation = app.weekly_daily_goal_allocation();
-    if !allocation.has_any_target() {
-        return "Weekly allocation: off".to_string();
-    }
-    if allocation.remaining_minutes == 0 && allocation.remaining_pomodoros == 0 {
-        return format!(
-            "Weekly allocation: met ({} day(s) left)",
-            allocation.remaining_days_in_week
-        );
-    }
-    let today_target = allocation.today_target();
-    format!(
-        "Weekly allocation: today {}m/{}p, left {}m/{}p ({}/{} day(s))",
-        today_target.minutes,
-        today_target.pomodoros,
-        allocation.remaining_minutes,
-        allocation.remaining_pomodoros,
-        allocation.allocatable_days,
-        allocation.remaining_days_in_week
-    )
 }
 
 fn render_session_planner_labels(frame: &mut Frame, app: &App, area: Rect) {

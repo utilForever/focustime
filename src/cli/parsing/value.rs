@@ -1,6 +1,6 @@
 use crate::cli::{
-    DailyGoalConfig, MonthlyGoalConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, SiteEditValue, ThemePreset, WeeklyGoalConfig,
+    DailyGoalConfig, ProfileId, RecurringFocusWindowConfig, RecurringScheduleConfig, SiteEditValue,
+    ThemePreset,
 };
 
 use super::invalid_usage;
@@ -35,16 +35,6 @@ pub(in crate::cli) fn parse_theme_preset(value: &str) -> Result<ThemePreset, Str
 pub(in crate::cli) fn parse_goal_value(value: &str) -> Result<DailyGoalConfig, String> {
     let (minutes, pomodoros) = parse_goal_components(value, "--goal")?;
     Ok(DailyGoalConfig { minutes, pomodoros })
-}
-
-pub(in crate::cli) fn parse_weekly_goal_value(value: &str) -> Result<WeeklyGoalConfig, String> {
-    let (minutes, pomodoros) = parse_goal_components(value, "--goal-weekly")?;
-    Ok(WeeklyGoalConfig { minutes, pomodoros })
-}
-
-pub(in crate::cli) fn parse_monthly_goal_value(value: &str) -> Result<MonthlyGoalConfig, String> {
-    let (minutes, pomodoros) = parse_goal_components(value, "--goal-monthly")?;
-    Ok(MonthlyGoalConfig { minutes, pomodoros })
 }
 
 fn parse_goal_components(value: &str, flag: &str) -> Result<(u64, u32), String> {

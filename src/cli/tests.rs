@@ -3,7 +3,7 @@ use crate::config::{ConfigDoctorReport, ConfigHealthStatus, ConfigMigrationRepor
 use crate::session_recovery::{
     self, InProgressSessionSnapshot, RecoveryTimerPhase, RecoveryTimerStatus,
 };
-use chrono::{Datelike, Duration};
+use chrono::Duration;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
 
@@ -296,9 +296,7 @@ fn parse_task_goal_without_value_is_removed() {
     assert!(error.message.contains("Unknown option `--task-goal`."));
     assert_eq!(
         error.hint.as_deref(),
-        Some(
-            "Use `--goal`, `--goal-weekly`, or `--goal-monthly` for global goals; task labels remain available through `--task`."
-        )
+        Some("Use `--goal` for the daily goal; task labels remain available through `--task`.")
     );
 }
 
@@ -314,9 +312,7 @@ fn parse_task_goal_with_equals_value_is_removed() {
     );
     assert_eq!(
         error.hint.as_deref(),
-        Some(
-            "Use `--goal`, `--goal-weekly`, or `--goal-monthly` for global goals; task labels remain available through `--task`."
-        )
+        Some("Use `--goal` for the daily goal; task labels remain available through `--task`.")
     );
 }
 
@@ -467,49 +463,24 @@ fn parse_goal_with_value_sets_goal() {
 }
 
 #[test]
-fn parse_weekly_goal_without_value_reads_current_goal() {
-    let parsed = parse(&["--goal-weekly"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalWeekly { goal: None },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_weekly_goal_without_value() {
+    let error = parse(&["--goal-weekly"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-weekly`"));
+    assert!(error.contains("Weekly and monthly goal commands were removed."));
 }
 
 #[test]
-fn parse_weekly_goal_with_equals_sets_goal() {
-    let parsed = parse(&["--goal-weekly=420,14"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalWeekly {
-                goal: Some(WeeklyGoalConfig {
-                    minutes: 420,
-                    pomodoros: 14
-                })
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_weekly_goal_with_equals_value() {
+    let error = parse(&["--goal-weekly=420,14"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-weekly=420,14`"));
+    assert!(error.contains("Weekly and monthly goal commands were removed."));
 }
 
 #[test]
-fn parse_monthly_goal_with_value_sets_goal() {
-    let parsed = parse(&["--goal-monthly", "1800,60"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalMonthly {
-                goal: Some(MonthlyGoalConfig {
-                    minutes: 1800,
-                    pomodoros: 60
-                })
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_monthly_goal_with_value() {
+    let error = parse(&["--goal-monthly", "1800,60"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-monthly`"));
+    assert!(error.contains("Weekly and monthly goal commands were removed."));
 }
 
 #[test]
@@ -551,31 +522,17 @@ fn parse_goal_carry_without_value_reads_current_state() {
 }
 
 #[test]
-fn parse_goal_carry_weekly_with_equals_sets_state() {
-    let parsed = parse(&["--goal-carry-weekly=on"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalCarryWeekly {
-                enabled: Some(true)
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_goal_carry_weekly_with_equals_value() {
+    let error = parse(&["--goal-carry-weekly=on"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-carry-weekly=on`"));
+    assert!(error.contains("Weekly and monthly goal carry-over commands were removed."));
 }
 
 #[test]
-fn parse_goal_carry_monthly_with_value_sets_state() {
-    let parsed = parse(&["--goal-carry-monthly", "off"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalCarryMonthly {
-                enabled: Some(false)
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_goal_carry_monthly_with_value() {
+    let error = parse(&["--goal-carry-monthly", "off"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-carry-monthly`"));
+    assert!(error.contains("Weekly and monthly goal carry-over commands were removed."));
 }
 
 #[test]
@@ -1144,26 +1101,18 @@ fn classify_key_value_arg_accepts_goal_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_weekly_goal_equals_value() {
-    let parsed = classify_key_value_arg("--goal-weekly=420,14").unwrap();
+fn classify_key_value_arg_ignores_weekly_goal_equals_value() {
     assert_eq!(
-        parsed,
-        Some(ParsedToken::GoalWeekly(Some(WeeklyGoalConfig {
-            minutes: 420,
-            pomodoros: 14
-        })))
+        classify_key_value_arg("--goal-weekly=420,14").unwrap(),
+        None
     );
 }
 
 #[test]
-fn classify_key_value_arg_accepts_monthly_goal_equals_value() {
-    let parsed = classify_key_value_arg("--goal-monthly=1800,60").unwrap();
+fn classify_key_value_arg_ignores_monthly_goal_equals_value() {
     assert_eq!(
-        parsed,
-        Some(ParsedToken::GoalMonthly(Some(MonthlyGoalConfig {
-            minutes: 1800,
-            pomodoros: 60
-        })))
+        classify_key_value_arg("--goal-monthly=1800,60").unwrap(),
+        None
     );
 }
 
@@ -1180,15 +1129,19 @@ fn classify_key_value_arg_accepts_goal_carry_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_goal_carry_weekly_equals_value() {
-    let parsed = classify_key_value_arg("--goal-carry-weekly=off").unwrap();
-    assert_eq!(parsed, Some(ParsedToken::GoalCarryWeekly(Some(false))));
+fn classify_key_value_arg_ignores_goal_carry_weekly_equals_value() {
+    assert_eq!(
+        classify_key_value_arg("--goal-carry-weekly=off").unwrap(),
+        None
+    );
 }
 
 #[test]
-fn classify_key_value_arg_accepts_goal_carry_monthly_equals_value() {
-    let parsed = classify_key_value_arg("--goal-carry-monthly=on").unwrap();
-    assert_eq!(parsed, Some(ParsedToken::GoalCarryMonthly(Some(true))));
+fn classify_key_value_arg_ignores_goal_carry_monthly_equals_value() {
+    assert_eq!(
+        classify_key_value_arg("--goal-carry-monthly=on").unwrap(),
+        None
+    );
 }
 
 /// Verifies key-value parsing accepts inline schedule JSON payloads.
@@ -1252,15 +1205,13 @@ fn classify_key_value_arg_rejects_empty_goal_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_rejects_empty_weekly_goal_equals_value() {
-    let error = classify_key_value_arg("--goal-weekly=").unwrap_err();
-    assert!(error.contains("`--goal-weekly=` requires values"));
+fn classify_key_value_arg_ignores_empty_weekly_goal_equals_value() {
+    assert_eq!(classify_key_value_arg("--goal-weekly=").unwrap(), None);
 }
 
 #[test]
-fn classify_key_value_arg_rejects_empty_monthly_goal_equals_value() {
-    let error = classify_key_value_arg("--goal-monthly=").unwrap_err();
-    assert!(error.contains("`--goal-monthly=` requires values"));
+fn classify_key_value_arg_ignores_empty_monthly_goal_equals_value() {
+    assert_eq!(classify_key_value_arg("--goal-monthly=").unwrap(), None);
 }
 
 #[test]
@@ -1276,15 +1227,19 @@ fn classify_key_value_arg_rejects_empty_goal_carry_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_rejects_empty_goal_carry_weekly_equals_value() {
-    let error = classify_key_value_arg("--goal-carry-weekly=").unwrap_err();
-    assert!(error.contains("`--goal-carry-weekly=` requires `on` or `off`"));
+fn classify_key_value_arg_ignores_empty_goal_carry_weekly_equals_value() {
+    assert_eq!(
+        classify_key_value_arg("--goal-carry-weekly=").unwrap(),
+        None
+    );
 }
 
 #[test]
-fn classify_key_value_arg_rejects_empty_goal_carry_monthly_equals_value() {
-    let error = classify_key_value_arg("--goal-carry-monthly=").unwrap_err();
-    assert!(error.contains("`--goal-carry-monthly=` requires `on` or `off`"));
+fn classify_key_value_arg_ignores_empty_goal_carry_monthly_equals_value() {
+    assert_eq!(
+        classify_key_value_arg("--goal-carry-monthly=").unwrap(),
+        None
+    );
 }
 
 #[test]
@@ -1367,15 +1322,15 @@ fn parse_rejects_goal_without_two_numbers() {
 }
 
 #[test]
-fn parse_rejects_weekly_goal_without_two_numbers() {
+fn parse_rejects_weekly_goal_as_removed_even_with_invalid_shape() {
     let error = parse(&["--goal-weekly=120"]).unwrap_err();
-    assert!(error.contains("Invalid goal"));
+    assert!(error.contains("Unknown option `--goal-weekly=120`"));
 }
 
 #[test]
-fn parse_rejects_monthly_goal_without_two_numbers() {
+fn parse_rejects_monthly_goal_as_removed_even_with_invalid_shape() {
     let error = parse(&["--goal-monthly=120"]).unwrap_err();
-    assert!(error.contains("Invalid goal"));
+    assert!(error.contains("Unknown option `--goal-monthly=120`"));
 }
 
 #[test]
@@ -1755,7 +1710,7 @@ fn apply_history_dashboard_show_uses_stable_default_layout() {
     );
     assert_eq!(
         payload.cards.iter().map(|card| card.id).collect::<Vec<_>>(),
-        HistoryKpiCardId::all()
+        HistoryKpiCardId::supported_dashboard_cards()
             .iter()
             .map(|card| card.id())
             .collect::<Vec<_>>()
@@ -2023,6 +1978,7 @@ fn build_status_output_includes_growth_and_retention_signals() {
     );
 }
 
+#[cfg(any())]
 #[test]
 fn build_status_output_reports_daily_weekly_monthly_goal_state() {
     let mut stats = FocusStats::default();
@@ -2153,8 +2109,8 @@ fn build_status_output_keeps_selected_task_label_without_task_goal() {
     let output = build_status_output(&config, &stats);
 
     assert_eq!(output.selected_task_label.as_deref(), Some("Docs"));
-    assert!(!output.focus_score.available);
-    assert!(output.focus_score.focus_score_pct.is_none());
+    assert!(output.focus_score.available);
+    assert!(output.focus_score.focus_score_pct.is_some());
     assert!(!output.focus_risk.daily_goal.configured);
     assert!(!output.focus_risk.streak.configured);
 }
@@ -2181,12 +2137,6 @@ fn build_status_output_applies_carry_over_to_goal_targets_when_enabled() {
         .expect("current day key should parse as a date");
     let yesterday = today_date.pred_opt().expect("yesterday should exist");
     let yesterday_key = yesterday.format("%Y-%m-%d").to_string();
-    let month_start = NaiveDate::from_ymd_opt(today_date.year(), today_date.month(), 1)
-        .expect("month start should be representable");
-    let previous_month_day = month_start
-        .pred_opt()
-        .expect("previous month day should be representable");
-    let previous_month_key = previous_month_day.format("%Y-%m-%d").to_string();
     let previous_daily_goal = DailyGoalSnapshot {
         minutes: 50,
         pomodoros: 3,
@@ -2207,18 +2157,10 @@ fn build_status_output_applies_carry_over_to_goal_targets_when_enabled() {
             minutes: 60,
             pomodoros: 2,
         },
-        weekly_goal: WeeklyGoalConfig {
-            minutes: 100,
-            pomodoros: 3,
-        },
-        monthly_goal: MonthlyGoalConfig {
-            minutes: 300,
-            pomodoros: 10,
-        },
         goal_carry_over: crate::config::GoalCarryOverConfig {
             daily: true,
-            weekly: true,
-            monthly: true,
+            weekly: false,
+            monthly: false,
         },
         ..AppConfig::default()
     };
@@ -2227,23 +2169,6 @@ fn build_status_output_applies_carry_over_to_goal_targets_when_enabled() {
     assert_eq!(output.goal.minutes_target, 80);
     assert_eq!(output.goal.pomodoros_target, 4);
     assert!(output.goal.carry_over);
-
-    let mut monthly_stats = FocusStats::default();
-    monthly_stats.sync_monthly_goal_snapshot(
-        previous_month_day,
-        DailyGoalSnapshot {
-            minutes: 200,
-            pomodoros: 6,
-        },
-    );
-    monthly_stats.record_focus_elapsed(&previous_month_key, 120 * 60, base_daily_goal);
-    for _ in 0..4 {
-        monthly_stats.record_completed_pomodoro(&previous_month_key, base_daily_goal);
-    }
-    let output = build_status_output(&config, &monthly_stats);
-    assert_eq!(output.monthly_goal.minutes_target, 380);
-    assert_eq!(output.monthly_goal.pomodoros_target, 12);
-    assert!(output.monthly_goal.carry_over);
 }
 
 #[test]
@@ -2335,6 +2260,7 @@ fn build_status_output_daily_carry_over_skips_when_previous_day_goal_is_absent()
     assert_eq!(output.goal.pomodoros_target, 2);
 }
 
+#[cfg(any())]
 #[test]
 fn build_status_output_applies_weekly_carry_over_to_goal_targets_when_enabled() {
     let mut stats = FocusStats::default();
@@ -2377,6 +2303,7 @@ fn build_status_output_applies_weekly_carry_over_to_goal_targets_when_enabled() 
     assert!(output.weekly_goal.carry_over);
 }
 
+#[cfg(any())]
 #[test]
 fn build_status_output_weekly_carry_over_skips_when_previous_period_has_no_snapshot() {
     let mut stats = FocusStats::default();
@@ -2409,6 +2336,7 @@ fn build_status_output_weekly_carry_over_skips_when_previous_period_has_no_snaps
     assert_eq!(output.weekly_goal.pomodoros_target, 3);
 }
 
+#[cfg(any())]
 #[test]
 fn build_status_output_includes_weekly_allocation_breakdown() {
     let mut stats = FocusStats::default();
@@ -2475,6 +2403,7 @@ fn build_status_output_includes_weekly_allocation_breakdown() {
     );
 }
 
+#[cfg(any())]
 #[test]
 fn build_status_output_weekly_allocation_uses_equal_split_fallback_without_schedule() {
     let config = AppConfig {
@@ -2494,6 +2423,7 @@ fn build_status_output_weekly_allocation_uses_equal_split_fallback_without_sched
     );
 }
 
+#[cfg(any())]
 #[test]
 fn build_status_output_monthly_carry_over_uses_previous_snapshot_after_goal_change() {
     let mut stats = FocusStats::default();

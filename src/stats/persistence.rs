@@ -102,8 +102,8 @@ impl FocusStats {
         Self {
             session: SessionStats::default(),
             daily: persisted.daily,
-            weekly_goal_snapshots: persisted.weekly_goal_snapshots,
-            monthly_goal_snapshots: persisted.monthly_goal_snapshots,
+            weekly_goal_snapshots: Default::default(),
+            monthly_goal_snapshots: Default::default(),
             task_labels,
             selected_task_label,
             task_label_favorites,
@@ -118,8 +118,8 @@ impl FocusStats {
     pub(super) fn to_persisted(&self) -> PersistedStats {
         PersistedStats {
             daily: self.daily.clone(),
-            weekly_goal_snapshots: self.weekly_goal_snapshots.clone(),
-            monthly_goal_snapshots: self.monthly_goal_snapshots.clone(),
+            weekly_goal_snapshots: Default::default(),
+            monthly_goal_snapshots: Default::default(),
             task_labels: self.task_labels.clone(),
             selected_task_label: self.selected_task_label.clone(),
             task_label_favorites: planner_state_labels_for_keys(

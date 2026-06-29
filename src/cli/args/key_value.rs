@@ -1,21 +1,16 @@
 use crate::cli::{
     KeyValueParser, ParsedToken, PathBuf, parse_goal_carry_value, parse_goal_value,
-    parse_monthly_goal_value, parse_profile_id, parse_schedule_value, parse_site_edit_value,
-    parse_strict_value, parse_theme_preset, parse_watch_interval_secs, parse_weekly_goal_value,
-    require_nonempty_key_value,
+    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
+    parse_theme_preset, parse_watch_interval_secs, require_nonempty_key_value,
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 18] = [
+    let parsers: [KeyValueParser; 14] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_theme_key_value_arg,
         parse_goal_key_value_arg,
-        parse_goal_weekly_key_value_arg,
-        parse_goal_monthly_key_value_arg,
         parse_goal_carry_key_value_arg,
-        parse_goal_carry_weekly_key_value_arg,
-        parse_goal_carry_monthly_key_value_arg,
         parse_strict_key_value_arg,
         parse_schedule_set_key_value_arg,
         parse_watch_key_value_arg,
@@ -71,32 +66,6 @@ fn parse_goal_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     Ok(None)
 }
 
-fn parse_goal_weekly_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--goal-weekly=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--goal-weekly=` requires values in `MINUTES,POMODOROS` format.",
-        )?;
-        return Ok(Some(ParsedToken::GoalWeekly(Some(
-            parse_weekly_goal_value(value)?,
-        ))));
-    }
-    Ok(None)
-}
-
-fn parse_goal_monthly_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--goal-monthly=") {
-        let value = require_nonempty_key_value(
-            value,
-            "`--goal-monthly=` requires values in `MINUTES,POMODOROS` format.",
-        )?;
-        return Ok(Some(ParsedToken::GoalMonthly(Some(
-            parse_monthly_goal_value(value)?,
-        ))));
-    }
-    Ok(None)
-}
-
 fn parse_strict_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
     if let Some(value) = arg.strip_prefix("--strict=") {
         let value = require_nonempty_key_value(value, "`--strict=` requires `on` or `off`.")?;
@@ -111,28 +80,6 @@ fn parse_goal_carry_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, Stri
         return Ok(Some(ParsedToken::GoalCarry(Some(parse_goal_carry_value(
             value,
         )?))));
-    }
-    Ok(None)
-}
-
-fn parse_goal_carry_weekly_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--goal-carry-weekly=") {
-        let value =
-            require_nonempty_key_value(value, "`--goal-carry-weekly=` requires `on` or `off`.")?;
-        return Ok(Some(ParsedToken::GoalCarryWeekly(Some(
-            parse_goal_carry_value(value)?,
-        ))));
-    }
-    Ok(None)
-}
-
-fn parse_goal_carry_monthly_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--goal-carry-monthly=") {
-        let value =
-            require_nonempty_key_value(value, "`--goal-carry-monthly=` requires `on` or `off`.")?;
-        return Ok(Some(ParsedToken::GoalCarryMonthly(Some(
-            parse_goal_carry_value(value)?,
-        ))));
     }
     Ok(None)
 }

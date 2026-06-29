@@ -5,9 +5,8 @@ pub(super) use options::{
     parse_watch_interval_option, parse_watch_interval_secs, require_nonempty_key_value,
 };
 pub(super) use value::{
-    parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_profile_id,
-    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_theme_preset,
-    parse_weekly_goal_value,
+    parse_goal_carry_value, parse_goal_value, parse_profile_id, parse_schedule_value,
+    parse_site_edit_value, parse_strict_value, parse_theme_preset,
 };
 
 use crate::cli::{
@@ -47,11 +46,7 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Profile(_)
             | ParsedToken::Theme(_)
             | ParsedToken::Goal(_)
-            | ParsedToken::GoalWeekly(_)
-            | ParsedToken::GoalMonthly(_)
             | ParsedToken::GoalCarry(_)
-            | ParsedToken::GoalCarryWeekly(_)
-            | ParsedToken::GoalCarryMonthly(_)
             | ParsedToken::Strict(_)
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
@@ -139,7 +134,15 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
         }),
         "--task-goal" => Some(RemovedOptionGuidance {
             summary: "Task goal commands were removed.",
-            replacement: "Use `--goal`, `--goal-weekly`, or `--goal-monthly` for global goals; task labels remain available through `--task`.",
+            replacement: "Use `--goal` for the daily goal; task labels remain available through `--task`.",
+        }),
+        "--goal-weekly" | "--goal-monthly" => Some(RemovedOptionGuidance {
+            summary: "Weekly and monthly goal commands were removed.",
+            replacement: "Use `--goal` for the supported daily goal target.",
+        }),
+        "--goal-carry-weekly" | "--goal-carry-monthly" => Some(RemovedOptionGuidance {
+            summary: "Weekly and monthly goal carry-over commands were removed.",
+            replacement: "Use `--goal-carry` for daily goal carry-over.",
         }),
         "--allowlist-site-add-temporary" => Some(RemovedOptionGuidance {
             summary: "Temporary allowlist commands were removed.",
@@ -178,20 +181,8 @@ pub(super) fn parse_primary_command(
             ParsedToken::Goal(goal) => {
                 set_primary_command(&mut primary, PrimaryCommand::Goal(*goal))?
             }
-            ParsedToken::GoalWeekly(goal) => {
-                set_primary_command(&mut primary, PrimaryCommand::GoalWeekly(*goal))?
-            }
-            ParsedToken::GoalMonthly(goal) => {
-                set_primary_command(&mut primary, PrimaryCommand::GoalMonthly(*goal))?
-            }
             ParsedToken::GoalCarry(enabled) => {
                 set_primary_command(&mut primary, PrimaryCommand::GoalCarry(*enabled))?
-            }
-            ParsedToken::GoalCarryWeekly(enabled) => {
-                set_primary_command(&mut primary, PrimaryCommand::GoalCarryWeekly(*enabled))?
-            }
-            ParsedToken::GoalCarryMonthly(enabled) => {
-                set_primary_command(&mut primary, PrimaryCommand::GoalCarryMonthly(*enabled))?
             }
             ParsedToken::Strict(enabled) => {
                 set_primary_command(&mut primary, PrimaryCommand::Strict(*enabled))?
@@ -278,24 +269,8 @@ pub(super) fn finalize_cli_action(
             kind: CommandKind::Goal { goal },
             output,
         })),
-        Some(PrimaryCommand::GoalWeekly(goal)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalWeekly { goal },
-            output,
-        })),
-        Some(PrimaryCommand::GoalMonthly(goal)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalMonthly { goal },
-            output,
-        })),
         Some(PrimaryCommand::GoalCarry(enabled)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::GoalCarry { enabled },
-            output,
-        })),
-        Some(PrimaryCommand::GoalCarryWeekly(enabled)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalCarryWeekly { enabled },
-            output,
-        })),
-        Some(PrimaryCommand::GoalCarryMonthly(enabled)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalCarryMonthly { enabled },
             output,
         })),
         Some(PrimaryCommand::Strict(enabled)) => Ok(CliAction::RunCommand(CliCommand {
@@ -418,11 +393,7 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::Profile(_) => "--profile",
         PrimaryCommand::Theme(_) => "--theme",
         PrimaryCommand::Goal(_) => "--goal",
-        PrimaryCommand::GoalWeekly(_) => "--goal-weekly",
-        PrimaryCommand::GoalMonthly(_) => "--goal-monthly",
         PrimaryCommand::GoalCarry(_) => "--goal-carry",
-        PrimaryCommand::GoalCarryWeekly(_) => "--goal-carry-weekly",
-        PrimaryCommand::GoalCarryMonthly(_) => "--goal-carry-monthly",
         PrimaryCommand::Strict(_) => "--strict",
         PrimaryCommand::Schedule => "--schedule",
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",

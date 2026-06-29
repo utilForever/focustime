@@ -16,7 +16,7 @@ use crate::stats::{
 };
 use forecast::{
     classify_calibration_signal, goal_risk_forecast, observed_goal_miss_for_candidate,
-    remaining_days_in_month, remaining_days_in_week, rolling_cadence_window, streak_risk_forecast,
+    rolling_cadence_window, streak_risk_forecast,
 };
 use support::{
     estimated_serialized_bytes, is_day_key_on_or_after, is_month_key_on_or_after,
@@ -144,13 +144,11 @@ impl FocusStats {
         &self,
         day: chrono::NaiveDate,
         daily_goal: DailyGoalSnapshot,
-        weekly_goal: DailyGoalSnapshot,
-        monthly_goal: DailyGoalSnapshot,
+        _weekly_goal: DailyGoalSnapshot,
+        _monthly_goal: DailyGoalSnapshot,
     ) -> FocusRiskForecast {
         let day_key = day.format("%Y-%m-%d").to_string();
         let daily_stats = self.daily_for(&day_key);
-        let weekly_stats = self.weekly_for_day(day);
-        let monthly_stats = self.monthly_for_day(day);
         let cadence = rolling_cadence_window(self, day, 7);
         let daily_goal_forecast = goal_risk_forecast(
             GoalPeriod::Daily,
@@ -160,22 +158,6 @@ impl FocusStats {
             1,
             cadence,
         );
-        let weekly_goal_forecast = goal_risk_forecast(
-            GoalPeriod::Weekly,
-            weekly_goal,
-            weekly_stats.focused_minutes(),
-            weekly_stats.pomodoros_completed,
-            remaining_days_in_week(day),
-            cadence,
-        );
-        let monthly_goal_forecast = goal_risk_forecast(
-            GoalPeriod::Monthly,
-            monthly_goal,
-            monthly_stats.focused_minutes(),
-            monthly_stats.pomodoros_completed,
-            remaining_days_in_month(day),
-            cadence,
-        );
 
         let streak = self.goal_streak_with_day_goal(day, daily_goal, daily_stats, |_| daily_goal);
         let streak_forecast =
@@ -183,13 +165,11 @@ impl FocusStats {
 
         FocusRiskForecast {
             daily_goal: daily_goal_forecast,
-            weekly_goal: weekly_goal_forecast,
-            monthly_goal: monthly_goal_forecast,
             streak: streak_forecast,
         }
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[allow(dead_code)]
     pub(crate) fn focus_risk_calibration_metrics_for_day(
         &self,
         day: chrono::NaiveDate,
