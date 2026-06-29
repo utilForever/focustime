@@ -64,7 +64,7 @@ flowchart LR
 | `schedule.rs`                   | Recurring schedule window compile, overlap inspection, and occurrence selection logic                                                                                                                                                                                                            | `app`, `cli`, `config`                                                                        |
 | `session_recovery.rs`           | Runtime recovery snapshot read/write, transient runtime artifact reconciliation, and startup warning notices for dropped invalid fragments                                                                                                                                                      | `app`, `cli`, filesystem                                                                      |
 | `task_labels.rs`                | Task-label normalization, canonicalization, and index helpers                                                                                                                                                                                                                                   | `app`, `stats`, `cli`                                                                         |
-| `wakatime.rs`                   | WakaTime config parsing and heartbeat scheduling/sending with retry, bounded offline queueing, and replay orchestration                                                                                                                                                                         | `app`, HTTP (`ureq`)                                                                          |
+| `wakatime.rs`                   | WakaTime config parsing and heartbeat scheduling/sending. The v0.17.0 scope decision keeps optional heartbeat submission but targets retry tuning, bounded offline queueing, and replay orchestration for follow-up simplification.                                                              | `app`, HTTP (`ureq`)                                                                          |
 | `notifications.rs`              | Phase completion notifications and optional sound alerts                                                                                                                                                                                                                                        | `app`, OS notification commands                                                               |
 
 ## Runtime flow (timer mode)
@@ -112,6 +112,9 @@ sequenceDiagram
    timer state; side effects are isolated in dedicated modules.
 5. Headless automation routes through CLI timer/session/workflow commands; the
    daemon local API lifecycle and loopback `/v1/*` endpoints are retired.
+6. v0.17.0 roadmap work keeps WakaTime only as optional heartbeat submission;
+   queue/replay persistence, retry tuning, and queue-specific diagnostics are
+   cleanup targets rather than long-term architecture surfaces.
 
 ## Visibility rules
 

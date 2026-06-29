@@ -19,6 +19,7 @@ contracts now live in normal module and integration tests that run with
 | History and stats surfaces | Focus History keeps the stable default KPI layout; comparison and customization paths stay in supported export/history workflows; task notes, focus intentions, and task-specific goals stay retired while task labels remain available for grouping. | `history_dashboard_uses_stable_default_layout_despite_legacy_customization`, `apply_history_dashboard_show_uses_stable_default_layout`, `parse_rejects_status_comparison_options_as_unknown_options`, `parse_rejects_retired_history_dashboard_customization_flags`, `session_export_omits_task_note_metadata_fields`, `build_status_output_keeps_selected_task_label_without_task_goal`, `task_goal_json_command_is_removed`, `task_note_json_command_is_removed` |
 | Artifacts | Backup and stats export artifact workflows share target-directory creation and JSON path/error contracts. | `artifact_workflows_json_create_target_dirs_and_preserve_path_fields`, `artifact_workflows_json_report_consistent_target_directory_errors` |
 | Integration runtime | Daemon local API lifecycle paths remain removed; CLI timer/session/workflow commands and the TUI remain the supported automation/runtime surface. | `parse_rejects_retired_daemon_lifecycle_options`, `retired_daemon_lifecycle_commands_emit_json_usage_errors`, `usage_text_keeps_supported_cli_automation_replacements` |
+| WakaTime v0.17 scope | WakaTime stays in product positioning as optional heartbeat tracking, with follow-up cleanup keeping heartbeat delivery non-blocking while removing queue/replay runtime surfaces rather than full WakaTime removal. | `README.md`, `CHANGELOG.md`, `ARCHITECTURE.md` roadmap notes before implementation issues remove runtime surfaces |
 | WakaTime runtime | WakaTime exposes only supported runtime calls for heartbeat polling, focus-running sync, elapsed focus tracking, and metadata updates. | `poll_wakatime_events_applies_async_updates`, `disabled_wakatime_runtime_ignores_supported_hooks` |
 | Dependency ownership | Runtime HTTP and Basic auth stay owned by WakaTime, while removed daemon paths do not reintroduce direct runtime ownership and retired calendar timezone parsing stays absent. | `Cargo.toml`, `Cargo.lock`, `src/wakatime/transport.rs`, plus `rg -n "chrono_tz\|chrono-tz" src tests Cargo.toml Cargo.lock` and `rg -n "ureq" src tests` during dependency cleanup |
 
@@ -36,8 +37,8 @@ cargo test --all
 When a feature path is merged, deprecated, or removed, update the relevant row
 here and add or update the matching normal module or integration test before
 preparing the release commit. Documentation-only roadmap updates should still
-keep README, CHANGELOG.md, CONTRIBUTING.md, and this matrix aligned with
-supported replacement behavior.
+keep README, CHANGELOG.md, CONTRIBUTING.md, ARCHITECTURE.md, and this matrix
+aligned with supported replacement behavior.
 When cleanup work changes runtime dependencies, first confirm retired calendar
 timezone parsing stays absent with `rg -n "chrono_tz|chrono-tz" src tests Cargo.toml Cargo.lock`
 and confirm WakaTime HTTP ownership with `rg -n "ureq" src tests`, then run
