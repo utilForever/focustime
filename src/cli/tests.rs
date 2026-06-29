@@ -462,53 +462,25 @@ fn parse_goal_with_value_sets_goal() {
     );
 }
 
-#[cfg(any())]
 #[test]
-fn parse_weekly_goal_without_value_reads_current_goal() {
-    let parsed = parse(&["--goal-weekly"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalWeekly { goal: None },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_weekly_goal_without_value() {
+    let error = parse(&["--goal-weekly"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-weekly`"));
+    assert!(error.contains("Weekly and monthly goal commands were removed."));
 }
 
-#[cfg(any())]
 #[test]
-fn parse_weekly_goal_with_equals_sets_goal() {
-    let parsed = parse(&["--goal-weekly=420,14"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalWeekly {
-                goal: Some(WeeklyGoalConfig {
-                    minutes: 420,
-                    pomodoros: 14
-                })
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_weekly_goal_with_equals_value() {
+    let error = parse(&["--goal-weekly=420,14"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-weekly=420,14`"));
+    assert!(error.contains("Weekly and monthly goal commands were removed."));
 }
 
-#[cfg(any())]
 #[test]
-fn parse_monthly_goal_with_value_sets_goal() {
-    let parsed = parse(&["--goal-monthly", "1800,60"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalMonthly {
-                goal: Some(MonthlyGoalConfig {
-                    minutes: 1800,
-                    pomodoros: 60
-                })
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_monthly_goal_with_value() {
+    let error = parse(&["--goal-monthly", "1800,60"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-monthly`"));
+    assert!(error.contains("Weekly and monthly goal commands were removed."));
 }
 
 #[test]
@@ -549,34 +521,18 @@ fn parse_goal_carry_without_value_reads_current_state() {
     );
 }
 
-#[cfg(any())]
 #[test]
-fn parse_goal_carry_weekly_with_equals_sets_state() {
-    let parsed = parse(&["--goal-carry-weekly=on"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalCarryWeekly {
-                enabled: Some(true)
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_goal_carry_weekly_with_equals_value() {
+    let error = parse(&["--goal-carry-weekly=on"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-carry-weekly=on`"));
+    assert!(error.contains("Weekly and monthly goal carry-over commands were removed."));
 }
 
-#[cfg(any())]
 #[test]
-fn parse_goal_carry_monthly_with_value_sets_state() {
-    let parsed = parse(&["--goal-carry-monthly", "off"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalCarryMonthly {
-                enabled: Some(false)
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_goal_carry_monthly_with_value() {
+    let error = parse(&["--goal-carry-monthly", "off"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-carry-monthly`"));
+    assert!(error.contains("Weekly and monthly goal carry-over commands were removed."));
 }
 
 #[test]
@@ -1144,29 +1100,19 @@ fn classify_key_value_arg_accepts_goal_equals_value() {
     );
 }
 
-#[cfg(any())]
 #[test]
-fn classify_key_value_arg_accepts_weekly_goal_equals_value() {
-    let parsed = classify_key_value_arg("--goal-weekly=420,14").unwrap();
+fn classify_key_value_arg_ignores_weekly_goal_equals_value() {
     assert_eq!(
-        parsed,
-        Some(ParsedToken::GoalWeekly(Some(WeeklyGoalConfig {
-            minutes: 420,
-            pomodoros: 14
-        })))
+        classify_key_value_arg("--goal-weekly=420,14").unwrap(),
+        None
     );
 }
 
-#[cfg(any())]
 #[test]
-fn classify_key_value_arg_accepts_monthly_goal_equals_value() {
-    let parsed = classify_key_value_arg("--goal-monthly=1800,60").unwrap();
+fn classify_key_value_arg_ignores_monthly_goal_equals_value() {
     assert_eq!(
-        parsed,
-        Some(ParsedToken::GoalMonthly(Some(MonthlyGoalConfig {
-            minutes: 1800,
-            pomodoros: 60
-        })))
+        classify_key_value_arg("--goal-monthly=1800,60").unwrap(),
+        None
     );
 }
 
@@ -1182,18 +1128,20 @@ fn classify_key_value_arg_accepts_goal_carry_equals_value() {
     assert_eq!(parsed, Some(ParsedToken::GoalCarry(Some(true))));
 }
 
-#[cfg(any())]
 #[test]
-fn classify_key_value_arg_accepts_goal_carry_weekly_equals_value() {
-    let parsed = classify_key_value_arg("--goal-carry-weekly=off").unwrap();
-    assert_eq!(parsed, Some(ParsedToken::GoalCarryWeekly(Some(false))));
+fn classify_key_value_arg_ignores_goal_carry_weekly_equals_value() {
+    assert_eq!(
+        classify_key_value_arg("--goal-carry-weekly=off").unwrap(),
+        None
+    );
 }
 
-#[cfg(any())]
 #[test]
-fn classify_key_value_arg_accepts_goal_carry_monthly_equals_value() {
-    let parsed = classify_key_value_arg("--goal-carry-monthly=on").unwrap();
-    assert_eq!(parsed, Some(ParsedToken::GoalCarryMonthly(Some(true))));
+fn classify_key_value_arg_ignores_goal_carry_monthly_equals_value() {
+    assert_eq!(
+        classify_key_value_arg("--goal-carry-monthly=on").unwrap(),
+        None
+    );
 }
 
 /// Verifies key-value parsing accepts inline schedule JSON payloads.
@@ -1256,18 +1204,14 @@ fn classify_key_value_arg_rejects_empty_goal_equals_value() {
     assert!(error.contains("`--goal=` requires values"));
 }
 
-#[cfg(any())]
 #[test]
-fn classify_key_value_arg_rejects_empty_weekly_goal_equals_value() {
-    let error = classify_key_value_arg("--goal-weekly=").unwrap_err();
-    assert!(error.contains("`--goal-weekly=` requires values"));
+fn classify_key_value_arg_ignores_empty_weekly_goal_equals_value() {
+    assert_eq!(classify_key_value_arg("--goal-weekly=").unwrap(), None);
 }
 
-#[cfg(any())]
 #[test]
-fn classify_key_value_arg_rejects_empty_monthly_goal_equals_value() {
-    let error = classify_key_value_arg("--goal-monthly=").unwrap_err();
-    assert!(error.contains("`--goal-monthly=` requires values"));
+fn classify_key_value_arg_ignores_empty_monthly_goal_equals_value() {
+    assert_eq!(classify_key_value_arg("--goal-monthly=").unwrap(), None);
 }
 
 #[test]
@@ -1282,18 +1226,20 @@ fn classify_key_value_arg_rejects_empty_goal_carry_equals_value() {
     assert!(error.contains("`--goal-carry=` requires `on` or `off`"));
 }
 
-#[cfg(any())]
 #[test]
-fn classify_key_value_arg_rejects_empty_goal_carry_weekly_equals_value() {
-    let error = classify_key_value_arg("--goal-carry-weekly=").unwrap_err();
-    assert!(error.contains("`--goal-carry-weekly=` requires `on` or `off`"));
+fn classify_key_value_arg_ignores_empty_goal_carry_weekly_equals_value() {
+    assert_eq!(
+        classify_key_value_arg("--goal-carry-weekly=").unwrap(),
+        None
+    );
 }
 
-#[cfg(any())]
 #[test]
-fn classify_key_value_arg_rejects_empty_goal_carry_monthly_equals_value() {
-    let error = classify_key_value_arg("--goal-carry-monthly=").unwrap_err();
-    assert!(error.contains("`--goal-carry-monthly=` requires `on` or `off`"));
+fn classify_key_value_arg_ignores_empty_goal_carry_monthly_equals_value() {
+    assert_eq!(
+        classify_key_value_arg("--goal-carry-monthly=").unwrap(),
+        None
+    );
 }
 
 #[test]
@@ -1375,18 +1321,16 @@ fn parse_rejects_goal_without_two_numbers() {
     assert!(error.contains("Invalid goal"));
 }
 
-#[cfg(any())]
 #[test]
-fn parse_rejects_weekly_goal_without_two_numbers() {
+fn parse_rejects_weekly_goal_as_removed_even_with_invalid_shape() {
     let error = parse(&["--goal-weekly=120"]).unwrap_err();
-    assert!(error.contains("Invalid goal"));
+    assert!(error.contains("Unknown option `--goal-weekly=120`"));
 }
 
-#[cfg(any())]
 #[test]
-fn parse_rejects_monthly_goal_without_two_numbers() {
+fn parse_rejects_monthly_goal_as_removed_even_with_invalid_shape() {
     let error = parse(&["--goal-monthly=120"]).unwrap_err();
-    assert!(error.contains("Invalid goal"));
+    assert!(error.contains("Unknown option `--goal-monthly=120`"));
 }
 
 #[test]
@@ -1766,7 +1710,7 @@ fn apply_history_dashboard_show_uses_stable_default_layout() {
     );
     assert_eq!(
         payload.cards.iter().map(|card| card.id).collect::<Vec<_>>(),
-        HistoryKpiCardId::all()
+        HistoryKpiCardId::supported_dashboard_cards()
             .iter()
             .map(|card| card.id())
             .collect::<Vec<_>>()
