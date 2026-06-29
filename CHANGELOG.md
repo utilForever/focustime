@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **WakaTime v0.17.0 scope decision (#564):** documented the roadmap target to keep WakaTime as an optional, minimal heartbeat-only integration while follow-up cleanup removes queue/retry/runtime tuning surfaces that go beyond fire-and-forget tracking.
+
 ## [0.16.4] - 2026-06-28
 
 ### Changed
