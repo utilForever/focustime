@@ -32,9 +32,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
         payload.today.focused_minutes, payload.today.pomodoros_completed
     );
     print_status_goal_line("Daily goal", &payload.goal);
-    print_status_goal_line("Weekly goal", &payload.weekly_goal);
-    print_status_weekly_allocation_line(&payload.weekly_allocation);
-    print_status_goal_line("Monthly goal", &payload.monthly_goal);
     println!(
         "Session: {} focused minutes, {} pomodoros",
         payload.session.focused_minutes, payload.session.pomodoros_completed
@@ -66,42 +63,6 @@ pub(in crate::cli) fn print_status_output(payload: &StatusOutput) {
     }
 }
 
-fn print_status_weekly_allocation_line(allocation: &crate::cli::WeeklyAllocationOutput) {
-    if !allocation.available {
-        println!("Weekly allocation: off (weekly goal off)");
-        return;
-    }
-
-    let strategy = if allocation.uses_schedule_weights {
-        "schedule-weighted"
-    } else {
-        "equal-split fallback"
-    };
-    println!(
-        "Weekly allocation: today {} min, {} pomodoros | remaining {} min, {} pomodoros across {}/{} days ({strategy})",
-        allocation.today_minutes_target,
-        allocation.today_pomodoros_target,
-        allocation.remaining_minutes,
-        allocation.remaining_pomodoros,
-        allocation.allocatable_days,
-        allocation.remaining_days_in_week,
-    );
-
-    let day_breakdown = allocation
-        .days
-        .iter()
-        .map(|day| {
-            let marker = if day.allocatable { "" } else { "*" };
-            format!(
-                "{}={}m/{}p{}",
-                day.date, day.minutes_target, day.pomodoros_target, marker
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-    println!("Weekly allocation days: {day_breakdown}");
-}
-
 fn print_status_goal_line(label: &str, goal: &GoalOutput) {
     if goal.configured {
         println!(
@@ -122,54 +83,31 @@ fn print_status_goal_line(label: &str, goal: &GoalOutput) {
 fn print_status_focus_score_line(focus_score: &FocusScoreOutput) {
     if focus_score.available {
         println!(
-            "Focus score: {}% (consistency {}%, completion {}%)",
+            "Focus score: {}% (consistency)",
             focus_score.focus_score_pct.unwrap_or(0),
-            focus_score.consistency_score_pct,
-            focus_score.completion_score_pct.unwrap_or(0)
         );
     } else {
-        println!(
-            "Focus score: n/a (weekly goal off; consistency {}%)",
-            focus_score.consistency_score_pct
-        );
+        println!("Focus score: n/a");
     }
 }
 
 fn print_status_focus_risk_line(forecast: &crate::stats::FocusRiskForecast) {
     let alert_active = forecast.alert_active();
     let daily_label = forecast.daily_goal.period.short_label();
-    let weekly_label = forecast.weekly_goal.period.short_label();
-    let monthly_label = forecast.monthly_goal.period.short_label();
     let alert_suffix = if alert_active { " (alert)" } else { "" };
     println!(
-        "Focus risk: {} {} {}% | {} {} {}% | {} {} {}% | Streak {} {}%{}",
+        "Focus risk: {} {} {}% | Streak {} {}%{}",
         daily_label,
         forecast.daily_goal.risk_level.label(),
         forecast.daily_goal.risk_score_pct,
-        weekly_label,
-        forecast.weekly_goal.risk_level.label(),
-        forecast.weekly_goal.risk_score_pct,
-        monthly_label,
-        forecast.monthly_goal.risk_level.label(),
-        forecast.monthly_goal.risk_score_pct,
         forecast.streak.risk_level.label(),
         forecast.streak.risk_score_pct,
         alert_suffix
     );
 
     let mut highest_label = daily_label;
-    let mut highest_score = forecast.daily_goal.risk_score_pct;
+    let highest_score = forecast.daily_goal.risk_score_pct;
     let mut highest_signal = forecast.daily_goal.signals.first();
-    if forecast.weekly_goal.risk_score_pct > highest_score {
-        highest_label = weekly_label;
-        highest_score = forecast.weekly_goal.risk_score_pct;
-        highest_signal = forecast.weekly_goal.signals.first();
-    }
-    if forecast.monthly_goal.risk_score_pct > highest_score {
-        highest_label = monthly_label;
-        highest_score = forecast.monthly_goal.risk_score_pct;
-        highest_signal = forecast.monthly_goal.signals.first();
-    }
     if forecast.streak.risk_score_pct > highest_score {
         highest_label = "Streak";
         highest_signal = forecast.streak.signals.first();

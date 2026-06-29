@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use chrono::{Datelike, NaiveDate};
+use chrono::NaiveDate;
 use serde::Serialize;
 
 #[cfg(test)]
@@ -15,8 +15,8 @@ use crate::blocker::{BlockingPreviewAction, EditSiteResult, InvalidSiteInput, Si
 use crate::config::HistoryKpiCardId;
 use crate::config::{
     AppConfig, BlocklistProfileConfig, ConfigDoctorReport, ConfigMigrationReport,
-    CustomProfileConfig, DailyGoalConfig, MonthlyGoalConfig, ProfileId, RecurringFocusWindowConfig,
-    RecurringScheduleConfig, ThemePreset, WeeklyGoalConfig,
+    CustomProfileConfig, DailyGoalConfig, ProfileId, RecurringFocusWindowConfig,
+    RecurringScheduleConfig, ThemePreset,
 };
 use crate::error::UserMessage;
 use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_config};
@@ -57,10 +57,9 @@ use output::{
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
-    parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_primary_command,
-    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
-    parse_theme_preset, parse_watch_interval_option, parse_watch_interval_secs,
-    parse_weekly_goal_value, require_nonempty_key_value,
+    parse_goal_carry_value, parse_goal_value, parse_primary_command, parse_profile_id,
+    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_theme_preset,
+    parse_watch_interval_option, parse_watch_interval_secs, require_nonempty_key_value,
 };
 use status::{
     available_theme_preset_views, build_status_output, profile_id, profile_view, theme_preset_view,
@@ -79,16 +78,8 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --theme [classic|high-contrast|deuteranopia-friendly] [--json]
   focustime --goal [--json]
   focustime --goal=MINUTES,POMODOROS [--json]
-  focustime --goal-weekly [--json]
-  focustime --goal-weekly=MINUTES,POMODOROS [--json]
-  focustime --goal-monthly [--json]
-  focustime --goal-monthly=MINUTES,POMODOROS [--json]
   focustime --goal-carry [--json]
   focustime --goal-carry=on|off [--json]
-  focustime --goal-carry-weekly [--json]
-  focustime --goal-carry-weekly=on|off [--json]
-  focustime --goal-carry-monthly [--json]
-  focustime --goal-carry-monthly=on|off [--json]
   focustime --strict [--json]
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
@@ -114,11 +105,7 @@ Options:
   --profile       Show current profile, or set it when value is provided
   --theme         Show current theme preset, or set it when value is provided
   --goal          Show current daily goal, or set minutes/pomodoros targets
-  --goal-weekly   Show current weekly goal, or set minutes/pomodoros targets
-  --goal-monthly  Show current monthly goal, or set minutes/pomodoros targets
-  --goal-carry          Show daily goal carry-over, or set on/off
-  --goal-carry-weekly   Show weekly goal carry-over, or set on/off
-  --goal-carry-monthly  Show monthly goal carry-over, or set on/off
+  --goal-carry    Show daily goal carry-over, or set on/off
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
   --schedule-set  Replace selected profile schedule from JSON payload
@@ -207,19 +194,7 @@ pub(crate) enum CommandKind {
     Goal {
         goal: Option<DailyGoalConfig>,
     },
-    GoalWeekly {
-        goal: Option<WeeklyGoalConfig>,
-    },
-    GoalMonthly {
-        goal: Option<MonthlyGoalConfig>,
-    },
     GoalCarry {
-        enabled: Option<bool>,
-    },
-    GoalCarryWeekly {
-        enabled: Option<bool>,
-    },
-    GoalCarryMonthly {
         enabled: Option<bool>,
     },
     Strict {
@@ -274,11 +249,7 @@ enum PrimaryCommand {
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
-    GoalWeekly(Option<WeeklyGoalConfig>),
-    GoalMonthly(Option<MonthlyGoalConfig>),
     GoalCarry(Option<bool>),
-    GoalCarryWeekly(Option<bool>),
-    GoalCarryMonthly(Option<bool>),
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
@@ -309,11 +280,7 @@ enum ParsedToken {
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
-    GoalWeekly(Option<WeeklyGoalConfig>),
-    GoalMonthly(Option<MonthlyGoalConfig>),
     GoalCarry(Option<bool>),
-    GoalCarryWeekly(Option<bool>),
-    GoalCarryMonthly(Option<bool>),
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
@@ -443,29 +410,6 @@ struct LiveStatusOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct WeeklyAllocationDayOutput {
-    date: String,
-    minutes_target: u64,
-    pomodoros_target: u32,
-    allocatable: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct WeeklyAllocationOutput {
-    available: bool,
-    uses_schedule_weights: bool,
-    remaining_days_in_week: usize,
-    allocatable_days: usize,
-    completed_minutes: u64,
-    completed_pomodoros: u32,
-    remaining_minutes: u64,
-    remaining_pomodoros: u32,
-    today_minutes_target: u64,
-    today_pomodoros_target: u32,
-    days: Vec<WeeklyAllocationDayOutput>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct StatusOutput {
     day: String,
     selected_profile: ProfileView,
@@ -475,9 +419,6 @@ struct StatusOutput {
     blocked_sites_count: usize,
     strict_mode: bool,
     goal: GoalOutput,
-    weekly_goal: GoalOutput,
-    weekly_allocation: WeeklyAllocationOutput,
-    monthly_goal: GoalOutput,
     session: SessionOutput,
     today: TodayOutput,
     latest_interruption: Option<SessionInterruptionEvent>,

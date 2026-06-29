@@ -9,14 +9,13 @@ use crate::error::UserMessage;
 
 use crate::cli::{
     AppConfig, CliCommand, CommandKind, DailyGoalConfig, FocusStats, GoalCarryCommandOutput,
-    GoalCommandOutput, MonthlyGoalConfig, OutputMode, ProfileId, ProfileOutput, ProfileView,
-    RecurringScheduleConfig, ScheduleCommandOutput, StrictCommandOutput, TaskCommandOutput,
-    ThemeCommandOutput, ThemePreset, TimerCommandOutput, TimerStateOutput, WeeklyGoalConfig,
-    available_theme_preset_views, build_schedule_inspection_output,
-    print_goal_carry_command_output, print_goal_command_output, print_json, print_profile_output,
-    print_schedule_command_output, print_strict_command_output, print_theme_command_output,
-    print_timer_state_output, profile_id, profile_view, theme_preset_view, timer_phase_id,
-    timer_status_id,
+    GoalCommandOutput, OutputMode, ProfileId, ProfileOutput, ProfileView, RecurringScheduleConfig,
+    ScheduleCommandOutput, StrictCommandOutput, TaskCommandOutput, ThemeCommandOutput, ThemePreset,
+    TimerCommandOutput, TimerStateOutput, available_theme_preset_views,
+    build_schedule_inspection_output, print_goal_carry_command_output, print_goal_command_output,
+    print_json, print_profile_output, print_schedule_command_output, print_strict_command_output,
+    print_theme_command_output, print_timer_state_output, profile_id, profile_view,
+    theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 mod blocklists;
@@ -62,16 +61,8 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
         CommandKind::Theme { preset } => execute_theme_command(preset, cli_command.output),
         CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
-        CommandKind::GoalWeekly { goal } => execute_weekly_goal_command(goal, cli_command.output),
-        CommandKind::GoalMonthly { goal } => execute_monthly_goal_command(goal, cli_command.output),
         CommandKind::GoalCarry { enabled } => {
             execute_goal_carry_command(enabled, cli_command.output)
-        }
-        CommandKind::GoalCarryWeekly { enabled } => {
-            execute_weekly_goal_carry_command(enabled, cli_command.output)
-        }
-        CommandKind::GoalCarryMonthly { enabled } => {
-            execute_monthly_goal_carry_command(enabled, cli_command.output)
         }
         CommandKind::Strict { enabled } => execute_strict_command(enabled, cli_command.output),
         CommandKind::Schedule { schedule } => {
@@ -115,11 +106,7 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Profile { .. } => Some("profile"),
         CommandKind::Theme { .. } => Some("theme"),
         CommandKind::Goal { .. } => Some("goal"),
-        CommandKind::GoalWeekly { .. } => Some("goal-weekly"),
-        CommandKind::GoalMonthly { .. } => Some("goal-monthly"),
         CommandKind::GoalCarry { .. } => Some("goal-carry"),
-        CommandKind::GoalCarryWeekly { .. } => Some("goal-carry-weekly"),
-        CommandKind::GoalCarryMonthly { .. } => Some("goal-carry-monthly"),
         CommandKind::Strict { .. } => Some("strict"),
         CommandKind::Schedule { .. } => Some("schedule"),
         CommandKind::Diagnostics => Some("diagnostics"),
@@ -311,62 +298,6 @@ fn execute_goal_command(goal: Option<DailyGoalConfig>, output: OutputMode) -> Cl
     Ok(())
 }
 
-fn execute_weekly_goal_command(
-    goal: Option<WeeklyGoalConfig>,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let mut config = AppConfig::load().normalized();
-    let mut updated = false;
-    if let Some(goal) = goal {
-        config.weekly_goal = goal;
-        config
-            .save()
-            .map_err(|error| format!("Failed to save weekly goal: {error}"))?;
-        updated = true;
-    }
-
-    let payload = GoalCommandOutput {
-        updated,
-        configured: config.weekly_goal.minutes > 0 || config.weekly_goal.pomodoros > 0,
-        minutes_target: config.weekly_goal.minutes,
-        pomodoros_target: config.weekly_goal.pomodoros,
-    };
-
-    match output {
-        OutputMode::Text => print_goal_command_output("Weekly", &payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn execute_monthly_goal_command(
-    goal: Option<MonthlyGoalConfig>,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let mut config = AppConfig::load().normalized();
-    let mut updated = false;
-    if let Some(goal) = goal {
-        config.monthly_goal = goal;
-        config
-            .save()
-            .map_err(|error| format!("Failed to save monthly goal: {error}"))?;
-        updated = true;
-    }
-
-    let payload = GoalCommandOutput {
-        updated,
-        configured: config.monthly_goal.minutes > 0 || config.monthly_goal.pomodoros > 0,
-        minutes_target: config.monthly_goal.minutes,
-        pomodoros_target: config.monthly_goal.pomodoros,
-    };
-
-    match output {
-        OutputMode::Text => print_goal_command_output("Monthly", &payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
 fn execute_goal_carry_command(enabled: Option<bool>, output: OutputMode) -> CliExecuteResult<()> {
     let mut config = AppConfig::load().normalized();
     let mut updated = false;
@@ -384,56 +315,6 @@ fn execute_goal_carry_command(enabled: Option<bool>, output: OutputMode) -> CliE
     };
     match output {
         OutputMode::Text => print_goal_carry_command_output("Daily", &payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn execute_weekly_goal_carry_command(
-    enabled: Option<bool>,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let mut config = AppConfig::load().normalized();
-    let mut updated = false;
-    if let Some(enabled) = enabled {
-        config.goal_carry_over.weekly = enabled;
-        config
-            .save()
-            .map_err(|error| format!("Failed to save weekly goal carry-over: {error}"))?;
-        updated = true;
-    }
-
-    let payload = GoalCarryCommandOutput {
-        updated,
-        carry_over: config.goal_carry_over.weekly,
-    };
-    match output {
-        OutputMode::Text => print_goal_carry_command_output("Weekly", &payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn execute_monthly_goal_carry_command(
-    enabled: Option<bool>,
-    output: OutputMode,
-) -> CliExecuteResult<()> {
-    let mut config = AppConfig::load().normalized();
-    let mut updated = false;
-    if let Some(enabled) = enabled {
-        config.goal_carry_over.monthly = enabled;
-        config
-            .save()
-            .map_err(|error| format!("Failed to save monthly goal carry-over: {error}"))?;
-        updated = true;
-    }
-
-    let payload = GoalCarryCommandOutput {
-        updated,
-        carry_over: config.goal_carry_over.monthly,
-    };
-    match output {
-        OutputMode::Text => print_goal_carry_command_output("Monthly", &payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

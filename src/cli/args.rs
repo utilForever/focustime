@@ -4,9 +4,9 @@ pub(super) use key_value::classify_key_value_arg;
 
 use crate::cli::{
     OsString, OutputMode, ParsedToken, PathBuf, ValueArgParser, invalid_usage,
-    parse_goal_carry_value, parse_goal_value, parse_monthly_goal_value, parse_profile_id,
-    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_theme_preset,
-    parse_watch_interval_secs, parse_weekly_goal_value, require_nonempty_key_value,
+    parse_goal_carry_value, parse_goal_value, parse_profile_id, parse_schedule_value,
+    parse_site_edit_value, parse_strict_value, parse_theme_preset, parse_watch_interval_secs,
+    require_nonempty_key_value,
 };
 
 pub(super) fn infer_output_mode_from_os_args(args: &[OsString]) -> OutputMode {
@@ -59,16 +59,12 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 18] = [
+    let parsers: [(&str, ValueArgParser); 14] = [
         ("--task", classify_task_arg),
         ("--profile", classify_profile_arg),
         ("--theme", classify_theme_arg),
         ("--goal", classify_goal_arg),
-        ("--goal-weekly", classify_goal_weekly_arg),
-        ("--goal-monthly", classify_goal_monthly_arg),
         ("--goal-carry", classify_goal_carry_arg),
-        ("--goal-carry-weekly", classify_goal_carry_weekly_arg),
-        ("--goal-carry-monthly", classify_goal_carry_monthly_arg),
         ("--strict", classify_strict_arg),
         ("--schedule-set", classify_schedule_set_arg),
         ("--watch", classify_watch_arg),
@@ -259,33 +255,6 @@ fn classify_goal_arg(args: &[String], index: usize) -> Result<(ParsedToken, usiz
     Ok((ParsedToken::Goal(None), 1))
 }
 
-fn classify_goal_weekly_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        return Ok((
-            ParsedToken::GoalWeekly(Some(parse_weekly_goal_value(next)?)),
-            2,
-        ));
-    }
-    Ok((ParsedToken::GoalWeekly(None), 1))
-}
-
-fn classify_goal_monthly_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        return Ok((
-            ParsedToken::GoalMonthly(Some(parse_monthly_goal_value(next)?)),
-            2,
-        ));
-    }
-    Ok((ParsedToken::GoalMonthly(None), 1))
-}
-
 fn classify_strict_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
     if let Some(next) = args.get(index + 1)
         && !next.starts_with('-')
@@ -305,36 +274,6 @@ fn classify_goal_carry_arg(args: &[String], index: usize) -> Result<(ParsedToken
         ));
     }
     Ok((ParsedToken::GoalCarry(None), 1))
-}
-
-fn classify_goal_carry_weekly_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        return Ok((
-            ParsedToken::GoalCarryWeekly(Some(parse_goal_carry_value(next)?)),
-            2,
-        ));
-    }
-    Ok((ParsedToken::GoalCarryWeekly(None), 1))
-}
-
-fn classify_goal_carry_monthly_arg(
-    args: &[String],
-    index: usize,
-) -> Result<(ParsedToken, usize), String> {
-    if let Some(next) = args.get(index + 1)
-        && !next.starts_with('-')
-    {
-        return Ok((
-            ParsedToken::GoalCarryMonthly(Some(parse_goal_carry_value(next)?)),
-            2,
-        ));
-    }
-    Ok((ParsedToken::GoalCarryMonthly(None), 1))
 }
 
 fn classify_schedule_set_arg(

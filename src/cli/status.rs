@@ -1,11 +1,9 @@
-use crate::app::weekly_daily_goal_allocation_for_context;
 use crate::cli::{
     AppConfig, CustomProfileConfig, DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL,
-    DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS, DailyGoalSnapshot, Datelike,
-    FocusScoreOutput, FocusStats, GoalOutput, LiveStatusOutput, NaiveDate, ProfileId, ProfileSpec,
-    ProfileView, SessionOutput, StatsRetentionStatusOutput, StatusOutput, ThemePreset,
-    ThemePresetView, TimerPhase, TimerStatus, TodayOutput, WeeklyAllocationDayOutput,
-    WeeklyAllocationOutput, carry_over_goal_target, current_day_key,
+    DEFAULT_LONG_BREAK_SECS, DEFAULT_SHORT_BREAK_SECS, DailyGoalSnapshot, FocusScoreOutput,
+    FocusStats, GoalOutput, LiveStatusOutput, NaiveDate, ProfileId, ProfileSpec, ProfileView,
+    SessionOutput, StatsRetentionStatusOutput, StatusOutput, ThemePreset, ThemePresetView,
+    TimerPhase, TimerStatus, TodayOutput, carry_over_goal_target, current_day_key,
     effective_blocked_sites_for_profile, session_recovery,
 };
 use crate::timer::TimerState;
@@ -16,13 +14,9 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let day_date = NaiveDate::parse_from_str(&day, "%Y-%m-%d")
         .expect("current_day_key should always be a valid ISO date");
     let today = stats.daily_for(&day);
-    let week = stats.weekly_for_day(day_date);
-    let month = stats.monthly_for_day(day_date);
     let (_, selected_task_label) = stats.task_planner_state();
     let selected_task_label = normalize_optional_task_label(selected_task_label);
     let goal_snapshot = effective_daily_goal_snapshot_for_day(config, stats, day_date);
-    let weekly_goal_snapshot = effective_weekly_goal_snapshot(config, stats, day_date);
-    let monthly_goal_snapshot = effective_monthly_goal_snapshot(config, stats, day_date);
     let active_sites_count = config
         .blocklist_profiles
         .first()
@@ -35,29 +29,13 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
     let consistency_score_pct = stats
         .weekly_focus_score_for_day(day_date)
         .consistency_score_pct;
-    let completion_score_pct = if weekly_goal_snapshot.has_any_target() {
-        weekly_goal_completion_score_pct(
-            weekly_goal_snapshot,
-            week.focused_minutes(),
-            week.pomodoros_completed,
-        )
-    } else {
-        None
-    };
-    let focus_score_pct = completion_score_pct.map(|completion| {
-        (u16::from(consistency_score_pct) + u16::from(completion)).div_ceil(2) as u8
-    });
+    let completion_score_pct = None;
+    let focus_score_pct = Some(consistency_score_pct);
     let focus_risk = stats.focus_risk_forecast_for_day(
         day_date,
         goal_snapshot,
-        weekly_goal_snapshot,
-        monthly_goal_snapshot,
-    );
-    let weekly_allocation = build_weekly_allocation_output(
-        day_date,
-        weekly_goal_snapshot,
-        week,
-        &selected_automation.recurring_schedule,
+        DailyGoalSnapshot::default(),
+        DailyGoalSnapshot::default(),
     );
     let stats_growth = stats.growth_summary();
     let retention_windows = config.stats_retention.windows();
@@ -77,23 +55,6 @@ pub(super) fn build_status_output(config: &AppConfig, stats: &FocusStats) -> Sta
             pomodoros_target: goal_snapshot.pomodoros,
             met: goal_snapshot.is_met_by(today),
             carry_over: config.goal_carry_over.daily,
-        },
-        weekly_goal: GoalOutput {
-            configured: weekly_goal_snapshot.has_any_target(),
-            minutes_target: weekly_goal_snapshot.minutes,
-            pomodoros_target: weekly_goal_snapshot.pomodoros,
-            met: weekly_goal_snapshot
-                .is_met_by_totals(week.focused_minutes(), week.pomodoros_completed),
-            carry_over: config.goal_carry_over.weekly,
-        },
-        weekly_allocation,
-        monthly_goal: GoalOutput {
-            configured: monthly_goal_snapshot.has_any_target(),
-            minutes_target: monthly_goal_snapshot.minutes,
-            pomodoros_target: monthly_goal_snapshot.pomodoros,
-            met: monthly_goal_snapshot
-                .is_met_by_totals(month.focused_minutes(), month.pomodoros_completed),
-            carry_over: config.goal_carry_over.monthly,
         },
         session: SessionOutput {
             focused_minutes: session.focused_minutes,
@@ -147,75 +108,6 @@ fn build_session_output(live: &LiveStatusOutput) -> SessionOutput {
     }
 }
 
-fn weekly_goal_completion_score_pct(
-    goal: DailyGoalSnapshot,
-    focused_minutes: u64,
-    pomodoros_completed: u32,
-) -> Option<u8> {
-    let minute_score = if goal.minutes > 0 {
-        Some(percentage_round_nearest(
-            focused_minutes.min(goal.minutes),
-            goal.minutes,
-        ))
-    } else {
-        None
-    };
-    let pomodoro_score = if goal.pomodoros > 0 {
-        Some(percentage_round_nearest(
-            u64::from(pomodoros_completed.min(goal.pomodoros)),
-            u64::from(goal.pomodoros),
-        ))
-    } else {
-        None
-    };
-    match (minute_score, pomodoro_score) {
-        (None, None) => None,
-        (Some(score), None) | (None, Some(score)) => Some(score),
-        (Some(left), Some(right)) => Some((u16::from(left) + u16::from(right)).div_ceil(2) as u8),
-    }
-}
-
-fn build_weekly_allocation_output(
-    day: NaiveDate,
-    weekly_goal_snapshot: DailyGoalSnapshot,
-    week: crate::stats::WeeklyStats,
-    schedule: &crate::config::RecurringScheduleConfig,
-) -> WeeklyAllocationOutput {
-    let allocation =
-        weekly_daily_goal_allocation_for_context(day, weekly_goal_snapshot, week, schedule);
-    let today_target = allocation.today_target();
-    WeeklyAllocationOutput {
-        available: allocation.has_any_target(),
-        uses_schedule_weights: allocation.uses_schedule_weights,
-        remaining_days_in_week: allocation.remaining_days_in_week,
-        allocatable_days: allocation.allocatable_days,
-        completed_minutes: allocation.completed_minutes,
-        completed_pomodoros: allocation.completed_pomodoros,
-        remaining_minutes: allocation.remaining_minutes,
-        remaining_pomodoros: allocation.remaining_pomodoros,
-        today_minutes_target: today_target.minutes,
-        today_pomodoros_target: today_target.pomodoros,
-        days: allocation
-            .daily_targets
-            .into_iter()
-            .map(|target| WeeklyAllocationDayOutput {
-                date: target.day.format("%Y-%m-%d").to_string(),
-                minutes_target: target.minutes_target,
-                pomodoros_target: target.pomodoros_target,
-                allocatable: target.allocatable,
-            })
-            .collect(),
-    }
-}
-
-fn percentage_round_nearest(part: u64, total: u64) -> u8 {
-    if total == 0 {
-        return 0;
-    }
-    let rounded = (u128::from(part) * 100 + (u128::from(total) / 2)) / u128::from(total);
-    rounded.min(u128::from(u8::MAX)) as u8
-}
-
 fn effective_daily_goal_snapshot_for_day(
     config: &AppConfig,
     stats: &FocusStats,
@@ -238,61 +130,6 @@ fn effective_daily_goal_snapshot_for_day(
         })
     });
     carry_over_goal_target(base, config.goal_carry_over.daily, previous)
-}
-
-fn effective_weekly_goal_snapshot(
-    config: &AppConfig,
-    stats: &FocusStats,
-    day: NaiveDate,
-) -> DailyGoalSnapshot {
-    let base = DailyGoalSnapshot {
-        minutes: config.weekly_goal.minutes,
-        pomodoros: config.weekly_goal.pomodoros,
-    };
-    let previous =
-        day.checked_sub_signed(chrono::Duration::weeks(1))
-            .and_then(|previous_week_day| {
-                stats
-                    .weekly_goal_snapshot_for_day(previous_week_day)
-                    .map(|previous_target| {
-                        let week = stats.weekly_for_day(previous_week_day);
-                        (
-                            previous_target,
-                            week.focused_minutes(),
-                            week.pomodoros_completed,
-                        )
-                    })
-            });
-    carry_over_goal_target(base, config.goal_carry_over.weekly, previous)
-}
-
-fn effective_monthly_goal_snapshot(
-    config: &AppConfig,
-    stats: &FocusStats,
-    day: NaiveDate,
-) -> DailyGoalSnapshot {
-    let base = DailyGoalSnapshot {
-        minutes: config.monthly_goal.minutes,
-        pomodoros: config.monthly_goal.pomodoros,
-    };
-    let previous = previous_month_reference_day(day).and_then(|previous_month_day| {
-        stats
-            .monthly_goal_snapshot_for_day(previous_month_day)
-            .map(|previous_target| {
-                let month = stats.monthly_for_day(previous_month_day);
-                (
-                    previous_target,
-                    month.focused_minutes(),
-                    month.pomodoros_completed,
-                )
-            })
-    });
-    carry_over_goal_target(base, config.goal_carry_over.monthly, previous)
-}
-
-fn previous_month_reference_day(day: NaiveDate) -> Option<NaiveDate> {
-    let month_start = NaiveDate::from_ymd_opt(day.year(), day.month(), 1)?;
-    month_start.pred_opt()
 }
 
 fn build_live_status_output(
