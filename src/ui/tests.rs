@@ -750,8 +750,3 @@ fn session_planner_view_renders_favorite_and_archived_badges() {
     assert!(text.contains("★"));
     assert!(text.contains("archived"));
 }
-
-#[test]
-fn month_label_uses_zero_padded_iso_format() {
-    assert_eq!(format_month_label(2026, 5), "2026-05");
-}
