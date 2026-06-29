@@ -230,6 +230,8 @@ fn round_trip_full_config() {
     assert!(!root.contains_key("strict_mode"));
     assert!(!root.contains_key("recurring_schedule"));
     assert!(!root.contains_key("calendar_sync"));
+    assert!(!root.contains_key("wakatime"));
+    assert!(!root.contains_key("wakatime_runtime"));
     assert!(!root.contains_key("weekday_profile_rules"));
     assert!(!root.contains_key("history_dashboard"));
 
@@ -1556,6 +1558,54 @@ url = "https://example.com/work.ics"
     assert!(!saved.contains("[calendar_sync]"));
 }
 
+#[test]
+fn save_with_env_omits_retired_wakatime_sections() {
+    let temp_base = unique_temp_base("save-omits-retired-wakatime");
+    let app_dir = temp_base.join("focustime");
+    fs::create_dir_all(&app_dir).unwrap();
+    fs::write(
+        app_dir.join("config.toml"),
+        r#"
+[wakatime]
+api_key = "waka_key"
+project = "FocusTime"
+language = "Rust"
+
+[wakatime_runtime]
+queue_path = "queued-heartbeats.json"
+max_queue_len = 256
+retry_initial_backoff_secs = 5
+retry_max_backoff_secs = 300
+"#,
+    )
+    .unwrap();
+
+    let cfg = AppConfig::load_with_env(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    });
+    cfg.save_with_env(|key| {
+        if key == CONFIG_DIR_ENV {
+            Some(temp_base.clone().into_os_string())
+        } else {
+            None
+        }
+    })
+    .unwrap();
+
+    let saved = fs::read_to_string(app_dir.join("config.toml")).unwrap();
+    let saved_toml: toml::Value = toml::from_str(&saved).unwrap();
+    let _ = fs::remove_dir_all(&temp_base);
+
+    assert!(saved_toml.get("wakatime").is_none());
+    assert!(saved_toml.get("wakatime_runtime").is_none());
+    assert!(!saved.contains("[wakatime]"));
+    assert!(!saved.contains("[wakatime_runtime]"));
+}
+
 #[cfg(not(target_os = "windows"))]
 #[test]
 fn config_dir_returns_none_when_home_is_blank_and_xdg_is_unset() {
@@ -2142,6 +2192,36 @@ exception_dates = ["2026-12-25"]
     assert!(steps.iter().any(|step| {
         step.summary
             == "Remove deprecated schedule exception dates; schedules now use recurring windows only."
+    }));
+}
+
+#[test]
+fn config_migration_removes_retired_wakatime_sections() {
+    let original: toml::Value = toml::from_str(
+        r#"
+schema_version = 2
+
+[wakatime]
+api_key = "waka_key"
+project = "FocusTime"
+language = "Rust"
+
+[wakatime_runtime]
+queue_path = "queued-heartbeats.json"
+max_queue_len = 256
+retry_initial_backoff_secs = 5
+retry_max_backoff_secs = 300
+"#,
+    )
+    .unwrap();
+
+    let (migrated, _, steps) = migrate_config_toml_to_current_detailed(original).unwrap();
+    let root = migrated.as_table().expect("root should be a table");
+
+    assert!(!root.contains_key("wakatime"));
+    assert!(!root.contains_key("wakatime_runtime"));
+    assert!(steps.iter().any(|step| {
+        step.summary == "Remove retired WakaTime heartbeat config and runtime tuning sections."
     }));
 }
 
