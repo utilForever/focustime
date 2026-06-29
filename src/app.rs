@@ -323,24 +323,6 @@ pub(crate) struct WeeklyDailyGoalAllocation {
     pub(crate) daily_targets: Vec<WeeklyDailyAllocationDay>,
 }
 
-impl WeeklyDailyGoalAllocation {
-    #[allow(dead_code)]
-    pub(crate) fn has_any_target(&self) -> bool {
-        self.week_target.has_any_target()
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn today_target(&self) -> DailyGoalSnapshot {
-        self.daily_targets
-            .first()
-            .map(|target| DailyGoalSnapshot {
-                minutes: target.minutes_target,
-                pomodoros: target.pomodoros_target,
-            })
-            .unwrap_or_default()
-    }
-}
-
 pub(crate) struct App {
     pub(crate) timer: TimerState,
     pub(crate) should_quit: bool,
@@ -675,32 +657,6 @@ impl App {
         goal_progress_for_totals(
             today_stats.focused_minutes(),
             today_stats.pomodoros_completed,
-            target.minutes,
-            target.pomodoros,
-        )
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn current_week_goal_progress(&self) -> DailyGoalProgress {
-        let today = Local::now().date_naive();
-        let week = self.stats.weekly_for_day(today);
-        let target = self.effective_weekly_goal_snapshot_for_day(today);
-        goal_progress_for_totals(
-            week.focused_minutes(),
-            week.pomodoros_completed,
-            target.minutes,
-            target.pomodoros,
-        )
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn current_month_goal_progress(&self) -> DailyGoalProgress {
-        let today = Local::now().date_naive();
-        let month = self.stats.monthly_for_day(today);
-        let target = self.effective_monthly_goal_snapshot_for_day(today);
-        goal_progress_for_totals(
-            month.focused_minutes(),
-            month.pomodoros_completed,
             target.minutes,
             target.pomodoros,
         )
