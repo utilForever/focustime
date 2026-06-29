@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **WakaTime v0.17.0 scope decision (#564):** documented the roadmap target to keep WakaTime as an optional, minimal heartbeat-only integration while follow-up cleanup removes queue/retry/runtime tuning surfaces that go beyond non-blocking heartbeat tracking.
+- **Breaking - WakaTime integration retirement (#565):** removed WakaTime heartbeat tracking, config/runtime diagnostics, profile-editor metadata fields, and direct HTTP/Basic-auth dependency ownership so focus sessions stay local to timer, blocking, goals, recovery, history, and exports.
 
 ## [0.16.4] - 2026-06-28
 
