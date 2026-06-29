@@ -146,15 +146,6 @@ cargo run -- --export=./reports --json
 cargo run -- --status --watch
 cargo run -- --status --watch=2 --json
 
-# Back up config.toml and stats.toml to current directory or a target directory
-cargo run -- --backup
-cargo run -- --backup=./reports --json
-
-# Restore config.toml and stats.toml from current directory or a source directory
-# (restore requires both files to be present in the source directory)
-cargo run -- --restore
-cargo run -- --restore=./reports --json
-
 # Export stats to current directory or a target directory
 cargo run -- --export
 cargo run -- --export=./reports --json
@@ -166,12 +157,11 @@ cargo run -- --export=./reports --json
 - New automation should use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`) or the TUI for interactive focus sessions.
 - The loopback `/v1/*` daemon endpoints are no longer a supported runtime surface.
 
-Backup/restore/export behavior:
+Recovery/export behavior:
 
-- `--backup` and `--export` share the same target-directory handling: omitted directories use the current working directory and explicit targets are created before artifact files are written.
-- `--backup` creates the target directory if needed, then copies `config.toml` and `stats.toml` into it.
-- `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
-- Runtime persistence is canonical-path only; if only legacy `stats.toml` exists, copy it to the canonical stats path (the backup/restore commands can help).
+- `--export` writes supported stats extraction artifacts to the current working directory or an explicit target directory.
+- Portable file recovery is manual: copy `config.toml` and `stats.toml` from the app data/state locations before risky maintenance, and copy them back while `focustime` is not running if recovery is needed.
+- Runtime persistence is canonical-path only; if only legacy `stats.toml` exists, copy it to the canonical stats path manually.
 
 ### Product scope
 
@@ -199,8 +189,8 @@ detected.
 
 Milestone policy:
 
-- **v0.10.x migration window:** warning-only window with migration tooling (`--migrate`, `--backup`, `--restore`)
-- **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); `--backup`/`--restore` remain supported.
+- **v0.10.x migration window:** warning-only window with temporary migration and file-copy helper tooling.
+- **v0.11.0+:** retired temporary migration-only CLI compatibility flags (`--migrate`, `--dry-run`); local file-copy helpers stayed supported during the migration window.
 - **v0.15.2:** consolidated diagnostics are available through `--diagnostics`; config health and migration guidance are included in the canonical diagnostics payload.
 - **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows and supported timer controls remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary override state is represented through the canonical runtime model.
@@ -214,7 +204,7 @@ Milestone policy:
 - **v0.16.2:** schedule exception dates, calendar annotation cache handling, and retired calendar timezone parsing stay removed; recurring schedule windows remain the supported schedule model, and `chrono-tz` stays out of the manifest and lockfile.
 - **v0.16.3:** task note metadata, focus intention metadata, task-specific goals, session-template command/config surfaces, and per-task WakaTime mappings are retired; task labels are the supported session context in status, recovery, history, and exports.
 - **v0.16.4:** allowlist site-management commands, blocklist profile CRUD/selection, custom blocking backend/fallback policy, break-glass workflow, and temporary override runtime state are retired; canonical blocklist commands, config/internal allowlist rules, hosts-file diagnostics, and normal timer controls are the supported replacements.
-- **v0.17.0:** WakaTime heartbeat tracking, config/runtime diagnostics, and direct HTTP/Basic-auth dependency ownership are retired; `ureq` leaves the manifest and `base64` is no longer a direct dependency.
+- **v0.17.0:** WakaTime heartbeat tracking, backup/restore CLI workflows, config/runtime diagnostics, and direct HTTP/Basic-auth dependency ownership are retired; `--export` and manual config/stats file copies remain the supported recovery/data-extraction paths.
 - **Future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
@@ -231,7 +221,7 @@ Roadmap direction:
 - Keep one focus-entry runtime path for scheduled and manual starts.
 - Keep `--diagnostics` as the supported way to inspect setup health, config
   health, and migration guidance together.
-- Keep local backup/restore workflows as the supported portable recovery path.
+- Keep `--export` for supported stats extraction and document manual `config.toml`/`stats.toml` copies as the portable file recovery path.
 - Keep cleanup candidates tracked in GitHub roadmap issues first, with release
   notes and static documentation naming supported replacement behavior before
   paths are merged or retired. Generated feature inventory snapshots are no
