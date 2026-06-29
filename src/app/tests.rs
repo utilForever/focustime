@@ -163,8 +163,6 @@ fn selected_builtin_profile_is_applied_on_startup() {
         stats_retention: StatsRetentionConfig::default(),
         history_dashboard: HistoryDashboardConfig::default(),
         selected_theme_preset: ThemePreset::Classic,
-        wakatime: WakatimeMetadataConfig::default(),
-        wakatime_runtime: WakatimeRuntimeConfig::default(),
         feature_flags: FeatureFlagsConfig::default(),
         shortcuts: ShortcutConfig::default(),
     };
@@ -174,27 +172,6 @@ fn selected_builtin_profile_is_applied_on_startup() {
     assert_eq!(app.timer.short_break_secs, DEFAULT_SHORT_BREAK_SECS);
     assert_eq!(app.timer.long_break_secs, DEFAULT_LONG_BREAK_SECS);
     assert_eq!(app.timer.long_break_interval, DEFAULT_LONG_BREAK_INTERVAL);
-}
-
-#[test]
-fn app_from_config_applies_wakatime_runtime_knobs() {
-    let app = App::from_config(AppConfig {
-        wakatime_runtime: WakatimeRuntimeConfig {
-            retry_backoff_secs: vec![2, 4, 8],
-            queue_capacity: 512,
-            queue_retry_delay_secs: 25,
-        },
-        ..AppConfig::default()
-    });
-
-    assert_eq!(
-        app.wakatime_runtime_options_for_tests(),
-        crate::wakatime::WakatimeRuntimeOptions {
-            retry_backoff_secs: vec![2, 4, 8],
-            queue_capacity: 512,
-            queue_retry_delay_secs: 25,
-        }
-    );
 }
 
 #[test]
@@ -477,31 +454,9 @@ fn persisted_config_keeps_legacy_fields_from_custom_profile() {
     assert_eq!(persisted.auto_start, AutoStartConfig::default());
     assert!(persisted.strict_mode);
     assert_eq!(persisted.daily_goal, DailyGoalConfig::default());
-    assert_eq!(persisted.wakatime, WakatimeMetadataConfig::default());
     assert_eq!(persisted.selected_blocklist_profile, "Default");
     assert_eq!(persisted.blocklist_profiles.len(), 1);
     assert_eq!(persisted.blocklist_profiles[0].name, "Default");
-}
-
-#[test]
-fn persisted_config_preserves_wakatime_metadata() {
-    let config = AppConfig {
-        wakatime: WakatimeMetadataConfig {
-            project: "Team Focus".to_string(),
-            language: "Deep Work".to_string(),
-        },
-        ..AppConfig::default()
-    };
-    let app = App::from_config(config);
-
-    let persisted = app.persisted_config();
-    assert_eq!(
-        persisted.wakatime,
-        WakatimeMetadataConfig {
-            project: "Team Focus".to_string(),
-            language: "Deep Work".to_string(),
-        }
-    );
 }
 
 #[test]
@@ -571,8 +526,6 @@ fn profile_edit_field_value_displays_second_precision() {
     assert_eq!(app.profile_edit_field_value(15), "Off");
     assert_eq!(app.profile_edit_field_value(16), "Off");
     assert_eq!(app.profile_edit_field_value(17), "Off");
-    assert_eq!(app.profile_edit_field_value(18), "focustime");
-    assert_eq!(app.profile_edit_field_value(19), "Pomodoro");
 }
 
 #[test]
@@ -796,102 +749,6 @@ fn cancelling_profile_edit_restores_recurring_schedule_settings() {
 
     assert_eq!(app.recurring_schedule, original_schedule);
     assert_eq!(app.recurring_windows.len(), 1);
-}
-
-#[test]
-fn editing_wakatime_metadata_fields_updates_and_persists_settings() {
-    let config = AppConfig {
-        wakatime: WakatimeMetadataConfig {
-            project: "A".to_string(),
-            language: "B".to_string(),
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-
-    app.handle_key(key(KeyCode::Char('p')));
-    app.handle_key(key(KeyCode::Char('e')));
-    for _ in 0..PROFILE_EDIT_WAKATIME_PROJECT_INDEX {
-        app.handle_key(key(KeyCode::Down));
-    }
-    app.handle_key(key(KeyCode::Backspace));
-    for c in "Team Focus".chars() {
-        app.handle_key(key(KeyCode::Char(c)));
-    }
-    app.handle_key(key(KeyCode::Down));
-    app.handle_key(key(KeyCode::Backspace));
-    for c in "Deep Work".chars() {
-        app.handle_key(key(KeyCode::Char(c)));
-    }
-    app.handle_key(key(KeyCode::Enter));
-
-    let persisted = app.persisted_config();
-    assert_eq!(
-        persisted.wakatime,
-        WakatimeMetadataConfig {
-            project: "Team Focus".to_string(),
-            language: "Deep Work".to_string(),
-        }
-    );
-    assert_eq!(
-        app.wakatime_heartbeat_metadata_for_tests(),
-        WakatimeHeartbeatMetadata {
-            project: "Team Focus".to_string(),
-            language: "Deep Work".to_string(),
-        }
-    );
-}
-
-#[test]
-fn editing_wakatime_metadata_blank_values_fall_back_to_defaults() {
-    let config = AppConfig {
-        wakatime: WakatimeMetadataConfig {
-            project: "A".to_string(),
-            language: "B".to_string(),
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-
-    app.handle_key(key(KeyCode::Char('p')));
-    app.handle_key(key(KeyCode::Char('e')));
-    for _ in 0..PROFILE_EDIT_WAKATIME_PROJECT_INDEX {
-        app.handle_key(key(KeyCode::Down));
-    }
-    app.handle_key(key(KeyCode::Backspace));
-    app.handle_key(key(KeyCode::Down));
-    app.handle_key(key(KeyCode::Backspace));
-    app.handle_key(key(KeyCode::Enter));
-
-    let defaults = WakatimeMetadataConfig::default();
-    assert_eq!(app.wakatime_metadata, defaults);
-    assert_eq!(app.persisted_config().wakatime, defaults);
-    assert_eq!(
-        app.wakatime_heartbeat_metadata_for_tests(),
-        WakatimeHeartbeatMetadata::default()
-    );
-}
-
-#[test]
-fn selecting_task_label_keeps_global_wakatime_metadata() {
-    let config = AppConfig {
-        wakatime: WakatimeMetadataConfig {
-            project: "Global Project".to_string(),
-            language: "Global Language".to_string(),
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-
-    app.select_task_label_for_cli("Docs").unwrap();
-
-    assert_eq!(
-        app.wakatime_heartbeat_metadata_for_tests(),
-        WakatimeHeartbeatMetadata {
-            project: "Global Project".to_string(),
-            language: "Global Language".to_string(),
-        }
-    );
 }
 
 #[test]
@@ -1439,7 +1296,7 @@ fn sync_goal_snapshot_for_day_persists_idle_daily_snapshots_for_next_day_carry_o
 }
 
 #[test]
-fn poll_wakatime_status_and_on_tick_sync_today_goal_snapshot() {
+fn poll_runtime_status_and_on_tick_sync_today_goal_snapshot() {
     let config = AppConfig {
         daily_goal: DailyGoalConfig {
             minutes: 60,
@@ -1458,7 +1315,7 @@ fn poll_wakatime_status_and_on_tick_sync_today_goal_snapshot() {
             goal: None,
         },
     );
-    app.poll_wakatime_status();
+    app.poll_runtime_status();
     assert_eq!(app.today_stats().goal, Some(app.current_goal_snapshot()));
 
     app.stats.insert_daily_for_tests(
@@ -1787,41 +1644,6 @@ fn cancelling_profile_edit_restores_notification_settings() {
     assert!(!app.profile_edit_active);
     assert!(app.notification_settings.enabled);
     assert!(app.notification_settings.sound);
-}
-
-#[test]
-fn cancelling_profile_edit_restores_wakatime_metadata() {
-    let config = AppConfig {
-        wakatime: WakatimeMetadataConfig {
-            project: "Team Focus".to_string(),
-            language: "Deep Work".to_string(),
-        },
-        ..AppConfig::default()
-    };
-    let mut app = App::from_config(config);
-
-    app.handle_key(key(KeyCode::Char('p')));
-    app.handle_key(key(KeyCode::Char('e')));
-    app.profile_edit_field = PROFILE_EDIT_WAKATIME_PROJECT_INDEX;
-    app.handle_key(key(KeyCode::Char('X')));
-    app.profile_edit_field = PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX;
-    app.handle_key(key(KeyCode::Char('Y')));
-    app.handle_key(key(KeyCode::Esc));
-
-    assert_eq!(
-        app.wakatime_metadata,
-        WakatimeMetadataConfig {
-            project: "Team Focus".to_string(),
-            language: "Deep Work".to_string(),
-        }
-    );
-    assert_eq!(
-        app.wakatime_heartbeat_metadata_for_tests(),
-        WakatimeHeartbeatMetadata {
-            project: "Team Focus".to_string(),
-            language: "Deep Work".to_string(),
-        }
-    );
 }
 
 #[test]
@@ -3132,7 +2954,6 @@ fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
         selected_theme_preset: app.selected_theme_preset,
-        wakatime_metadata: app.wakatime_metadata.clone(),
     });
     let original_profile_automation = app
         .profile_automation
@@ -3187,7 +3008,6 @@ fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_res
         monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
         selected_theme_preset: app.selected_theme_preset,
-        wakatime_metadata: app.wakatime_metadata.clone(),
     });
 
     app.handle_key(key(KeyCode::Right));
@@ -3821,80 +3641,6 @@ fn ctrl_c_quits_during_profile_edit() {
     app.handle_key(key(KeyCode::Char('e')));
     app.handle_key(ctrl_key(KeyCode::Char('c')));
     assert!(app.should_quit);
-}
-
-#[test]
-fn q_quits_during_wakatime_metadata_edit() {
-    let mut app = App::default();
-    app.handle_key(key(KeyCode::Char('p')));
-    app.handle_key(key(KeyCode::Char('e')));
-    for _ in 0..PROFILE_EDIT_WAKATIME_PROJECT_INDEX {
-        app.handle_key(key(KeyCode::Down));
-    }
-
-    app.handle_key(key(KeyCode::Char('q')));
-
-    assert!(app.should_quit);
-    assert_eq!(app.wakatime_metadata.project, "focustime");
-}
-
-#[test]
-fn poll_wakatime_status_applies_async_failure_event() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
-    app.wakatime_tracker_mut_for_tests()
-        .expect("wakatime tracker should be available")
-        .push_failed_event_for_tests("HTTP 503");
-
-    app.poll_wakatime_status();
-
-    assert_eq!(
-        app.wakatime_runtime_state(),
-        crate::wakatime::WakatimeRuntimeState::Error("HTTP 503".to_string())
-    );
-}
-
-#[test]
-fn poll_wakatime_status_transitions_queued_backlog_to_replaying() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
-    app.wakatime_tracker_mut_for_tests()
-        .expect("wakatime tracker should be available")
-        .set_pending_heartbeats_for_tests(2);
-    assert!(matches!(
-        app.wakatime_runtime_state(),
-        crate::wakatime::WakatimeRuntimeState::Queued { pending: 2 }
-    ));
-
-    app.poll_wakatime_status();
-
-    assert!(matches!(
-        app.wakatime_runtime_state(),
-        crate::wakatime::WakatimeRuntimeState::Replaying { pending: 2 }
-    ));
-}
-
-#[test]
-/// Verifies setup diagnostics expose queued WakaTime heartbeats as a warning.
-fn setup_diagnostics_reports_wakatime_offline_queue_status() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
-    app.wakatime_tracker_mut_for_tests()
-        .expect("wakatime tracker should be available")
-        .set_pending_heartbeats_for_tests(3);
-
-    app.refresh_setup_diagnostics();
-
-    assert_eq!(
-        app.setup_diagnostics.wakatime_runtime.level,
-        SetupCheckLevel::Warning
-    );
-    assert!(
-        app.setup_diagnostics
-            .wakatime_runtime
-            .message
-            .contains("Queued: 3 WakaTime heartbeats pending replay")
-    );
 }
 
 #[test]

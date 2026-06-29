@@ -343,8 +343,6 @@ impl App {
             goal_carry_over: self.goal_carry_over,
             stats_retention: self.stats_retention,
             history_dashboard: HistoryDashboardConfig::default(),
-            wakatime: self.wakatime_metadata.clone(),
-            wakatime_runtime: self.wakatime_runtime.clone(),
             feature_flags: self.feature_flags.clone(),
             shortcuts: self.shortcuts.to_config(),
         }

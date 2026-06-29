@@ -8,7 +8,7 @@ This file provides context and instructions for AI coding agents working on the 
 
 - ⏱ **Pomodoro Timer** – structured focus/break intervals
 - 🚫 **Site Blocking** – block distracting websites during focus sessions
-- 📊 **Wakatime Tracking** – integrates with Wakatime to log coding activity
+- 📊 **Focus History** – records sessions, goals, trends, and exports
 
 The project is actively developed with frequent incremental releases.
 
@@ -41,7 +41,6 @@ focustime/
 │   ├── schedule.rs             # Schedule compile/occurrence logic
 │   ├── session_recovery.rs     # Runtime recovery snapshot helpers
 │   ├── task_labels.rs          # Task-label normalization/indexing
-│   ├── wakatime.rs             # WakaTime tracking integration
 │   └── notifications.rs        # Desktop notifications and sound
 ├── Cargo.toml                  # Package manifest and dependencies
 ├── Cargo.lock                  # Locked dependency versions

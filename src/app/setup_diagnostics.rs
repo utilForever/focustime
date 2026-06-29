@@ -1,7 +1,6 @@
 use crate::blocker::{
     BlockingBackendKind, BlockingPreviewAction, HostsFileDiagnostics, SiteBlocker,
 };
-use crate::wakatime::{WakatimeConfigStatus, WakatimeRuntimeState, WakatimeTracker};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SetupCheckLevel {
@@ -36,45 +35,20 @@ pub(crate) struct SetupDiagnostics {
     pub(crate) hosts_file_path: String,
     pub(crate) blocking_permissions: SetupCheck,
     pub(crate) hosts_write_capability: SetupCheck,
-    pub(crate) wakatime_config: SetupCheck,
-    pub(crate) wakatime_runtime: SetupCheck,
     pub(crate) deprecation_warnings: Vec<String>,
 }
 
 impl SetupDiagnostics {
-    /// Collects setup diagnostics, including WakaTime queue/retry runtime status.
-    pub(super) fn collect(
-        blocker: &SiteBlocker,
-        deprecation_warnings: Vec<String>,
-        wakatime_integration_enabled: bool,
-        wakatime_runtime_state: WakatimeRuntimeState,
-    ) -> Self {
+    /// Collects setup diagnostics for local blocking and config health surfaces.
+    pub(super) fn collect(blocker: &SiteBlocker, deprecation_warnings: Vec<String>) -> Self {
         let hosts_diagnostics = blocker.hosts_file_diagnostics();
         let blocking_permissions = blocking_permissions_check(&hosts_diagnostics);
         let hosts_write_capability = hosts_write_capability_check(&hosts_diagnostics);
         let hosts_file_path = hosts_diagnostics.path.clone();
-        let wakatime_config = if wakatime_integration_enabled {
-            let wakatime_diagnostics = WakatimeTracker::config_diagnostics();
-            match wakatime_diagnostics.status {
-                WakatimeConfigStatus::Configured => SetupCheck::ok(wakatime_diagnostics.detail),
-                WakatimeConfigStatus::MissingConfigFile
-                | WakatimeConfigStatus::MissingApiKey
-                | WakatimeConfigStatus::UnreadableConfig
-                | WakatimeConfigStatus::HomeDirectoryUnavailable => {
-                    SetupCheck::warning(wakatime_diagnostics.detail)
-                }
-            }
-        } else {
-            SetupCheck::ok("Disabled by WakaTime integration configuration.".to_string())
-        };
-        let wakatime_runtime =
-            wakatime_runtime_check(wakatime_integration_enabled, &wakatime_runtime_state);
         Self {
             hosts_file_path,
             blocking_permissions,
             hosts_write_capability,
-            wakatime_config,
-            wakatime_runtime,
             deprecation_warnings,
         }
     }
@@ -126,46 +100,6 @@ fn blocking_permissions_check(hosts_diagnostics: &HostsFileDiagnostics) -> Setup
             permission_remediation_guidance()
         ))
     }
-}
-
-/// Converts the current WakaTime runtime state into a user-facing setup check.
-fn wakatime_runtime_check(
-    wakatime_integration_enabled: bool,
-    state: &WakatimeRuntimeState,
-) -> SetupCheck {
-    if !wakatime_integration_enabled {
-        return SetupCheck::ok("Disabled by WakaTime integration configuration.");
-    }
-    match state {
-        WakatimeRuntimeState::NotConfigured => SetupCheck::warning(
-            "Not configured: WakaTime heartbeats and offline queue replay are inactive",
-        ),
-        WakatimeRuntimeState::Idle => SetupCheck::ok("Idle: no queued WakaTime heartbeats"),
-        WakatimeRuntimeState::Tracking => SetupCheck::ok("Tracking: no queued WakaTime heartbeats"),
-        WakatimeRuntimeState::Sending => SetupCheck::ok("Sending: heartbeat request in flight"),
-        WakatimeRuntimeState::Queued { pending } => SetupCheck::warning(format!(
-            "Queued: {pending} WakaTime heartbeat{} pending replay",
-            plural_suffix(*pending)
-        )),
-        WakatimeRuntimeState::Replaying { pending } => SetupCheck::warning(format!(
-            "Replaying: {pending} WakaTime heartbeat{} pending, oldest first",
-            plural_suffix(*pending)
-        )),
-        WakatimeRuntimeState::Retrying {
-            attempt,
-            max_attempts,
-            next_backoff_secs,
-            error,
-        } => SetupCheck::warning(format!(
-            "Retrying: attempt {attempt}/{max_attempts}, next retry in {next_backoff_secs}s ({error})"
-        )),
-        WakatimeRuntimeState::Error(error) => SetupCheck::warning(format!("Error: {error}")),
-    }
-}
-
-/// Returns the suffix needed to pluralize heartbeat status messages.
-fn plural_suffix(count: usize) -> &'static str {
-    if count == 1 { "" } else { "s" }
 }
 
 fn hosts_write_capability_check(hosts_diagnostics: &HostsFileDiagnostics) -> SetupCheck {

@@ -764,28 +764,6 @@ fn diagnostics_output_includes_config_health_and_migration_guidance() {
 }
 
 #[test]
-/// Verifies diagnostics JSON/text payloads retain WakaTime runtime status.
-fn diagnostics_output_includes_wakatime_runtime_status() {
-    let mut app = App::default();
-    app.setup_diagnostics.wakatime_runtime = SetupCheck {
-        level: SetupCheckLevel::Warning,
-        message: "Queued: 2 WakaTime heartbeats pending replay".to_string(),
-    };
-    let payload = build_diagnostics_command_output(
-        &app.setup_diagnostics,
-        test_config_doctor_report(),
-        test_config_migration_report(),
-        test_diagnostics_blocking_preview_output(),
-    );
-
-    assert_eq!(payload.setup.wakatime_runtime.level, "warning");
-    assert_eq!(
-        payload.setup.wakatime_runtime.message,
-        "Queued: 2 WakaTime heartbeats pending replay"
-    );
-}
-
-#[test]
 fn diagnostics_output_includes_deprecation_warnings() {
     let mut app = App::default();
     app.setup_diagnostics.deprecation_warnings = vec![

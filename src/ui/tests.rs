@@ -1,3 +1,8 @@
+use crate::app::{
+    PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX,
+    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX,
+};
 use crate::config::{
     AppConfig, HistoryDashboardConfig, HistoryKpiCardId, ShortcutConfig, ThemePreset,
 };
@@ -7,7 +12,6 @@ use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
 
 use crate::stats::current_day_key;
-use crate::wakatime::WakatimeTracker;
 
 fn terminal_text(terminal: &Terminal<TestBackend>, width: u16, height: u16) -> String {
     let buffer = terminal.backend().buffer();
@@ -141,22 +145,22 @@ fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
         crossterm::event::KeyCode::Char('e'),
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[3];
+    app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[4];
+    app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[6];
+    app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[7];
+    app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
@@ -645,7 +649,7 @@ fn profile_editor_renders_schedule_fields() {
     let mut app = App::default();
     app.mode = AppMode::ProfileManager;
     app.profile_edit_active = true;
-    app.profile_edit_field = PROFILE_EDIT_GROUP_SCHEDULE[0];
+    app.profile_edit_field = PROFILE_EDIT_SCHEDULE_WINDOW_INDEX;
 
     terminal
         .draw(|frame| render(frame, &app))
@@ -750,120 +754,4 @@ fn session_planner_view_renders_favorite_and_archived_badges() {
     let text = terminal_text(&terminal, width, height);
     assert!(text.contains("★"));
     assert!(text.contains("archived"));
-}
-
-#[test]
-fn month_label_uses_zero_padded_iso_format() {
-    assert_eq!(format_month_label(2026, 5), "2026-05");
-}
-
-#[test]
-fn wakatime_status_line_shows_not_yet_sent_when_no_success_exists() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
-
-    let (text, color) = wakatime_status_line(&app);
-
-    assert_eq!(text, "⏱  WakaTime: idle · last success not yet sent");
-    assert_eq!(color, Color::DarkGray);
-}
-
-#[test]
-fn wakatime_status_line_shows_last_success_time_after_success_event() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
-    let tracker = app
-        .wakatime_tracker_mut_for_tests()
-        .expect("wakatime tracker should be available");
-    tracker.push_sent_event_for_tests();
-    tracker.poll_events();
-
-    let (text, color) = wakatime_status_line(&app);
-
-    assert!(text.starts_with("⏱  WakaTime: idle · last success "));
-    assert!(!text.contains("not yet sent"));
-    assert_eq!(color, Color::DarkGray);
-}
-
-#[test]
-fn wakatime_status_line_shows_offline_queue_backlog() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
-    app.wakatime_tracker_mut_for_tests()
-        .expect("wakatime tracker should be available")
-        .set_pending_heartbeats_for_tests(3);
-
-    let (text, color) = wakatime_status_line(&app);
-
-    assert_eq!(
-        text,
-        "⏱  WakaTime: queued offline (3 pending) · last success not yet sent"
-    );
-    assert_eq!(color, Color::Yellow);
-}
-
-#[test]
-fn wakatime_status_line_shows_replaying_queue_backlog() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
-    app.wakatime_tracker_mut_for_tests()
-        .expect("wakatime tracker should be available")
-        .set_replaying_heartbeats_for_tests(2);
-
-    let (text, color) = wakatime_status_line(&app);
-
-    assert_eq!(
-        text,
-        "⏱  WakaTime: resending queued heartbeats (2 pending) · last success not yet sent"
-    );
-    assert_eq!(color, Color::Cyan);
-}
-
-#[test]
-fn wakatime_status_line_shows_retrying_state() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
-    let tracker = app
-        .wakatime_tracker_mut_for_tests()
-        .expect("wakatime tracker should be available");
-    tracker.push_retrying_event_for_tests(2, 4, 5, "HTTP 503");
-    tracker.poll_events();
-
-    let (text, color) = wakatime_status_line(&app);
-
-    assert_eq!(
-        text,
-        "⏱  WakaTime: retrying (2/4) in 5s (HTTP 503) · last success not yet sent"
-    );
-    assert_eq!(color, Color::Yellow);
-}
-
-#[test]
-fn wakatime_status_line_shows_error_state() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_configured_for_tests());
-    let tracker = app
-        .wakatime_tracker_mut_for_tests()
-        .expect("wakatime tracker should be available");
-    tracker.push_failed_event_for_tests("HTTP 500");
-    tracker.poll_events();
-
-    let (text, color) = wakatime_status_line(&app);
-
-    assert_eq!(
-        text,
-        "⏱  WakaTime: error (HTTP 500) · last success not yet sent"
-    );
-    assert_eq!(color, Color::Red);
-}
-
-#[test]
-fn wakatime_status_line_for_not_configured_omits_last_success_suffix() {
-    let mut app = App::default();
-    app.replace_wakatime_tracker_for_tests(WakatimeTracker::new_unconfigured_for_tests());
-
-    let (text, color) = wakatime_status_line(&app);
-
-    assert_eq!(text, "⏱  WakaTime: not configured");
-    assert_eq!(color, Color::DarkGray);
 }

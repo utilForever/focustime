@@ -554,7 +554,6 @@ impl App {
     }
 
     pub(super) fn sync_task_planner_state(&mut self) {
-        self.sync_wakatime_metadata_to_tracker();
         if self.stats.update_task_planner_state_with_label_states(
             self.task_labels.clone(),
             self.selected_task_label.clone(),

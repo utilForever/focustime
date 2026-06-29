@@ -11,7 +11,6 @@ mod diagnostics;
 mod migration;
 mod paths;
 mod shortcuts;
-mod wakatime;
 
 pub(crate) use blocklists::{BlocklistProfileConfig, effective_blocked_sites_for_profile};
 use blocklists::{
@@ -34,7 +33,6 @@ use paths::{app_dir_with_env, stats_app_dir_with_env};
 #[cfg(test)]
 use paths::{config_dir_from_env, stats_state_dir_from_env};
 pub(crate) use shortcuts::ShortcutConfig;
-pub(crate) use wakatime::{WakatimeMetadataConfig, WakatimeRuntimeConfig};
 
 const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 2;
 const LEGACY_CONFIG_SCHEMA_VERSION: u32 = 0;
@@ -133,12 +131,6 @@ pub(crate) struct AppConfig {
     /// always uses the stable default KPI layout and does not persist it.
     #[serde(default, skip_serializing)]
     pub(crate) history_dashboard: HistoryDashboardConfig,
-    /// WakaTime heartbeat metadata labels.
-    #[serde(default)]
-    pub(crate) wakatime: WakatimeMetadataConfig,
-    /// Runtime tuning knobs for WakaTime retry/queue behavior.
-    #[serde(default)]
-    pub(crate) wakatime_runtime: WakatimeRuntimeConfig,
     /// Feature flags used to safely gate compatibility-sensitive behavior.
     #[serde(default)]
     pub(crate) feature_flags: FeatureFlagsConfig,
@@ -250,13 +242,6 @@ impl IntegrationFeatureFlagsConfig {
             enabled.push(trimmed);
         }
         Self { enabled }
-    }
-
-    pub(crate) fn is_enabled(&self, integration: &str) -> bool {
-        let normalized = integration.trim().to_ascii_lowercase();
-        self.enabled
-            .iter()
-            .any(|candidate| candidate.eq_ignore_ascii_case(&normalized))
     }
 }
 
@@ -906,7 +891,7 @@ fn default_legacy_config_schema_version() -> u32 {
 }
 
 fn default_enabled_integrations() -> Vec<String> {
-    vec!["wakatime".to_string()]
+    Vec::new()
 }
 
 impl Default for AppConfig {
@@ -934,8 +919,6 @@ impl Default for AppConfig {
             goal_carry_over: GoalCarryOverConfig::default(),
             stats_retention: StatsRetentionConfig::default(),
             history_dashboard: HistoryDashboardConfig::default(),
-            wakatime: WakatimeMetadataConfig::default(),
-            wakatime_runtime: WakatimeRuntimeConfig::default(),
             feature_flags: FeatureFlagsConfig::default(),
             shortcuts: ShortcutConfig::default(),
         }
@@ -1111,8 +1094,6 @@ impl AppConfig {
         );
         self.schedule_runtime = self.schedule_runtime.normalized();
         self.history_dashboard = self.history_dashboard.normalized();
-        self.wakatime = self.wakatime.normalized();
-        self.wakatime_runtime = self.wakatime_runtime.normalized();
         self.shortcuts = self.shortcuts.normalized();
         self
     }

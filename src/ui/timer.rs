@@ -1,8 +1,7 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Gauge, Layout, Line,
-    Local, Modifier, Paragraph, Rect, ShortcutAction, Style, TimeZone, TimerPhase, TimerStatus,
-    WakatimeRuntimeState, Wrap, app_color, centered_rect, format_timer_goal_streak_line,
-    readable_goal_streak_text, render_hint_lines,
+    Modifier, Paragraph, Rect, ShortcutAction, Style, TimerPhase, TimerStatus, Wrap, app_color,
+    centered_rect, format_timer_goal_streak_line, readable_goal_streak_text, render_hint_lines,
 };
 
 pub(super) fn render_timer(frame: &mut Frame, app: &App) {
@@ -145,7 +144,6 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
     };
     let (stats_text, stats_style) = timer_stats_line(app);
     let goal_text = readable_goal_streak_text(&format_timer_goal_streak_line(app));
-    let (waka_text, waka_color) = wakatime_status_line(app);
     let (schedule_next_text, schedule_status_text) = app.recurring_schedule_display_texts();
 
     let mut lines = vec![
@@ -183,7 +181,6 @@ fn render_timer_session_panel(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(app_color(app, Color::DarkGray)),
         ));
     }
-    lines.push(Line::styled(waka_text, Style::default().fg(waka_color)));
     for status_line in timer_session_status_lines(strict_status_text) {
         lines.push(Line::styled(
             status_line,
@@ -268,78 +265,6 @@ fn timer_stats_line(app: &App) -> (String, Style) {
             Style::default().fg(app_color(app, Color::DarkGray)),
         )
     }
-}
-
-pub(super) fn wakatime_status_line(app: &App) -> (String, Color) {
-    let runtime_state = app.wakatime_runtime_state();
-    let (status_text, status_color) = match &runtime_state {
-        WakatimeRuntimeState::NotConfigured => (
-            "⏱  WakaTime: not configured".to_string(),
-            app_color(app, Color::DarkGray),
-        ),
-        WakatimeRuntimeState::Idle => (
-            "⏱  WakaTime: idle".to_string(),
-            app_color(app, Color::DarkGray),
-        ),
-        WakatimeRuntimeState::Tracking => (
-            "⏱  WakaTime: tracking".to_string(),
-            app_color(app, Color::Green),
-        ),
-        WakatimeRuntimeState::Sending => (
-            "⏱  WakaTime: sending heartbeat...".to_string(),
-            app_color(app, Color::Cyan),
-        ),
-        WakatimeRuntimeState::Queued { pending } => (
-            format!("⏱  WakaTime: queued offline ({pending} pending)"),
-            app_color(app, Color::Yellow),
-        ),
-        WakatimeRuntimeState::Replaying { pending } => (
-            format!("⏱  WakaTime: resending queued heartbeats ({pending} pending)"),
-            app_color(app, Color::Cyan),
-        ),
-        WakatimeRuntimeState::Retrying {
-            attempt,
-            max_attempts,
-            next_backoff_secs,
-            error,
-        } => (
-            format!(
-                "⏱  WakaTime: retrying ({attempt}/{max_attempts}) in {next_backoff_secs}s ({error})"
-            ),
-            app_color(app, Color::Yellow),
-        ),
-        WakatimeRuntimeState::Error(error) => (
-            format!("⏱  WakaTime: error ({error})"),
-            app_color(app, Color::Red),
-        ),
-    };
-
-    if matches!(runtime_state, WakatimeRuntimeState::NotConfigured) {
-        return (status_text, status_color);
-    }
-
-    (
-        format!("{status_text} · {}", wakatime_last_success_text(app)),
-        status_color,
-    )
-}
-
-fn wakatime_last_success_text(app: &App) -> String {
-    match app.wakatime_last_successful_heartbeat_epoch_secs() {
-        Some(epoch_secs) => format!(
-            "last success {}",
-            format_wakatime_heartbeat_timestamp(epoch_secs)
-        ),
-        None => "last success not yet sent".to_string(),
-    }
-}
-
-pub(super) fn format_wakatime_heartbeat_timestamp(epoch_secs: u64) -> String {
-    i64::try_from(epoch_secs)
-        .ok()
-        .and_then(|secs| Local.timestamp_opt(secs, 0).single())
-        .map(|datetime| datetime.format("%H:%M:%S").to_string())
-        .unwrap_or_else(|| epoch_secs.to_string())
 }
 
 pub(super) fn format_duration_label(duration_secs: u64) -> String {

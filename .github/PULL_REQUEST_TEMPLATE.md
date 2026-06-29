@@ -20,7 +20,6 @@
 
 - [ ] Pomodoro timer behavior was verified for this change (if applicable)
 - [ ] Site blocking behavior was verified for this change (if applicable)
-- [ ] WakaTime integration behavior was verified for this change (if applicable)
 - [ ] I added or updated tests for changed behavior (if applicable)
 
 ### Configuration & Docs

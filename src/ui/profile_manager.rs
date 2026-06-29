@@ -1,9 +1,21 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
-    ListItem, ListState, Modifier, NavigationAction, PROFILE_EDIT_GROUPS, PROFILE_IDS, Paragraph,
-    ShortcutAction, Span, Style, Wrap, app_color, centered_rect, render_centered_error,
-    render_hint_lines,
+    ListItem, ListState, Modifier, NavigationAction, PROFILE_IDS, Paragraph, ShortcutAction, Span,
+    Style, Wrap, app_color, centered_rect, render_centered_error, render_hint_lines,
 };
+
+const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
+const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
+const PROFILE_EDIT_GROUP_GOALS: [usize; 9] = [9, 10, 11, 12, 13, 14, 15, 16, 17];
+const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 6] = [18, 19, 20, 21, 22, 23];
+const PROFILE_EDIT_GROUP_APPEARANCE: [usize; 1] = [24];
+const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
+    ("Timer", &PROFILE_EDIT_GROUP_TIMER),
+    ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
+    ("Goals", &PROFILE_EDIT_GROUP_GOALS),
+    ("Schedule", &PROFILE_EDIT_GROUP_SCHEDULE),
+    ("Appearance", &PROFILE_EDIT_GROUP_APPEARANCE),
+];
 
 pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();
@@ -118,7 +130,7 @@ fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
                 "Press {} to edit the selected profile.",
                 app.shortcut_hint(ShortcutAction::ProfileEdit)
             )),
-            Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule · Appearance"),
+            Line::from("Sections: Timer · Automation · Goals · Schedule · Appearance"),
             Line::from("Editor is compact for smaller terminals."),
         ];
     }
@@ -182,14 +194,13 @@ fn profile_editor_lines(app: &App) -> Vec<Line<'static>> {
 fn profile_manager_hints(app: &App) -> Vec<Line<'static>> {
     if app.profile_edit_active {
         vec![
-            Line::from("Sections: Timer · Automation · Goals · WakaTime · Schedule · Appearance"),
+            Line::from("Sections: Timer · Automation · Goals · Schedule · Appearance"),
             Line::from(format!(
-                "Edit: {}/{} Field  {}/{} Change value  [Type/{}] WakaTime text",
+                "Edit: {}/{} Field  {}/{} Change value",
                 app.navigation_hint(NavigationAction::MoveUp),
                 app.navigation_hint(NavigationAction::MoveDown),
                 app.navigation_hint(NavigationAction::MoveLeft),
                 app.navigation_hint(NavigationAction::MoveRight),
-                app.navigation_label(NavigationAction::Backspace),
             )),
             Line::from(if app.strict_mode_enforced_for_focus() {
                 format!(
@@ -267,15 +278,13 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         15 => "Monthly goal minutes",
         16 => "Monthly goal pomodoros",
         17 => "Monthly goal carry-over",
-        18 => "WakaTime project",
-        19 => "WakaTime language",
-        20 => "Window selector",
-        21 => "Day selector",
-        22 => "Day enabled",
-        23 => "Start time",
-        24 => "End time",
-        25 => "Add/remove",
-        26 => "Theme preset",
+        18 => "Window selector",
+        19 => "Day selector",
+        20 => "Day enabled",
+        21 => "Start time",
+        22 => "End time",
+        23 => "Add/remove",
+        24 => "Theme preset",
         _ => "",
     }
 }

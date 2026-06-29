@@ -30,7 +30,7 @@ cargo audit
 
 ## Architecture
 
-`focustime` is a Rust TUI application that combines a Pomodoro timer, site blocking, and WakaTime tracking.
+`focustime` is a Rust TUI application that combines a Pomodoro timer, site blocking, and focus history.
 
 - Facade modules at `src/app.rs`, `src/cli.rs`, `src/stats.rs`, and `src/ui.rs`.
 - Focused domain submodules under `src/app/*.rs`, `src/cli/*.rs`, `src/stats/*.rs`, and `src/ui/*.rs`.
@@ -108,20 +108,17 @@ Key dependencies are defined in `Cargo.toml`:
 
 - `ratatui`: terminal UI rendering.
 - `crossterm`: terminal input/output and screen control.
-- `ureq` + `serde`: HTTP and JSON support for WakaTime heartbeats. Retired
-  calendar annotation and daemon paths no longer own runtime HTTP.
 - `serde_json`: CLI/status/export JSON.
-- `toml`: config, stats, WakaTime queue, and recovery persistence.
+- `toml`: config, stats, and recovery persistence.
 - `csv`: stats export artifacts.
 - `chrono`: timer/stat dates and schedule windows.
-- `base64`: WakaTime Basic auth.
 
 Dependency guidelines:
 
 - Prefer minimal, well-maintained crates.
 - Keep `Cargo.lock` committed.
 - Run `cargo audit` when updating dependencies.
-- When cleanup work removes daemon, calendar, or integration paths, update the
+- When cleanup work removes daemon, calendar, or retired integration paths, update the
   README runtime dependency ownership table with the owning path and run the
   release readiness checks in `REGRESSION_MATRIX.md`.
 - Before changing `Cargo.toml` for calendar-owned cleanup candidates, confirm

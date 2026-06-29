@@ -43,8 +43,6 @@ fn default_values_are_canonical_pomodoro() {
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.stats_retention, StatsRetentionConfig::default());
     assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
-    assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
-    assert_eq!(cfg.wakatime_runtime, WakatimeRuntimeConfig::default());
     assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
     assert_eq!(cfg.shortcuts, ShortcutConfig::default());
 }
@@ -209,15 +207,6 @@ fn round_trip_full_config() {
                 HistoryKpiCardId::Retention,
             ],
         },
-        wakatime: WakatimeMetadataConfig {
-            project: "Team Focus".to_string(),
-            language: "Focus Session".to_string(),
-        },
-        wakatime_runtime: WakatimeRuntimeConfig {
-            retry_backoff_secs: vec![2, 5, 10],
-            queue_capacity: 512,
-            queue_retry_delay_secs: 30,
-        },
         feature_flags: FeatureFlagsConfig::default(),
         shortcuts: ShortcutConfig {
             timer_toggle_pause: "space".to_string(),
@@ -273,8 +262,6 @@ fn round_trip_full_config() {
     assert_eq!(parsed.goal_carry_over, original.goal_carry_over);
     assert_eq!(parsed.stats_retention, original.stats_retention);
     assert_eq!(parsed.history_dashboard, HistoryDashboardConfig::default());
-    assert_eq!(parsed.wakatime, original.wakatime);
-    assert_eq!(parsed.wakatime_runtime, original.wakatime_runtime);
     assert_eq!(parsed.feature_flags, original.feature_flags);
     assert_eq!(parsed.shortcuts, original.shortcuts);
 }
@@ -303,7 +290,6 @@ fn missing_fields_fall_back_to_defaults() {
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
-    assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
     assert_eq!(cfg.feature_flags, FeatureFlagsConfig::default());
     assert_eq!(cfg.shortcuts, ShortcutConfig::default());
 }
@@ -550,45 +536,6 @@ fn normalize_clamps_schedule_runtime_time_step_to_safe_bounds() {
 }
 
 #[test]
-fn normalize_clamps_wakatime_runtime_knobs_and_falls_back_for_invalid_backoff() {
-    let cfg = AppConfig {
-        wakatime_runtime: WakatimeRuntimeConfig {
-            retry_backoff_secs: vec![0, 900, 2, 0],
-            queue_capacity: 0,
-            queue_retry_delay_secs: 24 * 60 * 60,
-        },
-        ..AppConfig::default()
-    }
-    .normalize();
-
-    assert_eq!(cfg.wakatime_runtime.retry_backoff_secs, vec![300, 2]);
-    assert_eq!(cfg.wakatime_runtime.queue_capacity, 1);
-    assert_eq!(cfg.wakatime_runtime.queue_retry_delay_secs, 60 * 60);
-
-    let cfg = AppConfig {
-        wakatime_runtime: WakatimeRuntimeConfig {
-            retry_backoff_secs: vec![0, 0],
-            queue_retry_delay_secs: 0,
-            ..WakatimeRuntimeConfig::default()
-        },
-        ..AppConfig::default()
-    }
-    .normalize();
-    assert_eq!(cfg.wakatime_runtime.retry_backoff_secs, vec![2, 5, 10]);
-    assert_eq!(cfg.wakatime_runtime.queue_retry_delay_secs, 1);
-
-    let cfg = AppConfig {
-        wakatime_runtime: WakatimeRuntimeConfig {
-            retry_backoff_secs: vec![0, 0, 0, 0, 0, 0, 0, 0, 5],
-            ..WakatimeRuntimeConfig::default()
-        },
-        ..AppConfig::default()
-    }
-    .normalize();
-    assert_eq!(cfg.wakatime_runtime.retry_backoff_secs, vec![5]);
-}
-
-#[test]
 fn unknown_selected_profile_falls_back_to_custom_without_dropping_config() {
     let config = r#"
 focus_secs = 1500
@@ -614,7 +561,6 @@ blocked_sites = ["reddit.com", "youtube.com"]
     assert_eq!(parsed.weekly_goal, WeeklyGoalConfig::default());
     assert_eq!(parsed.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(parsed.goal_carry_over, GoalCarryOverConfig::default());
-    assert_eq!(parsed.wakatime, WakatimeMetadataConfig::default());
 }
 
 #[test]
@@ -664,8 +610,6 @@ fn effective_custom_profile_uses_explicit_profile_when_present() {
         goal_carry_over: GoalCarryOverConfig::default(),
         stats_retention: StatsRetentionConfig::default(),
         history_dashboard: HistoryDashboardConfig::default(),
-        wakatime: WakatimeMetadataConfig::default(),
-        wakatime_runtime: WakatimeRuntimeConfig::default(),
         feature_flags: FeatureFlagsConfig::default(),
         shortcuts: ShortcutConfig::default(),
     };
@@ -713,7 +657,6 @@ fn load_returns_default_when_config_file_is_corrupt() {
     assert_eq!(cfg.monthly_goal, MonthlyGoalConfig::default());
     assert_eq!(cfg.goal_carry_over, GoalCarryOverConfig::default());
     assert_eq!(cfg.history_dashboard, HistoryDashboardConfig::default());
-    assert_eq!(cfg.wakatime, WakatimeMetadataConfig::default());
 }
 
 #[test]
@@ -1613,20 +1556,6 @@ url = "https://example.com/work.ics"
     assert!(!saved.contains("[calendar_sync]"));
 }
 
-#[test]
-fn wakatime_metadata_normalizes_blank_fields_to_defaults() {
-    let cfg: AppConfig = toml::from_str(
-        r#"
-[wakatime]
-project = "   "
-language = ""
-"#,
-    )
-    .unwrap();
-    let normalized = cfg.normalize();
-    assert_eq!(normalized.wakatime, WakatimeMetadataConfig::default());
-}
-
 #[cfg(not(target_os = "windows"))]
 #[test]
 fn config_dir_returns_none_when_home_is_blank_and_xdg_is_unset() {
@@ -2249,10 +2178,9 @@ fn effective_blocked_sites_exact_allowlist_does_not_cancel_wildcard_block() {
 }
 
 #[test]
-fn feature_flags_default_enables_wakatime_integration() {
+fn feature_flags_default_has_no_integrations() {
     let flags = FeatureFlagsConfig::default();
-    assert!(flags.integrations.is_enabled("wakatime"));
-    assert_eq!(flags.integrations.enabled, vec!["wakatime".to_string()]);
+    assert!(flags.integrations.enabled.is_empty());
 }
 
 #[test]
@@ -2260,8 +2188,8 @@ fn feature_flags_normalization_deduplicates_and_trims_integration_names() {
     let normalized = FeatureFlagsConfig {
         integrations: IntegrationFeatureFlagsConfig {
             enabled: vec![
-                "WakaTime".to_string(),
-                "  wakatime ".to_string(),
+                "Calendar".to_string(),
+                "  calendar ".to_string(),
                 "custom".to_string(),
                 "".to_string(),
             ],
@@ -2271,6 +2199,6 @@ fn feature_flags_normalization_deduplicates_and_trims_integration_names() {
 
     assert_eq!(
         normalized.integrations.enabled,
-        vec!["wakatime".to_string(), "custom".to_string()]
+        vec!["calendar".to_string(), "custom".to_string()]
     );
 }

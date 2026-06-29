@@ -3,7 +3,6 @@ mod blocker;
 mod cli;
 mod config;
 mod error;
-mod integration;
 mod notifications;
 mod schedule;
 mod session_recovery;
@@ -11,7 +10,6 @@ mod stats;
 mod task_labels;
 mod timer;
 mod ui;
-mod wakatime;
 
 use std::{
     io, process,
@@ -189,7 +187,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
     let mut clock = RuntimeClock::new(Duration::from_millis(100));
 
     loop {
-        app.poll_wakatime_status();
+        app.poll_runtime_status();
         terminal.draw(|frame| ui::render(frame, &app))?;
 
         if let Some(event) = read_terminal_event(clock.poll_timeout())? {
@@ -232,9 +230,7 @@ fn advance_running_timer(app: &mut App, elapsed: TimerElapsed) {
     for _ in 0..elapsed.elapsed_secs {
         app.on_tick(elapsed.is_catchup);
     }
-    // Advance WakaTime once per UI frame to avoid burst heartbeats
-    // after a suspend/resume catch-up.
-    app.on_wakatime_elapsed(elapsed.elapsed_secs);
+    app.on_runtime_elapsed(elapsed.elapsed_secs);
 }
 
 #[cfg(test)]

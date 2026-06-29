@@ -12,7 +12,7 @@
 [![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=utilForever_focustime&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=utilForever_focustime)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=utilForever_focustime&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=utilForever_focustime)
 
-TUI-based application for **Pomodoro timing**, **distraction-site blocking**, and optional **WakaTime heartbeat tracking**.
+TUI-based application for **Pomodoro timing**, **distraction-site blocking**, and **focus history**.
 
 <table>
   <tr>
@@ -190,41 +190,13 @@ Backup/restore/export behavior:
 - `--restore` requires both files in the source directory and uses staged replacement so failed restores roll back to the original files.
 - Runtime persistence is canonical-path only; if only legacy `stats.toml` exists, copy it to the canonical stats path (the backup/restore commands can help).
 
-### WakaTime integration runtime
+### Product scope
 
-`focustime` routes supported WakaTime tracking behavior through a narrow
-integration runtime. The runtime exposes only the tracking calls the app uses:
-polling async heartbeat outcomes, syncing focus running state, advancing
-elapsed focus time, and updating heartbeat metadata.
-
-v0.17.0 scope decision (#564): keep WakaTime as an optional heartbeat-only
-integration instead of removing it from the product. Follow-up cleanup should
-keep heartbeat delivery non-blocking in the main flow: keep API-key detection, global
-`[wakatime]` metadata, focus-session heartbeat submission, and a simple
-configured/sent/error status, while reserving removal of durable queue/replay
-behavior, runtime retry/backoff tuning, and diagnostics that only exist for the
-richer queueing runtime for follow-up cleanup. Full WakaTime removal is deferred
-unless a later roadmap issue changes product scope.
-
-Decision comparison:
-
-| Option | Product impact | Affected code/docs |
-| --- | --- | --- |
-| Remove WakaTime entirely | `focustime` becomes a Pomodoro + site-blocking app; WakaTime leaves README/Cargo positioning and setup guidance. | Remove `src/wakatime*`, `src/integration.rs` WakaTime hooks, `[wakatime]` config, TUI/setup/status copy, WakaTime tests, `ureq`/`base64` ownership, and WakaTime docs. |
-| Keep minimal heartbeat-only WakaTime | `focustime` remains a Pomodoro + site-blocking app with optional WakaTime heartbeat tracking. | Keep global `[wakatime]` metadata, API-key detection, heartbeat transport, and simple status; remove `[wakatime_runtime]`, durable queue snapshots, replay/backoff diagnostics, and queue-specific tests/docs in follow-up issues. |
-
-Current supported integration ID:
-
-- `wakatime`
-
-Config example (`config.toml`):
-
-```toml
-[feature_flags.integrations]
-enabled = ["wakatime"]
-```
-
-Set `enabled = []` to disable all built-in integrations.
+`focustime` is focused on timer flow, hosts-file site blocking, profile
+schedules, goals, and focus history. WakaTime heartbeat tracking was retired in
+the v0.17.0 cleanup scope (#565): runtime writes omit `[wakatime]` and
+`[wakatime_runtime]`, diagnostics no longer report WakaTime state, and focus
+sessions no longer submit external heartbeats.
 
 ### Legacy compatibility deprecation milestones
 
@@ -250,15 +222,16 @@ Milestone policy:
 - **v0.15.3:** calendar annotation cache behavior and weekday rules are documented as compatibility cleanup paths; schedule windows and supported timer controls remain the supported behavior.
 - **v0.15.4:** blocklist/allowlist site management operates on profile-level rules without selected-category branching, while temporary override state is represented through the canonical runtime model.
 - **v0.15.5:** Focus History uses a stable default KPI layout, export/history remain the deeper comparison paths, and backup/export artifact workflows share target-directory handling.
-- **v0.15.6:** daemon local API lifecycle commands report retirement guidance, runtime dependency ownership stays documented, and WakaTime integration uses explicit supported runtime calls.
+- **v0.15.6:** daemon local API lifecycle commands report retirement guidance and runtime dependency ownership stays documented.
 - **v0.15.7:** standalone blocking preview access, Focus History dashboard customization paths, and dedicated status comparison guidance stay removed while diagnostics, the stable KPI dashboard, export artifacts, and Focus History remain the supported replacements.
 - **v0.15.8:** blocklist category config is flattened into profile-level `sites` and `allowlist_sites`, `automation_triggers` config is removed during migration, and neither legacy surface is re-persisted by runtime writes.
 - **v0.15.9:** standalone calendar sync and daemon local API command access are retired, and dependency ownership reflects the removed refresh and daemon paths.
-- **v0.16.0:** daemon-owned runtime dependency cleanup is locked; WakaTime owns runtime HTTP and Basic auth while daemon-only local API server and direct random-token dependencies stay removed.
+- **v0.16.0:** daemon-owned runtime dependency cleanup is locked while daemon-only local API server and direct random-token dependencies stay removed.
 - **v0.16.1:** focused config diagnostics commands are retired in favor of `--diagnostics`; feature inventory CLI export and committed generated inventory snapshots are retired; legacy cleanup-specific regression gates are archived, and current cleanup contracts live in normal CI/module/integration tests.
 - **v0.16.2:** schedule exception dates, calendar annotation cache handling, and retired calendar timezone parsing stay removed; recurring schedule windows remain the supported schedule model, and `chrono-tz` stays out of the manifest and lockfile.
-- **v0.16.3:** task note metadata, focus intention metadata, task-specific goals, session-template command/config surfaces, and per-task WakaTime mappings are retired; task labels are the supported session context in status, recovery, history, and exports, while WakaTime uses one global metadata configuration.
+- **v0.16.3:** task note metadata, focus intention metadata, task-specific goals, session-template command/config surfaces, and per-task WakaTime mappings are retired; task labels are the supported session context in status, recovery, history, and exports.
 - **v0.16.4:** allowlist site-management commands, blocklist profile CRUD/selection, custom blocking backend/fallback policy, break-glass workflow, and temporary override runtime state are retired; canonical blocklist commands, config/internal allowlist rules, hosts-file diagnostics, and normal timer controls are the supported replacements.
+- **v0.17.0:** WakaTime heartbeat tracking, config/runtime diagnostics, and direct HTTP/Basic-auth dependency ownership are retired; `ureq` leaves the manifest and `base64` is no longer a direct dependency.
 - **Future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
@@ -281,15 +254,12 @@ Roadmap direction:
   paths are merged or retired. Generated feature inventory snapshots are no
   longer part of release preparation, and cleanup-specific v0.14/v0.15 gates are
   no longer part of release readiness.
-- Keep broad integration lifecycle/capability hooks retired in favor of the
-  supported WakaTime integration runtime calls for heartbeat polling,
-  focus-running sync, elapsed focus tracking, and metadata updates.
-- For v0.17.0, keep WakaTime in product positioning as optional heartbeat
-  tracking, keep heartbeat delivery non-blocking in the main flow, and reserve
-  queue/runtime simplification for follow-up cleanup. Follow-up cleanup issues
-  should remove or collapse `[wakatime_runtime]`, durable queue snapshots,
-  replay/backoff diagnostics, and dependency ownership notes that only apply to
-  the current queueing runtime.
+- Keep broad integration lifecycle/capability hooks retired; current runtime
+  behavior is owned directly by timer, blocking, notification, schedule, stats,
+  and recovery modules.
+- For v0.17.0, keep WakaTime retired from product positioning, config,
+  diagnostics, and dependency ownership while preserving the core Pomodoro,
+  blocking, schedule, goal, and history workflows.
 
 Early deprecation notices:
 
@@ -317,8 +287,7 @@ Early deprecation notices:
 | Focus intention metadata (`--focus-intention`, `focus_intention` recovery/status/export fields) | Removed; use `--task` and task label selection as the supported session metadata. |
 | Task-specific cumulative goals (`--task-goal`, selected task goal status/history/export fields) | Removed; use global daily, weekly, and monthly goals with `--goal`, `--goal-weekly`, and `--goal-monthly`; task labels remain available for grouping. |
 | Session template workflows (`--session-template*` commands and session-template config/runtime persistence) | Removed; select task, profile, schedule, and blocklist settings directly through their dedicated controls. |
-| Per-task WakaTime metadata mappings (`[[wakatime.task_mappings]]`) | Removed; configure one global `[wakatime]` project/language pair for heartbeat metadata. |
-| Rich WakaTime queue/replay runtime (`[wakatime_runtime]`, durable queue snapshots, retry/backoff diagnostics) | v0.17.0 cleanup target; keep optional global WakaTime heartbeat submission non-blocking in the main flow and remove queue-specific configuration/status surfaces in follow-up issues. |
+| WakaTime heartbeat tracking and config (`[wakatime]`, `[wakatime_runtime]`, prior task mappings) | Removed; focus sessions stay local to timer, blocking, goals, recovery, history, and exports. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`) for automation, or the TUI for interactive focus sessions. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule directly, then start focus through the unified timer flow with `--start` or the TUI. |
 
@@ -326,11 +295,11 @@ Runtime dependency ownership after daemon and calendar cleanup:
 
 | Dependency | Owning feature paths | Ownership note |
 | --- | --- | --- |
-| `ureq` JSON feature | WakaTime heartbeat transport. Retired calendar annotation and daemon paths no longer own runtime HTTP. | Keep while WakaTime heartbeat submission uses `send_json`; re-audit if the transport changes. |
-| `base64` | WakaTime Basic auth. | Keep while WakaTime uses Basic auth. |
+| `ureq` JSON feature | None. | Removed from the manifest after WakaTime retirement; retired calendar annotation and daemon paths still do not own runtime HTTP. |
+| `base64` | No direct owner. | Removed as a direct dependency after WakaTime retirement; it may remain in `Cargo.lock` only when pulled transitively by platform crates. |
 | `chrono` | Timer/stat dates and recurring schedule windows. | Keep for core time/date handling; retired calendar timezone parsing must not reintroduce `chrono-tz`. |
 
-When changing `Cargo.toml` dependency ownership, run `rg -n "chrono_tz|chrono-tz" src tests Cargo.toml Cargo.lock` to confirm retired calendar timezone parsing stays removed, then run `rg -n "ureq" src tests`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
+When changing `Cargo.toml` dependency ownership, run `rg -n "chrono_tz|chrono-tz" src tests Cargo.toml Cargo.lock` to confirm retired calendar timezone parsing stays removed, then run `rg -n "ureq|base64|wakatime" src tests Cargo.toml`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
 
 ### CLI JSON/error contract
 
@@ -392,7 +361,7 @@ The TUI keeps the same keyboard shortcuts, but uses a cleaner hierarchy and more
 consistent screen structure:
 
 - **Timer view** prioritizes phase/countdown/progress first, then shows grouped
-  session context (task, profile, schedule, stats, WakaTime, strict mode).
+  session context (task, profile, schedule, stats, goals, strict mode).
 - **Manager/detail views** (sites, profiles, task setup, history, diagnostics)
   follow a consistent pattern: context header, primary content block, feedback
   line, and compact command legend.
@@ -451,7 +420,7 @@ Open profile manager from timer view with **`p`**.
 - `↑/↓` (default `navigate_up`/`navigate_down`): move between presets
 - `Enter` (default `confirm`): apply selected preset
 - `e`: open profile/settings editor
-- In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values (including **Theme preset**), `Type/Backspace` edits WakaTime project/language, `Enter` saves (all defaults are configurable via navigation/edit shortcut fields)
+- In editor: `↑/↓` selects field, `←/→` adjusts numeric/boolean values (including **Theme preset**), and `Enter` saves (all defaults are configurable via navigation/edit shortcut fields)
 
 Preset selection, theme preset selection, custom durations, and preset-scoped
 automation settings are persisted in `config.toml`.
@@ -552,24 +521,12 @@ pomodoros = 80
 
 [stats_retention]
 preset = "balanced" # keep_all | balanced | aggressive
-
-[wakatime]
-project = "focustime"
-language = "Pomodoro"
-
-[wakatime_runtime]
-retry_backoff_secs = [2, 5, 10]
-queue_capacity = 512
-queue_retry_delay_secs = 30
 ```
 
 `schema_version` is managed by focustime when writing `config.toml`. Files
 without this key are treated as legacy and migrated automatically. If a file
 declares a newer schema version than the running binary supports, focustime
 attempts a best-effort load of known fields.
-
-`[wakatime]` is optional. If omitted (or set to blank values), `focustime` uses
-the defaults above for one global heartbeat metadata configuration.
 
 `[schedule_runtime]` is optional. When omitted, focustime keeps existing
 schedule runtime defaults (`time_step_minutes = 15`).
@@ -580,13 +537,9 @@ are loaded without using calendar data, and runtime writes omit the section.
 Schedule output remains deterministic without calendar-derived busy or overlap
 annotations.
 
-
-`[wakatime_runtime]` is optional. When omitted, focustime keeps existing
-WakaTime runtime defaults (`retry_backoff_secs = [2, 5, 10]`,
-`queue_capacity = 512`, `queue_retry_delay_secs = 30`). Backoff entries are
-bounded to `1..300` seconds (up to 8 entries, empty/invalid falls back to
-defaults), queue capacity is clamped to `1..4096`, and queue replay delay is
-clamped to `1..3600`.
+`[wakatime]` and `[wakatime_runtime]` are retired. Existing configs that still
+contain these sections are loaded without heartbeat tracking, and runtime writes
+omit both sections.
 
 ## Site manager workflow
 
@@ -637,10 +590,6 @@ The diagnostics screen reports:
 - hosts file write capability
 - blocking preview summary and hosts-file target details
 - remediation guidance when hosts-file readiness is insufficient
-- WakaTime config status (`~/.wakatime.cfg` and `api_key` availability)
-- WakaTime runtime queue/retry status (`not configured`, `idle`,
-  `tracking`, `sending`, `queued`, `replaying`, `retrying`, `error`, and
-  related pending counts/backoff details)
 
 The CLI diagnostics command adds blocking preview details, config health
 findings, and migration preview guidance to the same workflow:
@@ -706,9 +655,9 @@ You can configure notification and auto-start settings directly from the TUI:
 - open profile manager with `p`
 - press `e` to open the editor
 - automation and schedule edits apply to the currently selected profile only
-- the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **Appearance**, **WakaTime**, **Schedule**) to keep settings easier to scan
-- use `↑/↓` (default `navigate_up`/`navigate_down`) to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily/Weekly/Monthly goal (minutes)**, **Daily/Weekly/Monthly goal (pomodoros)**, **Theme preset**, **WakaTime project/language**, or the **Schedule** fields
-- use `←/→` (default `navigate_left`/`navigate_right`) to adjust values (or toggle `Off`/`On` for boolean fields), use `Type/Backspace` (default `backspace`) for WakaTime text fields, then `Enter` (default `confirm`) to save
+- the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **Schedule**, **Appearance**) to keep settings easier to scan
+- use `↑/↓` (default `navigate_up`/`navigate_down`) to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily/Weekly/Monthly goal (minutes)**, **Daily/Weekly/Monthly goal (pomodoros)**, **Theme preset**, or the **Schedule** fields
+- use `←/→` (default `navigate_left`/`navigate_right`) to adjust values (or toggle `Off`/`On` for boolean fields), then `Enter` (default `confirm`) to save
 - schedule editing is in-app:
   - **Schedule add/remove**: `→` adds a window, `←` removes selected window
   - **Schedule window**: `←/→` changes which window is selected
@@ -811,14 +760,7 @@ with focused submodules (updated in #240):
 - `src/stats.rs` + `src/stats/*.rs`: stats persistence, analytics, trends, recording, planner state, and exports.
 - `src/ui.rs` + `src/ui/*.rs`: Ratatui rendering split by screen (timer, task setup, site manager, profile manager, history, setup diagnostics).
 - `src/config.rs` + `src/config/paths.rs`: config schema/normalization and environment-aware path resolution.
-- Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, `src/integration.rs`, `src/wakatime.rs`, and `src/notifications.rs`.
-
-WakaTime tracking is optional and activates only when an API key is configured
-(read from `~/.wakatime.cfg`).
-
-For v0.17.0 planning, WakaTime remains in scope only as optional heartbeat
-submission. Queue/replay persistence, retry tuning, and queue-specific
-diagnostics are cleanup targets rather than long-term product surfaces.
+- Supporting core modules: `src/timer.rs`, `src/blocker.rs`, `src/schedule.rs`, `src/session_recovery.rs`, `src/task_labels.rs`, and `src/notifications.rs`.
 
 Runtime flow (high-level):
 
@@ -828,32 +770,8 @@ Runtime flow (high-level):
 4. Timer ticks advance every elapsed second while running.
 5. Phase-completion notifications are dispatched asynchronously.
 6. Blocking is applied during focus phases and removed outside focus.
-7. WakaTime tracking is managed via the narrow `IntegrationRuntime` (`App ->
-   IntegrationRuntime -> WakaTime`) and applies async heartbeat outcomes without
-   blocking timer flow.
-
-### WakaTime reliability behavior
-
-When WakaTime is configured, heartbeats are still best-effort and non-blocking.
-The timer never waits on network calls.
-
-- transient heartbeat failures (`429`, `5xx`, and connectivity/timeout errors)
-  retry with bounded backoff (default `2s`, then `5s`, then `10s`, configurable via
-  `[wakatime_runtime].retry_backoff_secs`)
-- retryable failures that still cannot be delivered are queued in a durable local
-  backlog (bounded, drop-oldest at capacity; default `512`, configurable via
-  `[wakatime_runtime].queue_capacity`) and replayed oldest-first after restart
-  and when connectivity recovers
-- queued heartbeat replay delay after retryable failure starts at `30s`, doubles
-  after each consecutive retryable replay failure (up to `3600s`), and is
-  configurable via `[wakatime_runtime].queue_retry_delay_secs`
-- invalid/corrupt persisted queue snapshots are dropped on startup and surfaced
-  as a runtime warning in WakaTime status
-- non-retryable failures are surfaced in the timer view status line
-- status line reflects runtime states (`tracking`, `sending`, `queued`,
-  `replaying`, `retrying`, `error`, `idle`, `not configured`) and, when
-  configured, also shows the last successful heartbeat time (`HH:MM:SS`) or
-  `not yet sent` before first success
+7. Runtime persistence captures in-progress sessions and valid transient app
+   state so restart recovery can resume without external service dependencies.
 
 For full module map and design details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 

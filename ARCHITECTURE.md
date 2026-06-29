@@ -17,14 +17,11 @@ flowchart LR
     CFG["config.rs + config/paths.rs<br/>config model + path resolution"]
     TM["timer.rs<br/>Pomodoro state machine"]
     BL["blocker.rs<br/>hosts-file blocking"]
-    IG["integration.rs<br/>WakaTime integration runtime"]
-    WK["wakatime.rs<br/>heartbeat tracking"]
     NT["notifications.rs<br/>phase notifications"]
     SCH["schedule.rs<br/>window compilation/selection"]
     REC["session_recovery.rs<br/>runtime snapshot I/O"]
     TL["task_labels.rs<br/>task label normalization/indexing"]
     OS["OS / filesystem / hosts / notifications"]
-    API["WakaTime API"]
 
     M --> CLI
     M --> APP
@@ -32,8 +29,6 @@ flowchart LR
     APP --> CFG
     APP --> TM
     APP --> BL
-    APP --> IG
-    IG --> WK
     APP --> NT
     APP --> SCH
     APP --> ST
@@ -45,7 +40,6 @@ flowchart LR
     UI --> APP
     BL --> OS
     NT --> OS
-    WK --> API
 ```
 
 ## Module map
@@ -53,18 +47,16 @@ flowchart LR
 | Module                          | Responsibility                                                                                                                                                                                                                                                                                  | Main collaborators                                                                            |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `main.rs`                       | Composition root, CLI vs TUI dispatch, terminal setup/teardown, frame/tick loop                                                                                                                                                                                                                 | `cli`, `app`, `ui`, `crossterm`, `ratatui`                                                    |
-| `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `task setup`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `cli_api`, `mode_keys`) | `timer`, `blocker`, `integration`, `notifications`, `schedule`, `stats`, `config` |
+| `app.rs` + `app/*`              | Core runtime state and orchestration split into focused domains (`timer_flow`, `task setup`, `site_manager`, `profile_management`, `schedule_*`, `persistence`, `history_goals`, `feedback_diagnostics`, `cli_api`, `mode_keys`) | `timer`, `blocker`, `notifications`, `schedule`, `stats`, `config` |
 | `cli.rs` + `cli/*`              | CLI contract and execution pipeline split into `args`, `parsing`, `execute`, `status`, and `output`, including headless timer/session/workflow controls and local backup/restore. The standalone calendar refresh, feature inventory export, task metadata/goal, session template, temporary allowlist, break-glass override, and daemon local API lifecycle commands are retired.                    | `app`, `config`, `stats`, `blocker`                                     |
 | `stats.rs` + `stats/*`          | Stats data model plus split persistence/analytics/export/recording/planner/trends helpers, including canonical-path persistence, task-label grouping, and legacy read-time compatibility handling during deprecation windows                                                                                          | `app`, `task_labels`, filesystem                                                              |
-| `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, task setup, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                                                                      | `app`, `timer`, `integration`                                                                 |
-| `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including feature-flag compatibility defaults, runtime knob settings, and global WakaTime metadata defaults                                                                                                          | `app`, `cli`, filesystem/env                                                                  |
+| `ui.rs` + `ui/*`                | Screen-oriented Ratatui rendering split into `timer`, task setup, `site_manager`, `profile_manager`, `history`, and `setup`                                                                                                                                                                      | `app`, `timer`                                                                 |
+| `config.rs` + `config/paths.rs` | Config schema/normalization and environment-aware config path resolution, including feature-flag compatibility defaults and runtime knob settings                                                                                                          | `app`, `cli`, filesystem/env                                                                  |
 | `timer.rs`                      | Pomodoro timer domain model and phase transitions                                                                                                                                                                                                                                               | `app`, `ui`                                                                                   |
 | `blocker.rs`                    | Hosts-file blocking, preview generation, rollback-aware hosts updates, and hosts permission diagnostics                                                                                                                                                                                          | `app`, `cli`, OS/filesystem                                                                   |
-| `integration.rs`                | Narrow WakaTime integration runtime: config-driven activation plus supported calls for heartbeat polling, focus-running sync, elapsed focus tracking, heartbeat metadata updates, and runtime status access                                                                                    | `app`, `config`, `wakatime`                                                                   |
 | `schedule.rs`                   | Recurring schedule window compile, overlap inspection, and occurrence selection logic                                                                                                                                                                                                            | `app`, `cli`, `config`                                                                        |
 | `session_recovery.rs`           | Runtime recovery snapshot read/write, transient runtime artifact reconciliation, and startup warning notices for dropped invalid fragments                                                                                                                                                      | `app`, `cli`, filesystem                                                                      |
 | `task_labels.rs`                | Task-label normalization, canonicalization, and index helpers                                                                                                                                                                                                                                   | `app`, `stats`, `cli`                                                                         |
-| `wakatime.rs`                   | WakaTime config parsing and heartbeat scheduling/sending. The v0.17.0 scope decision keeps optional heartbeat submission but targets retry tuning, bounded offline queueing, and replay orchestration for follow-up simplification.                                                              | `app`, HTTP (`ureq`)                                                                          |
 | `notifications.rs`              | Phase completion notifications and optional sound alerts                                                                                                                                                                                                                                        | `app`, OS notification commands                                                               |
 
 ## Runtime flow (timer mode)
@@ -73,48 +65,42 @@ flowchart LR
 sequenceDiagram
     participant Main as main loop
     participant App as App
-    participant Integrations as IntegrationRuntime
     participant Timer as TimerState
     participant Blocker as SiteBlocker
-    participant Waka as WakatimeTracker
+    participant Schedule as ScheduleState
+    participant Stats as Stats
     participant Notify as PhaseNotifier
     participant UI as ui::render
 
     loop every frame
-        Main->>App: poll_wakatime_status()
-        App->>Integrations: poll_wakatime_events()
-        Integrations->>Waka: poll_events()
+        Main->>App: poll_runtime_status()
         Main->>UI: render(frame, &app)
         Main->>App: handle_key/handle_paste (if input)
         Main->>App: on_tick() (when 1s elapsed)
         App->>Timer: tick()
+        App->>Schedule: reconcile schedule state
         alt phase changed
             App->>Blocker: block()/unblock()
-            App->>Integrations: set_wakatime_tracking(focus_running)
             App->>Notify: notify_phase_completion()
+            App->>Stats: record completed focus/interruption data
         end
-        Main->>App: on_wakatime_elapsed(elapsed_secs)
-        alt Focus + Running
-            App->>Integrations: advance_wakatime(elapsed_secs)
-            Integrations->>Waka: tick_elapsed(elapsed_secs)
-        end
-        App-->>UI: expose sending/queued/replaying/retrying/error state
+        Main->>App: on_runtime_elapsed(elapsed_secs)
+        App-->>UI: expose timer, task, schedule, blocking, goal, and notice state
     end
 ```
 
 1. `main` parses CLI arguments and either executes a CLI command path (`cli`) or
    boots the interactive TUI loop (`app` + `ui`).
-2. Each TUI frame polls async WakaTime outcomes, renders via `ui::render`, then
+2. Each TUI frame polls local runtime status, renders via `ui::render`, then
    processes keyboard/paste input through `App` key handlers.
 3. A 100ms cadence accumulates elapsed time; each elapsed second advances
    `App::on_tick()` and applies phase-driven side effects.
-4. `App` keeps blocking, notifications, scheduling, and supported WakaTime tracking in sync with
-   timer state; side effects are isolated in dedicated modules.
+4. `App` keeps blocking, notifications, scheduling, stats, and recovery in sync
+   with timer state; side effects are isolated in dedicated modules.
 5. Headless automation routes through CLI timer/session/workflow commands; the
    daemon local API lifecycle and loopback `/v1/*` endpoints are retired.
-6. v0.17.0 roadmap work keeps WakaTime only as optional heartbeat submission;
-   queue/replay persistence, retry tuning, and queue-specific diagnostics are
-   cleanup targets rather than long-term architecture surfaces.
+6. WakaTime heartbeat tracking, retry queues, and runtime diagnostics are
+   retired; runtime architecture has no external heartbeat service dependency.
 
 ## Visibility rules
 
