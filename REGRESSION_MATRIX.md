@@ -40,6 +40,6 @@ aligned with supported replacement behavior.
 When cleanup work changes runtime dependencies, first confirm retired calendar
 timezone parsing stays absent with `rg -n "chrono_tz|chrono-tz" src tests Cargo.toml Cargo.lock`
 and confirm retired HTTP/heartbeat ownership stays absent with
-`rg -n "ureq|wakatime" src tests Cargo.toml`, then run
+`rg -n "ureq|base64|wakatime" src tests Cargo.toml`, then run
 `cargo check --all`, `cargo clippy --all-targets -- -D warnings`,
 `cargo test --all`, and `cargo audit` before release tagging.

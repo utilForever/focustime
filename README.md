@@ -299,7 +299,7 @@ Runtime dependency ownership after daemon and calendar cleanup:
 | `base64` | No direct owner. | Removed as a direct dependency after WakaTime retirement; it may remain in `Cargo.lock` only when pulled transitively by platform crates. |
 | `chrono` | Timer/stat dates and recurring schedule windows. | Keep for core time/date handling; retired calendar timezone parsing must not reintroduce `chrono-tz`. |
 
-When changing `Cargo.toml` dependency ownership, run `rg -n "chrono_tz|chrono-tz" src tests Cargo.toml Cargo.lock` to confirm retired calendar timezone parsing stays removed, then run `rg -n "ureq|wakatime" src tests Cargo.toml`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
+When changing `Cargo.toml` dependency ownership, run `rg -n "chrono_tz|chrono-tz" src tests Cargo.toml Cargo.lock` to confirm retired calendar timezone parsing stays removed, then run `rg -n "ureq|base64|wakatime" src tests Cargo.toml`, `cargo check --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, and `cargo audit`.
 
 ### CLI JSON/error contract
 
