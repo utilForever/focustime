@@ -205,6 +205,8 @@ fn status_json_success_emits_payload_on_stdout() {
     assert!(payload.get("monthly_goal").is_none());
     assert!(payload.get("weekly_allocation").is_none());
     assert!(payload["goal"].get("carry_over").is_some());
+    assert!(payload["goal"].get("weekly_carry_over").is_none());
+    assert!(payload["goal"].get("monthly_carry_over").is_none());
     assert!(payload.get("selected_task_goal").is_none());
     assert!(payload.get("focus_score").is_some());
     assert!(payload["focus_score"].get("available").is_some());
