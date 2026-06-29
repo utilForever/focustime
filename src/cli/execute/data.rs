@@ -21,7 +21,6 @@ pub(super) fn execute_export_command(
     let payload = ExportOutput {
         export_dir: target_dir,
         json_path: exported.json_path,
-        csv_path: exported.csv_path,
     };
     match output {
         OutputMode::Text => print_export_output(&payload),

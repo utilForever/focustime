@@ -74,7 +74,7 @@ pub(super) fn print_theme_command_output(payload: &ThemeCommandOutput) {
 
 pub(super) fn print_export_output(payload: &ExportOutput) {
     println!("Exported stats to {}", payload.export_dir.display());
-    print_artifact_paths(&[("JSON", &payload.json_path), ("CSV", &payload.csv_path)]);
+    print_artifact_paths(&[("JSON", &payload.json_path)]);
 }
 
 fn print_artifact_paths(paths: &[(&str, &Path)]) {

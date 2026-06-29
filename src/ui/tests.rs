@@ -458,7 +458,7 @@ fn history_view_hints_include_export_shortcut() {
         .expect("render should succeed");
 
     let text = terminal_text(&terminal, width, height);
-    assert!(text.contains("[e] Export CSV + JSON"));
+    assert!(text.contains("[e] Export JSON"));
 }
 
 #[test]

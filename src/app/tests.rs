@@ -308,11 +308,9 @@ fn export_stats_to_dir_writes_files_and_reports_success() {
     assert!(feedback.message.contains("Exported to "));
     assert!(!feedback.message.contains('\n'));
     assert!(feedback.message.contains("JSON focustime-stats.json"));
-    assert!(feedback.message.contains("CSV focustime-stats.csv"));
     assert!(feedback.message.contains("focustime-stats.json"));
-    assert!(feedback.message.contains("focustime-stats.csv"));
     assert!(export_dir.join("focustime-stats.json").exists());
-    assert!(export_dir.join("focustime-stats.csv").exists());
+    assert!(!export_dir.join("focustime-stats.csv").exists());
 
     fs::remove_dir_all(export_dir).unwrap();
 }

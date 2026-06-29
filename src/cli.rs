@@ -418,7 +418,6 @@ struct StatsRetentionStatusOutput {
 struct ExportOutput {
     export_dir: PathBuf,
     json_path: PathBuf,
-    csv_path: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

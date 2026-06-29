@@ -181,7 +181,7 @@ pub(super) fn render_stats_history(frame: &mut Frame, app: &App) {
         inner[3],
         vec![
             Line::from(format!(
-                "History: {} Export CSV + JSON | Compare: [{}/{}] Dim [{}/{}] Task [[/]] Profile [,/.] Time",
+                "History: {} Export JSON | Compare: [{}/{}] Dim [{}/{}] Task [[/]] Profile [,/.] Time",
                 app.shortcut_hint(ShortcutAction::ExportStatsHistory),
                 app.navigation_label(NavigationAction::MoveLeft),
                 app.navigation_label(NavigationAction::MoveRight),
