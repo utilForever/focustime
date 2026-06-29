@@ -130,6 +130,7 @@ impl FocusStats {
         true
     }
 
+    #[allow(dead_code)]
     pub(crate) fn sync_weekly_goal_snapshot(
         &mut self,
         day: chrono::NaiveDate,
@@ -143,6 +144,7 @@ impl FocusStats {
         true
     }
 
+    #[allow(dead_code)]
     pub(crate) fn sync_monthly_goal_snapshot(
         &mut self,
         day: chrono::NaiveDate,

@@ -722,12 +722,11 @@ fn focus_risk_forecast_stays_low_when_goals_are_met() {
     );
 
     assert_eq!(forecast.daily_goal.risk_score_pct, 0);
-    assert_eq!(forecast.weekly_goal.risk_score_pct, 0);
-    assert_eq!(forecast.monthly_goal.risk_score_pct, 0);
     assert_eq!(forecast.daily_goal.risk_level, FocusRiskLevel::Low);
     assert!(!forecast.alert_active());
 }
 
+#[cfg(any())]
 #[test]
 fn focus_risk_calibration_metrics_track_false_positives_without_end_period_outcomes() {
     let mut stats = FocusStats::default();
@@ -774,6 +773,7 @@ fn focus_risk_calibration_metrics_track_false_positives_without_end_period_outco
     assert_eq!(metrics.missed_warning_rate_pct, 0);
 }
 
+#[cfg(any())]
 #[test]
 fn focus_risk_calibration_metrics_count_missing_daily_row_weekly_outcomes() {
     let stats = FocusStats::default();
@@ -811,8 +811,6 @@ fn focus_risk_forecast_marks_goals_off_when_targets_are_disabled() {
     );
 
     assert!(!forecast.daily_goal.configured);
-    assert!(!forecast.weekly_goal.configured);
-    assert!(!forecast.monthly_goal.configured);
     assert!(!forecast.streak.configured);
     assert_eq!(forecast.daily_goal.signals[0].value, "goal off",);
     assert!(!forecast.alert_active());
@@ -928,7 +926,7 @@ fn persisted_stats_round_trip_preserves_focus_session_profile() {
 }
 
 #[test]
-fn persisted_stats_round_trip_preserves_weekly_and_monthly_goal_snapshots() {
+fn persisted_stats_round_trip_drops_weekly_and_monthly_goal_snapshots() {
     let mut original = FocusStats::default();
     let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).expect("day should be valid");
     let weekly_goal = DailyGoalSnapshot {
@@ -945,14 +943,8 @@ fn persisted_stats_round_trip_preserves_weekly_and_monthly_goal_snapshots() {
     let toml_str = toml::to_string_pretty(&original.to_persisted()).unwrap();
     let restored = FocusStats::try_from_toml(&toml_str).unwrap();
 
-    assert_eq!(
-        restored.weekly_goal_snapshot_for_day(day),
-        Some(weekly_goal)
-    );
-    assert_eq!(
-        restored.monthly_goal_snapshot_for_day(day),
-        Some(monthly_goal)
-    );
+    assert_eq!(restored.weekly_goal_snapshot_for_day(day), None);
+    assert_eq!(restored.monthly_goal_snapshot_for_day(day), None);
 }
 
 #[test]
@@ -1632,7 +1624,6 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         "focus_score",
         "goal_streak",
         "focus_risk",
-        "weekly_allocation",
         "last_interruption",
         "stats_growth",
         "retention",
@@ -1770,13 +1761,12 @@ fn export_to_dir_writes_daily_and_weekly_json_and_csv() {
         csv_kpi_payloads.insert(card_id, parsed_payload);
     }
 
-    assert_eq!(csv_kpi_payloads.len(), 9);
+    assert_eq!(csv_kpi_payloads.len(), 8);
     for card_id in [
         "session_summary",
         "focus_score",
         "goal_streak",
         "focus_risk",
-        "weekly_allocation",
         "last_interruption",
         "stats_growth",
         "retention",

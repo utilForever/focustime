@@ -6,9 +6,9 @@ use crate::ui::{
 
 const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
 const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
-const PROFILE_EDIT_GROUP_GOALS: [usize; 9] = [9, 10, 11, 12, 13, 14, 15, 16, 17];
-const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 6] = [18, 19, 20, 21, 22, 23];
-const PROFILE_EDIT_GROUP_APPEARANCE: [usize; 1] = [24];
+const PROFILE_EDIT_GROUP_GOALS: [usize; 3] = [9, 10, 11];
+const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 6] = [12, 13, 14, 15, 16, 17];
+const PROFILE_EDIT_GROUP_APPEARANCE: [usize; 1] = [18];
 const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
     ("Timer", &PROFILE_EDIT_GROUP_TIMER),
     ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
@@ -272,19 +272,13 @@ fn profile_edit_field_display_label(field_index: usize) -> &'static str {
         9 => "Daily goal minutes",
         10 => "Daily goal pomodoros",
         11 => "Daily goal carry-over",
-        12 => "Weekly goal minutes",
-        13 => "Weekly goal pomodoros",
-        14 => "Weekly goal carry-over",
-        15 => "Monthly goal minutes",
-        16 => "Monthly goal pomodoros",
-        17 => "Monthly goal carry-over",
-        18 => "Window selector",
-        19 => "Day selector",
-        20 => "Day enabled",
-        21 => "Start time",
-        22 => "End time",
-        23 => "Add/remove",
-        24 => "Theme preset",
+        12 => "Window selector",
+        13 => "Day selector",
+        14 => "Day enabled",
+        15 => "Start time",
+        16 => "End time",
+        17 => "Add/remove",
+        18 => "Theme preset",
         _ => "",
     }
 }

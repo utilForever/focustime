@@ -55,18 +55,13 @@ use history_dashboard_cache::HistoryDashboardCache;
 #[cfg(test)]
 pub(crate) use history_dashboard_cache::HistoryDashboardCacheStats;
 pub(crate) use history_dashboard_cache::HistoryDashboardViewData;
-pub(crate) use history_goals::weekly_daily_goal_allocation_for_context;
 pub(crate) use profile_edit::{
     CUSTOM_DURATION_STEP_SECS, DAILY_GOAL_MINUTES_STEP, PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX, PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX,
-    PROFILE_EDIT_FIELD_LABELS, PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX,
-    PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX,
-    PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
-    PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
-    PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
-    PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
-    PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX,
-    ProfileEditSnapshot,
+    PROFILE_EDIT_FIELD_LABELS, PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX,
+    PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX, PROFILE_EDIT_SCHEDULE_DAY_INDEX,
+    PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
+    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX, ProfileEditSnapshot,
 };
 pub(crate) use setup_diagnostics::{
     BlockingPreviewSnapshot, SetupCheck, SetupCheckLevel, SetupDiagnostics,
@@ -329,10 +324,12 @@ pub(crate) struct WeeklyDailyGoalAllocation {
 }
 
 impl WeeklyDailyGoalAllocation {
+    #[allow(dead_code)]
     pub(crate) fn has_any_target(&self) -> bool {
         self.week_target.has_any_target()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn today_target(&self) -> DailyGoalSnapshot {
         self.daily_targets
             .first()
@@ -683,6 +680,7 @@ impl App {
         )
     }
 
+    #[allow(dead_code)]
     pub(crate) fn current_week_goal_progress(&self) -> DailyGoalProgress {
         let today = Local::now().date_naive();
         let week = self.stats.weekly_for_day(today);
@@ -695,6 +693,7 @@ impl App {
         )
     }
 
+    #[allow(dead_code)]
     pub(crate) fn current_month_goal_progress(&self) -> DailyGoalProgress {
         let today = Local::now().date_naive();
         let month = self.stats.monthly_for_day(today);
@@ -846,24 +845,6 @@ impl App {
             }
             PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX => {
                 bool_label(self.goal_carry_over.daily).to_string()
-            }
-            PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX => {
-                format_daily_goal_minutes_label(self.weekly_goal.minutes)
-            }
-            PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX => {
-                format_daily_goal_pomodoros_label(self.weekly_goal.pomodoros)
-            }
-            PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX => {
-                bool_label(self.goal_carry_over.weekly).to_string()
-            }
-            PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX => {
-                format_daily_goal_minutes_label(self.monthly_goal.minutes)
-            }
-            PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX => {
-                format_daily_goal_pomodoros_label(self.monthly_goal.pomodoros)
-            }
-            PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX => {
-                bool_label(self.goal_carry_over.monthly).to_string()
             }
             PROFILE_EDIT_THEME_PRESET_INDEX => self.selected_theme_preset.label().to_string(),
             _ => String::new(),

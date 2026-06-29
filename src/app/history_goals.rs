@@ -160,6 +160,7 @@ impl App {
         carry_over_goal_target(base, self.goal_carry_over.monthly, previous)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn weekly_daily_goal_allocation(&self) -> WeeklyDailyGoalAllocation {
         let today = Local::now().date_naive();
         self.weekly_daily_goal_allocation_for_day(today)
@@ -188,13 +189,7 @@ impl App {
         let daily_changed = self
             .stats
             .sync_goal_snapshot(&day_key, self.current_goal_snapshot());
-        let weekly_changed = self
-            .stats
-            .sync_weekly_goal_snapshot(day, self.current_week_goal_snapshot());
-        let monthly_changed = self
-            .stats
-            .sync_monthly_goal_snapshot(day, self.current_month_goal_snapshot());
-        if daily_changed || weekly_changed || monthly_changed {
+        if daily_changed {
             self.mark_stats_dirty();
             self.flush_stats_if_dirty(false);
         }

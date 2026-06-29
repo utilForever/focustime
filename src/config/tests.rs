@@ -259,9 +259,11 @@ fn round_trip_full_config() {
     assert_eq!(parsed.profile_automation, original.profile_automation);
     assert!(!parsed.strict_mode);
     assert_eq!(parsed.daily_goal, original.daily_goal);
-    assert_eq!(parsed.weekly_goal, original.weekly_goal);
-    assert_eq!(parsed.monthly_goal, original.monthly_goal);
-    assert_eq!(parsed.goal_carry_over, original.goal_carry_over);
+    assert_eq!(parsed.weekly_goal, WeeklyGoalConfig::default());
+    assert_eq!(parsed.monthly_goal, MonthlyGoalConfig::default());
+    assert_eq!(parsed.goal_carry_over.daily, original.goal_carry_over.daily);
+    assert!(!parsed.goal_carry_over.weekly);
+    assert!(!parsed.goal_carry_over.monthly);
     assert_eq!(parsed.stats_retention, original.stats_retention);
     assert_eq!(parsed.history_dashboard, HistoryDashboardConfig::default());
     assert_eq!(parsed.feature_flags, original.feature_flags);

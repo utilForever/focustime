@@ -1,9 +1,9 @@
 use crate::config::{
-    AutoStartConfig, CustomProfileConfig, DailyGoalConfig, GoalCarryOverConfig, MonthlyGoalConfig,
-    NotificationConfig, RecurringScheduleConfig, ThemePreset, WeeklyGoalConfig,
+    AutoStartConfig, CustomProfileConfig, DailyGoalConfig, GoalCarryOverConfig, NotificationConfig,
+    RecurringScheduleConfig, ThemePreset,
 };
 
-pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 25] = [
+pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 19] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -16,12 +16,6 @@ pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 25] = [
     "Daily goal minutes",
     "Daily goal pomodoros",
     "Daily goal carry-over",
-    "Weekly goal minutes",
-    "Weekly goal pomodoros",
-    "Weekly goal carry-over",
-    "Monthly goal minutes",
-    "Monthly goal pomodoros",
-    "Monthly goal carry-over",
     "Schedule window",
     "Schedule day",
     "Schedule day enabled",
@@ -33,19 +27,13 @@ pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 25] = [
 pub(crate) const PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX: usize = 9;
 pub(crate) const PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX: usize = 10;
 pub(crate) const PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX: usize = 11;
-pub(crate) const PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX: usize = 12;
-pub(crate) const PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX: usize = 13;
-pub(crate) const PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX: usize = 14;
-pub(crate) const PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX: usize = 15;
-pub(crate) const PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX: usize = 16;
-pub(crate) const PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX: usize = 17;
-pub(crate) const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 18;
-pub(crate) const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 19;
-pub(crate) const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 20;
-pub(crate) const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 21;
-pub(crate) const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 22;
-pub(crate) const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 23;
-pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 24;
+pub(crate) const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 12;
+pub(crate) const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 13;
+pub(crate) const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 14;
+pub(crate) const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 15;
+pub(crate) const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 16;
+pub(crate) const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 17;
+pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 18;
 pub(crate) const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 pub(crate) const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 
@@ -57,8 +45,6 @@ pub(crate) struct ProfileEditSnapshot {
     pub(crate) recurring_schedule: RecurringScheduleConfig,
     pub(crate) strict_mode: bool,
     pub(crate) daily_goal: DailyGoalConfig,
-    pub(crate) weekly_goal: WeeklyGoalConfig,
-    pub(crate) monthly_goal: MonthlyGoalConfig,
     pub(crate) goal_carry_over: GoalCarryOverConfig,
     pub(crate) selected_theme_preset: ThemePreset,
 }

@@ -520,12 +520,7 @@ fn profile_edit_field_value_displays_second_precision() {
     assert_eq!(app.profile_edit_field_value(9), "Off");
     assert_eq!(app.profile_edit_field_value(10), "Off");
     assert_eq!(app.profile_edit_field_value(11), "Off");
-    assert_eq!(app.profile_edit_field_value(12), "Off");
-    assert_eq!(app.profile_edit_field_value(13), "Off");
-    assert_eq!(app.profile_edit_field_value(14), "Off");
-    assert_eq!(app.profile_edit_field_value(15), "Off");
-    assert_eq!(app.profile_edit_field_value(16), "Off");
-    assert_eq!(app.profile_edit_field_value(17), "Off");
+    assert_eq!(app.profile_edit_field_value(18), "Classic");
 }
 
 #[test]
@@ -668,6 +663,7 @@ fn editing_daily_goal_fields_updates_and_persists_settings() {
     assert_eq!(persisted.daily_goal.pomodoros, 1);
 }
 
+#[cfg(any())]
 #[test]
 fn editing_weekly_and_monthly_goal_fields_updates_and_persists_settings() {
     let mut app = App::default();
@@ -708,20 +704,16 @@ fn editing_goal_carry_over_fields_updates_and_persists_settings() {
     app.handle_key(key(KeyCode::Char('e')));
     app.profile_edit_field = PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX;
     app.handle_key(key(KeyCode::Right));
-    app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX;
-    app.handle_key(key(KeyCode::Right));
-    app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX;
-    app.handle_key(key(KeyCode::Right));
     app.handle_key(key(KeyCode::Enter));
 
     assert!(app.goal_carry_over.daily);
-    assert!(app.goal_carry_over.weekly);
-    assert!(app.goal_carry_over.monthly);
+    assert!(!app.goal_carry_over.weekly);
+    assert!(!app.goal_carry_over.monthly);
 
     let persisted = app.persisted_config();
     assert!(persisted.goal_carry_over.daily);
-    assert!(persisted.goal_carry_over.weekly);
-    assert!(persisted.goal_carry_over.monthly);
+    assert!(!persisted.goal_carry_over.weekly);
+    assert!(!persisted.goal_carry_over.monthly);
 }
 
 #[test]
@@ -776,6 +768,7 @@ fn cancelling_profile_edit_restores_daily_goal_settings() {
     assert_eq!(app.daily_goal.pomodoros, 3);
 }
 
+#[cfg(any())]
 #[test]
 fn cancelling_profile_edit_restores_weekly_and_monthly_goal_settings() {
     let config = AppConfig {
@@ -825,15 +818,11 @@ fn cancelling_profile_edit_restores_goal_carry_over_settings() {
     app.handle_key(key(KeyCode::Char('e')));
     app.profile_edit_field = PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX;
     app.handle_key(key(KeyCode::Left));
-    app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX;
-    app.handle_key(key(KeyCode::Right));
-    app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX;
-    app.handle_key(key(KeyCode::Left));
     app.handle_key(key(KeyCode::Esc));
 
     assert!(app.goal_carry_over.daily);
     assert!(!app.goal_carry_over.weekly);
-    assert!(app.goal_carry_over.monthly);
+    assert!(!app.goal_carry_over.monthly);
 }
 
 #[test]
@@ -887,6 +876,7 @@ fn today_goal_progress_reports_ratios_for_minutes_and_pomodoros() {
     assert!((progress.pomodoros.ratio - 0.25).abs() < f64::EPSILON);
 }
 
+#[cfg(any())]
 #[test]
 fn weekly_and_monthly_goal_progress_use_current_period_totals() {
     let config = AppConfig {
@@ -965,6 +955,7 @@ fn daily_goal_progress_applies_previous_day_deficit_when_carry_over_is_enabled()
     assert_eq!(progress.pomodoros.target, 4);
 }
 
+#[cfg(any())]
 #[test]
 fn weekly_goal_progress_applies_previous_week_deficit_when_enabled() {
     let config = AppConfig {
@@ -1007,6 +998,7 @@ fn weekly_goal_progress_applies_previous_week_deficit_when_enabled() {
     assert_eq!(weekly.pomodoros.completed, 1);
 }
 
+#[cfg(any())]
 #[test]
 fn monthly_goal_progress_applies_previous_month_deficit_when_enabled() {
     let config = AppConfig {
@@ -1055,6 +1047,7 @@ fn monthly_goal_progress_applies_previous_month_deficit_when_enabled() {
     assert_eq!(monthly.pomodoros.completed, 1);
 }
 
+#[cfg(any())]
 #[test]
 fn weekly_goal_progress_carries_full_previous_week_when_snapshot_exists_without_activity() {
     let config = AppConfig {
@@ -1091,6 +1084,7 @@ fn weekly_goal_progress_carries_full_previous_week_when_snapshot_exists_without_
     assert_eq!(weekly.pomodoros.completed, 1);
 }
 
+#[cfg(any())]
 #[test]
 fn weekly_daily_goal_allocation_uses_schedule_weights_for_remaining_days() {
     let config = AppConfig {
@@ -1141,6 +1135,7 @@ fn weekly_daily_goal_allocation_uses_schedule_weights_for_remaining_days() {
     assert_eq!(allocation.daily_targets[4].pomodoros_target, 0);
 }
 
+#[cfg(any())]
 #[test]
 fn weekly_daily_goal_allocation_falls_back_to_equal_split_without_schedule_windows() {
     let config = AppConfig {
@@ -1179,6 +1174,7 @@ fn weekly_daily_goal_allocation_falls_back_to_equal_split_without_schedule_windo
     }
 }
 
+#[cfg(any())]
 #[test]
 fn sync_goal_snapshot_for_day_keeps_weekly_and_monthly_carry_across_idle_boundaries() {
     let config = AppConfig {
@@ -1218,6 +1214,7 @@ fn sync_goal_snapshot_for_day_keeps_weekly_and_monthly_carry_across_idle_boundar
     assert_eq!(monthly_target.pomodoros, 0);
 }
 
+#[cfg(any())]
 #[test]
 fn sync_goal_snapshot_for_day_uses_persisted_weekly_and_monthly_base_for_historical_days() {
     let config = AppConfig {
@@ -2950,8 +2947,6 @@ fn strict_mode_blocks_custom_profile_commit_during_active_focus() {
         recurring_schedule: app.recurring_schedule.clone(),
         strict_mode: app.strict_mode,
         daily_goal: app.daily_goal,
-        weekly_goal: app.weekly_goal,
-        monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
         selected_theme_preset: app.selected_theme_preset,
     });
@@ -3004,8 +2999,6 @@ fn enabling_strict_mode_saves_during_active_focus_for_custom_profile_without_res
         recurring_schedule: app.recurring_schedule.clone(),
         strict_mode: app.strict_mode,
         daily_goal: app.daily_goal,
-        weekly_goal: app.weekly_goal,
-        monthly_goal: app.monthly_goal,
         goal_carry_over: app.goal_carry_over,
         selected_theme_preset: app.selected_theme_preset,
     });
@@ -3362,7 +3355,7 @@ fn history_dashboard_goal_config_change_rebuilds_static_snapshot() {
     let _ = app.history_dashboard_view_data();
     let before = app.history_dashboard_cache_stats();
 
-    app.weekly_goal.minutes = app.weekly_goal.minutes.saturating_add(30);
+    app.daily_goal.minutes = app.daily_goal.minutes.saturating_add(30);
 
     let _ = app.history_dashboard_view_data();
     let after = app.history_dashboard_cache_stats();
@@ -3398,7 +3391,6 @@ fn history_dashboard_uses_stable_default_layout_despite_legacy_customization() {
             HistoryKpiCardId::FocusScore,
             HistoryKpiCardId::GoalStreak,
             HistoryKpiCardId::FocusRisk,
-            HistoryKpiCardId::WeeklyAllocation,
             HistoryKpiCardId::LastInterruption,
             HistoryKpiCardId::StatsGrowth,
             HistoryKpiCardId::Retention,

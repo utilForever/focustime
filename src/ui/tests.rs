@@ -1,13 +1,9 @@
-use crate::app::{
-    PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX,
-    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
-    PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX,
-};
+use crate::app::PROFILE_EDIT_SCHEDULE_WINDOW_INDEX;
 use crate::config::{
     AppConfig, HistoryDashboardConfig, HistoryKpiCardId, ShortcutConfig, ThemePreset,
 };
 use crate::ui::*;
-use chrono::{Datelike, Duration, NaiveDate};
+use chrono::{Datelike, NaiveDate};
 use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
 
@@ -108,7 +104,7 @@ fn history_focus_risk_line_shows_low_risk_when_goals_are_off() {
     let app = App::default();
     assert_eq!(
         format_history_focus_risk_line(&app),
-        "Risk: D low 0% · W low 0% · M low 0% · S low 0%"
+        "Risk: D low 0% · S low 0%"
     );
 }
 
@@ -119,14 +115,6 @@ fn history_focus_risk_line_marks_alert_for_high_risk_forecast() {
             minutes: 120,
             pomodoros: 4,
         },
-        weekly_goal: crate::config::WeeklyGoalConfig {
-            minutes: 600,
-            pomodoros: 24,
-        },
-        monthly_goal: crate::config::MonthlyGoalConfig {
-            minutes: 2400,
-            pomodoros: 96,
-        },
         ..AppConfig::default()
     });
     let line = format_history_focus_risk_line(&app);
@@ -134,6 +122,7 @@ fn history_focus_risk_line_marks_alert_for_high_risk_forecast() {
     assert!(line.contains("ALERT"));
 }
 
+#[cfg(any())]
 #[test]
 fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
     let mut app = App::default();
@@ -227,6 +216,7 @@ fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
     assert_eq!(format_history_goal_streak_line(&app), expected);
 }
 
+#[cfg(any())]
 #[test]
 fn weekly_allocation_lines_show_off_when_weekly_goal_is_disabled() {
     let app = App::default();
@@ -240,6 +230,7 @@ fn weekly_allocation_lines_show_off_when_weekly_goal_is_disabled() {
     );
 }
 
+#[cfg(any())]
 #[test]
 fn weekly_allocation_lines_show_today_targets_when_weekly_goal_is_configured() {
     let app = App::from_config_for_tests(AppConfig {

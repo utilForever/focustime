@@ -1,9 +1,8 @@
 use chrono::Local;
 
-use crate::app::{App, DailyGoalProgress, WeeklyDailyGoalAllocation, parse_day_key};
+use crate::app::{App, DailyGoalProgress, parse_day_key};
 use crate::config::{
-    DailyGoalConfig, GoalCarryOverConfig, MonthlyGoalConfig, RecurringScheduleConfig,
-    StatsRetentionConfig, WeeklyGoalConfig,
+    DailyGoalConfig, GoalCarryOverConfig, RecurringScheduleConfig, StatsRetentionConfig,
 };
 use crate::stats::{
     ComparisonDimension, DailyStats, FocusRiskForecast, GoalStreak, MonthlyHeatmap, MonthlyStats,
@@ -17,12 +16,9 @@ pub(crate) struct HistoryDashboardViewData {
     pub(crate) session_stats: SessionStats,
     pub(crate) today_stats: DailyStats,
     pub(crate) daily_goal_progress: DailyGoalProgress,
-    pub(crate) weekly_goal_progress: DailyGoalProgress,
-    pub(crate) monthly_goal_progress: DailyGoalProgress,
     pub(crate) latest_weekly_focus_score: Option<WeeklyFocusScore>,
     pub(crate) goal_streak: GoalStreak,
     pub(crate) focus_risk_forecast: FocusRiskForecast,
-    pub(crate) weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
     pub(crate) latest_session_interruption: Option<SessionInterruptionEvent>,
     pub(crate) stats_growth_summary: StatsGrowthSummary,
     pub(crate) stats_retention_config: StatsRetentionConfig,
@@ -40,12 +36,9 @@ pub(super) struct HistoryDashboardStaticSnapshot {
     session_stats: SessionStats,
     today_stats: DailyStats,
     daily_goal_progress: DailyGoalProgress,
-    weekly_goal_progress: DailyGoalProgress,
-    monthly_goal_progress: DailyGoalProgress,
     latest_weekly_focus_score: Option<WeeklyFocusScore>,
     goal_streak: GoalStreak,
     focus_risk_forecast: FocusRiskForecast,
-    weekly_daily_goal_allocation: WeeklyDailyGoalAllocation,
     latest_session_interruption: Option<SessionInterruptionEvent>,
     stats_growth_summary: StatsGrowthSummary,
     stats_retention_config: StatsRetentionConfig,
@@ -69,8 +62,6 @@ pub(super) struct HistoryDashboardStaticSnapshotKey {
     retention: StatsRetentionConfig,
     recurring_schedule: RecurringScheduleConfig,
     daily_goal: DailyGoalConfig,
-    weekly_goal: WeeklyGoalConfig,
-    monthly_goal: MonthlyGoalConfig,
     goal_carry_over: GoalCarryOverConfig,
 }
 
@@ -150,12 +141,9 @@ impl App {
             session_stats: static_snapshot.session_stats,
             today_stats: static_snapshot.today_stats,
             daily_goal_progress: static_snapshot.daily_goal_progress,
-            weekly_goal_progress: static_snapshot.weekly_goal_progress,
-            monthly_goal_progress: static_snapshot.monthly_goal_progress,
             latest_weekly_focus_score: static_snapshot.latest_weekly_focus_score,
             goal_streak: static_snapshot.goal_streak,
             focus_risk_forecast: static_snapshot.focus_risk_forecast,
-            weekly_daily_goal_allocation: static_snapshot.weekly_daily_goal_allocation,
             latest_session_interruption: static_snapshot.latest_session_interruption,
             stats_growth_summary: static_snapshot.stats_growth_summary,
             stats_retention_config: static_snapshot.stats_retention_config,
@@ -186,8 +174,6 @@ impl App {
             retention: self.stats_retention,
             recurring_schedule: self.recurring_schedule.clone(),
             daily_goal: self.daily_goal,
-            weekly_goal: self.weekly_goal,
-            monthly_goal: self.monthly_goal,
             goal_carry_over: self.goal_carry_over,
         }
     }
@@ -209,24 +195,19 @@ impl App {
         let day = parse_day_key(day_key).unwrap_or_else(|| Local::now().date_naive());
         let canonical_day_key = day.format("%Y-%m-%d").to_string();
         let daily_goal = self.effective_daily_goal_snapshot_for_day(day);
-        let weekly_goal = self.effective_weekly_goal_snapshot_for_day(day);
-        let monthly_goal = self.effective_monthly_goal_snapshot_for_day(day);
 
         HistoryDashboardStaticSnapshot {
             session_stats: self.stats.session(),
             today_stats: self.stats.daily_for(&canonical_day_key),
             daily_goal_progress: self.today_goal_progress(),
-            weekly_goal_progress: self.current_week_goal_progress(),
-            monthly_goal_progress: self.current_month_goal_progress(),
             latest_weekly_focus_score: self.stats.latest_weekly_focus_score(),
             goal_streak: self.goal_streak_for_day_key(&canonical_day_key),
             focus_risk_forecast: self.stats.focus_risk_forecast_for_day(
                 day,
                 daily_goal,
-                weekly_goal,
-                monthly_goal,
+                crate::stats::DailyGoalSnapshot::default(),
+                crate::stats::DailyGoalSnapshot::default(),
             ),
-            weekly_daily_goal_allocation: self.weekly_daily_goal_allocation_for_day(day),
             latest_session_interruption: self.stats.latest_session_interruption(),
             stats_growth_summary: self.stats.growth_summary(),
             stats_retention_config: self.stats_retention,

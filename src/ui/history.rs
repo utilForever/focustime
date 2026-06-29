@@ -227,9 +227,7 @@ fn history_kpi_card_text(
             readable_goal_streak_text(&format_history_goal_streak_line_from_data(history_data))
         }
         HistoryKpiCardId::FocusRisk => format_history_focus_risk_line_from_data(history_data),
-        HistoryKpiCardId::WeeklyAllocation => {
-            format_history_weekly_allocation_line_from_data(history_data)
-        }
+        HistoryKpiCardId::WeeklyAllocation => "Weekly allocation: retired".to_string(),
         HistoryKpiCardId::LastInterruption => {
             format_history_interruption_line_from_data(history_data)
         }
@@ -366,18 +364,11 @@ pub(super) fn format_history_goal_streak_line(app: &App) -> String {
 
 fn format_history_goal_streak_line_from_data(history_data: &HistoryDashboardViewData) -> String {
     let daily_goal_progress = history_data.daily_goal_progress;
-    let weekly_goal_progress = history_data.weekly_goal_progress;
-    let monthly_goal_progress = history_data.monthly_goal_progress;
     let streak = history_data.goal_streak;
-    if daily_goal_progress.has_any_target()
-        || weekly_goal_progress.has_any_target()
-        || monthly_goal_progress.has_any_target()
-    {
+    if daily_goal_progress.has_any_target() {
         format!(
-            "Goals: {} · {} · {}   Streaks: {}d current · {}d best",
+            "Goal: {}   Streaks: {}d current · {}d best",
             format_goal_period_progress("D", daily_goal_progress),
-            format_goal_period_progress("W", weekly_goal_progress),
-            format_goal_period_progress("M", monthly_goal_progress),
             streak.current,
             streak.best
         )
@@ -394,16 +385,10 @@ pub(super) fn format_history_focus_score_line(app: &App) -> String {
 
 fn format_history_focus_score_line_from_data(history_data: &HistoryDashboardViewData) -> String {
     match history_data.latest_weekly_focus_score.as_ref() {
-        Some(score) => match (score.focus_score_pct, score.completion_score_pct) {
-            (Some(focus_score), Some(completion_score)) => format!(
-                "Focus score: {focus_score}% (consistency {}% · completion {completion_score}%)",
-                score.consistency_score_pct
-            ),
-            _ => format!(
-                "Focus score: n/a (weekly goal off; consistency {}% ({}/7 days))",
-                score.consistency_score_pct, score.active_days
-            ),
-        },
+        Some(score) => format!(
+            "Focus score: {}% (consistency, {}/7 active days)",
+            score.consistency_score_pct, score.active_days
+        ),
         None => "Focus score: n/a".to_string(),
     }
 }
@@ -418,21 +403,9 @@ fn format_history_focus_risk_line_from_data(history_data: &HistoryDashboardViewD
     let forecast = &history_data.focus_risk_forecast;
     let alert_active = forecast.alert_active();
     let daily_label = forecast.daily_goal.period.short_label();
-    let weekly_label = forecast.weekly_goal.period.short_label();
-    let monthly_label = forecast.monthly_goal.period.short_label();
     let mut highest_label = daily_label;
-    let mut highest_score = forecast.daily_goal.risk_score_pct;
+    let highest_score = forecast.daily_goal.risk_score_pct;
     let mut highest_signal = forecast.daily_goal.signals.first();
-    if forecast.weekly_goal.risk_score_pct > highest_score {
-        highest_label = weekly_label;
-        highest_score = forecast.weekly_goal.risk_score_pct;
-        highest_signal = forecast.weekly_goal.signals.first();
-    }
-    if forecast.monthly_goal.risk_score_pct > highest_score {
-        highest_label = monthly_label;
-        highest_score = forecast.monthly_goal.risk_score_pct;
-        highest_signal = forecast.monthly_goal.signals.first();
-    }
     if forecast.streak.risk_score_pct > highest_score {
         highest_label = "S";
         highest_signal = forecast.streak.signals.first();
@@ -446,16 +419,10 @@ fn format_history_focus_risk_line_from_data(history_data: &HistoryDashboardViewD
     };
     let alert_suffix = if alert_active { " · ALERT" } else { "" };
     format!(
-        "Risk: {} {} {}% · {} {} {}% · {} {} {}% · S {} {}%{}{}",
+        "Risk: {} {} {}% · S {} {}%{}{}",
         daily_label,
         forecast.daily_goal.risk_level.label(),
         forecast.daily_goal.risk_score_pct,
-        weekly_label,
-        forecast.weekly_goal.risk_level.label(),
-        forecast.weekly_goal.risk_score_pct,
-        monthly_label,
-        forecast.monthly_goal.risk_level.label(),
-        forecast.monthly_goal.risk_score_pct,
         forecast.streak.risk_level.label(),
         forecast.streak.risk_score_pct,
         alert_suffix,
@@ -470,29 +437,9 @@ pub(super) fn format_history_weekly_allocation_line(app: &App) -> String {
 }
 
 fn format_history_weekly_allocation_line_from_data(
-    history_data: &HistoryDashboardViewData,
+    _history_data: &HistoryDashboardViewData,
 ) -> String {
-    let allocation = &history_data.weekly_daily_goal_allocation;
-    if !allocation.has_any_target() {
-        return "Weekly allocation: off".to_string();
-    }
-    if allocation.remaining_minutes == 0 && allocation.remaining_pomodoros == 0 {
-        return format!(
-            "Weekly allocation: met · 0m/0p remaining · {} day(s) left",
-            allocation.remaining_days_in_week
-        );
-    }
-
-    let today_target = allocation.today_target();
-    format!(
-        "Weekly allocation: today {}m/{}p · remaining {}m/{}p across {}/{} days",
-        today_target.minutes,
-        today_target.pomodoros,
-        allocation.remaining_minutes,
-        allocation.remaining_pomodoros,
-        allocation.allocatable_days,
-        allocation.remaining_days_in_week
-    )
+    "Weekly allocation: retired".to_string()
 }
 
 #[allow(dead_code)]

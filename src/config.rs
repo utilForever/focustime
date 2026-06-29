@@ -112,14 +112,14 @@ pub(crate) struct AppConfig {
     /// Weekly goal settings for focus minutes and completed pomodoros.
     ///
     /// A value of `0` disables the corresponding goal.
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub(crate) weekly_goal: WeeklyGoalConfig,
     /// Monthly goal settings for focus minutes and completed pomodoros.
     ///
     /// A value of `0` disables the corresponding goal.
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub(crate) monthly_goal: MonthlyGoalConfig,
-    /// Carry-over behavior for unmet daily/weekly/monthly targets.
+    /// Carry-over behavior for unmet daily targets.
     #[serde(default)]
     pub(crate) goal_carry_over: GoalCarryOverConfig,
     /// Retention policy for persisted stats history.
@@ -480,11 +480,11 @@ pub(crate) struct GoalCarryOverConfig {
     /// When enabled, unmet daily targets are added to the next day's target.
     #[serde(default)]
     pub(crate) daily: bool,
-    /// When enabled, unmet weekly targets are added to the next week's target.
-    #[serde(default)]
+    /// Deprecated weekly target carry-over, retained only for legacy config reads.
+    #[serde(default, skip_serializing)]
     pub(crate) weekly: bool,
-    /// When enabled, unmet monthly targets are added to the next month's target.
-    #[serde(default)]
+    /// Deprecated monthly target carry-over, retained only for legacy config reads.
+    #[serde(default, skip_serializing)]
     pub(crate) monthly: bool,
 }
 
@@ -596,13 +596,12 @@ impl HistoryKpiCardId {
         }
     }
 
-    pub(crate) const fn all() -> [Self; 9] {
+    pub(crate) const fn all() -> [Self; 8] {
         [
             Self::SessionSummary,
             Self::FocusScore,
             Self::GoalStreak,
             Self::FocusRisk,
-            Self::WeeklyAllocation,
             Self::LastInterruption,
             Self::StatsGrowth,
             Self::Retention,
@@ -1095,6 +1094,10 @@ impl AppConfig {
         self.schedule_runtime = self.schedule_runtime.normalized();
         self.history_dashboard = self.history_dashboard.normalized();
         self.shortcuts = self.shortcuts.normalized();
+        self.weekly_goal = WeeklyGoalConfig::default();
+        self.monthly_goal = MonthlyGoalConfig::default();
+        self.goal_carry_over.weekly = false;
+        self.goal_carry_over.monthly = false;
         self
     }
 

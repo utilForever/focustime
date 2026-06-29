@@ -7,13 +7,14 @@ use crate::stats::{
     percentage_round_nearest, weekly_completion_score_pct,
 };
 
+#[allow(dead_code)]
 pub(super) fn observed_goal_miss_for_candidate(
-    stats: &FocusStats,
-    candidate: chrono::NaiveDate,
+    _stats: &FocusStats,
+    _candidate: chrono::NaiveDate,
     day_stats: DailyStats,
     daily_goal: DailyGoalSnapshot,
-    weekly_goal: DailyGoalSnapshot,
-    monthly_goal: DailyGoalSnapshot,
+    _weekly_goal: DailyGoalSnapshot,
+    _monthly_goal: DailyGoalSnapshot,
 ) -> Option<bool> {
     let mut observed_outcome = false;
     let mut observed_miss = false;
@@ -23,29 +24,10 @@ pub(super) fn observed_goal_miss_for_candidate(
         observed_miss |= !daily_goal.is_met_by(day_stats);
     }
 
-    if candidate.weekday().num_days_from_monday() == 6 && weekly_goal.has_any_target() {
-        observed_outcome = true;
-        let weekly_stats = stats.weekly_for_day(candidate);
-        observed_miss |= !weekly_goal.is_met_by_totals(
-            weekly_stats.focused_minutes(),
-            weekly_stats.pomodoros_completed,
-        );
-    }
-
-    if candidate.day() == days_in_month(candidate.year(), candidate.month())
-        && monthly_goal.has_any_target()
-    {
-        observed_outcome = true;
-        let monthly_stats = stats.monthly_for_day(candidate);
-        observed_miss |= !monthly_goal.is_met_by_totals(
-            monthly_stats.focused_minutes(),
-            monthly_stats.pomodoros_completed,
-        );
-    }
-
     observed_outcome.then_some(observed_miss)
 }
 
+#[allow(dead_code)]
 pub(super) fn classify_calibration_signal(
     alert_active: bool,
     observed_miss: bool,
@@ -405,10 +387,12 @@ pub(super) fn risk_signal(label: &str, value: &str) -> FocusRiskSignal {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn remaining_days_in_week(day: chrono::NaiveDate) -> u32 {
     7_u32.saturating_sub(day.weekday().num_days_from_monday())
 }
 
+#[allow(dead_code)]
 pub(super) fn remaining_days_in_month(day: chrono::NaiveDate) -> u32 {
     let total_days = days_in_month(day.year(), day.month());
     total_days.saturating_sub(day.day()).saturating_add(1)
