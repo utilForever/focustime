@@ -58,7 +58,7 @@ fn classify_value_arg(
     index: usize,
     arg: &str,
 ) -> Result<Option<(ParsedToken, usize)>, String> {
-    let parsers: [(&str, ValueArgParser); 13] = [
+    let parsers: [(&str, ValueArgParser); 11] = [
         ("--task", classify_task_arg),
         ("--profile", classify_profile_arg),
         ("--theme", classify_theme_arg),
@@ -66,8 +66,6 @@ fn classify_value_arg(
         ("--strict", classify_strict_arg),
         ("--schedule-set", classify_schedule_set_arg),
         ("--watch", classify_watch_arg),
-        ("--backup", classify_backup_arg),
-        ("--restore", classify_restore_arg),
         ("--export", classify_export_arg),
         ("--blocklist-site-add", classify_blocklist_site_add_arg),
         ("--blocklist-site-edit", classify_blocklist_site_edit_arg),
@@ -147,24 +145,6 @@ fn classify_export_arg(args: &[String], index: usize) -> Result<(ParsedToken, us
         index,
         ParsedToken::Export,
         "`--export` requires a target directory.",
-    )
-}
-
-fn classify_backup_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
-    classify_optional_artifact_path_arg(
-        args,
-        index,
-        ParsedToken::Backup,
-        "`--backup` requires a target directory.",
-    )
-}
-
-fn classify_restore_arg(args: &[String], index: usize) -> Result<(ParsedToken, usize), String> {
-    classify_optional_artifact_path_arg(
-        args,
-        index,
-        ParsedToken::Restore,
-        "`--restore` requires a source directory.",
     )
 }
 

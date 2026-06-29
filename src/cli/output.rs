@@ -17,9 +17,8 @@ pub(super) use sites::{
 pub(super) use status::{print_status_output, print_timer_state_output};
 
 use crate::cli::{
-    BackupOutput, BlocklistProfileConfig, ExportOutput, GoalCommandOutput, ProfileOutput,
-    RestoreOutput, ScheduleCommandOutput, Serialize, StrictCommandOutput, ThemeCommandOutput,
-    Write, io,
+    BlocklistProfileConfig, ExportOutput, GoalCommandOutput, ProfileOutput, ScheduleCommandOutput,
+    Serialize, StrictCommandOutput, ThemeCommandOutput, Write, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -76,22 +75,6 @@ pub(super) fn print_theme_command_output(payload: &ThemeCommandOutput) {
 pub(super) fn print_export_output(payload: &ExportOutput) {
     println!("Exported stats to {}", payload.export_dir.display());
     print_artifact_paths(&[("JSON", &payload.json_path), ("CSV", &payload.csv_path)]);
-}
-
-pub(super) fn print_backup_output(payload: &BackupOutput) {
-    println!("Backed up app data to {}", payload.backup_dir.display());
-    print_artifact_paths(&[
-        ("Config", &payload.config_backup_path),
-        ("Stats", &payload.stats_backup_path),
-    ]);
-}
-
-pub(super) fn print_restore_output(payload: &RestoreOutput) {
-    println!("Restored app data from {}", payload.restore_dir.display());
-    print_artifact_paths(&[
-        ("Config", &payload.config_restored_path),
-        ("Stats", &payload.stats_restored_path),
-    ]);
 }
 
 fn print_artifact_paths(paths: &[(&str, &Path)]) {
