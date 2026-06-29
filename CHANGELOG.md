@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking - Stats export format reduction (#570):** kept JSON as the canonical `--export` artifact, removed CSV writer/output contracts, and simplified export docs/tests around `focustime-stats.json`.
 - **Breaking - Goal carry-over cleanup (#568):** removed `--goal-carry*` CLI parsing/help/output, dropped carry-over runtime/config/status/export calculations, and kept goal progress tied to the current daily target.
 - **Breaking - Backup/restore CLI cleanup (#569):** removed `--backup` and `--restore` parsing/help/execution/output plus staged restore/rollback workflow code, keeping `--export` for supported stats extraction and manual config/stats file copies as recovery guidance.
 - **Breaking - WakaTime integration retirement (#565):** removed WakaTime heartbeat tracking, config/runtime diagnostics, profile-editor metadata fields, and direct HTTP/Basic-auth dependency ownership so focus sessions stay local to timer, blocking, goals, recovery, history, and exports.

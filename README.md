@@ -697,7 +697,7 @@ From timer view:
 
 - press **`h`** to open the history panel with weekly and daily summaries
 - while history is open, use **`←/→`** to switch comparison dimension; **`↑/↓`** task filter; **`[`/`]`** profile filter; **`,`/`.`** time-of-day filter
-- while the history panel is open, press **`e`** to export `focustime-stats.json` and `focustime-stats.csv` into the current working directory
+- while the history panel is open, press **`e`** to export `focustime-stats.json` into the current working directory
 - press **`h`** or **`Esc`** to return to timer view
 
 Exports include daily/weekly aggregates, weekly consistency, weekly focus score,
@@ -708,10 +708,9 @@ task note metadata. Interruption records include structured `reason` values and
 remaining-time metadata. Export files now also include a `history_kpis` JSON
 object covering all History dashboard KPI cards (`session_summary`,
 `focus_score`, `goal_streak`, `focus_risk`, `last_interruption`,
-`stats_growth`, `retention`, `comparison_filters`), with
-matching CSV `history_kpi` rows (`kpi_card_id` + `kpi_payload_json`) for
-JSON/CSV parity. Export files expose `schema_version` (currently `9`) so
-downstream consumers can handle versioned contracts explicitly.
+`stats_growth`, `retention`, `comparison_filters`). The JSON artifact exposes
+`schema_version` (currently `9`) so downstream consumers can handle versioned
+contracts explicitly.
 
 ## The way the system works
 
