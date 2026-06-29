@@ -941,6 +941,10 @@ fn persisted_stats_round_trip_drops_weekly_and_monthly_goal_snapshots() {
     original.sync_monthly_goal_snapshot(day, monthly_goal);
 
     let toml_str = toml::to_string_pretty(&original.to_persisted()).unwrap();
+    assert!(!toml_str.contains("weekly_goal_snapshots"));
+    assert!(!toml_str.contains("monthly_goal_snapshots"));
+    assert!(!toml_str.contains(&day.format("%Y-%m-%d").to_string()));
+
     let restored = FocusStats::try_from_toml(&toml_str).unwrap();
 
     assert_eq!(restored.weekly_goal_snapshot_for_day(day), None);
