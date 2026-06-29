@@ -111,21 +111,9 @@ cargo run -- --goal
 cargo run -- --goal=120,4
 cargo run -- --goal --json
 
-# Show or set weekly goal targets (minutes,pomodoros)
-cargo run -- --goal-weekly
-cargo run -- --goal-weekly=600,20
-cargo run -- --goal-weekly --json
-
-# Show or set monthly goal targets (minutes,pomodoros)
-cargo run -- --goal-monthly
-cargo run -- --goal-monthly=2400,80
-cargo run -- --goal-monthly --json
-
-# Show or set goal carry-over behavior (on/off)
+# Show or set daily goal carry-over behavior (on/off)
 cargo run -- --goal-carry
 cargo run -- --goal-carry=on
-cargo run -- --goal-carry-weekly=on
-cargo run -- --goal-carry-monthly=off
 cargo run -- --goal-carry --json
 
 # Show or set strict mode for the selected profile
@@ -285,7 +273,7 @@ Early deprecation notices:
 | Standalone calendar refresh command (`--calendar-sync`) and `[calendar_sync]` config | Removed; scheduling no longer reads calendar annotation caches or renders calendar-derived busy/overlap text. |
 | Task note metadata and command surface (`--task-note`, timer note editing, `task_note` status/export fields) | Removed; use `--task` and task label selection as the supported session context. |
 | Focus intention metadata (`--focus-intention`, `focus_intention` recovery/status/export fields) | Removed; use `--task` and task label selection as the supported session metadata. |
-| Task-specific cumulative goals (`--task-goal`, selected task goal status/history/export fields) | Removed; use global daily, weekly, and monthly goals with `--goal`, `--goal-weekly`, and `--goal-monthly`; task labels remain available for grouping. |
+| Task-specific cumulative goals (`--task-goal`, selected task goal status/history/export fields) | Removed; use the global daily goal with `--goal`; task labels remain available for grouping. |
 | Session template workflows (`--session-template*` commands and session-template config/runtime persistence) | Removed; select task, profile, schedule, and blocklist settings directly through their dedicated controls. |
 | WakaTime heartbeat tracking and config (`[wakatime]`, `[wakatime_runtime]`, prior task mappings) | Removed; focus sessions stay local to timer, blocking, goals, recovery, history, and exports. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`) for automation, or the TUI for interactive focus sessions. |
@@ -449,8 +437,8 @@ Open Focus History from timer view with **`h`**.
 - `↑/↓`: cycle task slice, `[`/`]`: cycle profile slice, `,`/`.`: cycle time-of-day slice
 
 Focus History renders a stable default KPI layout covering session summary,
-focus score, goal streak, focus risk, weekly allocation, last interruption,
-stats growth, retention, and comparison filters. Dashboard pin, unpin, and order
+focus score, goal streak, focus risk, last interruption, stats growth,
+retention, and comparison filters. Dashboard pin, unpin, and order
 customization commands are retired; use `--history-dashboard` for CLI layout
 inspection.
 
@@ -510,14 +498,6 @@ time_step_minutes = 15
 [daily_goal]
 minutes = 120
 pomodoros = 4
-
-[weekly_goal]
-minutes = 600
-pomodoros = 20
-
-[monthly_goal]
-minutes = 2400
-pomodoros = 80
 
 [stats_retention]
 preset = "balanced" # keep_all | balanced | aggressive
@@ -656,7 +636,7 @@ You can configure notification and auto-start settings directly from the TUI:
 - press `e` to open the editor
 - automation and schedule edits apply to the currently selected profile only
 - the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **Schedule**, **Appearance**) to keep settings easier to scan
-- use `↑/↓` (default `navigate_up`/`navigate_down`) to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily/Weekly/Monthly goal (minutes)**, **Daily/Weekly/Monthly goal (pomodoros)**, **Theme preset**, or the **Schedule** fields
+- use `↑/↓` (default `navigate_up`/`navigate_down`) to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily goal (minutes)**, **Daily goal (pomodoros)**, **Theme preset**, or the **Schedule** fields
 - use `←/→` (default `navigate_left`/`navigate_right`) to adjust values (or toggle `Off`/`On` for boolean fields), then `Enter` (default `confirm`) to save
 - schedule editing is in-app:
   - **Schedule add/remove**: `→` adds a window, `←` removes selected window
@@ -702,7 +682,7 @@ for blocked-site changes, and normal timer controls (`--pause`, `--resume`,
 - daily aggregates persisted in `stats.toml` in the canonical data/state directory
 - weekly totals derived from daily aggregates in the History view
 - weekly consistency score (`active_days / 7`, rounded to `%`) derived from daily activity
-- weekly focus score KPI (50/50 blend of consistency and weekly goal completion; `n/a` when weekly goal is off)
+- weekly focus score KPI based on consistency (`active_days / 7`, rounded to `%`)
 - profile effectiveness comparison (focus share % and average focused minutes per completed session)
 - productivity comparison rows by task/profile/time-of-day in History and exports
 - per-task totals (pomodoros and focused minutes) derived from labeled focus sessions
@@ -719,8 +699,7 @@ Current retention presets for historical records:
 
 Retention is enforced when stats are persisted. Existing data older than the selected windows is pruned on save.
 
-If daily, weekly, or monthly goals are configured, timer and history views also
-show live progress for each period:
+If a daily goal is configured, timer and history views also show live progress:
 
 - target focused minutes
 - target completed pomodoros
