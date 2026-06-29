@@ -596,7 +596,7 @@ impl HistoryKpiCardId {
         }
     }
 
-    pub(crate) const fn all() -> [Self; 8] {
+    pub(crate) const fn supported_dashboard_cards() -> [Self; 8] {
         [
             Self::SessionSummary,
             Self::FocusScore,
@@ -701,11 +701,11 @@ fn default_schedule_window_end() -> String {
 }
 
 fn default_history_dashboard_pinned_cards() -> Vec<HistoryKpiCardId> {
-    HistoryKpiCardId::all().to_vec()
+    HistoryKpiCardId::supported_dashboard_cards().to_vec()
 }
 
 fn default_history_dashboard_card_order() -> Vec<HistoryKpiCardId> {
-    HistoryKpiCardId::all().to_vec()
+    HistoryKpiCardId::supported_dashboard_cards().to_vec()
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]

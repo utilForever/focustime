@@ -59,7 +59,7 @@ impl App {
     }
 
     pub(crate) fn history_dashboard_cards(&self) -> Vec<HistoryKpiCardId> {
-        HistoryKpiCardId::all().to_vec()
+        HistoryKpiCardId::supported_dashboard_cards().to_vec()
     }
 
     pub(super) fn cycle_history_comparison_dimension(&mut self, forward: bool) {

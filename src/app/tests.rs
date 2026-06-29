@@ -3435,7 +3435,7 @@ fn history_dashboard_deprecated_shortcuts_do_not_change_feedback() {
 
     assert_eq!(
         app.history_dashboard_cards(),
-        HistoryKpiCardId::all().to_vec()
+        HistoryKpiCardId::supported_dashboard_cards().to_vec()
     );
     assert!(app.history_feedback.is_none());
 }
