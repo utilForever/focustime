@@ -636,7 +636,7 @@ You can configure notification and auto-start settings directly from the TUI:
 - press `e` to open the editor
 - automation and schedule edits apply to the currently selected profile only
 - the editor is grouped into sections (**Timer**, **Automation**, **Goals**, **Schedule**, **Appearance**) to keep settings easier to scan
-- use `↑/↓` (default `navigate_up`/`navigate_down`) to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily goal (minutes)**, **Daily goal (pomodoros)**, **Theme preset**, or the **Schedule** fields
+- use `↑/↓` (default `navigate_up`/`navigate_down`) to select **Phase notifications**, **Sound alert**, **Auto-start break**, **Auto-start focus**, **Strict focus mode**, **Daily goal (minutes)**, **Daily goal (pomodoros)**, **Daily carry-over**, **Theme preset**, or the **Schedule** fields
 - use `←/→` (default `navigate_left`/`navigate_right`) to adjust values (or toggle `Off`/`On` for boolean fields), then `Enter` (default `confirm`) to save
 - schedule editing is in-app:
   - **Schedule add/remove**: `→` adds a window, `←` removes selected window
@@ -722,8 +722,8 @@ attached. Focus-session rows persist and export `task_label` without separate
 task note metadata. Interruption records include structured `reason` values and
 remaining-time metadata. Export files now also include a `history_kpis` JSON
 object covering all History dashboard KPI cards (`session_summary`,
-`focus_score`, `goal_streak`, `focus_risk`, `weekly_allocation`,
-`last_interruption`, `stats_growth`, `retention`, `comparison_filters`), with
+`focus_score`, `goal_streak`, `focus_risk`, `last_interruption`,
+`stats_growth`, `retention`, `comparison_filters`), with
 matching CSV `history_kpi` rows (`kpi_card_id` + `kpi_payload_json`) for
 JSON/CSV parity. Export files expose `schema_version` (currently `9`) so
 downstream consumers can handle versioned contracts explicitly.
