@@ -3,23 +3,21 @@ name = "focustime"
 version = "0.16.4"
 edition = "2024"
 rust-version = "1.85"
-description = "TUI Pomodoro timer with site blocking and optional WakaTime heartbeat tracking"
+description = "TUI Pomodoro timer with site blocking and focus history"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/utilForever/focustime"
 homepage = "https://github.com/utilForever/focustime"
-keywords = ["pomodoro", "tui", "productivity", "focus", "wakatime"]
+keywords = ["pomodoro", "tui", "productivity", "focus"]
 categories = ["command-line-utilities"]
 
 [dependencies]
 ratatui = "0.30"
 crossterm = "0.29"
-ureq = { version = "3", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 csv = "1"
 toml = "1.1"
-base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

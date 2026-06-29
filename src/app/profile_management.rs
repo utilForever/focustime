@@ -6,12 +6,11 @@ use crate::app::{
     PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
     PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
     PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
-    PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX,
-    PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
+    PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX, PROFILE_IDS,
     ProfileAutomationConfig, ProfileEditSnapshot, ProfileId, ShortcutAction, TimerState,
-    WakatimeHeartbeatMetadata, adjust_daily_goal_minutes, adjust_daily_goal_pomodoros,
-    adjust_duration_minutes, compile_windows, profile_for_index, profile_index, profile_spec_for,
+    adjust_daily_goal_minutes, adjust_daily_goal_pomodoros, adjust_duration_minutes,
+    compile_windows, profile_for_index, profile_index, profile_spec_for,
 };
 
 const PROFILE_MANAGER_SHORTCUT_ACTIONS: [ShortcutAction; 2] = [
@@ -210,7 +209,6 @@ impl App {
             monthly_goal: self.monthly_goal,
             goal_carry_over: self.goal_carry_over,
             selected_theme_preset: self.selected_theme_preset,
-            wakatime_metadata: self.wakatime_metadata.clone(),
         });
         self.profile_edit_active = true;
         self.profile_edit_field = 0;
@@ -231,8 +229,6 @@ impl App {
             self.monthly_goal = snapshot.monthly_goal;
             self.goal_carry_over = snapshot.goal_carry_over;
             self.selected_theme_preset = snapshot.selected_theme_preset;
-            self.wakatime_metadata = snapshot.wakatime_metadata;
-            self.sync_wakatime_metadata_to_tracker();
             self.rebuild_notifier();
             self.rebuild_recurring_schedule_runtime();
         }
@@ -254,11 +250,9 @@ impl App {
         let goals_changed = self.profile_edit_goals_changed();
         self.custom_profile = self.custom_profile.normalized();
         self.recurring_schedule = normalized_schedule;
-        self.wakatime_metadata = self.wakatime_metadata.normalized();
         if !self.commit_profile_edit_profile_settings(custom_profile_changed) {
             return;
         }
-        self.sync_wakatime_metadata_to_tracker();
         self.rebuild_notifier();
         self.rebuild_recurring_schedule_runtime();
         self.sync_profile_edit_commit_side_effects(schedule_changed, goals_changed);
@@ -405,15 +399,7 @@ impl App {
             PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX => {
                 self.adjust_schedule_windows_collection(increase);
             }
-            PROFILE_EDIT_WAKATIME_PROJECT_INDEX | PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => {}
             _ => {}
         }
-    }
-
-    pub(super) fn sync_wakatime_metadata_to_tracker(&mut self) {
-        let project = self.wakatime_metadata.project.clone();
-        let language = self.wakatime_metadata.language.clone();
-        self.integrations
-            .set_wakatime_metadata(WakatimeHeartbeatMetadata { project, language });
     }
 }

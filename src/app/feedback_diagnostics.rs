@@ -57,11 +57,6 @@ impl App {
         }
     }
 
-    pub(super) fn sync_wakatime_tracking_for_state(&mut self) {
-        let focus_running = self.focus_running_for_current_state();
-        self.integrations.set_wakatime_tracking(focus_running);
-    }
-
     pub(super) fn set_block_error_from_result(&mut self, result: std::io::Result<()>) {
         match result {
             Ok(()) => self.block_error = None,
@@ -129,17 +124,11 @@ impl App {
         );
     }
 
-    /// Refreshes setup diagnostics and preserves the current WakaTime runtime state.
+    /// Refreshes setup diagnostics and the current blocking preview.
     pub(super) fn refresh_setup_diagnostics(&mut self) {
         let deprecation_warnings =
             crate::app::setup_deprecation_warnings(&self.config_deprecation_warnings, &self.stats);
-        let wakatime_runtime_state = self.wakatime_runtime_state();
-        self.setup_diagnostics = SetupDiagnostics::collect(
-            &self.blocker,
-            deprecation_warnings,
-            self.feature_flags.integrations.is_enabled("wakatime"),
-            wakatime_runtime_state,
-        );
+        self.setup_diagnostics = SetupDiagnostics::collect(&self.blocker, deprecation_warnings);
         self.refresh_blocking_preview();
     }
 

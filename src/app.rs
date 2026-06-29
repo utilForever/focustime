@@ -11,10 +11,8 @@ use crate::config::{
     FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig, MonthlyGoalConfig,
     NotificationConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
     RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
-    StatsRetentionConfig, ThemePreset, WakatimeMetadataConfig, WakatimeRuntimeConfig,
-    WeeklyGoalConfig,
+    StatsRetentionConfig, ThemePreset, WeeklyGoalConfig,
 };
-use crate::integration::IntegrationRuntime;
 use crate::notifications::PhaseNotifier;
 use crate::schedule::{
     RecurringWindow, WindowOccurrence, active_occurrence, compile_windows, next_occurrence_after,
@@ -33,10 +31,6 @@ use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
     DEFAULT_SHORT_BREAK_SECS, TimerPhase, TimerState, TimerStatus,
 };
-#[cfg(test)]
-use crate::wakatime::WakatimeTracker;
-use crate::wakatime::{WakatimeHeartbeatMetadata, WakatimeRuntimeOptions, WakatimeRuntimeState};
-
 mod cli_api;
 mod error;
 mod feedback_diagnostics;
@@ -70,8 +64,7 @@ pub(crate) use profile_edit::{
     PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
     PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
     PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
-    PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX,
-    PROFILE_EDIT_WAKATIME_PROJECT_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
+    PROFILE_EDIT_THEME_PRESET_INDEX, PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX,
     PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX,
     ProfileEditSnapshot,
 };
@@ -393,7 +386,6 @@ pub(crate) struct App {
     history_time_of_day_filter: Option<TimeOfDayBucket>,
     history_dashboard_cache: RefCell<HistoryDashboardCache>,
     pub(crate) phase_notification: Option<String>,
-    integrations: IntegrationRuntime,
     pub(crate) selected_profile: ProfileId,
     selected_theme_preset: ThemePreset,
     feature_flags: FeatureFlagsConfig,
@@ -421,8 +413,6 @@ pub(crate) struct App {
     monthly_goal: MonthlyGoalConfig,
     goal_carry_over: GoalCarryOverConfig,
     stats_retention: StatsRetentionConfig,
-    wakatime_metadata: WakatimeMetadataConfig,
-    wakatime_runtime: WakatimeRuntimeConfig,
     pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
     stats: FocusStats,
@@ -472,20 +462,6 @@ impl App {
         let monthly_goal = config.monthly_goal;
         let goal_carry_over = config.goal_carry_over;
         let stats_retention = config.stats_retention;
-        let wakatime_metadata = config.wakatime;
-        let wakatime_runtime = config.wakatime_runtime;
-        let (integrations, integration_load_warnings) = IntegrationRuntime::load(
-            &feature_flags.integrations.enabled,
-            WakatimeHeartbeatMetadata {
-                project: wakatime_metadata.project.clone(),
-                language: wakatime_metadata.language.clone(),
-            },
-            WakatimeRuntimeOptions {
-                retry_backoff_secs: wakatime_runtime.retry_backoff_secs.clone(),
-                queue_capacity: wakatime_runtime.queue_capacity,
-                queue_retry_delay_secs: wakatime_runtime.queue_retry_delay_secs,
-            },
-        );
         let blocklist_profiles = config.blocklist_profiles.clone();
         let active_blocklist_profile =
             blocklist_profile_index(&blocklist_profiles, &config.selected_blocklist_profile);
@@ -497,13 +473,7 @@ impl App {
                 shortcut_diagnostics.join(" ")
             )
         });
-        let integration_config_error = (!integration_load_warnings.is_empty()).then(|| {
-            format!(
-                "integration config adjusted: {}",
-                integration_load_warnings.join("; ")
-            )
-        });
-        let initial_config_error = [shortcut_config_error, integration_config_error]
+        let initial_config_error = [shortcut_config_error]
             .into_iter()
             .flatten()
             .collect::<Vec<_>>()
@@ -530,12 +500,8 @@ impl App {
             profile_spec.long_break_interval,
         );
         let blocker = SiteBlocker::new();
-        let setup_diagnostics = SetupDiagnostics::collect(
-            &blocker,
-            setup_deprecation_warnings.clone(),
-            feature_flags.integrations.is_enabled("wakatime"),
-            integrations.wakatime_runtime_state(),
-        );
+        let setup_diagnostics =
+            SetupDiagnostics::collect(&blocker, setup_deprecation_warnings.clone());
         let mut app = Self {
             timer,
             should_quit: false,
@@ -572,7 +538,6 @@ impl App {
             history_time_of_day_filter: None,
             history_dashboard_cache: RefCell::new(HistoryDashboardCache::default()),
             phase_notification: None,
-            integrations,
             selected_profile,
             selected_theme_preset,
             feature_flags,
@@ -600,8 +565,6 @@ impl App {
             monthly_goal,
             goal_carry_over,
             stats_retention,
-            wakatime_metadata,
-            wakatime_runtime,
             pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
             stats,
@@ -626,24 +589,13 @@ impl App {
         Self::from_config(config)
     }
 
-    /// Advance WakaTime tracking by `elapsed_secs` simulated seconds.
-    ///
-    /// Must be called **once per main-loop UI frame** (not once per catch-up
-    /// tick) so that a burst of back-filled timer ticks after a
-    /// suspend/resume cannot trigger multiple rapid heartbeats.
-    pub(crate) fn on_wakatime_elapsed(&mut self, elapsed_secs: u64) {
-        if self.timer.phase == TimerPhase::Focus && self.timer.status == TimerStatus::Running {
-            self.integrations.advance_wakatime(elapsed_secs);
-        }
-    }
+    pub(crate) fn on_runtime_elapsed(&mut self, _elapsed_secs: u64) {}
 
-    /// Applies any completed async WakaTime heartbeat results to tracker state.
     /// Intended to be called once per UI frame.
-    pub(crate) fn poll_wakatime_status(&mut self) {
+    pub(crate) fn poll_runtime_status(&mut self) {
         let now = Local::now();
         self.current_frame_now = now;
         self.sync_today_goal_snapshot();
-        self.integrations.poll_wakatime_events();
         self.sync_recurring_schedule(now);
     }
 
@@ -653,42 +605,6 @@ impl App {
 
     pub(crate) fn selected_theme_preset(&self) -> ThemePreset {
         self.selected_theme_preset
-    }
-
-    pub(crate) fn wakatime_runtime_state(&self) -> WakatimeRuntimeState {
-        self.integrations.wakatime_runtime_state()
-    }
-
-    pub(crate) fn wakatime_last_successful_heartbeat_epoch_secs(&self) -> Option<u64> {
-        self.integrations
-            .wakatime_last_successful_heartbeat_epoch_secs()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn replace_wakatime_tracker_for_tests(&mut self, tracker: WakatimeTracker) {
-        self.integrations
-            .replace_wakatime_tracker_for_tests(tracker);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn wakatime_tracker_mut_for_tests(&mut self) -> Option<&mut WakatimeTracker> {
-        self.integrations.wakatime_tracker_mut_for_tests()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn wakatime_heartbeat_metadata_for_tests(&self) -> WakatimeHeartbeatMetadata {
-        self.integrations
-            .wakatime_tracker_for_tests()
-            .expect("missing WakaTime tracker in test setup")
-            .heartbeat_metadata_for_tests()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn wakatime_runtime_options_for_tests(&self) -> WakatimeRuntimeOptions {
-        self.integrations
-            .wakatime_tracker_for_tests()
-            .expect("missing WakaTime tracker in test setup")
-            .runtime_options_for_tests()
     }
 
     pub(crate) fn current_task_label(&self) -> Option<&str> {
@@ -950,18 +866,12 @@ impl App {
                 bool_label(self.goal_carry_over.monthly).to_string()
             }
             PROFILE_EDIT_THEME_PRESET_INDEX => self.selected_theme_preset.label().to_string(),
-            PROFILE_EDIT_WAKATIME_PROJECT_INDEX => self.wakatime_metadata.project.clone(),
-            PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => self.wakatime_metadata.language.clone(),
             _ => String::new(),
         }
     }
 
     fn profile_edit_metadata_field_mut(&mut self) -> Option<&mut String> {
-        match self.profile_edit_field {
-            PROFILE_EDIT_WAKATIME_PROJECT_INDEX => Some(&mut self.wakatime_metadata.project),
-            PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX => Some(&mut self.wakatime_metadata.language),
-            _ => None,
-        }
+        None
     }
 
     pub(super) fn handle_profile_edit_metadata_input(&mut self, key: &KeyEvent) -> bool {
@@ -1066,8 +976,7 @@ impl App {
         self.timer.status == TimerStatus::Running
     }
 
-    /// Apply or remove blocks based on the current timer phase and status, and
-    /// synchronise WakaTime tracking state.
+    /// Apply or remove blocks based on the current timer phase and status.
     ///
     /// Blocks whenever the focus phase is active (Running or Paused) so that
     /// pausing the timer cannot be used to bypass the block.
@@ -1079,8 +988,6 @@ impl App {
             self.blocker.unblock()
         };
         self.set_block_error_from_result(block_result);
-        self.sync_wakatime_metadata_to_tracker();
-        self.sync_wakatime_tracking_for_state();
     }
 
     fn handle_quit_key(&mut self, key: &KeyEvent, esc_quits: bool) -> bool {

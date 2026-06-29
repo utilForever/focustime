@@ -1,4 +1,3 @@
-use chrono::{Local, TimeZone};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -15,7 +14,6 @@ use crate::app::{
 use crate::blocker::BlockingPreviewAction;
 use crate::config::ThemePreset;
 use crate::timer::{TimerPhase, TimerStatus};
-use crate::wakatime::WakatimeRuntimeState;
 
 mod history;
 #[cfg(test)]
@@ -39,22 +37,17 @@ use setup::render_setup_diagnostics;
 mod timer;
 use timer::{format_duration_label, render_timer};
 #[cfg(test)]
-use timer::{
-    timer_primary_hint, timer_secondary_hint, timer_session_status_lines_for_width,
-    wakatime_status_line,
-};
+use timer::{timer_primary_hint, timer_secondary_hint, timer_session_status_lines_for_width};
 
 const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
 const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
 const PROFILE_EDIT_GROUP_GOALS: [usize; 9] = [9, 10, 11, 12, 13, 14, 15, 16, 17];
-const PROFILE_EDIT_GROUP_WAKATIME: [usize; 2] = [18, 19];
-const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 6] = [20, 21, 22, 23, 24, 25];
-const PROFILE_EDIT_GROUP_APPEARANCE: [usize; 1] = [26];
-const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 6] = [
+const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 6] = [18, 19, 20, 21, 22, 23];
+const PROFILE_EDIT_GROUP_APPEARANCE: [usize; 1] = [24];
+const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
     ("Timer", &PROFILE_EDIT_GROUP_TIMER),
     ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
     ("Goals", &PROFILE_EDIT_GROUP_GOALS),
-    ("WakaTime", &PROFILE_EDIT_GROUP_WAKATIME),
     ("Schedule", &PROFILE_EDIT_GROUP_SCHEDULE),
     ("Appearance", &PROFILE_EDIT_GROUP_APPEARANCE),
 ];

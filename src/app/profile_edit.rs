@@ -1,10 +1,9 @@
 use crate::config::{
     AutoStartConfig, CustomProfileConfig, DailyGoalConfig, GoalCarryOverConfig, MonthlyGoalConfig,
-    NotificationConfig, RecurringScheduleConfig, ThemePreset, WakatimeMetadataConfig,
-    WeeklyGoalConfig,
+    NotificationConfig, RecurringScheduleConfig, ThemePreset, WeeklyGoalConfig,
 };
 
-pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 27] = [
+pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 25] = [
     "Focus",
     "Short Break",
     "Long Break",
@@ -23,8 +22,6 @@ pub(crate) const PROFILE_EDIT_FIELD_LABELS: [&str; 27] = [
     "Monthly goal minutes",
     "Monthly goal pomodoros",
     "Monthly goal carry-over",
-    "WakaTime project",
-    "WakaTime language",
     "Schedule window",
     "Schedule day",
     "Schedule day enabled",
@@ -42,15 +39,13 @@ pub(crate) const PROFILE_EDIT_WEEKLY_GOAL_CARRY_OVER_INDEX: usize = 14;
 pub(crate) const PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX: usize = 15;
 pub(crate) const PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX: usize = 16;
 pub(crate) const PROFILE_EDIT_MONTHLY_GOAL_CARRY_OVER_INDEX: usize = 17;
-pub(crate) const PROFILE_EDIT_WAKATIME_PROJECT_INDEX: usize = 18;
-pub(crate) const PROFILE_EDIT_WAKATIME_LANGUAGE_INDEX: usize = 19;
-pub(crate) const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 20;
-pub(crate) const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 21;
-pub(crate) const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 22;
-pub(crate) const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 23;
-pub(crate) const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 24;
-pub(crate) const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 25;
-pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 26;
+pub(crate) const PROFILE_EDIT_SCHEDULE_WINDOW_INDEX: usize = 18;
+pub(crate) const PROFILE_EDIT_SCHEDULE_DAY_INDEX: usize = 19;
+pub(crate) const PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX: usize = 20;
+pub(crate) const PROFILE_EDIT_SCHEDULE_START_INDEX: usize = 21;
+pub(crate) const PROFILE_EDIT_SCHEDULE_END_INDEX: usize = 22;
+pub(crate) const PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX: usize = 23;
+pub(crate) const PROFILE_EDIT_THEME_PRESET_INDEX: usize = 24;
 pub(crate) const CUSTOM_DURATION_STEP_SECS: u64 = 60;
 pub(crate) const DAILY_GOAL_MINUTES_STEP: u64 = 5;
 
@@ -66,5 +61,4 @@ pub(crate) struct ProfileEditSnapshot {
     pub(crate) monthly_goal: MonthlyGoalConfig,
     pub(crate) goal_carry_over: GoalCarryOverConfig,
     pub(crate) selected_theme_preset: ThemePreset,
-    pub(crate) wakatime_metadata: WakatimeMetadataConfig,
 }
