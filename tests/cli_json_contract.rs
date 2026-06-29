@@ -354,74 +354,15 @@ fn status_watch_json_sigint_exits_cleanly_without_partial_snapshot() {
 }
 
 #[test]
-fn backup_and_restore_json_round_trip_config_and_stats_files() {
-    let env = TestEnv::new("backup-restore-json");
-    let backup_dir = env.root.join("backup");
-    let backup_arg = format!("--backup={}", backup_dir.display());
-    let restore_arg = format!("--restore={}", backup_dir.display());
+fn export_json_creates_target_dirs_and_preserves_path_fields() {
+    let env = TestEnv::new("export-json");
 
     let set_goal_output = env.run(&["--goal=120,4", "--json"]);
     assert_eq!(set_goal_output.status.code(), Some(0));
     assert!(stderr_text(&set_goal_output).trim().is_empty());
 
-    let backup_output = env.run(&[backup_arg.as_str(), "--json"]);
-    assert_eq!(backup_output.status.code(), Some(0));
-    assert!(stderr_text(&backup_output).trim().is_empty());
-    let backup_payload: Value =
-        serde_json::from_slice(&backup_output.stdout).expect("stdout should be JSON");
-    assert!(backup_payload.get("backup_dir").is_some());
-    assert!(backup_payload.get("config_backup_path").is_some());
-    assert!(backup_payload.get("stats_backup_path").is_some());
-    assert!(backup_dir.join("config.toml").is_file());
-    assert!(backup_dir.join("stats.toml").is_file());
-
-    let mutate_goal_output = env.run(&["--goal=15,1", "--json"]);
-    assert_eq!(mutate_goal_output.status.code(), Some(0));
-    assert!(stderr_text(&mutate_goal_output).trim().is_empty());
-
-    let restore_output = env.run(&[restore_arg.as_str(), "--json"]);
-    assert_eq!(restore_output.status.code(), Some(0));
-    assert!(stderr_text(&restore_output).trim().is_empty());
-    let restore_payload: Value =
-        serde_json::from_slice(&restore_output.stdout).expect("stdout should be JSON");
-    assert!(restore_payload.get("restore_dir").is_some());
-    assert!(restore_payload.get("config_restored_path").is_some());
-    assert!(restore_payload.get("stats_restored_path").is_some());
-
-    let goal_output = env.run(&["--goal", "--json"]);
-    assert_eq!(goal_output.status.code(), Some(0));
-    let goal_payload: Value = serde_json::from_slice(&goal_output.stdout).unwrap();
-    assert_eq!(goal_payload["minutes_target"], 120);
-    assert_eq!(goal_payload["pomodoros_target"], 4);
-}
-
-#[test]
-fn artifact_workflows_json_create_target_dirs_and_preserve_path_fields() {
-    let env = TestEnv::new("artifact-workflows-json");
-
-    let set_goal_output = env.run(&["--goal=120,4", "--json"]);
-    assert_eq!(set_goal_output.status.code(), Some(0));
-    assert!(stderr_text(&set_goal_output).trim().is_empty());
-
-    let backup_dir = env.root.join("artifacts").join("backup").join("nested");
     let export_dir = env.root.join("artifacts").join("export").join("nested");
-    let backup_arg = format!("--backup={}", backup_dir.display());
     let export_arg = format!("--export={}", export_dir.display());
-
-    let backup_output = env.run(&[backup_arg.as_str(), "--json"]);
-    assert_eq!(backup_output.status.code(), Some(0));
-    assert!(stderr_text(&backup_output).trim().is_empty());
-    let backup_payload: Value =
-        serde_json::from_slice(&backup_output.stdout).expect("stdout should be JSON");
-    assert_eq!(path_value(&backup_payload, "backup_dir"), backup_dir);
-    assert_eq!(
-        path_value(&backup_payload, "config_backup_path"),
-        backup_dir.join("config.toml")
-    );
-    assert_eq!(
-        path_value(&backup_payload, "stats_backup_path"),
-        backup_dir.join("stats.toml")
-    );
 
     let export_output = env.run(&[export_arg.as_str(), "--json"]);
     assert_eq!(export_output.status.code(), Some(0));
@@ -440,33 +381,54 @@ fn artifact_workflows_json_create_target_dirs_and_preserve_path_fields() {
 }
 
 #[test]
-fn artifact_workflows_json_report_consistent_target_directory_errors() {
-    let env = TestEnv::new("artifact-target-errors");
+fn export_json_reports_target_directory_errors() {
+    let env = TestEnv::new("export-target-errors");
     let occupied_path = env.root.join("occupied");
     fs::write(&occupied_path, "not a directory").expect("failed to write occupied target");
-    let backup_arg = format!("--backup={}", occupied_path.display());
     let export_arg = format!("--export={}", occupied_path.display());
 
-    for (args, command_name) in [
-        ([backup_arg.as_str(), "--json"], "Backup"),
-        ([export_arg.as_str(), "--json"], "Export"),
-    ] {
-        let output = env.run(&args);
-        assert_eq!(output.status.code(), Some(1));
+    let output = env.run(&[export_arg.as_str(), "--json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr_text(&output).trim().is_empty());
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(payload["ok"], false);
+    assert_eq!(payload["error"]["kind"], "runtime");
+    let message = payload["error"]["message"]
+        .as_str()
+        .expect("runtime error message should be a string");
+    assert!(
+        message.contains("Export failed: could not create target directory"),
+        "runtime error should use export target wording: {message}"
+    );
+}
+
+#[test]
+fn backup_and_restore_json_commands_are_retired_with_guidance() {
+    let env = TestEnv::new("backup-restore-json-retired");
+    let artifact_dir = env.root.join("artifacts");
+    let backup_arg = format!("--backup={}", artifact_dir.display());
+    let restore_arg = format!("--restore={}", artifact_dir.display());
+
+    for flag in [backup_arg.as_str(), restore_arg.as_str()] {
+        let output = env.run(&[flag, "--json"]);
+        assert_eq!(output.status.code(), Some(2));
         assert!(stderr_text(&output).trim().is_empty());
+
         let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
         assert_eq!(payload["ok"], false);
-        assert_eq!(payload["error"]["kind"], "runtime");
-        let message = payload["error"]["message"]
-            .as_str()
-            .expect("runtime error message should be a string");
+        assert_eq!(payload["error"]["kind"], "usage");
+        assert_eq!(payload["error"]["exit_code"], 2);
         assert!(
-            message.contains(&format!(
-                "{command_name} failed: could not create target directory"
-            )),
-            "runtime error should use shared artifact target wording: {message}"
+            payload["error"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("Unknown option"))
+        );
+        assert_eq!(
+            payload["error"]["hint"],
+            "Copy config.toml and stats.toml manually for file recovery, or use `--export` for supported stats extraction."
         );
     }
+    assert!(!artifact_dir.exists());
 }
 
 #[test]
@@ -604,58 +566,6 @@ fn status_json_uses_canonical_stats_without_legacy_fallback() {
     let fallback_payload: Value =
         serde_json::from_slice(&fallback_status.stdout).expect("stdout should be JSON");
     assert_eq!(fallback_payload["today"]["pomodoros_completed"], 0);
-}
-
-#[test]
-fn backup_json_copies_raw_files_even_when_malformed() {
-    let env = TestEnv::new("backup-raw-malformed");
-    let app_data_dir = env.app_data_dir();
-    fs::create_dir_all(&app_data_dir).expect("failed to create app data directory");
-    let seed_output = env.run(&["--task", "Docs", "--json"]);
-    assert_eq!(seed_output.status.code(), Some(0));
-    assert!(stderr_text(&seed_output).trim().is_empty());
-
-    let malformed_config = "this is not valid toml !!!\n";
-    fs::write(app_data_dir.join("config.toml"), malformed_config).expect("failed to write config");
-
-    let backup_dir = env.root.join("backup");
-    let backup_arg = format!("--backup={}", backup_dir.display());
-    let output = env.run(&[backup_arg.as_str(), "--json"]);
-    assert_eq!(output.status.code(), Some(0));
-    assert!(stderr_text(&output).trim().is_empty());
-
-    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert!(payload.get("backup_dir").is_some());
-    assert_eq!(
-        fs::read_to_string(backup_dir.join("config.toml")).unwrap(),
-        malformed_config
-    );
-    assert!(backup_dir.join("stats.toml").is_file());
-}
-
-#[test]
-fn restore_json_fails_when_backup_is_missing_stats_file() {
-    let env = TestEnv::new("restore-missing-stats");
-    let backup_dir = env.root.join("broken-backup");
-    fs::create_dir_all(&backup_dir).expect("failed to create backup directory");
-    fs::write(backup_dir.join("config.toml"), "focus_secs = 1500\n")
-        .expect("failed to write config backup file");
-    let restore_arg = format!("--restore={}", backup_dir.display());
-
-    let output = env.run(&[restore_arg.as_str(), "--json"]);
-    assert_eq!(output.status.code(), Some(1));
-    assert!(stderr_text(&output).trim().is_empty());
-
-    let payload: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(payload["ok"], false);
-    assert_eq!(payload["error"]["kind"], "runtime");
-    assert_eq!(payload["error"]["exit_code"], 1);
-    assert!(
-        payload["error"]["message"]
-            .as_str()
-            .expect("error message should be a string")
-            .contains("missing `stats.toml`")
-    );
 }
 
 #[test]

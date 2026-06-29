@@ -50,8 +50,6 @@ pub(super) fn parse_global_tokens(tokens: &[ParsedToken]) -> Result<(bool, Outpu
             | ParsedToken::Schedule
             | ParsedToken::ScheduleSet(_)
             | ParsedToken::Diagnostics
-            | ParsedToken::Backup(_)
-            | ParsedToken::Restore(_)
             | ParsedToken::Export(_)
             | ParsedToken::HistoryDashboard
             | ParsedToken::BlocklistSites
@@ -153,6 +151,10 @@ fn removed_option_replacement_guidance(option: &str) -> Option<RemovedOptionGuid
             summary: "Break-glass commands were removed.",
             replacement: "Use normal timer controls (`--pause`, `--resume`, `--stop`, `--next`) or manage blocked sites with blocklist commands.",
         }),
+        "--backup" | "--restore" => Some(RemovedOptionGuidance {
+            summary: "Backup and restore commands were removed.",
+            replacement: "Copy config.toml and stats.toml manually for file recovery, or use `--export` for supported stats extraction.",
+        }),
         _ => None,
     }
 }
@@ -191,12 +193,6 @@ pub(super) fn parse_primary_command(
             }
             ParsedToken::Diagnostics => {
                 set_primary_command(&mut primary, PrimaryCommand::Diagnostics)?
-            }
-            ParsedToken::Backup(dir) => {
-                set_primary_command(&mut primary, PrimaryCommand::Backup(dir.clone()))?
-            }
-            ParsedToken::Restore(dir) => {
-                set_primary_command(&mut primary, PrimaryCommand::Restore(dir.clone()))?
             }
             ParsedToken::Export(dir) => {
                 set_primary_command(&mut primary, PrimaryCommand::Export(dir.clone()))?
@@ -311,14 +307,6 @@ pub(super) fn finalize_cli_action(
             },
             output,
         })),
-        Some(PrimaryCommand::Backup(dir)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Backup { dir },
-            output,
-        })),
-        Some(PrimaryCommand::Restore(dir)) => Ok(CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Restore { dir },
-            output,
-        })),
         Some(PrimaryCommand::Export(dir)) => Ok(CliAction::RunCommand(CliCommand {
             kind: CommandKind::Export { dir },
             output,
@@ -392,8 +380,6 @@ fn primary_name(command: &PrimaryCommand) -> &'static str {
         PrimaryCommand::ScheduleSet(_) => "--schedule-set",
         PrimaryCommand::Diagnostics => "--diagnostics",
         PrimaryCommand::Status => "--status",
-        PrimaryCommand::Backup(_) => "--backup",
-        PrimaryCommand::Restore(_) => "--restore",
         PrimaryCommand::Export(_) => "--export",
         PrimaryCommand::HistoryDashboard => "--history-dashboard",
         PrimaryCommand::BlocklistSites => "--blocklist-sites",

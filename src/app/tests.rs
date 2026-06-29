@@ -128,8 +128,8 @@ fn legacy_stats_path_migration_warning_includes_actionable_guidance() {
 
     assert!(warning.contains("Legacy stats path"));
     assert!(warning.contains("canonical stats"));
-    assert!(warning.contains("focustime --backup"));
-    assert!(warning.contains("focustime --restore"));
+    assert!(warning.contains("Copy"));
+    assert!(warning.contains("focustime --export"));
 }
 
 /// Verifies startup applies the selected built-in profile settings.

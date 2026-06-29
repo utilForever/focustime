@@ -31,10 +31,7 @@ pub(super) use blocklists::{
 #[cfg(test)]
 pub(super) use dashboard::apply_history_dashboard_command;
 use dashboard::execute_history_dashboard_command;
-use data::{
-    execute_backup_command, execute_export_command, execute_restore_command, stats_load_options,
-    stats_save_options,
-};
+use data::{execute_export_command, stats_load_options, stats_save_options};
 use diagnostics::execute_diagnostics_command;
 use status::execute_status_command;
 #[cfg(test)]
@@ -71,12 +68,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
             watch_interval_secs,
         } => execute_status_command(cli_command.output, watch_interval_secs)
             .map_err(UserMessage::from),
-        CommandKind::Backup { dir } => {
-            execute_backup_command(dir, cli_command.output).map_err(UserMessage::from)
-        }
-        CommandKind::Restore { dir } => {
-            execute_restore_command(dir, cli_command.output).map_err(UserMessage::from)
-        }
         CommandKind::Export { dir } => {
             execute_export_command(dir, cli_command.output).map_err(UserMessage::from)
         }
@@ -106,8 +97,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Schedule { .. } => Some("schedule"),
         CommandKind::Diagnostics => Some("diagnostics"),
         CommandKind::Status { .. } => Some("status"),
-        CommandKind::Backup { .. } => Some("backup"),
-        CommandKind::Restore { .. } => Some("restore"),
         CommandKind::Export { .. } => Some("export"),
         CommandKind::BlocklistSites { .. } => Some("blocklist-sites"),
         CommandKind::HistoryDashboard { .. } => Some("history-dashboard"),
@@ -433,9 +422,6 @@ mod tests {
     fn command_usage_records_via_app_matches_expected_commands() {
         assert!(command_usage_records_via_app(&CommandKind::Start));
         assert!(command_usage_records_via_app(&CommandKind::Diagnostics));
-        assert!(!command_usage_records_via_app(&CommandKind::Backup {
-            dir: None
-        }));
         assert!(!command_usage_records_via_app(&CommandKind::Status {
             watch_interval_secs: None,
         }));

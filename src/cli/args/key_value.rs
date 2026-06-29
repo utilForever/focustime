@@ -5,7 +5,7 @@ use crate::cli::{
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 13] = [
+    let parsers: [KeyValueParser; 11] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_theme_key_value_arg,
@@ -13,8 +13,6 @@ pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedT
         parse_strict_key_value_arg,
         parse_schedule_set_key_value_arg,
         parse_watch_key_value_arg,
-        parse_backup_key_value_arg,
-        parse_restore_key_value_arg,
         parse_export_key_value_arg,
         parse_blocklist_site_add_key_value_arg,
         parse_blocklist_site_edit_key_value_arg,
@@ -88,24 +86,6 @@ fn parse_export_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> 
         "--export=",
         ParsedToken::Export,
         "`--export=` requires a target directory.",
-    )
-}
-
-fn parse_backup_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    parse_artifact_key_value_arg(
-        arg,
-        "--backup=",
-        ParsedToken::Backup,
-        "`--backup=` requires a target directory.",
-    )
-}
-
-fn parse_restore_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    parse_artifact_key_value_arg(
-        arg,
-        "--restore=",
-        ParsedToken::Restore,
-        "`--restore=` requires a source directory.",
     )
 }
 

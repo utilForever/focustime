@@ -760,83 +760,23 @@ fn parse_export_accepts_optional_directory() {
 }
 
 #[test]
-fn parse_backup_accepts_optional_directory() {
-    let parsed = parse(&["--backup", "reports"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Backup {
-                dir: Some(PathBuf::from("reports"))
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_backup_without_value_uses_default_directory() {
-    let parsed = parse(&["--backup"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Backup { dir: None },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_backup_with_equals_accepts_directory() {
-    let parsed = parse(&["--backup=reports"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Backup {
-                dir: Some(PathBuf::from("reports"))
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_restore_accepts_optional_directory() {
-    let parsed = parse(&["--restore", "reports"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Restore {
-                dir: Some(PathBuf::from("reports"))
-            },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_restore_without_value_uses_default_directory() {
-    let parsed = parse(&["--restore"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Restore { dir: None },
-            output: OutputMode::Text
-        })
-    );
-}
-
-#[test]
-fn parse_restore_with_equals_accepts_directory() {
-    let parsed = parse(&["--restore=reports"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::Restore {
-                dir: Some(PathBuf::from("reports"))
-            },
-            output: OutputMode::Text
-        })
-    );
+fn parse_backup_and_restore_commands_are_removed_with_guidance() {
+    for flag in [
+        "--backup",
+        "--backup=reports",
+        "--restore",
+        "--restore=reports",
+    ] {
+        let error = parse_with_contract(&[flag]).unwrap_err();
+        assert_eq!(error.exit_code(), EXIT_CODE_USAGE_ERROR);
+        assert!(error.message.contains(&format!("Unknown option `{flag}`.")));
+        assert_eq!(
+            error.hint.as_deref(),
+            Some(
+                "Copy config.toml and stats.toml manually for file recovery, or use `--export` for supported stats extraction."
+            )
+        );
+    }
 }
 
 #[test]
@@ -1066,21 +1006,9 @@ fn classify_key_value_arg_accepts_export_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_backup_equals_value() {
-    let parsed = classify_key_value_arg("--backup=reports").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::Backup(Some(PathBuf::from("reports"))))
-    );
-}
-
-#[test]
-fn classify_key_value_arg_accepts_restore_equals_value() {
-    let parsed = classify_key_value_arg("--restore=reports").unwrap();
-    assert_eq!(
-        parsed,
-        Some(ParsedToken::Restore(Some(PathBuf::from("reports"))))
-    );
+fn classify_key_value_arg_ignores_backup_and_restore_equals_values() {
+    assert_eq!(classify_key_value_arg("--backup=reports").unwrap(), None);
+    assert_eq!(classify_key_value_arg("--restore=reports").unwrap(), None);
 }
 
 #[test]
@@ -1178,18 +1106,6 @@ fn classify_key_value_arg_ignores_retired_history_dashboard_customization() {
 fn classify_key_value_arg_rejects_empty_export_equals_value() {
     let error = classify_key_value_arg("--export=").unwrap_err();
     assert!(error.contains("`--export=` requires a target directory."));
-}
-
-#[test]
-fn classify_key_value_arg_rejects_empty_backup_equals_value() {
-    let error = classify_key_value_arg("--backup=").unwrap_err();
-    assert!(error.contains("`--backup=` requires a target directory."));
-}
-
-#[test]
-fn classify_key_value_arg_rejects_empty_restore_equals_value() {
-    let error = classify_key_value_arg("--restore=").unwrap_err();
-    assert!(error.contains("`--restore=` requires a source directory."));
 }
 
 #[test]
@@ -1402,18 +1318,6 @@ fn parse_rejects_multiple_primary_commands() {
 }
 
 #[test]
-fn parse_rejects_multiple_primary_commands_for_backup_and_restore() {
-    let error = parse(&["--backup", "--restore"]).unwrap_err();
-    assert!(error.contains("Multiple primary commands"));
-}
-
-#[test]
-fn parse_rejects_multiple_primary_commands_for_backup_and_export() {
-    let error = parse(&["--backup", "--export"]).unwrap_err();
-    assert!(error.contains("Multiple primary commands"));
-}
-
-#[test]
 fn parse_rejects_unknown_option() {
     let error = parse(&["--unknown"]).unwrap_err();
     assert!(error.contains("Unknown option"));
@@ -1480,21 +1384,18 @@ fn parse_rejects_removed_sync_backup_option() {
 }
 
 #[test]
+fn parse_rejects_removed_backup_restore_options_before_other_commands() {
+    let error = parse(&["--backup", "--export"]).unwrap_err();
+    assert!(error.contains("Unknown option `--backup`"));
+
+    let error = parse(&["--restore", "--export"]).unwrap_err();
+    assert!(error.contains("Unknown option `--restore`"));
+}
+
+#[test]
 fn parse_rejects_removed_sync_passphrase_option() {
     let error = parse(&["--sync-passphrase=secret"]).unwrap_err();
     assert!(error.contains("Unknown option `--sync-passphrase=secret`"));
-}
-
-#[test]
-fn parse_rejects_backup_with_blank_positional_value() {
-    let error = parse(&["--backup", "   "]).unwrap_err();
-    assert!(error.contains("`--backup` requires a target directory."));
-}
-
-#[test]
-fn parse_rejects_restore_with_blank_positional_value() {
-    let error = parse(&["--restore", "   "]).unwrap_err();
-    assert!(error.contains("`--restore` requires a source directory."));
 }
 
 #[test]

@@ -1205,7 +1205,7 @@ pub(super) fn format_legacy_stats_path_migration_warning(
     legacy_path: &std::path::Path,
 ) -> String {
     format!(
-        "Legacy stats path `{}` is still in use while canonical stats `{}` are missing. Copy `{}` to `{}` (you can use `focustime --backup` and `focustime --restore` to assist).",
+        "Legacy stats path `{}` is still in use while canonical stats `{}` are missing. Copy `{}` to `{}` manually, or use `focustime --export` for supported stats extraction.",
         legacy_path.display(),
         canonical_path.display(),
         legacy_path.display(),
