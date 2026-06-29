@@ -199,12 +199,12 @@ elapsed focus time, and updating heartbeat metadata.
 
 v0.17.0 scope decision (#564): keep WakaTime as an optional heartbeat-only
 integration instead of removing it from the product. Follow-up cleanup should
-make heartbeat delivery fire-and-forget: keep API-key detection, global
+keep heartbeat delivery non-blocking in the main flow: keep API-key detection, global
 `[wakatime]` metadata, focus-session heartbeat submission, and a simple
-configured/sent/error status, while removing durable queue/replay behavior,
-runtime retry/backoff tuning, and diagnostics that only exist for the richer
-queueing runtime. Full WakaTime removal is deferred unless a later roadmap issue
-changes product scope.
+configured/sent/error status, while reserving removal of durable queue/replay
+behavior, runtime retry/backoff tuning, and diagnostics that only exist for the
+richer queueing runtime for follow-up cleanup. Full WakaTime removal is deferred
+unless a later roadmap issue changes product scope.
 
 Decision comparison:
 
@@ -285,10 +285,11 @@ Roadmap direction:
   supported WakaTime integration runtime calls for heartbeat polling,
   focus-running sync, elapsed focus tracking, and metadata updates.
 - For v0.17.0, keep WakaTime in product positioning as optional heartbeat
-  tracking, but simplify the implementation to fire-and-forget heartbeat
-  submission. Follow-up cleanup issues should remove or collapse
-  `[wakatime_runtime]`, durable queue snapshots, replay/backoff diagnostics, and
-  dependency ownership notes that only apply to the current queueing runtime.
+  tracking, keep heartbeat delivery non-blocking in the main flow, and reserve
+  queue/runtime simplification for follow-up cleanup. Follow-up cleanup issues
+  should remove or collapse `[wakatime_runtime]`, durable queue snapshots,
+  replay/backoff diagnostics, and dependency ownership notes that only apply to
+  the current queueing runtime.
 
 Early deprecation notices:
 
@@ -317,7 +318,7 @@ Early deprecation notices:
 | Task-specific cumulative goals (`--task-goal`, selected task goal status/history/export fields) | Removed; use global daily, weekly, and monthly goals with `--goal`, `--goal-weekly`, and `--goal-monthly`; task labels remain available for grouping. |
 | Session template workflows (`--session-template*` commands and session-template config/runtime persistence) | Removed; select task, profile, schedule, and blocklist settings directly through their dedicated controls. |
 | Per-task WakaTime metadata mappings (`[[wakatime.task_mappings]]`) | Removed; configure one global `[wakatime]` project/language pair for heartbeat metadata. |
-| Rich WakaTime queue/replay runtime (`[wakatime_runtime]`, durable queue snapshots, retry/backoff diagnostics) | v0.17.0 cleanup target; keep optional global WakaTime heartbeat submission, but make delivery fire-and-forget and remove queue-specific configuration/status surfaces in follow-up issues. |
+| Rich WakaTime queue/replay runtime (`[wakatime_runtime]`, durable queue snapshots, retry/backoff diagnostics) | v0.17.0 cleanup target; keep optional global WakaTime heartbeat submission non-blocking in the main flow and remove queue-specific configuration/status surfaces in follow-up issues. |
 | Daemon local API lifecycle (`--daemon-start`, `--daemon-status`, `--daemon-stop`, `--daemon-port`, `/v1/*`) | Removed; use CLI timer/session/workflow commands (`--start`, `--pause`, `--resume`, `--stop`, `--next`, `--task`) for automation, or the TUI for interactive focus sessions. |
 | Duplicate schedule/session start entry points | Select the task/profile/blocklist/schedule directly, then start focus through the unified timer flow with `--start` or the TUI. |
 
