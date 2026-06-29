@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Breaking - WakaTime integration retirement (#565):** removed WakaTime heartbeat tracking, config/runtime diagnostics, profile-editor metadata fields, and direct HTTP/Basic-auth dependency ownership so focus sessions stay local to timer, blocking, goals, recovery, history, and exports.
+- **WakaTime config cleanup (#566):** migration now removes retired `[wakatime]` and `[wakatime_runtime]` sections, and config persistence keeps heartbeat metadata and queue/retry tuning out of current writes.
 
 ## [0.16.4] - 2026-06-28
 

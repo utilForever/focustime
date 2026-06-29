@@ -94,6 +94,16 @@ pub(super) fn migrate_config_toml_to_current_detailed(
                 .to_string(),
         });
     }
+    let wakatime_input = config_toml.clone();
+    remove_retired_wakatime_config(&mut config_toml);
+    if wakatime_input != config_toml {
+        steps.push(ConfigMigrationStepReport {
+            from_schema_version,
+            to_schema_version: from_schema_version,
+            summary: "Remove retired WakaTime heartbeat config and runtime tuning sections."
+                .to_string(),
+        });
+    }
     let blocklist_category_input = config_toml.clone();
     migrate_blocklist_categories_to_profile_rules(&mut config_toml);
     if blocklist_category_input != config_toml {
@@ -176,6 +186,15 @@ pub(super) fn remove_session_templates(config_toml: &mut toml::Value) {
     };
     table.remove("session_templates");
     table.remove("selected_session_template");
+}
+
+/// Removes retired WakaTime heartbeat config and runtime tuning sections.
+pub(super) fn remove_retired_wakatime_config(config_toml: &mut toml::Value) {
+    let Some(table) = config_toml.as_table_mut() else {
+        return;
+    };
+    table.remove("wakatime");
+    table.remove("wakatime_runtime");
 }
 
 fn remove_exception_dates_from_named_schedule(
