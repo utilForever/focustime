@@ -510,29 +510,24 @@ fn parse_strict_with_equals_sets_state() {
 }
 
 #[test]
-fn parse_goal_carry_without_value_reads_current_state() {
-    let parsed = parse(&["--goal-carry"]).unwrap();
-    assert_eq!(
-        parsed,
-        CliAction::RunCommand(CliCommand {
-            kind: CommandKind::GoalCarry { enabled: None },
-            output: OutputMode::Text
-        })
-    );
+fn parse_rejects_goal_carry_as_removed() {
+    let error = parse(&["--goal-carry"]).unwrap_err();
+    assert!(error.contains("Unknown option `--goal-carry`"));
+    assert!(error.contains("Goal carry-over commands were removed."));
 }
 
 #[test]
 fn parse_rejects_goal_carry_weekly_with_equals_value() {
     let error = parse(&["--goal-carry-weekly=on"]).unwrap_err();
     assert!(error.contains("Unknown option `--goal-carry-weekly=on`"));
-    assert!(error.contains("Weekly and monthly goal carry-over commands were removed."));
+    assert!(error.contains("Goal carry-over commands were removed."));
 }
 
 #[test]
 fn parse_rejects_goal_carry_monthly_with_value() {
     let error = parse(&["--goal-carry-monthly", "off"]).unwrap_err();
     assert!(error.contains("Unknown option `--goal-carry-monthly`"));
-    assert!(error.contains("Weekly and monthly goal carry-over commands were removed."));
+    assert!(error.contains("Goal carry-over commands were removed."));
 }
 
 #[test]
@@ -1123,9 +1118,8 @@ fn classify_key_value_arg_accepts_strict_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_accepts_goal_carry_equals_value() {
-    let parsed = classify_key_value_arg("--goal-carry=on").unwrap();
-    assert_eq!(parsed, Some(ParsedToken::GoalCarry(Some(true))));
+fn classify_key_value_arg_ignores_goal_carry_equals_value() {
+    assert_eq!(classify_key_value_arg("--goal-carry=on").unwrap(), None);
 }
 
 #[test]
@@ -1221,9 +1215,8 @@ fn classify_key_value_arg_rejects_empty_strict_equals_value() {
 }
 
 #[test]
-fn classify_key_value_arg_rejects_empty_goal_carry_equals_value() {
-    let error = classify_key_value_arg("--goal-carry=").unwrap_err();
-    assert!(error.contains("`--goal-carry=` requires `on` or `off`"));
+fn classify_key_value_arg_ignores_empty_goal_carry_equals_value() {
+    assert_eq!(classify_key_value_arg("--goal-carry=").unwrap(), None);
 }
 
 #[test]
@@ -1342,7 +1335,8 @@ fn parse_rejects_strict_with_unknown_value() {
 #[test]
 fn parse_rejects_goal_carry_with_unknown_value() {
     let error = parse(&["--goal-carry=enabled"]).unwrap_err();
-    assert!(error.contains("Invalid goal carry-over"));
+    assert!(error.contains("Unknown option `--goal-carry=enabled`"));
+    assert!(error.contains("Goal carry-over commands were removed."));
 }
 
 #[test]
@@ -2130,7 +2124,7 @@ fn build_status_output_does_not_mirror_task_label_metadata() {
 }
 
 #[test]
-fn build_status_output_applies_carry_over_to_goal_targets_when_enabled() {
+fn build_status_output_uses_current_daily_target_without_previous_deficit() {
     let mut stats = FocusStats::default();
     let today = current_day_key();
     let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
@@ -2157,22 +2151,16 @@ fn build_status_output_applies_carry_over_to_goal_targets_when_enabled() {
             minutes: 60,
             pomodoros: 2,
         },
-        goal_carry_over: crate::config::GoalCarryOverConfig {
-            daily: true,
-            weekly: false,
-            monthly: false,
-        },
         ..AppConfig::default()
     };
 
     let output = build_status_output(&config, &stats);
-    assert_eq!(output.goal.minutes_target, 80);
-    assert_eq!(output.goal.pomodoros_target, 4);
-    assert!(output.goal.carry_over);
+    assert_eq!(output.goal.minutes_target, 60);
+    assert_eq!(output.goal.pomodoros_target, 2);
 }
 
 #[test]
-fn build_status_output_daily_carry_over_does_not_reapply_older_day_debt() {
+fn build_status_output_uses_stored_daily_goal_for_today() {
     let mut stats = FocusStats::default();
     let today = current_day_key();
     let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
@@ -2214,20 +2202,16 @@ fn build_status_output_daily_carry_over_does_not_reapply_older_day_debt() {
             minutes: 60,
             pomodoros: 2,
         },
-        goal_carry_over: crate::config::GoalCarryOverConfig {
-            daily: true,
-            ..crate::config::GoalCarryOverConfig::default()
-        },
         ..AppConfig::default()
     };
 
     let output = build_status_output(&config, &stats);
-    assert_eq!(output.goal.minutes_target, 120);
-    assert_eq!(output.goal.pomodoros_target, 4);
+    assert_eq!(output.goal.minutes_target, 60);
+    assert_eq!(output.goal.pomodoros_target, 2);
 }
 
 #[test]
-fn build_status_output_daily_carry_over_skips_when_previous_day_goal_is_absent() {
+fn build_status_output_ignores_previous_day_without_goal_snapshot() {
     let mut stats = FocusStats::default();
     let today = current_day_key();
     let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
@@ -2248,92 +2232,12 @@ fn build_status_output_daily_carry_over_skips_when_previous_day_goal_is_absent()
             minutes: 60,
             pomodoros: 2,
         },
-        goal_carry_over: crate::config::GoalCarryOverConfig {
-            daily: true,
-            ..crate::config::GoalCarryOverConfig::default()
-        },
         ..AppConfig::default()
     };
 
     let output = build_status_output(&config, &stats);
     assert_eq!(output.goal.minutes_target, 60);
     assert_eq!(output.goal.pomodoros_target, 2);
-}
-
-#[cfg(any())]
-#[test]
-fn build_status_output_applies_weekly_carry_over_to_goal_targets_when_enabled() {
-    let mut stats = FocusStats::default();
-    let today = current_day_key();
-    let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
-        .expect("current day key should parse as a date");
-    let previous_week_day = today_date - Duration::days(7);
-    let previous_week_key = previous_week_day.format("%Y-%m-%d").to_string();
-    let goal = DailyGoalSnapshot {
-        minutes: 60,
-        pomodoros: 2,
-    };
-    stats.sync_weekly_goal_snapshot(
-        previous_week_day,
-        DailyGoalSnapshot {
-            minutes: 50,
-            pomodoros: 2,
-        },
-    );
-    stats.record_focus_elapsed(&previous_week_key, 20 * 60, goal);
-    stats.record_completed_pomodoro(&previous_week_key, goal);
-    stats.record_focus_elapsed(&today, 40 * 60, goal);
-    stats.record_completed_pomodoro(&today, goal);
-
-    let config = AppConfig {
-        weekly_goal: WeeklyGoalConfig {
-            minutes: 100,
-            pomodoros: 3,
-        },
-        goal_carry_over: crate::config::GoalCarryOverConfig {
-            weekly: true,
-            ..crate::config::GoalCarryOverConfig::default()
-        },
-        ..AppConfig::default()
-    };
-
-    let output = build_status_output(&config, &stats);
-    assert_eq!(output.weekly_goal.minutes_target, 130);
-    assert_eq!(output.weekly_goal.pomodoros_target, 4);
-    assert!(output.weekly_goal.carry_over);
-}
-
-#[cfg(any())]
-#[test]
-fn build_status_output_weekly_carry_over_skips_when_previous_period_has_no_snapshot() {
-    let mut stats = FocusStats::default();
-    let today = current_day_key();
-    let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
-        .expect("current day key should parse as a date");
-    let previous_week_day = today_date - Duration::days(7);
-    let previous_week_key = previous_week_day.format("%Y-%m-%d").to_string();
-    let goal = DailyGoalSnapshot {
-        minutes: 60,
-        pomodoros: 2,
-    };
-    stats.record_focus_elapsed(&previous_week_key, 70 * 60, goal);
-    stats.record_completed_pomodoro(&previous_week_key, goal);
-
-    let config = AppConfig {
-        weekly_goal: WeeklyGoalConfig {
-            minutes: 100,
-            pomodoros: 3,
-        },
-        goal_carry_over: crate::config::GoalCarryOverConfig {
-            weekly: true,
-            ..crate::config::GoalCarryOverConfig::default()
-        },
-        ..AppConfig::default()
-    };
-
-    let output = build_status_output(&config, &stats);
-    assert_eq!(output.weekly_goal.minutes_target, 100);
-    assert_eq!(output.weekly_goal.pomodoros_target, 3);
 }
 
 #[cfg(any())]
@@ -2421,52 +2325,6 @@ fn build_status_output_weekly_allocation_uses_equal_split_fallback_without_sched
         output.weekly_allocation.allocatable_days,
         output.weekly_allocation.remaining_days_in_week
     );
-}
-
-#[cfg(any())]
-#[test]
-fn build_status_output_monthly_carry_over_uses_previous_snapshot_after_goal_change() {
-    let mut stats = FocusStats::default();
-    let today = current_day_key();
-    let today_date = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
-        .expect("current day key should parse as a date");
-    let month_start = NaiveDate::from_ymd_opt(today_date.year(), today_date.month(), 1)
-        .expect("month start should be representable");
-    let previous_month_day = month_start
-        .pred_opt()
-        .expect("previous month day should be representable");
-    let previous_month_key = previous_month_day.format("%Y-%m-%d").to_string();
-    let goal = DailyGoalSnapshot {
-        minutes: 60,
-        pomodoros: 2,
-    };
-    stats.sync_monthly_goal_snapshot(
-        previous_month_day,
-        DailyGoalSnapshot {
-            minutes: 200,
-            pomodoros: 6,
-        },
-    );
-    stats.record_focus_elapsed(&previous_month_key, 120 * 60, goal);
-    for _ in 0..4 {
-        stats.record_completed_pomodoro(&previous_month_key, goal);
-    }
-
-    let config = AppConfig {
-        monthly_goal: MonthlyGoalConfig {
-            minutes: 300,
-            pomodoros: 10,
-        },
-        goal_carry_over: crate::config::GoalCarryOverConfig {
-            monthly: true,
-            ..crate::config::GoalCarryOverConfig::default()
-        },
-        ..AppConfig::default()
-    };
-
-    let output = build_status_output(&config, &stats);
-    assert_eq!(output.monthly_goal.minutes_target, 380);
-    assert_eq!(output.monthly_goal.pomodoros_target, 12);
 }
 
 #[test]

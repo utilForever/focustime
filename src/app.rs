@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::BTreeSet};
 
-use chrono::{DateTime, Datelike, Local, NaiveDate};
+use chrono::{DateTime, Local, NaiveDate};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::blocker::{
@@ -8,8 +8,8 @@ use crate::blocker::{
 };
 use crate::config::{
     AppConfig, AutoStartConfig, BlocklistProfileConfig, CustomProfileConfig, DailyGoalConfig,
-    FeatureFlagsConfig, GoalCarryOverConfig, HistoryDashboardConfig, MonthlyGoalConfig,
-    NotificationConfig, ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
+    FeatureFlagsConfig, HistoryDashboardConfig, MonthlyGoalConfig, NotificationConfig,
+    ProfileAutomationConfig, ProfileAutomationSettingsConfig, ProfileId,
     RecurringFocusWindowConfig, RecurringScheduleConfig, ScheduleRuntimeConfig,
     StatsRetentionConfig, ThemePreset, WeeklyGoalConfig,
 };
@@ -23,8 +23,7 @@ use crate::stats::{
     FocusSessionMetadata, FocusStats, GoalStreak, MonthlyHeatmap, MonthlyStats, ProfileBucket,
     ProfileEffectiveness, ProfileTotals, SessionInterruptionEvent, SessionInterruptionReason,
     SessionStats, StatsGrowthSummary, StatsRetentionPruneResult, TaskTotals, TaskTrend,
-    TimeOfDayBucket, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, carry_over_goal_target,
-    current_day_key,
+    TimeOfDayBucket, WeeklyConsistency, WeeklyFocusScore, WeeklyStats, current_day_key,
 };
 use crate::task_labels::{normalize_task_label, task_label_index};
 use crate::timer::{
@@ -56,12 +55,12 @@ use history_dashboard_cache::HistoryDashboardCache;
 pub(crate) use history_dashboard_cache::HistoryDashboardCacheStats;
 pub(crate) use history_dashboard_cache::HistoryDashboardViewData;
 pub(crate) use profile_edit::{
-    CUSTOM_DURATION_STEP_SECS, DAILY_GOAL_MINUTES_STEP, PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX,
-    PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX, PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX,
-    PROFILE_EDIT_FIELD_LABELS, PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX,
-    PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX, PROFILE_EDIT_SCHEDULE_DAY_INDEX,
-    PROFILE_EDIT_SCHEDULE_END_INDEX, PROFILE_EDIT_SCHEDULE_START_INDEX,
-    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_THEME_PRESET_INDEX, ProfileEditSnapshot,
+    CUSTOM_DURATION_STEP_SECS, DAILY_GOAL_MINUTES_STEP, PROFILE_EDIT_DAILY_GOAL_MINUTES_INDEX,
+    PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX, PROFILE_EDIT_FIELD_LABELS,
+    PROFILE_EDIT_SCHEDULE_ADD_REMOVE_INDEX, PROFILE_EDIT_SCHEDULE_DAY_ENABLED_INDEX,
+    PROFILE_EDIT_SCHEDULE_DAY_INDEX, PROFILE_EDIT_SCHEDULE_END_INDEX,
+    PROFILE_EDIT_SCHEDULE_START_INDEX, PROFILE_EDIT_SCHEDULE_WINDOW_INDEX,
+    PROFILE_EDIT_THEME_PRESET_INDEX, ProfileEditSnapshot,
 };
 pub(crate) use setup_diagnostics::{
     BlockingPreviewSnapshot, SetupCheck, SetupCheckLevel, SetupDiagnostics,
@@ -390,7 +389,6 @@ pub(crate) struct App {
     daily_goal: DailyGoalConfig,
     weekly_goal: WeeklyGoalConfig,
     monthly_goal: MonthlyGoalConfig,
-    goal_carry_over: GoalCarryOverConfig,
     stats_retention: StatsRetentionConfig,
     pending_timer_action: Option<PendingTimerAction>,
     notifier: PhaseNotifier,
@@ -439,7 +437,6 @@ impl App {
         let daily_goal = config.daily_goal;
         let weekly_goal = config.weekly_goal;
         let monthly_goal = config.monthly_goal;
-        let goal_carry_over = config.goal_carry_over;
         let stats_retention = config.stats_retention;
         let blocklist_profiles = config.blocklist_profiles.clone();
         let active_blocklist_profile =
@@ -542,7 +539,6 @@ impl App {
             daily_goal,
             weekly_goal,
             monthly_goal,
-            goal_carry_over,
             stats_retention,
             pending_timer_action: None,
             notifier: PhaseNotifier::new(notification_settings),
@@ -798,9 +794,6 @@ impl App {
             }
             PROFILE_EDIT_DAILY_GOAL_POMODOROS_INDEX => {
                 format_daily_goal_pomodoros_label(self.daily_goal.pomodoros)
-            }
-            PROFILE_EDIT_DAILY_GOAL_CARRY_OVER_INDEX => {
-                bool_label(self.goal_carry_over.daily).to_string()
             }
             PROFILE_EDIT_THEME_PRESET_INDEX => self.selected_theme_preset.label().to_string(),
             _ => String::new(),
@@ -1127,11 +1120,6 @@ fn format_schedule_days_for_display(days: &[String]) -> String {
 
 fn parse_day_key(day_key: &str) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d").ok()
-}
-
-fn previous_month_reference_day(day: NaiveDate) -> Option<NaiveDate> {
-    let month_start = NaiveDate::from_ymd_opt(day.year(), day.month(), 1)?;
-    month_start.pred_opt()
 }
 
 fn goal_progress(completed: u64, target: u64) -> GoalProgress {

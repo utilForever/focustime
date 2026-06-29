@@ -8,14 +8,13 @@ use crate::app::App;
 use crate::error::UserMessage;
 
 use crate::cli::{
-    AppConfig, CliCommand, CommandKind, DailyGoalConfig, FocusStats, GoalCarryCommandOutput,
-    GoalCommandOutput, OutputMode, ProfileId, ProfileOutput, ProfileView, RecurringScheduleConfig,
-    ScheduleCommandOutput, StrictCommandOutput, TaskCommandOutput, ThemeCommandOutput, ThemePreset,
-    TimerCommandOutput, TimerStateOutput, available_theme_preset_views,
-    build_schedule_inspection_output, print_goal_carry_command_output, print_goal_command_output,
-    print_json, print_profile_output, print_schedule_command_output, print_strict_command_output,
-    print_theme_command_output, print_timer_state_output, profile_id, profile_view,
-    theme_preset_view, timer_phase_id, timer_status_id,
+    AppConfig, CliCommand, CommandKind, DailyGoalConfig, FocusStats, GoalCommandOutput, OutputMode,
+    ProfileId, ProfileOutput, ProfileView, RecurringScheduleConfig, ScheduleCommandOutput,
+    StrictCommandOutput, TaskCommandOutput, ThemeCommandOutput, ThemePreset, TimerCommandOutput,
+    TimerStateOutput, available_theme_preset_views, build_schedule_inspection_output,
+    print_goal_command_output, print_json, print_profile_output, print_schedule_command_output,
+    print_strict_command_output, print_theme_command_output, print_timer_state_output, profile_id,
+    profile_view, theme_preset_view, timer_phase_id, timer_status_id,
 };
 
 mod blocklists;
@@ -61,9 +60,6 @@ pub(super) fn execute_cli_command(cli_command: CliCommand) -> CliExecuteResult<(
         CommandKind::Profile { profile } => execute_profile_command(profile, cli_command.output),
         CommandKind::Theme { preset } => execute_theme_command(preset, cli_command.output),
         CommandKind::Goal { goal } => execute_goal_command(goal, cli_command.output),
-        CommandKind::GoalCarry { enabled } => {
-            execute_goal_carry_command(enabled, cli_command.output)
-        }
         CommandKind::Strict { enabled } => execute_strict_command(enabled, cli_command.output),
         CommandKind::Schedule { schedule } => {
             execute_schedule_command(schedule, cli_command.output)
@@ -106,7 +102,6 @@ fn command_usage_surface_id(command: &CommandKind) -> Option<&'static str> {
         CommandKind::Profile { .. } => Some("profile"),
         CommandKind::Theme { .. } => Some("theme"),
         CommandKind::Goal { .. } => Some("goal"),
-        CommandKind::GoalCarry { .. } => Some("goal-carry"),
         CommandKind::Strict { .. } => Some("strict"),
         CommandKind::Schedule { .. } => Some("schedule"),
         CommandKind::Diagnostics => Some("diagnostics"),
@@ -293,28 +288,6 @@ fn execute_goal_command(goal: Option<DailyGoalConfig>, output: OutputMode) -> Cl
 
     match output {
         OutputMode::Text => print_goal_command_output("Daily", &payload),
-        OutputMode::Json => print_json(&payload)?,
-    }
-    Ok(())
-}
-
-fn execute_goal_carry_command(enabled: Option<bool>, output: OutputMode) -> CliExecuteResult<()> {
-    let mut config = AppConfig::load().normalized();
-    let mut updated = false;
-    if let Some(enabled) = enabled {
-        config.goal_carry_over.daily = enabled;
-        config
-            .save()
-            .map_err(|error| format!("Failed to save daily goal carry-over: {error}"))?;
-        updated = true;
-    }
-
-    let payload = GoalCarryCommandOutput {
-        updated,
-        carry_over: config.goal_carry_over.daily,
-    };
-    match output {
-        OutputMode::Text => print_goal_carry_command_output("Daily", &payload),
         OutputMode::Json => print_json(&payload)?,
     }
     Ok(())

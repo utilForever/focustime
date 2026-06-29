@@ -14,56 +14,6 @@ fn local_timestamp_today(hour: u32, minute: u32) -> u64 {
 }
 
 #[test]
-fn carry_over_goal_target_returns_base_when_disabled() {
-    let base = DailyGoalSnapshot {
-        minutes: 60,
-        pomodoros: 2,
-    };
-    let carried = carry_over_goal_target(base, false, Some((base, 0, 0)));
-    assert_eq!(carried, base);
-}
-
-#[test]
-fn carry_over_goal_target_adds_previous_period_deficit() {
-    let base = DailyGoalSnapshot {
-        minutes: 60,
-        pomodoros: 2,
-    };
-    let previous_target = DailyGoalSnapshot {
-        minutes: 50,
-        pomodoros: 3,
-    };
-    let carried = carry_over_goal_target(base, true, Some((previous_target, 30, 1)));
-    assert_eq!(
-        carried,
-        DailyGoalSnapshot {
-            minutes: 80,
-            pomodoros: 4,
-        }
-    );
-}
-
-#[test]
-fn carry_over_goal_target_keeps_disabled_metrics_off() {
-    let base = DailyGoalSnapshot {
-        minutes: 0,
-        pomodoros: 2,
-    };
-    let previous_target = DailyGoalSnapshot {
-        minutes: 120,
-        pomodoros: 5,
-    };
-    let carried = carry_over_goal_target(base, true, Some((previous_target, 0, 1)));
-    assert_eq!(
-        carried,
-        DailyGoalSnapshot {
-            minutes: 0,
-            pomodoros: 6,
-        }
-    );
-}
-
-#[test]
 fn weekly_and_monthly_goal_snapshot_sync_and_lookup_are_idempotent() {
     let mut stats = FocusStats::default();
     let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 9).expect("day should be valid");

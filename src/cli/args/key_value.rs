@@ -1,16 +1,15 @@
 use crate::cli::{
-    KeyValueParser, ParsedToken, PathBuf, parse_goal_carry_value, parse_goal_value,
-    parse_profile_id, parse_schedule_value, parse_site_edit_value, parse_strict_value,
-    parse_theme_preset, parse_watch_interval_secs, require_nonempty_key_value,
+    KeyValueParser, ParsedToken, PathBuf, parse_goal_value, parse_profile_id, parse_schedule_value,
+    parse_site_edit_value, parse_strict_value, parse_theme_preset, parse_watch_interval_secs,
+    require_nonempty_key_value,
 };
 
 pub(in crate::cli) fn classify_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    let parsers: [KeyValueParser; 14] = [
+    let parsers: [KeyValueParser; 13] = [
         parse_task_key_value_arg,
         parse_profile_key_value_arg,
         parse_theme_key_value_arg,
         parse_goal_key_value_arg,
-        parse_goal_carry_key_value_arg,
         parse_strict_key_value_arg,
         parse_schedule_set_key_value_arg,
         parse_watch_key_value_arg,
@@ -70,16 +69,6 @@ fn parse_strict_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> 
     if let Some(value) = arg.strip_prefix("--strict=") {
         let value = require_nonempty_key_value(value, "`--strict=` requires `on` or `off`.")?;
         return Ok(Some(ParsedToken::Strict(Some(parse_strict_value(value)?))));
-    }
-    Ok(None)
-}
-
-fn parse_goal_carry_key_value_arg(arg: &str) -> Result<Option<ParsedToken>, String> {
-    if let Some(value) = arg.strip_prefix("--goal-carry=") {
-        let value = require_nonempty_key_value(value, "`--goal-carry=` requires `on` or `off`.")?;
-        return Ok(Some(ParsedToken::GoalCarry(Some(parse_goal_carry_value(
-            value,
-        )?))));
     }
     Ok(None)
 }

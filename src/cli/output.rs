@@ -17,9 +17,9 @@ pub(super) use sites::{
 pub(super) use status::{print_status_output, print_timer_state_output};
 
 use crate::cli::{
-    BackupOutput, BlocklistProfileConfig, ExportOutput, GoalCarryCommandOutput, GoalCommandOutput,
-    ProfileOutput, RestoreOutput, ScheduleCommandOutput, Serialize, StrictCommandOutput,
-    ThemeCommandOutput, Write, io,
+    BackupOutput, BlocklistProfileConfig, ExportOutput, GoalCommandOutput, ProfileOutput,
+    RestoreOutput, ScheduleCommandOutput, Serialize, StrictCommandOutput, ThemeCommandOutput,
+    Write, io,
 };
 
 pub(super) fn print_profile_output(payload: &ProfileOutput) {
@@ -112,16 +112,6 @@ pub(super) fn print_goal_command_output(label: &str, payload: &GoalCommandOutput
     } else {
         println!("{label} goal: off");
     }
-}
-
-pub(super) fn print_goal_carry_command_output(label: &str, payload: &GoalCarryCommandOutput) {
-    if payload.updated {
-        println!("{label} goal carry-over updated.");
-    }
-    println!(
-        "{label} goal carry-over: {}",
-        if payload.carry_over { "on" } else { "off" }
-    );
 }
 
 pub(super) fn print_strict_command_output(payload: &StrictCommandOutput) {

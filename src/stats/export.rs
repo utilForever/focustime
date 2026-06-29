@@ -1,4 +1,4 @@
-use chrono::{Datelike, Duration, NaiveDate};
+use chrono::{Datelike, NaiveDate};
 
 use crate::config::HistoryKpiCardId;
 use crate::stats::{
@@ -361,19 +361,9 @@ impl FocusStats {
         context: &HistoryKpiExportContext,
     ) -> DailyGoalSnapshot {
         let day_key = day.format("%Y-%m-%d").to_string();
-        let base = self
-            .daily_entry(&day_key)
+        self.daily_entry(&day_key)
             .and_then(|stats| stats.goal)
-            .unwrap_or(context.daily_goal);
-        let previous = day.pred_opt().and_then(|previous_day| {
-            let previous_day_key = previous_day.format("%Y-%m-%d").to_string();
-            self.daily_entry(&previous_day_key).and_then(|stats| {
-                stats
-                    .goal
-                    .map(|goal| (goal, stats.focused_minutes(), stats.pomodoros_completed))
-            })
-        });
-        crate::stats::carry_over_goal_target(base, context.carry_over_daily, previous)
+            .unwrap_or(context.daily_goal)
     }
 
     fn effective_weekly_goal_snapshot_for_day(
@@ -381,23 +371,8 @@ impl FocusStats {
         day: NaiveDate,
         context: &HistoryKpiExportContext,
     ) -> DailyGoalSnapshot {
-        let base = self
-            .weekly_goal_snapshot_for_day(day)
-            .unwrap_or(context.weekly_goal);
-        let previous = day
-            .checked_sub_signed(Duration::weeks(1))
-            .and_then(|previous_week_day| {
-                self.weekly_goal_snapshot_for_day(previous_week_day)
-                    .map(|previous_target| {
-                        let week = self.weekly_for_day(previous_week_day);
-                        (
-                            previous_target,
-                            week.focused_minutes(),
-                            week.pomodoros_completed,
-                        )
-                    })
-            });
-        crate::stats::carry_over_goal_target(base, context.carry_over_weekly, previous)
+        self.weekly_goal_snapshot_for_day(day)
+            .unwrap_or(context.weekly_goal)
     }
 
     fn focus_score_for_day(

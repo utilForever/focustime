@@ -79,33 +79,6 @@ impl DailyGoalSnapshot {
     }
 }
 
-pub(crate) fn carry_over_goal_target(
-    base: DailyGoalSnapshot,
-    carry_enabled: bool,
-    previous: Option<(DailyGoalSnapshot, u64, u32)>,
-) -> DailyGoalSnapshot {
-    if !carry_enabled {
-        return base;
-    }
-    let Some((previous_target, previous_minutes, previous_pomodoros)) = previous else {
-        return base;
-    };
-    DailyGoalSnapshot {
-        minutes: if base.minutes == 0 {
-            0
-        } else {
-            base.minutes
-                .saturating_add(previous_target.minutes.saturating_sub(previous_minutes))
-        },
-        pomodoros: if base.pomodoros == 0 {
-            0
-        } else {
-            base.pomodoros
-                .saturating_add(previous_target.pomodoros.saturating_sub(previous_pomodoros))
-        },
-    }
-}
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct GoalStreak {
     pub(crate) current: u32,
@@ -346,9 +319,6 @@ pub(crate) struct HistoryKpiExportContext {
     pub(crate) daily_goal: DailyGoalSnapshot,
     pub(crate) weekly_goal: DailyGoalSnapshot,
     pub(crate) monthly_goal: DailyGoalSnapshot,
-    pub(crate) carry_over_daily: bool,
-    pub(crate) carry_over_weekly: bool,
-    pub(crate) carry_over_monthly: bool,
     pub(crate) recurring_schedule: RecurringScheduleConfig,
     pub(crate) stats_retention: StatsRetentionConfig,
     pub(crate) comparison_dimension: ComparisonDimension,
@@ -364,9 +334,6 @@ impl Default for HistoryKpiExportContext {
             daily_goal: DailyGoalSnapshot::default(),
             weekly_goal: DailyGoalSnapshot::default(),
             monthly_goal: DailyGoalSnapshot::default(),
-            carry_over_daily: false,
-            carry_over_weekly: false,
-            carry_over_monthly: false,
             recurring_schedule: RecurringScheduleConfig::default(),
             stats_retention: StatsRetentionConfig::default(),
             comparison_dimension: ComparisonDimension::TaskLabel,

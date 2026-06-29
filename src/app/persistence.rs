@@ -340,7 +340,6 @@ impl App {
             daily_goal: self.daily_goal,
             weekly_goal: self.weekly_goal,
             monthly_goal: self.monthly_goal,
-            goal_carry_over: self.goal_carry_over,
             stats_retention: self.stats_retention,
             history_dashboard: HistoryDashboardConfig::default(),
             feature_flags: self.feature_flags.clone(),

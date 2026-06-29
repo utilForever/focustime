@@ -23,7 +23,7 @@ use crate::schedule::{format_schedule_conflict, inspect_schedule_conflicts_from_
 use crate::session_recovery;
 use crate::stats::{
     DailyGoalSnapshot, FocusRiskForecast, FocusStats, SessionInterruptionEvent, StatsGrowthSummary,
-    StatsRetentionPruneResult, carry_over_goal_target, current_day_key,
+    StatsRetentionPruneResult, current_day_key,
 };
 use crate::timer::{
     DEFAULT_FOCUS_SECS, DEFAULT_LONG_BREAK_INTERVAL, DEFAULT_LONG_BREAK_SECS,
@@ -48,18 +48,18 @@ use output::{
     build_diagnostics_blocking_preview_error, build_diagnostics_blocking_preview_output,
     build_diagnostics_command_output, build_schedule_inspection_output, display_input_value,
     effective_blocked_sites_for_profile, flush_stdout, print_backup_output,
-    print_diagnostics_command_output, print_export_output, print_goal_carry_command_output,
-    print_goal_command_output, print_history_dashboard_command_output, print_json,
-    print_json_compact, print_profile_output, print_restore_output, print_schedule_command_output,
-    print_site_add_command_output, print_site_delete_command_output,
-    print_site_edit_command_output, print_site_list_command_output, print_status_output,
-    print_strict_command_output, print_theme_command_output, print_timer_state_output,
+    print_diagnostics_command_output, print_export_output, print_goal_command_output,
+    print_history_dashboard_command_output, print_json, print_json_compact, print_profile_output,
+    print_restore_output, print_schedule_command_output, print_site_add_command_output,
+    print_site_delete_command_output, print_site_edit_command_output,
+    print_site_list_command_output, print_status_output, print_strict_command_output,
+    print_theme_command_output, print_timer_state_output,
 };
 use parsing::{
     finalize_cli_action, first_removed_option_guidance, invalid_usage, parse_global_tokens,
-    parse_goal_carry_value, parse_goal_value, parse_primary_command, parse_profile_id,
-    parse_schedule_value, parse_site_edit_value, parse_strict_value, parse_theme_preset,
-    parse_watch_interval_option, parse_watch_interval_secs, require_nonempty_key_value,
+    parse_goal_value, parse_primary_command, parse_profile_id, parse_schedule_value,
+    parse_site_edit_value, parse_strict_value, parse_theme_preset, parse_watch_interval_option,
+    parse_watch_interval_secs, require_nonempty_key_value,
 };
 use status::{
     available_theme_preset_views, build_status_output, profile_id, profile_view, theme_preset_view,
@@ -78,8 +78,6 @@ const USAGE_TEXT: &str = r#"Usage:
   focustime --theme [classic|high-contrast|deuteranopia-friendly] [--json]
   focustime --goal [--json]
   focustime --goal=MINUTES,POMODOROS [--json]
-  focustime --goal-carry [--json]
-  focustime --goal-carry=on|off [--json]
   focustime --strict [--json]
   focustime --strict=on|off [--json]
   focustime --schedule [--json]
@@ -105,7 +103,6 @@ Options:
   --profile       Show current profile, or set it when value is provided
   --theme         Show current theme preset, or set it when value is provided
   --goal          Show current daily goal, or set minutes/pomodoros targets
-  --goal-carry    Show daily goal carry-over, or set on/off
   --strict        Show strict mode for selected profile, or set on/off
   --schedule      Show selected profile schedule with overlap/conflict inspection
   --schedule-set  Replace selected profile schedule from JSON payload
@@ -194,9 +191,6 @@ pub(crate) enum CommandKind {
     Goal {
         goal: Option<DailyGoalConfig>,
     },
-    GoalCarry {
-        enabled: Option<bool>,
-    },
     Strict {
         enabled: Option<bool>,
     },
@@ -249,7 +243,6 @@ enum PrimaryCommand {
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
-    GoalCarry(Option<bool>),
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
@@ -280,7 +273,6 @@ enum ParsedToken {
     Profile(Option<ProfileId>),
     Theme(Option<ThemePreset>),
     Goal(Option<DailyGoalConfig>),
-    GoalCarry(Option<bool>),
     Strict(Option<bool>),
     Schedule,
     ScheduleSet(RecurringScheduleConfig),
@@ -372,7 +364,6 @@ struct GoalOutput {
     minutes_target: u64,
     pomodoros_target: u32,
     met: bool,
-    carry_over: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -489,12 +480,6 @@ struct GoalCommandOutput {
     configured: bool,
     minutes_target: u64,
     pomodoros_target: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-struct GoalCarryCommandOutput {
-    updated: bool,
-    carry_over: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

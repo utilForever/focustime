@@ -1,9 +1,7 @@
 use chrono::Local;
 
 use crate::app::{App, DailyGoalProgress, parse_day_key};
-use crate::config::{
-    DailyGoalConfig, GoalCarryOverConfig, RecurringScheduleConfig, StatsRetentionConfig,
-};
+use crate::config::{DailyGoalConfig, RecurringScheduleConfig, StatsRetentionConfig};
 use crate::stats::{
     ComparisonDimension, DailyStats, FocusRiskForecast, GoalStreak, MonthlyHeatmap, MonthlyStats,
     ProductivityComparisonRow, ProfileBucket, ProfileEffectiveness, SessionInterruptionEvent,
@@ -62,7 +60,6 @@ pub(super) struct HistoryDashboardStaticSnapshotKey {
     retention: StatsRetentionConfig,
     recurring_schedule: RecurringScheduleConfig,
     daily_goal: DailyGoalConfig,
-    goal_carry_over: GoalCarryOverConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -174,7 +171,6 @@ impl App {
             retention: self.stats_retention,
             recurring_schedule: self.recurring_schedule.clone(),
             daily_goal: self.daily_goal,
-            goal_carry_over: self.goal_carry_over,
         }
     }
 
