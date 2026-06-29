@@ -1,3 +1,8 @@
+use crate::app::{
+    PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX, PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX,
+    PROFILE_EDIT_SCHEDULE_WINDOW_INDEX, PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX,
+    PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX,
+};
 use crate::config::{
     AppConfig, HistoryDashboardConfig, HistoryKpiCardId, ShortcutConfig, ThemePreset,
 };
@@ -140,22 +145,22 @@ fn goal_streak_lines_render_daily_weekly_monthly_period_progress() {
         crossterm::event::KeyCode::Char('e'),
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[3];
+    app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_MINUTES_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[4];
+    app.profile_edit_field = PROFILE_EDIT_WEEKLY_GOAL_POMODOROS_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[6];
+    app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_MINUTES_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
     ));
-    app.profile_edit_field = PROFILE_EDIT_GROUP_GOALS[7];
+    app.profile_edit_field = PROFILE_EDIT_MONTHLY_GOAL_POMODOROS_INDEX;
     app.handle_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Right,
         crossterm::event::KeyModifiers::NONE,
@@ -644,7 +649,7 @@ fn profile_editor_renders_schedule_fields() {
     let mut app = App::default();
     app.mode = AppMode::ProfileManager;
     app.profile_edit_active = true;
-    app.profile_edit_field = PROFILE_EDIT_GROUP_SCHEDULE[0];
+    app.profile_edit_field = PROFILE_EDIT_SCHEDULE_WINDOW_INDEX;
 
     terminal
         .draw(|frame| render(frame, &app))

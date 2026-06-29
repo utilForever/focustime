@@ -1,9 +1,21 @@
 use crate::ui::{
     Alignment, App, Block, Borders, Color, Constraint, Direction, Frame, Layout, Line, List,
-    ListItem, ListState, Modifier, NavigationAction, PROFILE_EDIT_GROUPS, PROFILE_IDS, Paragraph,
-    ShortcutAction, Span, Style, Wrap, app_color, centered_rect, render_centered_error,
-    render_hint_lines,
+    ListItem, ListState, Modifier, NavigationAction, PROFILE_IDS, Paragraph, ShortcutAction, Span,
+    Style, Wrap, app_color, centered_rect, render_centered_error, render_hint_lines,
 };
+
+const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
+const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
+const PROFILE_EDIT_GROUP_GOALS: [usize; 9] = [9, 10, 11, 12, 13, 14, 15, 16, 17];
+const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 6] = [18, 19, 20, 21, 22, 23];
+const PROFILE_EDIT_GROUP_APPEARANCE: [usize; 1] = [24];
+const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
+    ("Timer", &PROFILE_EDIT_GROUP_TIMER),
+    ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
+    ("Goals", &PROFILE_EDIT_GROUP_GOALS),
+    ("Schedule", &PROFILE_EDIT_GROUP_SCHEDULE),
+    ("Appearance", &PROFILE_EDIT_GROUP_APPEARANCE),
+];
 
 pub(super) fn render_profile_manager(frame: &mut Frame, app: &App) {
     let area = frame.area();

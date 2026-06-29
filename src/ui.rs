@@ -39,19 +39,6 @@ use timer::{format_duration_label, render_timer};
 #[cfg(test)]
 use timer::{timer_primary_hint, timer_secondary_hint, timer_session_status_lines_for_width};
 
-const PROFILE_EDIT_GROUP_TIMER: [usize; 4] = [0, 1, 2, 3];
-const PROFILE_EDIT_GROUP_AUTOMATION: [usize; 5] = [4, 5, 6, 7, 8];
-const PROFILE_EDIT_GROUP_GOALS: [usize; 9] = [9, 10, 11, 12, 13, 14, 15, 16, 17];
-const PROFILE_EDIT_GROUP_SCHEDULE: [usize; 6] = [18, 19, 20, 21, 22, 23];
-const PROFILE_EDIT_GROUP_APPEARANCE: [usize; 1] = [24];
-const PROFILE_EDIT_GROUPS: [(&str, &[usize]); 5] = [
-    ("Timer", &PROFILE_EDIT_GROUP_TIMER),
-    ("Automation", &PROFILE_EDIT_GROUP_AUTOMATION),
-    ("Goals", &PROFILE_EDIT_GROUP_GOALS),
-    ("Schedule", &PROFILE_EDIT_GROUP_SCHEDULE),
-    ("Appearance", &PROFILE_EDIT_GROUP_APPEARANCE),
-];
-
 pub(crate) fn render(frame: &mut Frame, app: &App) {
     match app.mode {
         AppMode::Timer => render_timer(frame, app),
