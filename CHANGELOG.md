@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-06-30
+
 ### Changed
 
 - **Breaking - Stats export format reduction (#570):** kept JSON as the canonical `--export` artifact, removed CSV writer/output contracts, and simplified export docs/tests around `focustime-stats.json`.
@@ -552,7 +554,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional WakaTime heartbeat integration for focus activity tracking.
 - Release automation for tagged builds across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/utilForever/focustime/compare/v0.16.4...HEAD
+[Unreleased]: https://github.com/utilForever/focustime/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/utilForever/focustime/compare/v0.16.4...v0.17.0
 [0.16.4]: https://github.com/utilForever/focustime/compare/v0.16.3...v0.16.4
 [0.16.3]: https://github.com/utilForever/focustime/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/utilForever/focustime/compare/v0.16.1...v0.16.2
