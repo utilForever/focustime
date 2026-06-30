@@ -208,9 +208,9 @@ Milestone policy:
 - **Future cleanup:** continue retiring overlapping paths only after release notes and docs name supported replacement behavior.
 - **v0.12.0:** remove legacy field/path compatibility after the warning window
 
-### v0.16.x cleanup roadmap
+### v0.17.x cleanup roadmap
 
-The v0.16.x line continues the cleanup work started in v0.14.x by reducing
+The v0.17.x line continues the cleanup work started in v0.14.x by reducing
 overlapping command and config paths while keeping supported behavior available
 through canonical surfaces. The guiding rule is that a path is only retired when
 release notes and diagnostics name the replacement behavior.
@@ -748,12 +748,12 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ## Release automation
 
-Pushing a tag that matches `v*` (for example, `v0.16.4`) triggers the release
+Pushing a tag that matches `v*` (for example, `v0.17.0`) triggers the release
 workflow. It runs CI quality gates (`check`, `fmt`, `clippy`, `test`, dependency
 `audit`, and `typos`), builds binaries for Linux/macOS/Windows, and publishes
 them to the GitHub Release attached to that tag.
 
-The latest stable release is [v0.16.4](https://github.com/utilForever/focustime/releases/tag/v0.16.4).
+The latest stable release is [v0.17.0](https://github.com/utilForever/focustime/releases/tag/v0.17.0).
 
 For a human-readable summary of notable changes in this release, see [CHANGELOG.md](CHANGELOG.md).
 
