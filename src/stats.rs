@@ -210,11 +210,12 @@ pub(crate) struct FocusRiskForecast {
 impl FocusRiskForecast {
     pub(crate) fn highest_risk_level(&self) -> FocusRiskLevel {
         let mut level = self.daily_goal.risk_level;
-        for candidate in [self.streak.risk_level] {
-            if candidate.rank() > level.rank() {
-                level = candidate;
-            }
+        let candidate = self.streak.risk_level;
+
+        if candidate.rank() > level.rank() {
+            level = candidate;
         }
+
         level
     }
 
